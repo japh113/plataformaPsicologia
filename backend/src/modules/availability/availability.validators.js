@@ -121,3 +121,27 @@ export const validateAvailabilityExceptionRangePayload = (payload) => {
 
   return errors;
 };
+
+export const validateAvailabilityExceptionRangeUpdatePayload = (payload) => {
+  const errors = validateAvailabilityExceptionRangePayload(payload);
+
+  if (!payload?.currentStartDate || !isIsoDate(payload.currentStartDate)) {
+    errors.push('currentStartDate must be in YYYY-MM-DD format');
+  }
+
+  if (!payload?.currentEndDate || !isIsoDate(payload.currentEndDate)) {
+    errors.push('currentEndDate must be in YYYY-MM-DD format');
+  }
+
+  if (
+    payload?.currentStartDate &&
+    payload?.currentEndDate &&
+    isIsoDate(payload.currentStartDate) &&
+    isIsoDate(payload.currentEndDate) &&
+    payload.currentEndDate < payload.currentStartDate
+  ) {
+    errors.push('currentEndDate must be equal to or after currentStartDate');
+  }
+
+  return errors;
+};

@@ -47,6 +47,11 @@ const buildDateRange = (startDate, endDate) => {
   return dates;
 };
 
+const differenceBetweenDateRanges = (sourceDates, excludedDates) => {
+  const excludedDateSet = new Set(excludedDates || []);
+  return (sourceDates || []).filter((date) => !excludedDateSet.has(date));
+};
+
 const parseTimeToMinutes = (value) => {
   const [hours = '0', minutes = '0'] = String(value).split(':');
   return Number(hours) * 60 + Number(minutes);
@@ -258,6 +263,40 @@ const getAvailabilityExceptionByDate = async (psychologistUserId, exceptionDate)
   return exceptionMap.get(exceptionDate) || null;
 };
 
+const ensureDatesAreUnavailableExceptions = async (psychologistUserId, dates, message) => {
+  const exceptionMap = await getAvailabilityExceptionMap(psychologistUserId, dates);
+  const invalidDates = dates.filter((date) => {
+    const exception = exceptionMap.get(date);
+    return !exception || !exception.isUnavailable;
+  });
+
+  if (invalidDates.length === 0) {
+    return;
+  }
+
+  throw createConflictError(`${message}: ${invalidDates.slice(0, 3).join(', ')}.`);
+};
+
+const ensureDatesDoNotOverrideSpecialExceptions = async (psychologistUserId, dates) => {
+  if (!dates || dates.length === 0) {
+    return;
+  }
+
+  const exceptionMap = await getAvailabilityExceptionMap(psychologistUserId, dates);
+  const conflictingDates = dates.filter((date) => {
+    const exception = exceptionMap.get(date);
+    return exception && !exception.isUnavailable;
+  });
+
+  if (conflictingDates.length === 0) {
+    return;
+  }
+
+  throw createConflictError(
+    `No puedes bloquear este periodo porque ya existen horarios especiales en estas fechas: ${conflictingDates.slice(0, 3).join(', ')}. Edita o elimina esas excepciones primero.`,
+  );
+};
+
 const ensureAvailabilityDoesNotConflictWithAppointments = async (entries, actor) => {
   const futureAppointments = await getFutureAppointmentsForPsychologist(actor.id);
 
@@ -332,6 +371,14 @@ const ensureExceptionDeletionDoesNotConflictWithAppointments = async (exceptionD
     weeklyBlocks,
     'No puedes eliminar la excepcion porque la disponibilidad semanal deja fuera algunas citas',
   );
+};
+
+const ensureExceptionRangeDeletionDoesNotConflictWithAppointments = async (dates, actor) => {
+  if (!dates || dates.length === 0) {
+    return;
+  }
+
+  await Promise.all(dates.map((date) => ensureExceptionDeletionDoesNotConflictWithAppointments(date, actor)));
 };
 
 export const getEffectiveAvailabilityForDate = async ({ psychologistUserId, date }) => {
@@ -511,6 +558,7 @@ export const createMyUnavailableAvailabilityRange = async ({ startDate, endDate 
   ensurePsychologist(actor);
 
   const dates = buildDateRange(startDate, endDate);
+  await ensureDatesDoNotOverrideSpecialExceptions(actor.id, dates);
   const futureAppointments = await getFutureAppointmentsForPsychologistByDates(actor.id, dates);
 
   if (futureAppointments.length > 0) {
@@ -561,6 +609,115 @@ export const createMyUnavailableAvailabilityRange = async ({ startDate, endDate 
 
   const exceptionMap = await getAvailabilityExceptionMap(actor.id, dates);
   return dates.map((date) => exceptionMap.get(date)).filter(Boolean);
+};
+
+export const updateMyUnavailableAvailabilityRange = async (
+  { currentStartDate, currentEndDate, startDate, endDate },
+  actor,
+) => {
+  ensurePsychologist(actor);
+
+  const currentDates = buildDateRange(currentStartDate, currentEndDate);
+  const nextDates = buildDateRange(startDate, endDate);
+  const datesToRemove = differenceBetweenDateRanges(currentDates, nextDates);
+  const datesToAdd = differenceBetweenDateRanges(nextDates, currentDates);
+
+  await ensureDatesAreUnavailableExceptions(
+    actor.id,
+    currentDates,
+    'No se pudo editar el periodo porque algunas fechas ya no siguen bloqueadas',
+  );
+  await ensureDatesDoNotOverrideSpecialExceptions(actor.id, datesToAdd);
+  await ensureExceptionRangeDeletionDoesNotConflictWithAppointments(datesToRemove, actor);
+
+  const futureAppointments = await getFutureAppointmentsForPsychologistByDates(actor.id, datesToAdd);
+
+  if (futureAppointments.length > 0) {
+    throw createConflictError(
+      `No puedes mover este periodo porque ya existen citas agendadas dentro del nuevo rango: ${buildConflictPreview(futureAppointments)}. Reagenda o cancela esos espacios primero.`,
+    );
+  }
+
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    if (datesToRemove.length > 0) {
+      await client.query(
+        `
+          DELETE FROM psychologist_availability_exceptions
+          WHERE psychologist_user_id = $1
+            AND exception_date = ANY($2::date[])
+        `,
+        [actor.id, datesToRemove],
+      );
+    }
+
+    for (const date of datesToAdd) {
+      await client.query(
+        `
+          INSERT INTO psychologist_availability_exceptions (
+            psychologist_user_id,
+            exception_date,
+            is_unavailable
+          )
+          VALUES ($1, $2, TRUE)
+          ON CONFLICT (psychologist_user_id, exception_date)
+          DO UPDATE SET
+            is_unavailable = TRUE,
+            updated_at = NOW()
+        `,
+        [actor.id, date],
+      );
+
+      await client.query(
+        `
+          DELETE FROM psychologist_availability_exception_blocks
+          WHERE psychologist_user_id = $1
+            AND exception_date = $2
+        `,
+        [actor.id, date],
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const exceptionMap = await getAvailabilityExceptionMap(actor.id, nextDates);
+  return nextDates.map((date) => exceptionMap.get(date)).filter(Boolean);
+};
+
+export const deleteMyUnavailableAvailabilityRange = async ({ startDate, endDate }, actor) => {
+  ensurePsychologist(actor);
+
+  const dates = buildDateRange(startDate, endDate);
+  await ensureDatesAreUnavailableExceptions(
+    actor.id,
+    dates,
+    'No se pudo desbloquear el periodo porque algunas fechas ya no siguen bloqueadas',
+  );
+  await ensureExceptionRangeDeletionDoesNotConflictWithAppointments(dates, actor);
+
+  await db.query(
+    `
+      DELETE FROM psychologist_availability_exceptions
+      WHERE psychologist_user_id = $1
+        AND exception_date = ANY($2::date[])
+    `,
+    [actor.id, dates],
+  );
+
+  return {
+    startDate: normalizeDateValue(startDate),
+    endDate: normalizeDateValue(endDate),
+    deletedDates: dates,
+  };
 };
 
 export const deleteMyAvailabilityException = async (exceptionDate, actor) => {

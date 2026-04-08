@@ -1,16 +1,19 @@
 import { errorResponse, successResponse } from '../../utils/response.js';
 import {
   createMyUnavailableAvailabilityRange,
+  deleteMyUnavailableAvailabilityRange,
   deleteMyAvailabilityException,
   listMyAvailability,
   listMyAvailabilityExceptions,
   updateMyAvailability,
+  updateMyUnavailableAvailabilityRange,
   upsertMyAvailabilityException,
 } from './availability.service.js';
 import {
   validateAvailabilityExceptionDate,
   validateAvailabilityExceptionPayload,
   validateAvailabilityExceptionRangePayload,
+  validateAvailabilityExceptionRangeUpdatePayload,
   validateAvailabilityPayload,
 } from './availability.validators.js';
 
@@ -94,6 +97,36 @@ export const createMyUnavailableAvailabilityRangeHandler = async (req, res, next
 
     const createdExceptions = await createMyUnavailableAvailabilityRange(req.body, req.user);
     return successResponse(res, createdExceptions, 'Availability range blocked successfully');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const updateMyUnavailableAvailabilityRangeHandler = async (req, res, next) => {
+  try {
+    const errors = validateAvailabilityExceptionRangeUpdatePayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const updatedExceptions = await updateMyUnavailableAvailabilityRange(req.body, req.user);
+    return successResponse(res, updatedExceptions, 'Availability range updated successfully');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const deleteMyUnavailableAvailabilityRangeHandler = async (req, res, next) => {
+  try {
+    const errors = validateAvailabilityExceptionRangePayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const deletedRange = await deleteMyUnavailableAvailabilityRange(req.body, req.user);
+    return successResponse(res, deletedRange, 'Availability range unblocked successfully');
   } catch (error) {
     return next(error);
   }

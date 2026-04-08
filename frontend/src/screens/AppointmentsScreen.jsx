@@ -43,6 +43,59 @@ const getRangeDayCount = (startDate, endDate) => {
   return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
 };
 
+const addDaysToDateString = (dateString, amount) => {
+  const [year = '0', month = '1', day = '1'] = String(dateString).split('-');
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  date.setDate(date.getDate() + amount);
+  return date.toISOString().slice(0, 10);
+};
+
+const buildBlockedRanges = (exceptions) => {
+  const unavailableDates = [...(exceptions || [])]
+    .filter((exception) => exception.isUnavailable)
+    .map((exception) => exception.date)
+    .sort((left, right) => left.localeCompare(right));
+
+  if (unavailableDates.length === 0) {
+    return [];
+  }
+
+  const ranges = [];
+  let rangeStart = unavailableDates[0];
+  let previousDate = unavailableDates[0];
+
+  for (let index = 1; index < unavailableDates.length; index += 1) {
+    const currentDate = unavailableDates[index];
+
+    if (currentDate === addDaysToDateString(previousDate, 1)) {
+      previousDate = currentDate;
+      continue;
+    }
+
+    ranges.push({
+      startDate: rangeStart,
+      endDate: previousDate,
+      dayCount: getRangeDayCount(rangeStart, previousDate),
+    });
+    rangeStart = currentDate;
+    previousDate = currentDate;
+  }
+
+  ranges.push({
+    startDate: rangeStart,
+    endDate: previousDate,
+    dayCount: getRangeDayCount(rangeStart, previousDate),
+  });
+
+  return ranges;
+};
+
+const formatBlockedRangeLabel = (range) => (
+  range.startDate === range.endDate
+    ? formatExceptionDate(range.startDate)
+    : `${formatExceptionDate(range.startDate)} - ${formatExceptionDate(range.endDate)}`
+);
+
 function ModalShell({ title, description, onClose, children }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-[2px]">
@@ -63,7 +116,7 @@ function ModalShell({ title, description, onClose, children }) {
 }
 
 export default function AppointmentsScreen({
-  currentUser, patients, appointments, availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onDeleteAvailabilityException,
+  currentUser, patients, appointments, availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
   isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
@@ -77,6 +130,7 @@ export default function AppointmentsScreen({
   const [editingExceptionDate, setEditingExceptionDate] = useState('');
   const [exceptionForm, setExceptionForm] = useState(createEmptyExceptionForm());
   const [exceptionRangeForm, setExceptionRangeForm] = useState({ startDate: todayDate, endDate: todayDate });
+  const [editingExceptionRange, setEditingExceptionRange] = useState(null);
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
@@ -87,6 +141,8 @@ export default function AppointmentsScreen({
     () => new Map((availabilityExceptions || []).map((exception) => [exception.date, { ...exception, blocks: normalizeBlocks(exception.blocks, `exception-${exception.date}`) }])),
     [availabilityExceptions],
   );
+  const blockedExceptionRanges = useMemo(() => buildBlockedRanges(availabilityExceptions), [availabilityExceptions]);
+  const datedAvailabilityExceptions = useMemo(() => (availabilityExceptions || []).filter((exception) => !exception.isUnavailable), [availabilityExceptions]);
   const appointmentsForCalendar = useMemo(() => statusFilter === 'todos' ? appointments : appointments.filter((appointment) => appointment.estado === statusFilter), [appointments, statusFilter]);
   const weekDates = useMemo(() => getWeekDates(calendarAnchorDate), [calendarAnchorDate]);
   const weekRangeLabel = useMemo(() => getWeekRangeLabel(calendarAnchorDate), [calendarAnchorDate]);
@@ -176,6 +232,11 @@ export default function AppointmentsScreen({
     setIsAvailabilityModalOpen(false);
     onDismissAvailabilityError?.();
   };
+  const resetExceptionRangeForm = (date = selectedDate || todayDate) => {
+    setEditingExceptionRange(null);
+    setExceptionRangeForm({ startDate: date, endDate: date });
+    onDismissAvailabilityExceptionError?.();
+  };
   const resetExceptionForm = () => {
     setEditingExceptionDate('');
     setExceptionForm(createEmptyExceptionForm(selectedDate || todayDate));
@@ -183,13 +244,13 @@ export default function AppointmentsScreen({
   };
   const openExceptionsModal = () => {
     resetExceptionForm();
-    setExceptionRangeForm({ startDate: selectedDate || todayDate, endDate: selectedDate || todayDate });
+    resetExceptionRangeForm(selectedDate || todayDate);
     setIsExceptionsModalOpen(true);
   };
   const closeExceptionsModal = () => {
     setIsExceptionsModalOpen(false);
     resetExceptionForm();
-    setExceptionRangeForm({ startDate: todayDate, endDate: todayDate });
+    resetExceptionRangeForm(todayDate);
     onDismissAvailabilityExceptionError?.();
   };
   const handleEditAppointment = (appointment) => {
@@ -256,8 +317,15 @@ export default function AppointmentsScreen({
     setExceptionForm((current) => ({ ...current, blocks: current.blocks.map((block) => block.id !== blockId ? block : { ...block, [field]: value }) }));
   };
   const handleEditException = (exception) => {
+    resetExceptionRangeForm(exception.date);
     setEditingExceptionDate(exception.date);
     setExceptionForm(normalizeExceptionForm(exception));
+    onDismissAvailabilityExceptionError?.();
+  };
+  const handleEditExceptionRange = (range) => {
+    resetExceptionForm();
+    setEditingExceptionRange(range);
+    setExceptionRangeForm({ startDate: range.startDate, endDate: range.endDate });
     onDismissAvailabilityExceptionError?.();
   };
   const handleSaveException = async (event) => {
@@ -286,12 +354,29 @@ export default function AppointmentsScreen({
   const handleSaveExceptionRange = async (event) => {
     event.preventDefault();
     if (!exceptionRangeForm.startDate || !exceptionRangeForm.endDate) return;
-    const wasSaved = await onCreateAvailabilityExceptionRange({
-      startDate: exceptionRangeForm.startDate,
-      endDate: exceptionRangeForm.endDate,
-    });
+    const wasSaved = editingExceptionRange
+      ? await onUpdateAvailabilityExceptionRange({
+        currentStartDate: editingExceptionRange.startDate,
+        currentEndDate: editingExceptionRange.endDate,
+        startDate: exceptionRangeForm.startDate,
+        endDate: exceptionRangeForm.endDate,
+      })
+      : await onCreateAvailabilityExceptionRange({
+        startDate: exceptionRangeForm.startDate,
+        endDate: exceptionRangeForm.endDate,
+      });
     if (wasSaved) {
       closeExceptionsModal();
+    }
+  };
+  const handleDeleteExceptionRange = async (range) => {
+    if (!window.confirm('Se desbloqueara este periodo completo. Deseas continuar?')) return;
+    const wasDeleted = await onDeleteAvailabilityExceptionRange({
+      startDate: range.startDate,
+      endDate: range.endDate,
+    });
+    if (wasDeleted && editingExceptionRange?.startDate === range.startDate && editingExceptionRange?.endDate === range.endDate) {
+      resetExceptionRangeForm(selectedDate || todayDate);
     }
   };
 
@@ -700,9 +785,12 @@ export default function AppointmentsScreen({
         >
           {availabilityExceptionActionError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{availabilityExceptionActionError}</div>}
           <form onSubmit={handleSaveExceptionRange} className="mb-4 space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div>
-              <h4 className="font-semibold text-slate-800">Bloquear periodo</h4>
-              <p className="mt-1 text-xs text-slate-500">Ideal para vacaciones, congresos o ausencias de varios dias. Creara dias no disponibles en todo el rango.</p>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h4 className="font-semibold text-slate-800">{editingExceptionRange ? 'Editar periodo bloqueado' : 'Bloquear periodo'}</h4>
+                <p className="mt-1 text-xs text-slate-500">Ideal para vacaciones, congresos o ausencias de varios dias. Creara dias no disponibles en todo el rango.</p>
+              </div>
+              {editingExceptionRange && <button type="button" onClick={() => resetExceptionRangeForm(selectedDate || todayDate)} className="text-sm font-medium text-slate-500 transition hover:text-slate-800">Cancelar edicion</button>}
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
@@ -721,10 +809,31 @@ export default function AppointmentsScreen({
                   : 'Selecciona un rango valido para bloquear el periodo.'}
               </p>
               <button type="submit" disabled={isSavingAvailabilityException || exceptionRangeDayCount === 0} className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition disabled:opacity-60 disabled:cursor-not-allowed">
-                {isSavingAvailabilityException ? 'Guardando...' : 'Bloquear periodo'}
+                {isSavingAvailabilityException ? 'Guardando...' : editingExceptionRange ? 'Guardar periodo' : 'Bloquear periodo'}
               </button>
             </div>
           </form>
+
+          <div className="mb-4 space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+            <div>
+              <h4 className="font-semibold text-slate-800">Periodos bloqueados</h4>
+              <p className="mt-1 text-xs text-slate-500">Administra vacaciones o ausencias largas sin editar cada dia por separado.</p>
+            </div>
+            {blockedExceptionRanges.length > 0 ? blockedExceptionRanges.map((range) => (
+              <div key={`${range.startDate}-${range.endDate}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="font-semibold text-slate-800 capitalize">{formatBlockedRangeLabel(range)}</p>
+                    <p className="mt-1 text-sm text-slate-500">{range.dayCount} dia{range.dayCount === 1 ? '' : 's'} bloqueado{range.dayCount === 1 ? '' : 's'}.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => handleEditExceptionRange(range)} className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition"><Pencil size={14} className="mr-2" /> Editar</button>
+                    <button type="button" onClick={() => handleDeleteExceptionRange(range)} disabled={isSavingAvailabilityException} className="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 transition disabled:opacity-60"><Trash2 size={14} className="mr-2" /> Desbloquear</button>
+                  </div>
+                </div>
+              </div>
+            )) : <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Todavia no hay periodos bloqueados.</div>}
+          </div>
 
           <form onSubmit={handleSaveException} className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
             <div className="flex items-center justify-between gap-3">
@@ -776,15 +885,13 @@ export default function AppointmentsScreen({
           </form>
 
           <div className="mt-4 space-y-3">
-            {availabilityExceptions.length > 0 ? availabilityExceptions.map((exception) => (
+            {datedAvailabilityExceptions.length > 0 ? datedAvailabilityExceptions.map((exception) => (
               <div key={exception.date} className="rounded-xl border border-gray-200 bg-white p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="font-semibold text-gray-800 capitalize">{formatExceptionDate(exception.date)}</p>
                     <p className="mt-1 text-sm text-gray-500">
-                      {exception.isUnavailable
-                        ? 'Dia completo no disponible.'
-                        : exception.blocks.map((block) => `${String(block.startTime).slice(0, 5)}-${String(block.endTime).slice(0, 5)}`).join(' | ')}
+                      {exception.blocks.map((block) => `${String(block.startTime).slice(0, 5)}-${String(block.endTime).slice(0, 5)}`).join(' | ')}
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -793,7 +900,7 @@ export default function AppointmentsScreen({
                   </div>
                 </div>
               </div>
-            )) : <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500">Todavia no hay excepciones configuradas.</div>}
+            )) : <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500">Todavia no hay horarios especiales configurados.</div>}
           </div>
         </ModalShell>
       )}

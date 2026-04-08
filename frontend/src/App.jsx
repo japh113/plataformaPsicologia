@@ -10,10 +10,12 @@ import LoginScreen from './screens/LoginScreen';
 import AppointmentsScreen from './screens/AppointmentsScreen';
 import {
   createMyUnavailableAvailabilityRange,
+  deleteMyUnavailableAvailabilityRange,
   deleteMyAvailabilityException,
   getMyAvailability,
   getMyAvailabilityExceptions,
   updateMyAvailability,
+  updateMyUnavailableAvailabilityRange,
   upsertMyAvailabilityException,
 } from './api/availability';
 import {
@@ -48,6 +50,25 @@ const sortAppointments = (appointments) =>
     const right = `${b.fecha}T${b.hora24}`;
     return left.localeCompare(right);
   });
+
+const buildDateRangeStrings = (startDate, endDate) => {
+  if (!startDate || !endDate || endDate < startDate) {
+    return [];
+  }
+
+  const [startYear = '0', startMonth = '1', startDay = '1'] = String(startDate).split('-');
+  const [endYear = '0', endMonth = '1', endDay = '1'] = String(endDate).split('-');
+  const currentDate = new Date(Number(startYear), Number(startMonth) - 1, Number(startDay));
+  const lastDate = new Date(Number(endYear), Number(endMonth) - 1, Number(endDay));
+  const dates = [];
+
+  while (currentDate <= lastDate) {
+    dates.push(currentDate.toISOString().slice(0, 10));
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return dates;
+};
 
 export default function App() {
   const [vistaActiva, setVistaActiva] = useState('dashboard');
@@ -497,6 +518,51 @@ export default function App() {
     }
   };
 
+  const handleUpdateAvailabilityExceptionRange = async (payload) => {
+    if (!isPsychologist || savingAvailabilityException) {
+      return false;
+    }
+
+    setSavingAvailabilityException(true);
+    setAvailabilityExceptionActionError('');
+
+    try {
+      const updatedExceptions = await updateMyUnavailableAvailabilityRange(payload);
+      setAvailabilityExceptions((currentExceptions) => {
+        const currentRangeDates = new Set(buildDateRangeStrings(payload.currentStartDate, payload.currentEndDate));
+        const preservedExceptions = currentExceptions.filter((exception) => !currentRangeDates.has(exception.date));
+        return [...preservedExceptions, ...updatedExceptions].sort((left, right) => left.date.localeCompare(right.date));
+      });
+      return true;
+    } catch (error) {
+      setAvailabilityExceptionActionError(error.message || 'No se pudo actualizar el periodo bloqueado.');
+      return false;
+    } finally {
+      setSavingAvailabilityException(false);
+    }
+  };
+
+  const handleDeleteAvailabilityExceptionRange = async (payload) => {
+    if (!isPsychologist || savingAvailabilityException) {
+      return false;
+    }
+
+    setSavingAvailabilityException(true);
+    setAvailabilityExceptionActionError('');
+
+    try {
+      const deletedRange = await deleteMyUnavailableAvailabilityRange(payload);
+      const deletedDates = new Set(deletedRange.deletedDates || []);
+      setAvailabilityExceptions((currentExceptions) => currentExceptions.filter((exception) => !deletedDates.has(exception.date)));
+      return true;
+    } catch (error) {
+      setAvailabilityExceptionActionError(error.message || 'No se pudo desbloquear el periodo.');
+      return false;
+    } finally {
+      setSavingAvailabilityException(false);
+    }
+  };
+
   const renderMainContent = () => {
     if (cargandoDatos) {
       return (
@@ -549,6 +615,8 @@ export default function App() {
           onChangeAvailabilityDraft={setAvailabilityDraft}
           onUpsertAvailabilityException={handleUpsertAvailabilityException}
           onCreateAvailabilityExceptionRange={handleCreateAvailabilityExceptionRange}
+          onUpdateAvailabilityExceptionRange={handleUpdateAvailabilityExceptionRange}
+          onDeleteAvailabilityExceptionRange={handleDeleteAvailabilityExceptionRange}
           onDeleteAvailabilityException={handleDeleteAvailabilityException}
           isSavingAppointment={guardandoCita}
           processingAppointmentId={procesandoCitaId}
