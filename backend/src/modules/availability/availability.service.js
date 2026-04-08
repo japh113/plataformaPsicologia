@@ -27,6 +27,26 @@ const normalizeDateValue = (value) => {
   return String(value).slice(0, 10);
 };
 
+const addDaysToDateString = (dateString, amount) => {
+  const [year = '0', month = '1', day = '1'] = String(dateString).split('-');
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  date.setDate(date.getDate() + amount);
+  return normalizeDateValue(date);
+};
+
+const buildDateRange = (startDate, endDate) => {
+  const dates = [];
+  let currentDate = normalizeDateValue(startDate);
+  const lastDate = normalizeDateValue(endDate);
+
+  while (currentDate <= lastDate) {
+    dates.push(currentDate);
+    currentDate = addDaysToDateString(currentDate, 1);
+  }
+
+  return dates;
+};
+
 const parseTimeToMinutes = (value) => {
   const [hours = '0', minutes = '0'] = String(value).split(':');
   return Number(hours) * 60 + Number(minutes);
@@ -153,6 +173,39 @@ const getFutureAppointmentsForPsychologist = async (psychologistUserId, date = n
       ORDER BY a.scheduled_date ASC, a.scheduled_time ASC, a.id ASC
     `,
     params,
+  );
+
+  return result.rows;
+};
+
+const getFutureAppointmentsForPsychologistByDates = async (psychologistUserId, dates) => {
+  if (!dates || dates.length === 0) {
+    return [];
+  }
+
+  const result = await db.query(
+    `
+      SELECT
+        a.id,
+        a.patient_id,
+        a.scheduled_date::text AS scheduled_date,
+        a.scheduled_time::text AS scheduled_time
+      FROM appointments a
+      INNER JOIN psychologist_patient_access spa
+        ON spa.patient_id = a.patient_id
+      WHERE spa.psychologist_user_id = $1
+        AND a.scheduled_date = ANY($2::date[])
+        AND a.status <> 'cancelled'
+        AND (
+          a.scheduled_date > CURRENT_DATE
+          OR (
+            a.scheduled_date = CURRENT_DATE
+            AND a.scheduled_time + INTERVAL '1 hour' > CURRENT_TIME
+          )
+        )
+      ORDER BY a.scheduled_date ASC, a.scheduled_time ASC, a.id ASC
+    `,
+    [psychologistUserId, dates],
   );
 
   return result.rows;
@@ -452,6 +505,62 @@ export const upsertMyAvailabilityException = async (exceptionDate, payload, acto
   }
 
   return getAvailabilityExceptionByDate(actor.id, normalizedDate);
+};
+
+export const createMyUnavailableAvailabilityRange = async ({ startDate, endDate }, actor) => {
+  ensurePsychologist(actor);
+
+  const dates = buildDateRange(startDate, endDate);
+  const futureAppointments = await getFutureAppointmentsForPsychologistByDates(actor.id, dates);
+
+  if (futureAppointments.length > 0) {
+    throw createConflictError(
+      `No puedes bloquear este periodo porque ya existen citas agendadas dentro del rango: ${buildConflictPreview(futureAppointments)}. Reagenda o cancela esos espacios primero.`,
+    );
+  }
+
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    for (const date of dates) {
+      await client.query(
+        `
+          INSERT INTO psychologist_availability_exceptions (
+            psychologist_user_id,
+            exception_date,
+            is_unavailable
+          )
+          VALUES ($1, $2, TRUE)
+          ON CONFLICT (psychologist_user_id, exception_date)
+          DO UPDATE SET
+            is_unavailable = TRUE,
+            updated_at = NOW()
+        `,
+        [actor.id, date],
+      );
+
+      await client.query(
+        `
+          DELETE FROM psychologist_availability_exception_blocks
+          WHERE psychologist_user_id = $1
+            AND exception_date = $2
+        `,
+        [actor.id, date],
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const exceptionMap = await getAvailabilityExceptionMap(actor.id, dates);
+  return dates.map((date) => exceptionMap.get(date)).filter(Boolean);
 };
 
 export const deleteMyAvailabilityException = async (exceptionDate, actor) => {

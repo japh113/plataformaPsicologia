@@ -31,9 +31,20 @@ const formatExceptionDate = (date) => {
   const [year = '0', month = '1', day = '1'] = String(date).split('-');
   return exceptionDateFormatter.format(new Date(Number(year), Number(month) - 1, Number(day)));
 };
+const getRangeDayCount = (startDate, endDate) => {
+  if (!startDate || !endDate || endDate < startDate) {
+    return 0;
+  }
+
+  const [startYear = '0', startMonth = '1', startDay = '1'] = String(startDate).split('-');
+  const [endYear = '0', endMonth = '1', endDay = '1'] = String(endDate).split('-');
+  const start = new Date(Number(startYear), Number(startMonth) - 1, Number(startDay));
+  const end = new Date(Number(endYear), Number(endMonth) - 1, Number(endDay));
+  return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+};
 
 export default function AppointmentsScreen({
-  currentUser, patients, appointments, availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onDeleteAvailabilityException,
+  currentUser, patients, appointments, availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onDeleteAvailabilityException,
   isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
@@ -46,6 +57,7 @@ export default function AppointmentsScreen({
   const [hoveredDate, setHoveredDate] = useState('');
   const [editingExceptionDate, setEditingExceptionDate] = useState('');
   const [exceptionForm, setExceptionForm] = useState(createEmptyExceptionForm());
+  const [exceptionRangeForm, setExceptionRangeForm] = useState({ startDate: todayDate, endDate: todayDate });
 
   const normalizedAvailabilityDraft = useMemo(() => normalizeDraftEntries(availabilityDraft || availability), [availability, availabilityDraft]);
   const availabilityMap = useMemo(() => new Map(normalizedAvailabilityDraft.map((entry) => [entry.weekday, entry.blocks])), [normalizedAvailabilityDraft]);
@@ -217,6 +229,21 @@ export default function AppointmentsScreen({
       resetExceptionForm();
     }
   };
+  const handleExceptionRangeFieldChange = (field, value) => {
+    onDismissAvailabilityExceptionError?.();
+    setExceptionRangeForm((current) => ({ ...current, [field]: value }));
+  };
+  const handleSaveExceptionRange = async (event) => {
+    event.preventDefault();
+    if (!exceptionRangeForm.startDate || !exceptionRangeForm.endDate) return;
+    const wasSaved = await onCreateAvailabilityExceptionRange({
+      startDate: exceptionRangeForm.startDate,
+      endDate: exceptionRangeForm.endDate,
+    });
+    if (wasSaved) {
+      setExceptionRangeForm({ startDate: todayDate, endDate: todayDate });
+    }
+  };
 
   const calendarTitle = calendarView === 'month' ? 'Vista Mensual' : 'Vista Semanal';
   const calendarSubtitle = calendarView === 'month' ? 'Explora el mes completo con una cuadricula de calendario y toca un dia para enfocar el listado.' : 'Explora la semana y selecciona un dia para enfocar el listado.';
@@ -236,6 +263,7 @@ export default function AppointmentsScreen({
       : hourOptions.length === 0
         ? 'No quedan cupos disponibles en este dia.'
         : `${hourOptions.length} horario${hourOptions.length === 1 ? '' : 's'} disponible${hourOptions.length === 1 ? '' : 's'} en este dia.`;
+  const exceptionRangeDayCount = getRangeDayCount(exceptionRangeForm.startDate, exceptionRangeForm.endDate);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -454,6 +482,33 @@ export default function AppointmentsScreen({
             </div>
 
             {availabilityExceptionActionError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{availabilityExceptionActionError}</div>}
+
+            <form onSubmit={handleSaveExceptionRange} className="mb-4 space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div>
+                <h4 className="font-semibold text-slate-800">Bloquear periodo</h4>
+                <p className="mt-1 text-xs text-slate-500">Ideal para vacaciones, congresos o ausencias de varios dias. Creara dias no disponibles en todo el rango.</p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Inicio</label>
+                  <input type="date" value={exceptionRangeForm.startDate} onChange={(event) => handleExceptionRangeFieldChange('startDate', event.target.value)} disabled={isSavingAvailabilityException} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Fin</label>
+                  <input type="date" value={exceptionRangeForm.endDate} onChange={(event) => handleExceptionRangeFieldChange('endDate', event.target.value)} disabled={isSavingAvailabilityException} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                </div>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-slate-500">
+                  {exceptionRangeDayCount > 0
+                    ? `Se bloquearan ${exceptionRangeDayCount} dia${exceptionRangeDayCount === 1 ? '' : 's'} completos.`
+                    : 'Selecciona un rango valido para bloquear el periodo.'}
+                </p>
+                <button type="submit" disabled={isSavingAvailabilityException || exceptionRangeDayCount === 0} className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition disabled:opacity-60 disabled:cursor-not-allowed">
+                  {isSavingAvailabilityException ? 'Guardando...' : 'Bloquear periodo'}
+                </button>
+              </div>
+            </form>
 
             <form onSubmit={handleSaveException} className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
               <div className="flex items-center justify-between gap-3">

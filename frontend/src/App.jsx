@@ -9,6 +9,7 @@ import NotesScreen from './screens/NotesScreen';
 import LoginScreen from './screens/LoginScreen';
 import AppointmentsScreen from './screens/AppointmentsScreen';
 import {
+  createMyUnavailableAvailabilityRange,
   deleteMyAvailabilityException,
   getMyAvailability,
   getMyAvailabilityExceptions,
@@ -472,6 +473,30 @@ export default function App() {
     }
   };
 
+  const handleCreateAvailabilityExceptionRange = async (payload) => {
+    if (!isPsychologist || savingAvailabilityException) {
+      return false;
+    }
+
+    setSavingAvailabilityException(true);
+    setAvailabilityExceptionActionError('');
+
+    try {
+      const createdExceptions = await createMyUnavailableAvailabilityRange(payload);
+      setAvailabilityExceptions((currentExceptions) => {
+        const blockedDates = new Set(createdExceptions.map((exception) => exception.date));
+        const preservedExceptions = currentExceptions.filter((exception) => !blockedDates.has(exception.date));
+        return [...preservedExceptions, ...createdExceptions].sort((left, right) => left.date.localeCompare(right.date));
+      });
+      return true;
+    } catch (error) {
+      setAvailabilityExceptionActionError(error.message || 'No se pudo bloquear el periodo.');
+      return false;
+    } finally {
+      setSavingAvailabilityException(false);
+    }
+  };
+
   const renderMainContent = () => {
     if (cargandoDatos) {
       return (
@@ -523,6 +548,7 @@ export default function App() {
           onUpdateAvailability={handleUpdateAvailability}
           onChangeAvailabilityDraft={setAvailabilityDraft}
           onUpsertAvailabilityException={handleUpsertAvailabilityException}
+          onCreateAvailabilityExceptionRange={handleCreateAvailabilityExceptionRange}
           onDeleteAvailabilityException={handleDeleteAvailabilityException}
           isSavingAppointment={guardandoCita}
           processingAppointmentId={procesandoCitaId}

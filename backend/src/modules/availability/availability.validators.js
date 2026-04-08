@@ -97,3 +97,27 @@ export const validateAvailabilityExceptionDate = (value) => {
 
   return errors;
 };
+
+export const validateAvailabilityExceptionRangePayload = (payload) => {
+  const errors = [];
+
+  if (!payload?.startDate || !isIsoDate(payload.startDate)) {
+    errors.push('startDate must be in YYYY-MM-DD format');
+  }
+
+  if (!payload?.endDate || !isIsoDate(payload.endDate)) {
+    errors.push('endDate must be in YYYY-MM-DD format');
+  }
+
+  if (
+    payload?.startDate &&
+    payload?.endDate &&
+    isIsoDate(payload.startDate) &&
+    isIsoDate(payload.endDate) &&
+    payload.endDate < payload.startDate
+  ) {
+    errors.push('endDate must be equal to or after startDate');
+  }
+
+  return errors;
+};

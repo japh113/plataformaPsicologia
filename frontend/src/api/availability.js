@@ -19,6 +19,15 @@ export const getMyAvailabilityExceptions = async () => {
   return response.data;
 };
 
+export const createMyUnavailableAvailabilityRange = async ({ startDate, endDate }) => {
+  const response = await apiRequest('/availability/me/exceptions/range', {
+    method: 'POST',
+    body: JSON.stringify({ startDate, endDate }),
+  });
+
+  return response.data;
+};
+
 export const upsertMyAvailabilityException = async ({ date, isUnavailable, blocks }) => {
   const response = await apiRequest(`/availability/me/exceptions/${date}`, {
     method: 'PUT',

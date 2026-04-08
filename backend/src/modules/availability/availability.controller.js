@@ -1,5 +1,6 @@
 import { errorResponse, successResponse } from '../../utils/response.js';
 import {
+  createMyUnavailableAvailabilityRange,
   deleteMyAvailabilityException,
   listMyAvailability,
   listMyAvailabilityExceptions,
@@ -9,6 +10,7 @@ import {
 import {
   validateAvailabilityExceptionDate,
   validateAvailabilityExceptionPayload,
+  validateAvailabilityExceptionRangePayload,
   validateAvailabilityPayload,
 } from './availability.validators.js';
 
@@ -77,6 +79,21 @@ export const deleteMyAvailabilityExceptionHandler = async (req, res, next) => {
     }
 
     return successResponse(res, null, 'Availability exception deleted successfully');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const createMyUnavailableAvailabilityRangeHandler = async (req, res, next) => {
+  try {
+    const errors = validateAvailabilityExceptionRangePayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const createdExceptions = await createMyUnavailableAvailabilityRange(req.body, req.user);
+    return successResponse(res, createdExceptions, 'Availability range blocked successfully');
   } catch (error) {
     return next(error);
   }
