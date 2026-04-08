@@ -15,6 +15,18 @@ const normalizeTime = (value) => {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
+const normalizeDateValue = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  return String(value).slice(0, 10);
+};
+
 const parseTimeToMinutes = (value) => {
   const [hours = '0', minutes = '0'] = String(value).split(':');
   return Number(hours) * 60 + Number(minutes);
@@ -26,7 +38,7 @@ const getWeekdayFromDateString = (value) => {
 };
 
 const mapAvailabilityRow = (row) => ({
-  id: String(row.id),
+  id: row.id ? String(row.id) : undefined,
   startTime: normalizeTime(row.start_time),
   endTime: normalizeTime(row.end_time),
 });
@@ -44,8 +56,81 @@ const mergeWithDefaults = (rows) => {
   }));
 };
 
-const ensureAvailabilityDoesNotConflictWithAppointments = async (entries, actor) => {
-  const futureAppointmentsResult = await db.query(
+const mapExceptionRows = (rows) => {
+  const exceptionByDate = new Map();
+
+  rows.forEach((row) => {
+    const date = normalizeDateValue(row.exception_date);
+
+    if (!exceptionByDate.has(date)) {
+      exceptionByDate.set(date, {
+        date,
+        isUnavailable: Boolean(row.is_unavailable),
+        blocks: [],
+      });
+    }
+
+    if (row.start_time && row.end_time) {
+      exceptionByDate.get(date).blocks.push(mapAvailabilityRow(row));
+    }
+  });
+
+  return [...exceptionByDate.values()]
+    .map((entry) => ({
+      ...entry,
+      blocks: entry.blocks.sort((left, right) => left.startTime.localeCompare(right.startTime)),
+    }))
+    .sort((left, right) => left.date.localeCompare(right.date));
+};
+
+const createConflictError = (message) => {
+  const error = new Error(message);
+  error.status = 409;
+  return error;
+};
+
+const fitsAppointmentInsideBlocks = (scheduledTime, blocks) => {
+  const appointmentStart = parseTimeToMinutes(scheduledTime);
+  const appointmentEnd = appointmentStart + 60;
+
+  return blocks.some((block) => {
+    const blockStart = parseTimeToMinutes(block.startTime);
+    const blockEnd = parseTimeToMinutes(block.endTime);
+    return appointmentStart >= blockStart && appointmentEnd <= blockEnd;
+  });
+};
+
+const buildConflictPreview = (appointments) => {
+  const preview = appointments
+    .slice(0, 3)
+    .map((appointment) => `${appointment.scheduled_date} ${String(appointment.scheduled_time).slice(0, 5)}`)
+    .join(', ');
+
+  const remainingCount = appointments.length - Math.min(appointments.length, 3);
+  const suffix = remainingCount > 0 ? ` y ${remainingCount} mas` : '';
+
+  return `${preview}${suffix}`;
+};
+
+const ensureAppointmentsFitBlocks = (appointments, blocks, message) => {
+  const conflictingAppointments = appointments.filter((appointment) => !fitsAppointmentInsideBlocks(appointment.scheduled_time, blocks));
+
+  if (conflictingAppointments.length === 0) {
+    return;
+  }
+
+  throw createConflictError(`${message}: ${buildConflictPreview(conflictingAppointments)}. Reagenda o cancela esos espacios primero.`);
+};
+
+const getFutureAppointmentsForPsychologist = async (psychologistUserId, date = null) => {
+  const params = [psychologistUserId];
+  const dateClause = date ? 'AND a.scheduled_date = $2' : '';
+
+  if (date) {
+    params.push(date);
+  }
+
+  const result = await db.query(
     `
       SELECT
         a.id,
@@ -56,46 +141,168 @@ const ensureAvailabilityDoesNotConflictWithAppointments = async (entries, actor)
       INNER JOIN psychologist_patient_access spa
         ON spa.patient_id = a.patient_id
       WHERE spa.psychologist_user_id = $1
+        ${dateClause}
         AND a.status <> 'cancelled'
-        AND a.scheduled_date >= CURRENT_DATE
+        AND (
+          a.scheduled_date > CURRENT_DATE
+          OR (
+            a.scheduled_date = CURRENT_DATE
+            AND a.scheduled_time + INTERVAL '1 hour' > CURRENT_TIME
+          )
+        )
       ORDER BY a.scheduled_date ASC, a.scheduled_time ASC, a.id ASC
     `,
-    [actor.id],
+    params,
   );
 
+  return result.rows;
+};
+
+const getWeeklyAvailabilityBlocks = async (psychologistUserId, weekday) => {
+  const result = await db.query(
+    `
+      SELECT id, start_time, end_time
+      FROM psychologist_availability_blocks
+      WHERE psychologist_user_id = $1
+        AND weekday = $2
+      ORDER BY start_time ASC, end_time ASC, id ASC
+    `,
+    [psychologistUserId, weekday],
+  );
+
+  return result.rows.map(mapAvailabilityRow);
+};
+
+const getAvailabilityExceptionMap = async (psychologistUserId, dates) => {
+  if (!dates || dates.length === 0) {
+    return new Map();
+  }
+
+  const result = await db.query(
+    `
+      SELECT
+        e.exception_date,
+        e.is_unavailable,
+        b.id,
+        b.start_time,
+        b.end_time
+      FROM psychologist_availability_exceptions e
+      LEFT JOIN psychologist_availability_exception_blocks b
+        ON b.psychologist_user_id = e.psychologist_user_id
+       AND b.exception_date = e.exception_date
+      WHERE e.psychologist_user_id = $1
+        AND e.exception_date = ANY($2::date[])
+      ORDER BY e.exception_date ASC, b.start_time ASC, b.id ASC
+    `,
+    [psychologistUserId, dates],
+  );
+
+  return new Map(mapExceptionRows(result.rows).map((entry) => [entry.date, entry]));
+};
+
+const getAvailabilityExceptionByDate = async (psychologistUserId, exceptionDate) => {
+  const exceptionMap = await getAvailabilityExceptionMap(psychologistUserId, [exceptionDate]);
+  return exceptionMap.get(exceptionDate) || null;
+};
+
+const ensureAvailabilityDoesNotConflictWithAppointments = async (entries, actor) => {
+  const futureAppointments = await getFutureAppointmentsForPsychologist(actor.id);
+
+  if (futureAppointments.length === 0) {
+    return;
+  }
+
+  const dates = [...new Set(futureAppointments.map((appointment) => appointment.scheduled_date))];
+  const exceptionMap = await getAvailabilityExceptionMap(actor.id, dates);
   const entriesByWeekday = new Map(entries.map((entry) => [entry.weekday, entry.blocks || []]));
-  const conflictingAppointments = futureAppointmentsResult.rows.filter((appointment) => {
+
+  const conflictingAppointments = futureAppointments.filter((appointment) => {
+    const exception = exceptionMap.get(appointment.scheduled_date);
     const weekday = getWeekdayFromDateString(appointment.scheduled_date);
-    const blocks = entriesByWeekday.get(weekday) || [];
+    const blocks = exception ? exception.blocks : entriesByWeekday.get(weekday) || [];
 
-    if (blocks.length === 0) {
-      return true;
-    }
-
-    const appointmentStart = parseTimeToMinutes(appointment.scheduled_time);
-    const appointmentEnd = appointmentStart + 60;
-
-    return !blocks.some((block) => {
-      const blockStart = parseTimeToMinutes(block.startTime);
-      const blockEnd = parseTimeToMinutes(block.endTime);
-      return appointmentStart >= blockStart && appointmentEnd <= blockEnd;
-    });
+    return !fitsAppointmentInsideBlocks(appointment.scheduled_time, blocks);
   });
 
   if (conflictingAppointments.length === 0) {
     return;
   }
 
-  const conflictPreview = conflictingAppointments
-    .slice(0, 3)
-    .map((appointment) => `${appointment.scheduled_date} ${String(appointment.scheduled_time).slice(0, 5)}`)
-    .join(', ');
+  throw createConflictError(
+    `No puedes reducir la disponibilidad porque ya existen citas agendadas fuera del nuevo horario: ${buildConflictPreview(conflictingAppointments)}. Reagenda o cancela esos espacios primero.`,
+  );
+};
 
-  const remainingCount = conflictingAppointments.length - Math.min(conflictingAppointments.length, 3);
-  const suffix = remainingCount > 0 ? ` y ${remainingCount} mas` : '';
-  const error = new Error(`No puedes reducir la disponibilidad porque ya existen citas agendadas fuera del nuevo horario: ${conflictPreview}${suffix}. Reagenda o cancela esos espacios primero.`);
-  error.status = 409;
-  throw error;
+const ensureAvailabilityExceptionDoesNotConflictWithAppointments = async ({
+  actor,
+  exceptionDate,
+  isUnavailable,
+  blocks,
+}) => {
+  const futureAppointments = await getFutureAppointmentsForPsychologist(actor.id, exceptionDate);
+
+  if (futureAppointments.length === 0) {
+    return;
+  }
+
+  if (isUnavailable || blocks.length === 0) {
+    throw createConflictError(
+      `No puedes marcar ${exceptionDate} como no disponible porque ya existen citas agendadas: ${buildConflictPreview(futureAppointments)}. Reagenda o cancela esos espacios primero.`,
+    );
+  }
+
+  ensureAppointmentsFitBlocks(
+    futureAppointments,
+    blocks,
+    `No puedes guardar esa excepcion porque ya existen citas fuera del horario especial`,
+  );
+};
+
+const ensureExceptionDeletionDoesNotConflictWithAppointments = async (exceptionDate, actor) => {
+  const futureAppointments = await getFutureAppointmentsForPsychologist(actor.id, exceptionDate);
+
+  if (futureAppointments.length === 0) {
+    return;
+  }
+
+  const weekday = getWeekdayFromDateString(exceptionDate);
+  const weeklyBlocks = await getWeeklyAvailabilityBlocks(actor.id, weekday);
+
+  if (weeklyBlocks.length === 0) {
+    throw createConflictError(
+      `No puedes eliminar la excepcion porque la disponibilidad semanal deja sin cobertura estas citas: ${buildConflictPreview(futureAppointments)}. Reagenda o cancela esos espacios primero.`,
+    );
+  }
+
+  ensureAppointmentsFitBlocks(
+    futureAppointments,
+    weeklyBlocks,
+    'No puedes eliminar la excepcion porque la disponibilidad semanal deja fuera algunas citas',
+  );
+};
+
+export const getEffectiveAvailabilityForDate = async ({ psychologistUserId, date }) => {
+  const normalizedDate = normalizeDateValue(date);
+  const exception = await getAvailabilityExceptionByDate(psychologistUserId, normalizedDate);
+
+  if (exception) {
+    return {
+      source: 'exception',
+      date: normalizedDate,
+      isUnavailable: exception.isUnavailable,
+      blocks: exception.blocks,
+    };
+  }
+
+  const weekday = getWeekdayFromDateString(normalizedDate);
+  const blocks = await getWeeklyAvailabilityBlocks(psychologistUserId, weekday);
+
+  return {
+    source: 'weekly',
+    date: normalizedDate,
+    isUnavailable: false,
+    blocks,
+  };
 };
 
 export const listMyAvailability = async (actor) => {
@@ -150,4 +357,123 @@ export const updateMyAvailability = async (entries, actor) => {
   }
 
   return listMyAvailability(actor);
+};
+
+export const listMyAvailabilityExceptions = async (actor) => {
+  ensurePsychologist(actor);
+
+  const result = await db.query(
+    `
+      SELECT
+        e.exception_date,
+        e.is_unavailable,
+        b.id,
+        b.start_time,
+        b.end_time
+      FROM psychologist_availability_exceptions e
+      LEFT JOIN psychologist_availability_exception_blocks b
+        ON b.psychologist_user_id = e.psychologist_user_id
+       AND b.exception_date = e.exception_date
+      WHERE e.psychologist_user_id = $1
+      ORDER BY e.exception_date ASC, b.start_time ASC, b.id ASC
+    `,
+    [actor.id],
+  );
+
+  return mapExceptionRows(result.rows);
+};
+
+export const upsertMyAvailabilityException = async (exceptionDate, payload, actor) => {
+  ensurePsychologist(actor);
+
+  const normalizedDate = normalizeDateValue(exceptionDate);
+  const blocks = (payload.isUnavailable ? [] : payload.blocks).map((block) => ({
+    startTime: normalizeTime(block.startTime),
+    endTime: normalizeTime(block.endTime),
+  }));
+
+  await ensureAvailabilityExceptionDoesNotConflictWithAppointments({
+    actor,
+    exceptionDate: normalizedDate,
+    isUnavailable: Boolean(payload.isUnavailable),
+    blocks,
+  });
+
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `
+        INSERT INTO psychologist_availability_exceptions (
+          psychologist_user_id,
+          exception_date,
+          is_unavailable
+        )
+        VALUES ($1, $2, $3)
+        ON CONFLICT (psychologist_user_id, exception_date)
+        DO UPDATE SET
+          is_unavailable = EXCLUDED.is_unavailable,
+          updated_at = NOW()
+      `,
+      [actor.id, normalizedDate, Boolean(payload.isUnavailable)],
+    );
+
+    await client.query(
+      `
+        DELETE FROM psychologist_availability_exception_blocks
+        WHERE psychologist_user_id = $1
+          AND exception_date = $2
+      `,
+      [actor.id, normalizedDate],
+    );
+
+    for (const block of blocks) {
+      await client.query(
+        `
+          INSERT INTO psychologist_availability_exception_blocks (
+            psychologist_user_id,
+            exception_date,
+            start_time,
+            end_time
+          )
+          VALUES ($1, $2, $3, $4)
+        `,
+        [actor.id, normalizedDate, block.startTime, block.endTime],
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  return getAvailabilityExceptionByDate(actor.id, normalizedDate);
+};
+
+export const deleteMyAvailabilityException = async (exceptionDate, actor) => {
+  ensurePsychologist(actor);
+
+  const normalizedDate = normalizeDateValue(exceptionDate);
+  const existingException = await getAvailabilityExceptionByDate(actor.id, normalizedDate);
+
+  if (!existingException) {
+    return false;
+  }
+
+  await ensureExceptionDeletionDoesNotConflictWithAppointments(normalizedDate, actor);
+
+  const result = await db.query(
+    `
+      DELETE FROM psychologist_availability_exceptions
+      WHERE psychologist_user_id = $1
+        AND exception_date = $2
+    `,
+    [actor.id, normalizedDate],
+  );
+
+  return result.rowCount > 0;
 };

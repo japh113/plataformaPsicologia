@@ -1,5 +1,6 @@
 import db from '../../config/db.js';
 import { buildPatientAccessScope, ensurePsychologist } from '../auth/auth.permissions.js';
+import { getEffectiveAvailabilityForDate } from '../availability/availability.service.js';
 
 const normalizeDateValue = (value) => {
   if (!value) {
@@ -30,11 +31,6 @@ const normalizeScheduledTime = (value) => {
 const parseTimeToMinutes = (value) => {
   const [hours = '0', minutes = '0'] = String(value).split(':');
   return Number(hours) * 60 + Number(minutes);
-};
-
-const getWeekdayFromDateString = (dateString) => {
-  const [year = '0', month = '1', day = '1'] = String(dateString).split('-');
-  return new Date(Number(year), Number(month) - 1, Number(day)).getDay();
 };
 
 const createScheduleConflictError = (message) => {
@@ -121,29 +117,32 @@ const ensureInsidePsychologistAvailability = async ({ actor, scheduledDate, sche
     return;
   }
 
-  const weekday = getWeekdayFromDateString(scheduledDate);
-  const availabilityResult = await db.query(
-    `
-      SELECT start_time, end_time
-      FROM psychologist_availability_blocks
-      WHERE psychologist_user_id = $1
-        AND weekday = $2
-      ORDER BY start_time ASC, end_time ASC, id ASC
-    `,
-    [actor.id, weekday],
-  );
+  const availability = await getEffectiveAvailabilityForDate({
+    psychologistUserId: actor.id,
+    date: scheduledDate,
+  });
 
-  if (availabilityResult.rowCount === 0) {
-    const error = new Error('No tienes disponibilidad configurada para ese día.');
+  if (availability.source === 'exception' && availability.isUnavailable) {
+    const error = new Error('Ese dia esta marcado como no disponible en tu calendario.');
+    error.status = 409;
+    throw error;
+  }
+
+  if (availability.blocks.length === 0) {
+    const error = new Error(
+      availability.source === 'exception'
+        ? 'Ese dia tiene una excepcion sin horarios disponibles.'
+        : 'No tienes disponibilidad configurada para ese dia.',
+    );
     error.status = 409;
     throw error;
   }
 
   const startMinutes = parseTimeToMinutes(scheduledTime);
   const endMinutes = startMinutes + 60;
-  const fitsInsideAnyBlock = availabilityResult.rows.some((availabilityBlock) => {
-    const availabilityStart = parseTimeToMinutes(availabilityBlock.start_time);
-    const availabilityEnd = parseTimeToMinutes(availabilityBlock.end_time);
+  const fitsInsideAnyBlock = availability.blocks.some((availabilityBlock) => {
+    const availabilityStart = parseTimeToMinutes(availabilityBlock.startTime);
+    const availabilityEnd = parseTimeToMinutes(availabilityBlock.endTime);
     return startMinutes >= availabilityStart && endMinutes <= availabilityEnd;
   });
 

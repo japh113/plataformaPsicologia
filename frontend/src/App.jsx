@@ -8,7 +8,13 @@ import PatientsScreen from './screens/PatientsScreen';
 import NotesScreen from './screens/NotesScreen';
 import LoginScreen from './screens/LoginScreen';
 import AppointmentsScreen from './screens/AppointmentsScreen';
-import { getMyAvailability, updateMyAvailability } from './api/availability';
+import {
+  deleteMyAvailabilityException,
+  getMyAvailability,
+  getMyAvailabilityExceptions,
+  updateMyAvailability,
+  upsertMyAvailabilityException,
+} from './api/availability';
 import {
   createPatient,
   createPatientTask,
@@ -49,6 +55,7 @@ export default function App() {
   const [appointments, setAppointments] = useState([]);
   const [availability, setAvailability] = useState([]);
   const [availabilityDraft, setAvailabilityDraft] = useState([]);
+  const [availabilityExceptions, setAvailabilityExceptions] = useState([]);
   const [mostrarModalNuevoPaciente, setMostrarModalNuevoPaciente] = useState(false);
   const [nuevoPacienteForm, setNuevoPacienteForm] = useState({ nombre: '', edad: '', motivo: '', riesgo: 'bajo' });
   const [notasTemp, setNotasTemp] = useState('');
@@ -63,6 +70,8 @@ export default function App() {
   const [appointmentActionError, setAppointmentActionError] = useState('');
   const [savingAvailability, setSavingAvailability] = useState(false);
   const [availabilityActionError, setAvailabilityActionError] = useState('');
+  const [savingAvailabilityException, setSavingAvailabilityException] = useState(false);
+  const [availabilityExceptionActionError, setAvailabilityExceptionActionError] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
@@ -79,10 +88,12 @@ export default function App() {
     setAppointments([]);
     setAvailability([]);
     setAvailabilityDraft([]);
+    setAvailabilityExceptions([]);
     setNotasTemp('');
     setErrorCarga('');
     setAppointmentActionError('');
     setAvailabilityActionError('');
+    setAvailabilityExceptionActionError('');
     setMostrarModalNuevoPaciente(false);
     setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'bajo' });
   };
@@ -100,14 +111,16 @@ export default function App() {
 
       if (currentUser.role === 'psychologist') {
         requests.push(getMyAvailability());
+        requests.push(getMyAvailabilityExceptions());
       }
 
-      const [backendPatients, backendAppointments, backendAvailability = []] = await Promise.all(requests);
+      const [backendPatients, backendAppointments, backendAvailability = [], backendAvailabilityExceptions = []] = await Promise.all(requests);
 
       setPacientes(backendPatients.map(mapBackendPatientToUiPatient));
       setAppointments(sortAppointments(backendAppointments.map(mapBackendAppointmentToUiAppointment)));
       setAvailability(backendAvailability);
       setAvailabilityDraft(backendAvailability);
+      setAvailabilityExceptions(backendAvailabilityExceptions);
     } catch (error) {
       setErrorCarga(error.message || 'No se pudieron cargar los datos del tablero.');
     } finally {
@@ -416,6 +429,49 @@ export default function App() {
     }
   };
 
+  const handleUpsertAvailabilityException = async (payload) => {
+    if (!isPsychologist || savingAvailabilityException) {
+      return false;
+    }
+
+    setSavingAvailabilityException(true);
+    setAvailabilityExceptionActionError('');
+
+    try {
+      const savedException = await upsertMyAvailabilityException(payload);
+      setAvailabilityExceptions((currentExceptions) => {
+        const withoutCurrentDate = currentExceptions.filter((exception) => exception.date !== savedException.date);
+        return [...withoutCurrentDate, savedException].sort((left, right) => left.date.localeCompare(right.date));
+      });
+      return true;
+    } catch (error) {
+      setAvailabilityExceptionActionError(error.message || 'No se pudo guardar la excepcion.');
+      return false;
+    } finally {
+      setSavingAvailabilityException(false);
+    }
+  };
+
+  const handleDeleteAvailabilityException = async (date) => {
+    if (!isPsychologist || savingAvailabilityException) {
+      return false;
+    }
+
+    setSavingAvailabilityException(true);
+    setAvailabilityExceptionActionError('');
+
+    try {
+      await deleteMyAvailabilityException(date);
+      setAvailabilityExceptions((currentExceptions) => currentExceptions.filter((exception) => exception.date !== date));
+      return true;
+    } catch (error) {
+      setAvailabilityExceptionActionError(error.message || 'No se pudo eliminar la excepcion.');
+      return false;
+    } finally {
+      setSavingAvailabilityException(false);
+    }
+  };
+
   const renderMainContent = () => {
     if (cargandoDatos) {
       return (
@@ -458,6 +514,7 @@ export default function App() {
           appointments={appointments}
           availability={availability}
           availabilityDraft={availabilityDraft}
+          availabilityExceptions={availabilityExceptions}
           todayDate={todayDate}
           onOpenPatient={abrirNotas}
           onCreateAppointment={handleCreateAppointment}
@@ -465,6 +522,8 @@ export default function App() {
           onDeleteAppointment={handleDeleteAppointment}
           onUpdateAvailability={handleUpdateAvailability}
           onChangeAvailabilityDraft={setAvailabilityDraft}
+          onUpsertAvailabilityException={handleUpsertAvailabilityException}
+          onDeleteAvailabilityException={handleDeleteAvailabilityException}
           isSavingAppointment={guardandoCita}
           processingAppointmentId={procesandoCitaId}
           appointmentActionError={appointmentActionError}
@@ -472,6 +531,9 @@ export default function App() {
           isSavingAvailability={savingAvailability}
           availabilityActionError={availabilityActionError}
           onDismissAvailabilityError={() => setAvailabilityActionError('')}
+          isSavingAvailabilityException={savingAvailabilityException}
+          availabilityExceptionActionError={availabilityExceptionActionError}
+          onDismissAvailabilityExceptionError={() => setAvailabilityExceptionActionError('')}
         />
       );
     }

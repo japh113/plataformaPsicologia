@@ -56,6 +56,29 @@ CREATE TABLE IF NOT EXISTS psychologist_availability_blocks (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS psychologist_availability_exceptions (
+  psychologist_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  exception_date DATE NOT NULL,
+  is_unavailable BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (psychologist_user_id, exception_date)
+);
+
+CREATE TABLE IF NOT EXISTS psychologist_availability_exception_blocks (
+  id BIGSERIAL PRIMARY KEY,
+  psychologist_user_id TEXT NOT NULL,
+  exception_date DATE NOT NULL,
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT psychologist_availability_exception_blocks_parent_fk
+    FOREIGN KEY (psychologist_user_id, exception_date)
+    REFERENCES psychologist_availability_exceptions (psychologist_user_id, exception_date)
+    ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS patient_tasks (
   id BIGSERIAL PRIMARY KEY,
   patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,

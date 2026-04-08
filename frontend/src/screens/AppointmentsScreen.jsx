@@ -4,16 +4,34 @@ import { formatAppointmentDisplayHour, getAppointmentHourOptions, getMonthDates,
 
 const emptyForm = { pacienteId: '', fecha: '', hora24: '', estado: 'pendiente', notas: '' };
 const weekdayLabels = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
+const exceptionDateFormatter = new Intl.DateTimeFormat('es-MX', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const getStatusBadge = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
 const getMiniAppointmentChip = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
 const getAppointmentAccent = (estado) => (estado === 'completada' ? 'border-l-green-500 bg-green-50/40' : estado === 'cancelada' ? 'border-l-red-500 bg-red-50/40' : 'border-l-indigo-500 bg-indigo-50/40');
 const getDayNumberBadge = ({ isToday, isActive, isHovered, isCurrentMonth }) => (isActive ? 'bg-indigo-600 text-white shadow-sm' : isHovered ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-200' : isToday ? 'bg-indigo-100 text-indigo-700' : isCurrentMonth ? 'text-slate-900' : 'text-slate-400');
 const getWeekdayFromDateString = (value) => { const [y = '0', m = '1', d = '1'] = String(value).split('-'); return new Date(Number(y), Number(m) - 1, Number(d)).getDay(); };
-const normalizeDraftEntries = (entries) => (entries || []).map((entry) => ({ weekday: entry.weekday, blocks: (entry.blocks || []).map((block, index) => ({ id: block.id || `tmp-${entry.weekday}-${index}`, startTime: String(block.startTime || '').slice(0, 5), endTime: String(block.endTime || '').slice(0, 5) })) }));
+const createTempId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const normalizeBlocks = (blocks, prefix) => (blocks || []).map((block, index) => ({ id: block.id || `${prefix}-${index}`, startTime: String(block.startTime || '').slice(0, 5), endTime: String(block.endTime || '').slice(0, 5) }));
+const normalizeDraftEntries = (entries) => (entries || []).map((entry) => ({ weekday: entry.weekday, blocks: normalizeBlocks(entry.blocks, `tmp-${entry.weekday}`) }));
+const createDefaultExceptionBlock = () => ({ id: createTempId('exception-block'), startTime: '09:00', endTime: '10:00' });
+const createEmptyExceptionForm = (date = '') => ({ date, isUnavailable: false, blocks: [createDefaultExceptionBlock()] });
+const normalizeExceptionForm = (exception) => ({
+  date: exception?.date || '',
+  isUnavailable: Boolean(exception?.isUnavailable),
+  blocks: exception?.isUnavailable
+    ? []
+    : normalizeBlocks(exception?.blocks, `exception-${exception?.date || 'draft'}`).length > 0
+      ? normalizeBlocks(exception?.blocks, `exception-${exception?.date || 'draft'}`)
+      : [createDefaultExceptionBlock()],
+});
+const formatExceptionDate = (date) => {
+  const [year = '0', month = '1', day = '1'] = String(date).split('-');
+  return exceptionDateFormatter.format(new Date(Number(year), Number(month) - 1, Number(day)));
+};
 
 export default function AppointmentsScreen({
-  currentUser, patients, appointments, availability, availabilityDraft, todayDate, onOpenPatient, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onUpdateAvailability, onChangeAvailabilityDraft,
-  isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError,
+  currentUser, patients, appointments, availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onDeleteAvailabilityException,
+  isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
   const [selectedDate, setSelectedDate] = useState(isPsychologist ? '' : todayDate);
@@ -23,9 +41,15 @@ export default function AppointmentsScreen({
   const [calendarAnchorDate, setCalendarAnchorDate] = useState(todayDate);
   const [calendarView, setCalendarView] = useState('week');
   const [hoveredDate, setHoveredDate] = useState('');
+  const [editingExceptionDate, setEditingExceptionDate] = useState('');
+  const [exceptionForm, setExceptionForm] = useState(createEmptyExceptionForm());
 
   const normalizedAvailabilityDraft = useMemo(() => normalizeDraftEntries(availabilityDraft || availability), [availability, availabilityDraft]);
   const availabilityMap = useMemo(() => new Map(normalizedAvailabilityDraft.map((entry) => [entry.weekday, entry.blocks])), [normalizedAvailabilityDraft]);
+  const availabilityExceptionsMap = useMemo(
+    () => new Map((availabilityExceptions || []).map((exception) => [exception.date, { ...exception, blocks: normalizeBlocks(exception.blocks, `exception-${exception.date}`) }])),
+    [availabilityExceptions],
+  );
   const appointmentsForCalendar = useMemo(() => statusFilter === 'todos' ? appointments : appointments.filter((appointment) => appointment.estado === statusFilter), [appointments, statusFilter]);
   const weekDates = useMemo(() => getWeekDates(calendarAnchorDate), [calendarAnchorDate]);
   const weekRangeLabel = useMemo(() => getWeekRangeLabel(calendarAnchorDate), [calendarAnchorDate]);
@@ -33,8 +57,28 @@ export default function AppointmentsScreen({
   const monthLabel = useMemo(() => getMonthLabel(calendarAnchorDate), [calendarAnchorDate]);
   const monthWeekdayHeaders = useMemo(() => getMonthWeekdayHeaders(), []);
   const selectedFormDate = form.fecha || todayDate;
+
+  const selectedDayAvailability = useMemo(() => {
+    const exception = availabilityExceptionsMap.get(selectedFormDate);
+
+    if (exception) {
+      return {
+        source: 'exception',
+        isUnavailable: Boolean(exception.isUnavailable),
+        blocks: exception.blocks || [],
+      };
+    }
+
+    const weekday = getWeekdayFromDateString(selectedFormDate);
+
+    return {
+      source: 'weekly',
+      isUnavailable: false,
+      blocks: availabilityMap.get(weekday) || [],
+    };
+  }, [availabilityExceptionsMap, availabilityMap, selectedFormDate]);
   const selectedFormWeekday = getWeekdayFromDateString(selectedFormDate);
-  const selectedDayBlocks = useMemo(() => availabilityMap.get(selectedFormWeekday) || [], [availabilityMap, selectedFormWeekday]);
+  const selectedDayBlocks = selectedDayAvailability.blocks;
   const occupiedHourValues = useMemo(
     () =>
       new Set(
@@ -82,6 +126,11 @@ export default function AppointmentsScreen({
   }), [appointments, selectedDate, statusFilter]);
 
   const resetForm = () => { setEditingAppointmentId(null); setForm(emptyForm); onDismissAppointmentError?.(); };
+  const resetExceptionForm = () => {
+    setEditingExceptionDate('');
+    setExceptionForm(createEmptyExceptionForm(selectedDate || todayDate));
+    onDismissAvailabilityExceptionError?.();
+  };
   const handleEditAppointment = (appointment) => {
     setEditingAppointmentId(appointment.id);
     setForm({ pacienteId: appointment.pacienteId, fecha: appointment.fecha, hora24: appointment.hora24, estado: appointment.estado, notas: appointment.notas || '' });
@@ -125,15 +174,62 @@ export default function AppointmentsScreen({
     })));
   };
 
+  const handleExceptionFieldChange = (field, value) => {
+    onDismissAvailabilityExceptionError?.();
+    setExceptionForm((current) => ({ ...current, [field]: value }));
+  };
+  const handleAddExceptionBlock = () => {
+    onDismissAvailabilityExceptionError?.();
+    setExceptionForm((current) => ({ ...current, blocks: [...current.blocks, createDefaultExceptionBlock()] }));
+  };
+  const handleRemoveExceptionBlock = (blockId) => {
+    onDismissAvailabilityExceptionError?.();
+    setExceptionForm((current) => ({ ...current, blocks: current.blocks.filter((block) => block.id !== blockId) }));
+  };
+  const handleExceptionBlockChange = (blockId, field, value) => {
+    onDismissAvailabilityExceptionError?.();
+    setExceptionForm((current) => ({ ...current, blocks: current.blocks.map((block) => block.id !== blockId ? block : { ...block, [field]: value }) }));
+  };
+  const handleEditException = (exception) => {
+    setEditingExceptionDate(exception.date);
+    setExceptionForm(normalizeExceptionForm(exception));
+    onDismissAvailabilityExceptionError?.();
+  };
+  const handleSaveException = async (event) => {
+    event.preventDefault();
+    if (!exceptionForm.date) return;
+    const wasSaved = await onUpsertAvailabilityException({
+      date: exceptionForm.date,
+      isUnavailable: Boolean(exceptionForm.isUnavailable),
+      blocks: exceptionForm.isUnavailable ? [] : exceptionForm.blocks.map((block) => ({ startTime: block.startTime, endTime: block.endTime })),
+    });
+    if (wasSaved) {
+      resetExceptionForm();
+    }
+  };
+  const handleDeleteException = async (date) => {
+    if (!window.confirm('Se eliminara esta excepcion y el dia volvera a usar la disponibilidad semanal. Deseas continuar?')) return;
+    const wasDeleted = await onDeleteAvailabilityException(date);
+    if (wasDeleted && editingExceptionDate === date) {
+      resetExceptionForm();
+    }
+  };
+
   const calendarTitle = calendarView === 'month' ? 'Vista Mensual' : 'Vista Semanal';
   const calendarSubtitle = calendarView === 'month' ? 'Explora el mes completo con una cuadricula de calendario y toca un dia para enfocar el listado.' : 'Explora la semana y selecciona un dia para enfocar el listado.';
   const calendarRangeLabel = calendarView === 'month' ? monthLabel : weekRangeLabel;
-  const blockSummary = selectedDayBlocks.length > 0 ? selectedDayBlocks.map((block) => `${block.startTime}-${block.endTime}`).join(' | ') : 'Sin disponibilidad';
+  const blockSummary = selectedDayAvailability.isUnavailable
+    ? 'Excepcion: dia no disponible'
+    : selectedDayBlocks.length > 0
+      ? `${selectedDayAvailability.source === 'exception' ? 'Excepcion' : 'Semana base'}: ${selectedDayBlocks.map((block) => `${block.startTime}-${block.endTime}`).join(' | ')}`
+      : 'Sin disponibilidad';
   const availabilityStartOptions = getAppointmentHourOptions(6, 21);
   const availabilityEndOptions = getAppointmentHourOptions(7, 22);
   const availableSlotsMessage =
-    selectedDayBlocks.length === 0
-      ? 'No hay disponibilidad configurada para este dia.'
+    selectedDayAvailability.isUnavailable
+      ? 'Este dia esta marcado como no disponible por una excepcion.'
+      : selectedDayBlocks.length === 0
+        ? 'No hay disponibilidad configurada para este dia.'
       : hourOptions.length === 0
         ? 'No quedan cupos disponibles en este dia.'
         : `${hourOptions.length} horario${hourOptions.length === 1 ? '' : 's'} disponible${hourOptions.length === 1 ? '' : 's'} en este dia.`;
@@ -272,8 +368,8 @@ export default function AppointmentsScreen({
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Hora</label>
-                  <select name="hora24" value={form.hora24} onChange={handleChange} disabled={isSavingAppointment || (selectedDayBlocks.length === 0 && !form.hora24)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                    <option value="">{selectedDayBlocks.length > 0 ? 'Selecciona un horario' : 'Dia sin disponibilidad'}</option>
+                  <select name="hora24" value={form.hora24} onChange={handleChange} disabled={isSavingAppointment || ((selectedDayBlocks.length === 0 || selectedDayAvailability.isUnavailable) && !form.hora24)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    <option value="">{selectedDayAvailability.isUnavailable ? 'Dia no disponible' : selectedDayBlocks.length > 0 ? 'Selecciona un horario' : 'Dia sin disponibilidad'}</option>
                     {hourOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                   <p className="mt-1 text-xs text-gray-500">{availableSlotsMessage}</p>
@@ -324,6 +420,85 @@ export default function AppointmentsScreen({
                   </div>
                 </div>
               </div>)}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">Excepciones por fecha</h3>
+                <p className="text-sm text-gray-500 mt-1">Tienen prioridad sobre la semana base. Puedes bloquear un dia completo o definir horarios especiales.</p>
+              </div>
+              <button type="button" onClick={resetExceptionForm} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">Nueva excepcion</button>
+            </div>
+
+            {availabilityExceptionActionError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{availabilityExceptionActionError}</div>}
+
+            <form onSubmit={handleSaveException} className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="font-semibold text-gray-800">{editingExceptionDate ? 'Editar excepcion' : 'Nueva excepcion'}</h4>
+                  <p className="text-xs text-gray-500 mt-1">Usa esta configuracion para vacaciones, feriados o un horario especial en una fecha puntual.</p>
+                </div>
+                {editingExceptionDate && <button type="button" onClick={resetExceptionForm} className="text-sm font-medium text-gray-500 hover:text-gray-800 transition">Limpiar</button>}
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Fecha</label>
+                  <input type="date" value={exceptionForm.date} onChange={(event) => handleExceptionFieldChange('date', event.target.value)} disabled={isSavingAvailabilityException} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                </div>
+                <label className="inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-700">
+                  <input type="checkbox" checked={exceptionForm.isUnavailable} onChange={(event) => handleExceptionFieldChange('isUnavailable', event.target.checked)} disabled={isSavingAvailabilityException} className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                  Marcar este dia como no disponible
+                </label>
+              </div>
+
+              {!exceptionForm.isUnavailable && <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-700">Bloques para esta fecha</p>
+                    <p className="text-xs text-gray-500">Estos horarios reemplazan la disponibilidad semanal solo en este dia.</p>
+                  </div>
+                  <button type="button" onClick={handleAddExceptionBlock} disabled={isSavingAvailabilityException} className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition disabled:opacity-60"><Plus size={14} className="mr-2" /> Agregar bloque</button>
+                </div>
+                <div className="space-y-2">
+                  {exceptionForm.blocks.map((block) => <div key={block.id} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-center">
+                    <select value={block.startTime} onChange={(event) => handleExceptionBlockChange(block.id, 'startTime', event.target.value)} disabled={isSavingAvailabilityException} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                      {availabilityStartOptions.map((option) => <option key={option.value} value={option.value}>Desde {option.label}</option>)}
+                    </select>
+                    <select value={block.endTime} onChange={(event) => handleExceptionBlockChange(block.id, 'endTime', event.target.value)} disabled={isSavingAvailabilityException} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                      {availabilityEndOptions.map((option) => <option key={option.value} value={option.value}>Hasta {option.label}</option>)}
+                    </select>
+                    <button type="button" onClick={() => handleRemoveExceptionBlock(block.id)} disabled={isSavingAvailabilityException} className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 p-2.5 text-red-700 hover:bg-red-100 transition disabled:opacity-60"><Trash2 size={16} /></button>
+                  </div>)}
+                </div>
+              </div>}
+
+              <button type="submit" disabled={isSavingAvailabilityException || !exceptionForm.date} className="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white hover:bg-indigo-700 transition disabled:opacity-60 disabled:cursor-not-allowed">
+                {isSavingAvailabilityException ? 'Guardando...' : editingExceptionDate ? 'Guardar excepcion' : 'Crear excepcion'}
+              </button>
+            </form>
+
+            <div className="mt-4 space-y-3">
+              {availabilityExceptions.length > 0 ? availabilityExceptions.map((exception) => (
+                <div key={exception.date} className="rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="font-semibold text-gray-800 capitalize">{formatExceptionDate(exception.date)}</p>
+                      <p className="mt-1 text-sm text-gray-500">
+                        {exception.isUnavailable
+                          ? 'Dia completo no disponible.'
+                          : exception.blocks.map((block) => `${String(block.startTime).slice(0, 5)}-${String(block.endTime).slice(0, 5)}`).join(' | ')}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => handleEditException(exception)} className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition"><Pencil size={14} className="mr-2" /> Editar</button>
+                      <button type="button" onClick={() => handleDeleteException(exception.date)} disabled={isSavingAvailabilityException} className="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 transition disabled:opacity-60"><Trash2 size={14} className="mr-2" /> Eliminar</button>
+                    </div>
+                  </div>
+                </div>
+              )) : <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500">Todavia no hay excepciones configuradas.</div>}
             </div>
           </div>
         </div>}
