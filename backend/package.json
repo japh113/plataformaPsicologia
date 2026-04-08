@@ -5,11 +5,18 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "db:schema": "node scripts/run-sql-file.js sql/schema.sql",
+    "db:seed": "node scripts/run-sql-file.js sql/seed.sql",
+    "db:init": "npm run db:schema && npm run db:seed",
+    "db:normalize-appointments": "node scripts/normalize-appointment-times.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.3",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
