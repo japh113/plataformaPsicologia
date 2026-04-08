@@ -1,9 +1,10 @@
 import express from 'express';
 import cors from 'cors';
-import patientRoutes from './routes/patientRoutes.js';
-import appointmentRoutes from './routes/appointmentRoutes.js';
-import noteRoutes from './routes/noteRoutes.js';
-import taskRoutes from './routes/taskRoutes.js';
+
+import healthRoutes from './modules/health/health.routes.js';
+import patientsRoutes from './modules/patients/patients.routes.js';
+import notFoundMiddleware from './middlewares/notFoundMiddleware.js';
+import errorMiddleware from './middlewares/errorMiddleware.js';
 
 const app = express();
 
@@ -14,9 +15,10 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'psicopanel-api' });
 });
 
-app.use('/api/patients', patientRoutes);
-app.use('/api/appointments', appointmentRoutes);
-app.use('/api/notes', noteRoutes);
-app.use('/api/tasks', taskRoutes);
+app.use('/api/health', healthRoutes);
+app.use('/api/patients', patientsRoutes);
+
+app.use(notFoundMiddleware);
+app.use(errorMiddleware);
 
 export default app;
