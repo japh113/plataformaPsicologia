@@ -171,3 +171,25 @@ WHERE NOT EXISTS (
     AND a.scheduled_date = seed.scheduled_date
     AND a.scheduled_time = seed.scheduled_time
 );
+
+INSERT INTO patient_sessions (
+  patient_id,
+  created_by_user_id,
+  session_date,
+  note_format,
+  content
+)
+SELECT seed.patient_id, seed.created_by_user_id, seed.session_date, seed.note_format, seed.content
+FROM (
+  VALUES
+    ('1', 'u_psy_1', '2026-04-05'::date, 'simple', 'Sesion enfocada en identificar detonantes de ansiedad y revisar estrategias de regulacion.'),
+    ('2', 'u_psy_1', '2026-04-04'::date, 'simple', 'Seguimiento de rutina de sueno y ajuste de habitos nocturnos.'),
+    ('1', 'u_psy_1', '2026-04-01'::date, 'simple', 'Se trabajo registro de pensamientos automaticos y adherencia a tareas.')
+) AS seed(patient_id, created_by_user_id, session_date, note_format, content)
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM patient_sessions ps
+  WHERE ps.patient_id = seed.patient_id
+    AND ps.session_date = seed.session_date
+    AND ps.content = seed.content
+);

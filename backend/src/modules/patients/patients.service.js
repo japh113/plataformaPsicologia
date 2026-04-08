@@ -1,6 +1,6 @@
 import db from '../../config/db.js';
 import { buildPatientEntity } from './patients.model.js';
-import { buildPatientAccessScope, ensurePsychologist } from '../auth/auth.permissions.js';
+import { buildPatientAccessScope, ensurePsychologist, isPsychologist } from '../auth/auth.permissions.js';
 
 const normalizeDateValue = (value) => {
   if (!value) {
@@ -44,10 +44,42 @@ const patientSelectColumns = `
   ) AS tasks
 `;
 
+const psychologistSessionSelectColumn = `,
+  COALESCE(
+    (
+      SELECT json_agg(
+        json_build_object(
+          'id', ps.id,
+          'appointmentId', ps.appointment_id,
+          'sessionDate', ps.session_date,
+          'noteFormat', ps.note_format,
+          'content', ps.content,
+          'createdAt', ps.created_at,
+          'updatedAt', ps.updated_at
+        )
+        ORDER BY ps.session_date DESC, ps.created_at DESC, ps.id DESC
+      )
+      FROM patient_sessions ps
+      WHERE ps.patient_id = p.id
+    ),
+    '[]'::json
+  ) AS sessions
+`;
+
 const mapTaskRow = (task) => ({
   id: String(task.id),
   text: task.text,
   completed: Boolean(task.completed),
+});
+
+const mapSessionRow = (session) => ({
+  id: String(session.id),
+  appointmentId: session.appointmentId === null || typeof session.appointmentId === 'undefined' ? null : String(session.appointmentId),
+  sessionDate: normalizeDateValue(session.sessionDate),
+  noteFormat: session.noteFormat || 'simple',
+  content: session.content || '',
+  createdAt: session.createdAt,
+  updatedAt: session.updatedAt,
 });
 
 const mapPatientRow = (row) => ({
@@ -64,21 +96,24 @@ const mapPatientRow = (row) => ({
   age: row.age,
   reasonForConsultation: row.reason_for_consultation,
   tasks: Array.isArray(row.tasks) ? row.tasks.map(mapTaskRow) : [],
+  sessions: Array.isArray(row.sessions) ? row.sessions.map(mapSessionRow) : [],
 });
 
-const getPatientBaseQuery = `
+const getPatientBaseQuery = (includeSessions = false) => `
   SELECT
     ${patientSelectColumns}
+    ${includeSessions ? psychologistSessionSelectColumn : ''}
   FROM patients p
 `;
 
 const mapPatientResult = (result) => (result.rows[0] ? mapPatientRow(result.rows[0]) : null);
 
 export const getAllPatients = async (actor) => {
+  const includeSessions = isPsychologist(actor);
   const accessScope = buildPatientAccessScope(actor, 'p.id');
   const result = await db.query(
     `
-      ${getPatientBaseQuery}
+      ${getPatientBaseQuery(includeSessions)}
       WHERE ${accessScope.clause}
       ORDER BY p.created_at DESC, p.full_name ASC
     `,
@@ -89,10 +124,11 @@ export const getAllPatients = async (actor) => {
 };
 
 export const getPatientById = async (id, actor) => {
+  const includeSessions = isPsychologist(actor);
   const accessScope = buildPatientAccessScope(actor, 'p.id', 2);
   const result = await db.query(
     `
-      ${getPatientBaseQuery}
+      ${getPatientBaseQuery(includeSessions)}
       WHERE p.id = $1
         AND ${accessScope.clause}
       LIMIT 1
@@ -101,6 +137,46 @@ export const getPatientById = async (id, actor) => {
   );
 
   return mapPatientResult(result);
+};
+
+const refreshPatientLastSessionDate = async (patientId) => {
+  await db.query(
+    `
+      UPDATE patients
+      SET
+        last_session_date = (
+          SELECT MAX(ps.session_date)
+          FROM patient_sessions ps
+          WHERE ps.patient_id = $1
+        ),
+        updated_at = NOW()
+      WHERE id = $1
+    `,
+    [patientId],
+  );
+};
+
+const ensureAppointmentBelongsToPatient = async (appointmentId, patientId) => {
+  if (!appointmentId) {
+    return;
+  }
+
+  const result = await db.query(
+    `
+      SELECT 1
+      FROM appointments
+      WHERE id = $1
+        AND patient_id = $2
+      LIMIT 1
+    `,
+    [appointmentId, patientId],
+  );
+
+  if (!result.rows[0]) {
+    const error = new Error('The selected appointment does not belong to this patient');
+    error.status = 400;
+    throw error;
+  }
 };
 
 export const createPatient = async (payload, actor) => {
@@ -320,4 +396,140 @@ export const deletePatientTask = async (patientId, taskId, actor) => {
   );
 
   return result.rowCount > 0;
+};
+
+export const createPatientSession = async (patientId, payload, actor) => {
+  ensurePsychologist(actor);
+
+  const patient = await getPatientById(patientId, actor);
+
+  if (!patient) {
+    return null;
+  }
+
+  await ensureAppointmentBelongsToPatient(payload.appointmentId ? Number(payload.appointmentId) : null, patientId);
+
+  const result = await db.query(
+    `
+      INSERT INTO patient_sessions (
+        patient_id,
+        appointment_id,
+        created_by_user_id,
+        session_date,
+        note_format,
+        content
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING
+        id,
+        appointment_id AS "appointmentId",
+        session_date AS "sessionDate",
+        note_format AS "noteFormat",
+        content,
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+    `,
+    [
+      patientId,
+      payload.appointmentId ? Number(payload.appointmentId) : null,
+      actor.id,
+      payload.sessionDate,
+      payload.noteFormat,
+      payload.content.trim(),
+    ],
+  );
+
+  await refreshPatientLastSessionDate(patientId);
+  return mapSessionRow(result.rows[0]);
+};
+
+export const updatePatientSession = async (patientId, sessionId, payload, actor) => {
+  ensurePsychologist(actor);
+
+  const patient = await getPatientById(patientId, actor);
+
+  if (!patient) {
+    return null;
+  }
+
+  const currentSessionResult = await db.query(
+    `
+      SELECT
+        id,
+        appointment_id AS "appointmentId",
+        session_date AS "sessionDate",
+        note_format AS "noteFormat",
+        content,
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      FROM patient_sessions
+      WHERE patient_id = $1 AND id = $2
+      LIMIT 1
+    `,
+    [patientId, sessionId],
+  );
+
+  if (!currentSessionResult.rows[0]) {
+    return null;
+  }
+
+  const currentSession = currentSessionResult.rows[0];
+  const nextSessionDate = Object.prototype.hasOwnProperty.call(payload, 'sessionDate') ? payload.sessionDate : normalizeDateValue(currentSession.sessionDate);
+  const nextNoteFormat = Object.prototype.hasOwnProperty.call(payload, 'noteFormat') ? payload.noteFormat : currentSession.noteFormat;
+  const nextContent = Object.prototype.hasOwnProperty.call(payload, 'content') ? payload.content.trim() : currentSession.content;
+  const nextAppointmentId = Object.prototype.hasOwnProperty.call(payload, 'appointmentId')
+    ? (payload.appointmentId ? Number(payload.appointmentId) : null)
+    : currentSession.appointmentId;
+
+  await ensureAppointmentBelongsToPatient(nextAppointmentId, patientId);
+
+  const result = await db.query(
+    `
+      UPDATE patient_sessions
+      SET
+        appointment_id = $3,
+        session_date = $4,
+        note_format = $5,
+        content = $6,
+        updated_at = NOW()
+      WHERE patient_id = $1 AND id = $2
+      RETURNING
+        id,
+        appointment_id AS "appointmentId",
+        session_date AS "sessionDate",
+        note_format AS "noteFormat",
+        content,
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+    `,
+    [patientId, sessionId, nextAppointmentId, nextSessionDate, nextNoteFormat, nextContent],
+  );
+
+  await refreshPatientLastSessionDate(patientId);
+  return mapSessionRow(result.rows[0]);
+};
+
+export const deletePatientSession = async (patientId, sessionId, actor) => {
+  ensurePsychologist(actor);
+
+  const patient = await getPatientById(patientId, actor);
+
+  if (!patient) {
+    return false;
+  }
+
+  const result = await db.query(
+    `
+      DELETE FROM patient_sessions
+      WHERE patient_id = $1 AND id = $2
+    `,
+    [patientId, sessionId],
+  );
+
+  if (result.rowCount > 0) {
+    await refreshPatientLastSessionDate(patientId);
+    return true;
+  }
+
+  return false;
 };

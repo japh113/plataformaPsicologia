@@ -8,9 +8,13 @@ import {
   createPatientTask,
   updatePatientTask,
   deletePatientTask,
+  createPatientSession,
+  updatePatientSession,
+  deletePatientSession,
 } from './patients.service.js';
 import { validateCreatePatient, validatePatientPayload } from './patients.validators.js';
 import { validateCreateTaskPayload, validateUpdateTaskPayload } from './patients.tasks.validators.js';
+import { validateCreateSessionPayload, validateUpdateSessionPayload } from './patients.sessions.validators.js';
 import { createForbiddenError, ensurePsychologist, isPatient } from '../auth/auth.permissions.js';
 
 export const listPatients = async (req, res, next) => {
@@ -153,6 +157,66 @@ export const deletePatientTaskHandler = async (req, res, next) => {
     }
 
     return successResponse(res, null, 'Task deleted successfully');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const createPatientSessionHandler = async (req, res, next) => {
+  try {
+    ensurePsychologist(req.user);
+
+    const errors = validateCreateSessionPayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const session = await createPatientSession(req.params.id, req.body, req.user);
+
+    if (!session) {
+      return errorResponse(res, 'Patient not found', 404);
+    }
+
+    return successResponse(res, session, 'Session created successfully', 201);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const updatePatientSessionHandler = async (req, res, next) => {
+  try {
+    ensurePsychologist(req.user);
+
+    const errors = validateUpdateSessionPayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const session = await updatePatientSession(req.params.id, req.params.sessionId, req.body, req.user);
+
+    if (!session) {
+      return errorResponse(res, 'Session not found', 404);
+    }
+
+    return successResponse(res, session, 'Session updated successfully');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const deletePatientSessionHandler = async (req, res, next) => {
+  try {
+    ensurePsychologist(req.user);
+
+    const deleted = await deletePatientSession(req.params.id, req.params.sessionId, req.user);
+
+    if (!deleted) {
+      return errorResponse(res, 'Session not found', 404);
+    }
+
+    return successResponse(res, null, 'Session deleted successfully');
   } catch (error) {
     return next(error);
   }

@@ -1,12 +1,28 @@
 import React, { useMemo, useState } from 'react';
-import { AlertCircle, CheckSquare, Plus, Save, Trash2, Shield } from 'lucide-react';
+import { AlertCircle, CheckSquare, FileText, Plus, Save, Shield, Trash2 } from 'lucide-react';
 import { getRiskColor } from '../utils/risk';
 import FutureFeatureCard from '../components/shared/FutureFeatureCard';
+
+const emptySessionForm = { fecha: '', formato: 'simple', contenido: '' };
 
 const getPatientSummary = (patient) => {
   const reason = patient.motivo || 'Motivo no registrado';
   const age = patient.edad === null || typeof patient.edad === 'undefined' ? 'Edad no registrada' : `${patient.edad} anos`;
   return `${reason} - ${age}`;
+};
+
+const formatSessionDate = (value) => {
+  if (!value) {
+    return 'Fecha no registrada';
+  }
+
+  const [year = '0', month = '1', day = '1'] = String(value).split('-');
+  return new Intl.DateTimeFormat('es-MX', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(Number(year), Number(month) - 1, Number(day)));
 };
 
 export default function NotesScreen({
@@ -19,20 +35,39 @@ export default function NotesScreen({
   onToggleTask,
   onDeleteTask,
   onAddTask,
+  onCreateSession,
+  onUpdateSession,
+  onDeleteSession,
   isSavingNotes = false,
+  isSavingSession = false,
   isCreatingTask = false,
   processingTaskId = null,
+  processingSessionId = null,
 }) {
   const [showTaskInput, setShowTaskInput] = useState(false);
   const [taskText, setTaskText] = useState('');
+  const [selectedSessionId, setSelectedSessionId] = useState(null);
+  const [sessionForm, setSessionForm] = useState(emptySessionForm);
   const isPsychologist = currentUser?.role === 'psychologist';
   const adherence = useMemo(() => {
     if (!patient?.tareas?.length) return 0;
     const completed = patient.tareas.filter((task) => task.completada).length;
     return Math.round((completed / patient.tareas.length) * 100);
   }, [patient]);
+  const sessions = patient?.sesiones || [];
 
   if (!patient) return null;
+
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId) || null;
+
+  const resetSessionForm = () => {
+    setSelectedSessionId(null);
+    setSessionForm({
+      fecha: patient?.ultimaSesion || '',
+      formato: 'simple',
+      contenido: '',
+    });
+  };
 
   const handleAddTask = async () => {
     if (!taskText.trim() || isCreatingTask) return;
@@ -41,6 +76,47 @@ export default function NotesScreen({
     if (wasCreated) {
       setTaskText('');
       setShowTaskInput(false);
+    }
+  };
+
+  const handleEditSession = (session) => {
+    setSelectedSessionId(session.id);
+    setSessionForm({
+      fecha: session.fecha || '',
+      formato: session.formato || 'simple',
+      contenido: session.contenido || '',
+    });
+  };
+
+  const handleSaveSession = async () => {
+    if (!sessionForm.fecha || !sessionForm.contenido.trim() || isSavingSession) {
+      return;
+    }
+
+    const payload = {
+      sessionDate: sessionForm.fecha,
+      noteFormat: sessionForm.formato,
+      content: sessionForm.contenido,
+    };
+
+    const wasSaved = selectedSession
+      ? await onUpdateSession(selectedSession.id, payload)
+      : await onCreateSession(payload);
+
+    if (wasSaved) {
+      resetSessionForm();
+    }
+  };
+
+  const handleDeleteCurrentSession = async (sessionId) => {
+    if (!window.confirm('Se eliminara esta nota de sesion. Deseas continuar?')) {
+      return;
+    }
+
+    const wasDeleted = await onDeleteSession(sessionId);
+
+    if (wasDeleted && selectedSessionId === sessionId) {
+      resetSessionForm();
     }
   };
 
@@ -67,16 +143,120 @@ export default function NotesScreen({
             <>
               <FutureFeatureCard title="Asistente Clinico IA" description="Mantuvimos el modulo visible, bloqueado y marcado como proxima fase para no perder el concepto del producto." />
 
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 flex items-center">
+                      <FileText className="mr-2 text-indigo-500" size={20} /> Historial de sesiones
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-500">Registra cada sesion por separado para construir un seguimiento clinico cronologico.</p>
+                  </div>
+                  <button onClick={resetSessionForm} className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                    <Plus size={16} className="mr-2" /> Nueva sesion
+                  </button>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="font-semibold text-slate-800">{selectedSession ? 'Editar sesion' : 'Registrar sesion'}</h4>
+                        <p className="mt-1 text-xs text-slate-500">Puedes dejar nota simple hoy y migrar a SOAP mas adelante sin perder historial.</p>
+                      </div>
+                      {selectedSession && (
+                        <button onClick={resetSessionForm} className="text-sm font-medium text-slate-500 transition hover:text-slate-800">
+                          Limpiar
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Fecha de sesion</label>
+                        <input type="date" value={sessionForm.fecha} onChange={(event) => setSessionForm((current) => ({ ...current, fecha: event.target.value }))} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Formato</label>
+                        <select value={sessionForm.formato} onChange={(event) => setSessionForm((current) => ({ ...current, formato: event.target.value }))} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                          <option value="simple">Simple</option>
+                          <option value="soap">SOAP</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                      <div className="px-4 pt-4 flex gap-2">
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${sessionForm.formato === 'simple' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}>Simple</span>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${sessionForm.formato === 'soap' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}>SOAP</span>
+                      </div>
+                      <textarea
+                        value={sessionForm.contenido}
+                        onChange={(event) => setSessionForm((current) => ({ ...current, contenido: event.target.value }))}
+                        placeholder="Escribe el resumen clinico, observaciones, avances y recomendaciones de esta sesion..."
+                        className="h-[260px] w-full resize-none bg-transparent p-4 leading-relaxed focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                      {selectedSession && (
+                        <button onClick={() => handleDeleteCurrentSession(selectedSession.id)} disabled={processingSessionId === selectedSession.id} className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
+                          {processingSessionId === selectedSession.id ? 'Eliminando...' : 'Eliminar sesion'}
+                        </button>
+                      )}
+                      <button onClick={handleSaveSession} disabled={isSavingSession} className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed">
+                        <Save size={16} className="mr-2" /> {isSavingSession ? 'Guardando...' : selectedSession ? 'Guardar cambios' : 'Guardar sesion'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <h4 className="font-semibold text-slate-800">Sesiones anteriores</h4>
+                    <p className="mt-1 text-xs text-slate-500">Cada registro queda ordenado por fecha para consultar la evolucion del caso.</p>
+
+                    <div className="mt-4 space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                      {sessions.length > 0 ? sessions.map((session) => (
+                        <div key={session.id} className={`rounded-xl border p-4 transition ${selectedSessionId === session.id ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-slate-50'}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="font-semibold text-slate-800 capitalize">{formatSessionDate(session.fecha)}</p>
+                                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                                  {session.formato}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-sm text-slate-600 line-clamp-4 whitespace-pre-wrap">{session.contenido || 'Sin contenido registrado.'}</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button onClick={() => handleEditSession(session)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                              Editar
+                            </button>
+                            <button onClick={() => handleDeleteCurrentSession(session.id)} disabled={processingSessionId === session.id} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
+                              Eliminar
+                            </button>
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                          Todavia no hay sesiones registradas para este paciente.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-4 pt-4 flex gap-2">
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-600 text-white">Simple</span>
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-gray-200 text-gray-500">SOAP</span>
+                <div className="px-4 py-4 border-b border-gray-200 bg-white">
+                  <h3 className="font-semibold text-gray-800">Nota general del expediente</h3>
+                  <p className="mt-1 text-xs text-gray-500">Este espacio queda para contexto transversal del caso, antecedentes o recordatorios clinicos no ligados a una sola sesion.</p>
                 </div>
                 <textarea
                   value={notesTemp}
                   onChange={(e) => setNotesTemp(e.target.value)}
-                  placeholder="Escribe la nota clinica de la sesion aqui..."
-                  className="w-full h-[420px] p-4 bg-transparent focus:outline-none resize-none leading-relaxed"
+                  placeholder="Escribe aqui la nota general del expediente..."
+                  className="w-full h-[240px] p-4 bg-transparent focus:outline-none resize-none leading-relaxed"
                 />
               </div>
 
@@ -85,7 +265,7 @@ export default function NotesScreen({
                 disabled={isSavingNotes}
                 className="flex items-center justify-center w-full px-4 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition font-medium shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Save size={18} className="mr-2" /> {isSavingNotes ? 'Guardando...' : 'Guardar en Expediente'}
+                <Save size={18} className="mr-2" /> {isSavingNotes ? 'Guardando...' : 'Guardar nota general'}
               </button>
             </>
           ) : (
@@ -95,7 +275,7 @@ export default function NotesScreen({
               </div>
               <h3 className="mt-4 text-xl font-black text-slate-900">Notas del terapeuta protegidas</h3>
               <p className="mt-2 text-sm text-slate-600">
-                Las notas clinicas del profesional no se muestran desde la cuenta del paciente. Aqui solo veras tu seguimiento, tareas y agenda.
+                Las notas clinicas y el historial de sesiones del profesional no se muestran desde la cuenta del paciente. Aqui solo veras tu seguimiento, tareas y agenda.
               </p>
             </div>
           )}

@@ -20,10 +20,13 @@ import {
 } from './api/availability';
 import {
   createPatient,
+  createPatientSession,
   createPatientTask,
+  deletePatientSession,
   deletePatientTask,
   getPatients,
   updatePatient,
+  updatePatientSession,
   updatePatientTask,
 } from './api/patients';
 import { createAppointment, deleteAppointment, getAppointments, updateAppointment } from './api/appointments';
@@ -32,6 +35,7 @@ import { getCurrentUser, login, logout } from './api/auth';
 import { getMyReminders } from './api/reminders';
 import {
   mapBackendPatientToUiPatient,
+  mapBackendSessionToUiSession,
   mapBackendTaskToUiTask,
   mapUiPatientToBackendPatient,
 } from './mappers/patients';
@@ -50,6 +54,13 @@ const sortAppointments = (appointments) =>
     const left = `${a.fecha}T${a.hora24}`;
     const right = `${b.fecha}T${b.hora24}`;
     return left.localeCompare(right);
+  });
+
+const sortSessions = (sessions) =>
+  [...sessions].sort((a, b) => {
+    const left = `${a.fecha || '0000-00-00'}T${a.actualizadaEn || a.creadaEn || '00:00:00'}`;
+    const right = `${b.fecha || '0000-00-00'}T${b.actualizadaEn || b.creadaEn || '00:00:00'}`;
+    return right.localeCompare(left);
   });
 
 const buildDateRangeStrings = (startDate, endDate) => {
@@ -87,8 +98,10 @@ export default function App() {
   const [errorCarga, setErrorCarga] = useState('');
   const [guardandoPaciente, setGuardandoPaciente] = useState(false);
   const [guardandoNotas, setGuardandoNotas] = useState(false);
+  const [guardandoSesion, setGuardandoSesion] = useState(false);
   const [creandoTarea, setCreandoTarea] = useState(false);
   const [procesandoTareaId, setProcesandoTareaId] = useState(null);
+  const [procesandoSesionId, setProcesandoSesionId] = useState(null);
   const [guardandoCita, setGuardandoCita] = useState(false);
   const [procesandoCitaId, setProcesandoCitaId] = useState(null);
   const [appointmentActionError, setAppointmentActionError] = useState('');
@@ -119,6 +132,8 @@ export default function App() {
     setAppointmentActionError('');
     setAvailabilityActionError('');
     setAvailabilityExceptionActionError('');
+    setGuardandoSesion(false);
+    setProcesandoSesionId(null);
     setMostrarModalNuevoPaciente(false);
     setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'bajo' });
   };
@@ -381,6 +396,90 @@ export default function App() {
       window.alert(error.message || 'No se pudo eliminar la tarea.');
     } finally {
       setProcesandoTareaId(null);
+    }
+  };
+
+  const createSession = async (payload) => {
+    if (!isPsychologist || !pacienteSeleccionado || guardandoSesion) {
+      return false;
+    }
+
+    setGuardandoSesion(true);
+
+    try {
+      const createdSession = await createPatientSession(pacienteSeleccionado.id, payload);
+      const uiSession = mapBackendSessionToUiSession(createdSession);
+      const sessionDate = uiSession.fecha || pacienteSeleccionado.ultimaSesion;
+      const nextPatient = {
+        ...pacienteSeleccionado,
+        ultimaSesion: sessionDate,
+        sesiones: sortSessions([...(pacienteSeleccionado.sesiones || []), uiSession]),
+      };
+
+      syncPatientState(nextPatient);
+      return true;
+    } catch (error) {
+      window.alert(error.message || 'No se pudo crear la sesion.');
+      return false;
+    } finally {
+      setGuardandoSesion(false);
+    }
+  };
+
+  const updateSession = async (sessionId, payload) => {
+    if (!isPsychologist || !pacienteSeleccionado || guardandoSesion) {
+      return false;
+    }
+
+    setGuardandoSesion(true);
+    setProcesandoSesionId(sessionId);
+
+    try {
+      const updatedSession = await updatePatientSession(pacienteSeleccionado.id, sessionId, payload);
+      const uiSession = mapBackendSessionToUiSession(updatedSession);
+      const nextSessions = sortSessions(
+        (pacienteSeleccionado.sesiones || []).map((session) => (session.id === sessionId ? uiSession : session)),
+      );
+      const nextPatient = {
+        ...pacienteSeleccionado,
+        ultimaSesion: nextSessions[0]?.fecha || null,
+        sesiones: nextSessions,
+      };
+
+      syncPatientState(nextPatient);
+      return true;
+    } catch (error) {
+      window.alert(error.message || 'No se pudo actualizar la sesion.');
+      return false;
+    } finally {
+      setGuardandoSesion(false);
+      setProcesandoSesionId(null);
+    }
+  };
+
+  const removeSession = async (sessionId) => {
+    if (!isPsychologist || !pacienteSeleccionado || procesandoSesionId) {
+      return false;
+    }
+
+    setProcesandoSesionId(sessionId);
+
+    try {
+      await deletePatientSession(pacienteSeleccionado.id, sessionId);
+      const nextSessions = (pacienteSeleccionado.sesiones || []).filter((session) => session.id !== sessionId);
+      const nextPatient = {
+        ...pacienteSeleccionado,
+        ultimaSesion: nextSessions[0]?.fecha || null,
+        sesiones: nextSessions,
+      };
+
+      syncPatientState(nextPatient);
+      return true;
+    } catch (error) {
+      window.alert(error.message || 'No se pudo eliminar la sesion.');
+      return false;
+    } finally {
+      setProcesandoSesionId(null);
     }
   };
 
@@ -664,6 +763,7 @@ export default function App() {
     if (vistaActiva === 'notas') {
       return (
         <NotesScreen
+          key={pacienteSeleccionado?.id || 'notes-screen'}
           currentUser={currentUser}
           patient={pacienteSeleccionado}
           setVistaActiva={setVistaActiva}
@@ -673,9 +773,14 @@ export default function App() {
           onToggleTask={toggleTask}
           onDeleteTask={removeTask}
           onAddTask={addTask}
+          onCreateSession={createSession}
+          onUpdateSession={updateSession}
+          onDeleteSession={removeSession}
           isSavingNotes={guardandoNotas}
+          isSavingSession={guardandoSesion}
           isCreatingTask={creandoTarea}
           processingTaskId={procesandoTareaId}
+          processingSessionId={procesandoSesionId}
         />
       );
     }
