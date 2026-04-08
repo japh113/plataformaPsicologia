@@ -766,6 +766,7 @@ export default function App() {
           key={pacienteSeleccionado?.id || 'notes-screen'}
           currentUser={currentUser}
           patient={pacienteSeleccionado}
+          appointments={appointments}
           setVistaActiva={setVistaActiva}
           notesTemp={notasTemp}
           setNotesTemp={setNotasTemp}

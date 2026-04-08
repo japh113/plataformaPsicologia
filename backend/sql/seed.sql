@@ -161,6 +161,9 @@ INSERT INTO appointments (
 SELECT seed.patient_id, seed.scheduled_date, seed.scheduled_time, seed.status, seed.notes
 FROM (
   VALUES
+    ('1', '2026-04-01'::date, '10:00:00'::time, 'completed', 'Sesion historica'),
+    ('2', '2026-04-04'::date, '11:00:00'::time, 'completed', 'Sesion historica'),
+    ('1', '2026-04-05'::date, '12:00:00'::time, 'completed', 'Sesion historica'),
     ('1', '2026-04-08'::date, '10:00:00'::time, 'pending', ''),
     ('2', '2026-04-08'::date, '11:00:00'::time, 'completed', '')
 ) AS seed(patient_id, scheduled_date, scheduled_time, status, notes)
@@ -172,24 +175,45 @@ WHERE NOT EXISTS (
     AND a.scheduled_time = seed.scheduled_time
 );
 
+UPDATE patient_sessions ps
+SET appointment_id = a.id
+FROM appointments a
+WHERE ps.appointment_id IS NULL
+  AND ps.patient_id = a.patient_id
+  AND ps.session_date = a.scheduled_date;
+
+DELETE FROM patient_sessions ps
+USING patient_sessions duplicated
+WHERE ps.appointment_id IS NOT NULL
+  AND duplicated.appointment_id = ps.appointment_id
+  AND duplicated.id < ps.id;
+
 INSERT INTO patient_sessions (
   patient_id,
+  appointment_id,
   created_by_user_id,
   session_date,
   note_format,
   content
 )
-SELECT seed.patient_id, seed.created_by_user_id, seed.session_date, seed.note_format, seed.content
+SELECT
+  seed.patient_id,
+  a.id,
+  seed.created_by_user_id,
+  seed.session_date,
+  seed.note_format,
+  seed.content
 FROM (
   VALUES
     ('1', 'u_psy_1', '2026-04-05'::date, 'simple', 'Sesion enfocada en identificar detonantes de ansiedad y revisar estrategias de regulacion.'),
     ('2', 'u_psy_1', '2026-04-04'::date, 'simple', 'Seguimiento de rutina de sueno y ajuste de habitos nocturnos.'),
     ('1', 'u_psy_1', '2026-04-01'::date, 'simple', 'Se trabajo registro de pensamientos automaticos y adherencia a tareas.')
 ) AS seed(patient_id, created_by_user_id, session_date, note_format, content)
+INNER JOIN appointments a
+  ON a.patient_id = seed.patient_id
+ AND a.scheduled_date = seed.session_date
 WHERE NOT EXISTS (
   SELECT 1
   FROM patient_sessions ps
-  WHERE ps.patient_id = seed.patient_id
-    AND ps.session_date = seed.session_date
-    AND ps.content = seed.content
+  WHERE ps.appointment_id = a.id
 );

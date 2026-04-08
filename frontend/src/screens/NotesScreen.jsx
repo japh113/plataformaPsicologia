@@ -3,7 +3,7 @@ import { AlertCircle, CheckSquare, FileText, Plus, Save, Shield, Trash2 } from '
 import { getRiskColor } from '../utils/risk';
 import FutureFeatureCard from '../components/shared/FutureFeatureCard';
 
-const emptySessionForm = { fecha: '', formato: 'simple', contenido: '' };
+const emptySessionForm = { citaId: '', formato: 'simple', contenido: '' };
 
 const getPatientSummary = (patient) => {
   const reason = patient.motivo || 'Motivo no registrado';
@@ -28,6 +28,7 @@ const formatSessionDate = (value) => {
 export default function NotesScreen({
   currentUser,
   patient,
+  appointments,
   setVistaActiva,
   notesTemp,
   setNotesTemp,
@@ -55,15 +56,27 @@ export default function NotesScreen({
     return Math.round((completed / patient.tareas.length) * 100);
   }, [patient]);
   const sessions = patient?.sesiones || [];
+  const patientAppointments = useMemo(
+    () =>
+      (appointments || [])
+        .filter((appointment) => appointment.pacienteId === patient?.id)
+        .sort((left, right) => {
+          const leftKey = `${left.fecha}T${left.hora24}`;
+          const rightKey = `${right.fecha}T${right.hora24}`;
+          return rightKey.localeCompare(leftKey);
+        }),
+    [appointments, patient?.id],
+  );
 
   if (!patient) return null;
 
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) || null;
+  const selectedAppointment = patientAppointments.find((appointment) => appointment.id === sessionForm.citaId) || null;
 
   const resetSessionForm = () => {
     setSelectedSessionId(null);
     setSessionForm({
-      fecha: patient?.ultimaSesion || '',
+      citaId: '',
       formato: 'simple',
       contenido: '',
     });
@@ -82,19 +95,19 @@ export default function NotesScreen({
   const handleEditSession = (session) => {
     setSelectedSessionId(session.id);
     setSessionForm({
-      fecha: session.fecha || '',
+      citaId: session.citaId || '',
       formato: session.formato || 'simple',
       contenido: session.contenido || '',
     });
   };
 
   const handleSaveSession = async () => {
-    if (!sessionForm.fecha || !sessionForm.contenido.trim() || isSavingSession) {
+    if (!sessionForm.citaId || !sessionForm.contenido.trim() || isSavingSession) {
       return;
     }
 
     const payload = {
-      sessionDate: sessionForm.fecha,
+      appointmentId: sessionForm.citaId,
       noteFormat: sessionForm.formato,
       content: sessionForm.contenido,
     };
@@ -172,8 +185,18 @@ export default function NotesScreen({
 
                     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">Fecha de sesion</label>
-                        <input type="date" value={sessionForm.fecha} onChange={(event) => setSessionForm((current) => ({ ...current, fecha: event.target.value }))} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Cita vinculada</label>
+                        <select value={sessionForm.citaId} onChange={(event) => setSessionForm((current) => ({ ...current, citaId: event.target.value }))} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                          <option value="">{patientAppointments.length > 0 ? 'Selecciona una cita' : 'No hay citas registradas'}</option>
+                          {patientAppointments.map((appointment) => (
+                            <option key={appointment.id} value={appointment.id}>
+                              {appointment.fecha} - {appointment.hora} - {appointment.estado}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-xs text-gray-500">
+                          La sesion solo puede registrarse desde citas existentes, pasadas o futuras.
+                        </p>
                       </div>
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">Formato</label>
@@ -181,6 +204,9 @@ export default function NotesScreen({
                           <option value="simple">Simple</option>
                           <option value="soap">SOAP</option>
                         </select>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {selectedAppointment ? `Fecha derivada de la cita: ${selectedAppointment.fecha} a las ${selectedAppointment.hora}.` : 'Selecciona una cita para completar el registro.'}
+                        </p>
                       </div>
                     </div>
 
@@ -203,10 +229,15 @@ export default function NotesScreen({
                           {processingSessionId === selectedSession.id ? 'Eliminando...' : 'Eliminar sesion'}
                         </button>
                       )}
-                      <button onClick={handleSaveSession} disabled={isSavingSession} className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed">
+                      <button onClick={handleSaveSession} disabled={isSavingSession || patientAppointments.length === 0 || !sessionForm.citaId} className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed">
                         <Save size={16} className="mr-2" /> {isSavingSession ? 'Guardando...' : selectedSession ? 'Guardar cambios' : 'Guardar sesion'}
                       </button>
                     </div>
+                    {patientAppointments.length === 0 && (
+                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                        Primero debes registrar una cita para poder crear una sesion clinica.
+                      </div>
+                    )}
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -224,6 +255,11 @@ export default function NotesScreen({
                                   {session.formato}
                                 </span>
                               </div>
+                              {session.citaId && (
+                                <p className="mt-1 text-xs font-medium text-slate-500">
+                                  Cita vinculada: {(patientAppointments.find((appointment) => appointment.id === session.citaId)?.fecha) || session.fecha}
+                                </p>
+                              )}
                               <p className="mt-2 text-sm text-slate-600 line-clamp-4 whitespace-pre-wrap">{session.contenido || 'Sin contenido registrado.'}</p>
                             </div>
                           </div>

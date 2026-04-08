@@ -158,12 +158,18 @@ const refreshPatientLastSessionDate = async (patientId) => {
 
 const ensureAppointmentBelongsToPatient = async (appointmentId, patientId) => {
   if (!appointmentId) {
-    return;
+    const error = new Error('Debes seleccionar una cita para registrar la sesion');
+    error.status = 400;
+    throw error;
   }
 
   const result = await db.query(
     `
-      SELECT 1
+      SELECT
+        id,
+        scheduled_date,
+        scheduled_time,
+        status
       FROM appointments
       WHERE id = $1
         AND patient_id = $2
@@ -173,8 +179,29 @@ const ensureAppointmentBelongsToPatient = async (appointmentId, patientId) => {
   );
 
   if (!result.rows[0]) {
-    const error = new Error('The selected appointment does not belong to this patient');
+    const error = new Error('La cita seleccionada no pertenece a este paciente');
     error.status = 400;
+    throw error;
+  }
+
+  return result.rows[0];
+};
+
+const ensureAppointmentSessionUniqueness = async (appointmentId, excludeSessionId = null) => {
+  const result = await db.query(
+    `
+      SELECT id
+      FROM patient_sessions
+      WHERE appointment_id = $1
+        AND ($2::bigint IS NULL OR id <> $2)
+      LIMIT 1
+    `,
+    [appointmentId, excludeSessionId],
+  );
+
+  if (result.rows[0]) {
+    const error = new Error('Esa cita ya tiene una sesion registrada');
+    error.status = 409;
     throw error;
   }
 };
@@ -407,7 +434,8 @@ export const createPatientSession = async (patientId, payload, actor) => {
     return null;
   }
 
-  await ensureAppointmentBelongsToPatient(payload.appointmentId ? Number(payload.appointmentId) : null, patientId);
+  const appointment = await ensureAppointmentBelongsToPatient(payload.appointmentId ? Number(payload.appointmentId) : null, patientId);
+  await ensureAppointmentSessionUniqueness(Number(appointment.id));
 
   const result = await db.query(
     `
@@ -417,7 +445,7 @@ export const createPatientSession = async (patientId, payload, actor) => {
         created_by_user_id,
         session_date,
         note_format,
-        content
+      content
       )
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING
@@ -431,9 +459,9 @@ export const createPatientSession = async (patientId, payload, actor) => {
     `,
     [
       patientId,
-      payload.appointmentId ? Number(payload.appointmentId) : null,
+      Number(appointment.id),
       actor.id,
-      payload.sessionDate,
+      normalizeDateValue(appointment.scheduled_date),
       payload.noteFormat,
       payload.content.trim(),
     ],
@@ -474,14 +502,14 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
   }
 
   const currentSession = currentSessionResult.rows[0];
-  const nextSessionDate = Object.prototype.hasOwnProperty.call(payload, 'sessionDate') ? payload.sessionDate : normalizeDateValue(currentSession.sessionDate);
   const nextNoteFormat = Object.prototype.hasOwnProperty.call(payload, 'noteFormat') ? payload.noteFormat : currentSession.noteFormat;
   const nextContent = Object.prototype.hasOwnProperty.call(payload, 'content') ? payload.content.trim() : currentSession.content;
   const nextAppointmentId = Object.prototype.hasOwnProperty.call(payload, 'appointmentId')
-    ? (payload.appointmentId ? Number(payload.appointmentId) : null)
+    ? Number(payload.appointmentId)
     : currentSession.appointmentId;
 
-  await ensureAppointmentBelongsToPatient(nextAppointmentId, patientId);
+  const appointment = await ensureAppointmentBelongsToPatient(nextAppointmentId, patientId);
+  await ensureAppointmentSessionUniqueness(Number(appointment.id), Number(sessionId));
 
   const result = await db.query(
     `
@@ -502,7 +530,7 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
         created_at AS "createdAt",
         updated_at AS "updatedAt"
     `,
-    [patientId, sessionId, nextAppointmentId, nextSessionDate, nextNoteFormat, nextContent],
+    [patientId, sessionId, Number(appointment.id), normalizeDateValue(appointment.scheduled_date), nextNoteFormat, nextContent],
   );
 
   await refreshPatientLastSessionDate(patientId);

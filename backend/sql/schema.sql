@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS appointments (
 CREATE TABLE IF NOT EXISTS patient_sessions (
   id BIGSERIAL PRIMARY KEY,
   patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-  appointment_id BIGINT REFERENCES appointments(id) ON DELETE SET NULL,
+  appointment_id BIGINT NOT NULL UNIQUE REFERENCES appointments(id) ON DELETE CASCADE,
   created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   session_date DATE NOT NULL,
   note_format TEXT NOT NULL DEFAULT 'simple' CHECK (note_format IN ('simple', 'soap')),
