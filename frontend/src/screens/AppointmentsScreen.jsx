@@ -9,6 +9,9 @@ const getStatusBadge = (estado) => (estado === 'completada' ? 'bg-green-100 text
 const getMiniAppointmentChip = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
 const getAppointmentAccent = (estado) => (estado === 'completada' ? 'border-l-green-500 bg-green-50/40' : estado === 'cancelada' ? 'border-l-red-500 bg-red-50/40' : 'border-l-indigo-500 bg-indigo-50/40');
 const getDayNumberBadge = ({ isToday, isActive, isHovered, isCurrentMonth }) => (isActive ? 'bg-indigo-600 text-white shadow-sm' : isHovered ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-200' : isToday ? 'bg-indigo-100 text-indigo-700' : isCurrentMonth ? 'text-slate-900' : 'text-slate-400');
+const getExceptionPillClasses = (isUnavailable) => (isUnavailable ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-700');
+const getExceptionDotClasses = (isUnavailable) => (isUnavailable ? 'bg-red-500 ring-red-100' : 'bg-amber-500 ring-amber-100');
+const getExceptionCellAccent = (isUnavailable) => (isUnavailable ? 'border-red-200 bg-red-50/40' : 'border-amber-200 bg-amber-50/40');
 const getWeekdayFromDateString = (value) => { const [y = '0', m = '1', d = '1'] = String(value).split('-'); return new Date(Number(y), Number(m) - 1, Number(d)).getDay(); };
 const createTempId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const normalizeBlocks = (blocks, prefix) => (blocks || []).map((block, index) => ({ id: block.id || `${prefix}-${index}`, startTime: String(block.startTime || '').slice(0, 5), endTime: String(block.endTime || '').slice(0, 5) }));
@@ -273,20 +276,36 @@ export default function AppointmentsScreen({
           </div>
         </div>
 
+        {isPsychologist && availabilityExceptions.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Excepciones</span>
+            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExceptionPillClasses(true)}`}>
+              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getExceptionDotClasses(true)}`} />
+              Dia bloqueado
+            </span>
+            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExceptionPillClasses(false)}`}>
+              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getExceptionDotClasses(false)}`} />
+              Horario especial
+            </span>
+          </div>
+        )}
+
         {calendarView === 'week' ? (
           <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
             {weekDates.map((weekDate) => {
               const dayAppointments = weeklyAppointments[weekDate.isoDate] || [];
+              const dayException = availabilityExceptionsMap.get(weekDate.isoDate);
               const isActive = selectedDate === weekDate.isoDate;
               const isHovered = hoveredDate === weekDate.isoDate;
               const isToday = weekDate.isoDate === todayDate;
               return (
-                <button key={weekDate.isoDate} type="button" onClick={() => handleSelectDate(weekDate.isoDate)} className={`rounded-2xl border p-3 text-left transition ${isActive ? 'border-indigo-500 bg-indigo-50 shadow-sm ring-2 ring-indigo-100' : isHovered ? 'border-indigo-300 bg-indigo-50/60' : isToday ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50 hover:bg-white'}`}>
-                  <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-wider text-gray-500">{weekDate.shortWeekday}</span>{isToday && <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Hoy</span>}</div>
+                <button key={weekDate.isoDate} type="button" onClick={() => handleSelectDate(weekDate.isoDate)} className={`rounded-2xl border p-3 text-left transition ${isActive ? 'border-indigo-500 bg-indigo-50 shadow-sm ring-2 ring-indigo-100' : dayException ? getExceptionCellAccent(dayException.isUnavailable) : isHovered ? 'border-indigo-300 bg-indigo-50/60' : isToday ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50 hover:bg-white'}`}>
+                  <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-wider text-gray-500">{weekDate.shortWeekday}</span><div className="flex items-center gap-1.5">{dayException && <span className={`inline-flex h-2.5 w-2.5 rounded-full ring-4 ${getExceptionDotClasses(dayException.isUnavailable)}`} />}{isToday && <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Hoy</span>}</div></div>
                   <p className="mt-2 text-sm font-bold text-gray-900">{weekDate.shortLabel}</p>
+                  {dayException && <div className={`mt-2 inline-flex max-w-full items-center rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'}</div>}
                   <div className="mt-3 space-y-2">
                     {dayAppointments.slice(0, 3).map((appointment) => <div key={appointment.id} className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(appointment.estado)}`}><p className="truncate">{appointment.hora}</p></div>)}
-                    {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-400">Sin citas</div>}
+                    {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-400">{dayException?.isUnavailable ? 'Dia bloqueado' : 'Sin citas'}</div>}
                     {dayAppointments.length > 3 && <p className="text-[11px] font-medium text-indigo-600">+{dayAppointments.length - 3} mas</p>}
                   </div>
                 </button>
@@ -299,13 +318,15 @@ export default function AppointmentsScreen({
             <div className="grid grid-cols-7">
               {monthDates.map((monthDate) => {
                 const dayAppointments = monthlyAppointments[monthDate.isoDate] || [];
+                const dayException = availabilityExceptionsMap.get(monthDate.isoDate);
                 const isActive = selectedDate === monthDate.isoDate;
                 const isHovered = hoveredDate === monthDate.isoDate;
                 const isToday = monthDate.isoDate === todayDate;
                 return (
-                  <button key={monthDate.isoDate} type="button" onClick={() => handleSelectDate(monthDate.isoDate)} className={`h-24 sm:h-28 border-b border-r p-2 text-left align-top transition ${isActive ? 'bg-indigo-50/80 ring-1 ring-inset ring-indigo-200' : isHovered ? 'bg-indigo-50/50' : monthDate.isCurrentMonth ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/70 hover:bg-slate-50'}`}>
+                  <button key={monthDate.isoDate} type="button" onClick={() => handleSelectDate(monthDate.isoDate)} className={`h-24 sm:h-28 border-b border-r p-2 text-left align-top transition ${isActive ? 'bg-indigo-50/80 ring-1 ring-inset ring-indigo-200' : dayException ? (dayException.isUnavailable ? 'bg-red-50/40' : 'bg-amber-50/40') : isHovered ? 'bg-indigo-50/50' : monthDate.isCurrentMonth ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/70 hover:bg-slate-50'}`}>
                     <div className="flex h-full flex-col">
-                      <div className="flex items-center justify-between"><span className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition ${getDayNumberBadge({ isToday, isActive, isHovered, isCurrentMonth: monthDate.isCurrentMonth })}`}>{monthDate.dayNumber}</span></div>
+                      <div className="flex items-center justify-between"><span className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition ${getDayNumberBadge({ isToday, isActive, isHovered, isCurrentMonth: monthDate.isCurrentMonth })}`}>{monthDate.dayNumber}</span>{dayException && <span className={`inline-flex h-2.5 w-2.5 rounded-full ring-4 ${getExceptionDotClasses(dayException.isUnavailable)}`} title={dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'} />}</div>
+                      {dayException && <div className={`mt-1 inline-flex w-fit rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Bloqueado' : 'Especial'}</div>}
                       <div className="mt-2 flex-1 space-y-1 overflow-hidden">{dayAppointments.slice(0, 2).map((appointment) => <div key={appointment.id} className={`rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(appointment.estado)}`}><div className="truncate">{appointment.hora}</div></div>)}</div>
                       {dayAppointments.length > 2 && <p className="mt-1 text-[10px] font-semibold leading-none text-indigo-700">+{dayAppointments.length - 2}</p>}
                     </div>
