@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Calendar, CalendarPlus, ChevronLeft, ChevronRight, Clock3, Pencil, Plus, Save, Trash2 } from 'lucide-react';
+import { Calendar, CalendarPlus, ChevronLeft, ChevronRight, Clock3, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { formatAppointmentDisplayHour, getAppointmentHourOptions, getMonthDates, getMonthLabel, getMonthWeekdayHeaders, getWeekDates, getWeekRangeLabel, shiftDateByDays, shiftDateByMonths } from '../mappers/appointments';
 
 const emptyForm = { pacienteId: '', fecha: '', hora24: '', estado: 'pendiente', notas: '' };
@@ -43,6 +43,25 @@ const getRangeDayCount = (startDate, endDate) => {
   return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
 };
 
+function ModalShell({ title, description, onClose, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-[2px]">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+            {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
+          </div>
+          <button type="button" onClick={onClose} className="inline-flex items-center justify-center rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="overflow-y-auto px-5 py-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AppointmentsScreen({
   currentUser, patients, appointments, availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onDeleteAvailabilityException,
   isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
@@ -58,6 +77,9 @@ export default function AppointmentsScreen({
   const [editingExceptionDate, setEditingExceptionDate] = useState('');
   const [exceptionForm, setExceptionForm] = useState(createEmptyExceptionForm());
   const [exceptionRangeForm, setExceptionRangeForm] = useState({ startDate: todayDate, endDate: todayDate });
+  const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
+  const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
+  const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
 
   const normalizedAvailabilityDraft = useMemo(() => normalizeDraftEntries(availabilityDraft || availability), [availability, availabilityDraft]);
   const availabilityMap = useMemo(() => new Map(normalizedAvailabilityDraft.map((entry) => [entry.weekday, entry.blocks])), [normalizedAvailabilityDraft]);
@@ -141,9 +163,33 @@ export default function AppointmentsScreen({
   }), [appointments, selectedDate, statusFilter]);
 
   const resetForm = () => { setEditingAppointmentId(null); setForm(emptyForm); onDismissAppointmentError?.(); };
+  const openNewAppointmentModal = () => {
+    resetForm();
+    setForm((current) => ({ ...current, fecha: selectedDate || todayDate, pacienteId: current.pacienteId || patients[0]?.id || '' }));
+    setIsAppointmentModalOpen(true);
+  };
+  const closeAppointmentModal = () => {
+    setIsAppointmentModalOpen(false);
+    resetForm();
+  };
+  const closeAvailabilityModal = () => {
+    setIsAvailabilityModalOpen(false);
+    onDismissAvailabilityError?.();
+  };
   const resetExceptionForm = () => {
     setEditingExceptionDate('');
     setExceptionForm(createEmptyExceptionForm(selectedDate || todayDate));
+    onDismissAvailabilityExceptionError?.();
+  };
+  const openExceptionsModal = () => {
+    resetExceptionForm();
+    setExceptionRangeForm({ startDate: selectedDate || todayDate, endDate: selectedDate || todayDate });
+    setIsExceptionsModalOpen(true);
+  };
+  const closeExceptionsModal = () => {
+    setIsExceptionsModalOpen(false);
+    resetExceptionForm();
+    setExceptionRangeForm({ startDate: todayDate, endDate: todayDate });
     onDismissAvailabilityExceptionError?.();
   };
   const handleEditAppointment = (appointment) => {
@@ -152,6 +198,7 @@ export default function AppointmentsScreen({
     setSelectedDate(appointment.fecha);
     setCalendarAnchorDate(appointment.fecha);
     onDismissAppointmentError?.();
+    setIsAppointmentModalOpen(true);
   };
   const handleChange = (event) => { onDismissAppointmentError?.(); setForm((current) => ({ ...current, [event.target.name]: event.target.value })); };
   const handleSubmit = async (event) => {
@@ -161,7 +208,7 @@ export default function AppointmentsScreen({
     if (!resolvedPatientId || !resolvedDate || !form.hora24) return;
     const payload = { pacienteId: resolvedPatientId, fecha: resolvedDate, hora24: form.hora24, estado: form.estado, notas: form.notas };
     const wasSaved = editingAppointmentId ? await onUpdateAppointment(editingAppointmentId, payload) : await onCreateAppointment(payload);
-    if (wasSaved) { setSelectedDate(resolvedDate); setCalendarAnchorDate(resolvedDate); resetForm(); }
+    if (wasSaved) { setSelectedDate(resolvedDate); setCalendarAnchorDate(resolvedDate); closeAppointmentModal(); }
   };
   const handleDelete = async (appointmentId) => { if (window.confirm('Se eliminara esta cita. Deseas continuar?')) await onDeleteAppointment(appointmentId); };
   const handleSelectDate = (date) => { setSelectedDate(date); if (!date) return; setCalendarAnchorDate(date); onDismissAppointmentError?.(); };
@@ -183,10 +230,13 @@ export default function AppointmentsScreen({
     updateDraftEntries((entries) => entries.map((entry) => entry.weekday !== weekday ? entry : { ...entry, blocks: entry.blocks.map((block) => block.id !== blockId ? block : { ...block, [field]: value }) }));
   };
   const handleSaveAvailability = async () => {
-    await onUpdateAvailability(normalizedAvailabilityDraft.map((entry) => ({
+    const wasSaved = await onUpdateAvailability(normalizedAvailabilityDraft.map((entry) => ({
       weekday: entry.weekday,
       blocks: entry.blocks.map((block) => ({ startTime: block.startTime, endTime: block.endTime })),
     })));
+    if (wasSaved) {
+      closeAvailabilityModal();
+    }
   };
 
   const handleExceptionFieldChange = (field, value) => {
@@ -219,7 +269,7 @@ export default function AppointmentsScreen({
       blocks: exceptionForm.isUnavailable ? [] : exceptionForm.blocks.map((block) => ({ startTime: block.startTime, endTime: block.endTime })),
     });
     if (wasSaved) {
-      resetExceptionForm();
+      closeExceptionsModal();
     }
   };
   const handleDeleteException = async (date) => {
@@ -241,7 +291,7 @@ export default function AppointmentsScreen({
       endDate: exceptionRangeForm.endDate,
     });
     if (wasSaved) {
-      setExceptionRangeForm({ startDate: todayDate, endDate: todayDate });
+      closeExceptionsModal();
     }
   };
 
@@ -264,6 +314,7 @@ export default function AppointmentsScreen({
         ? 'No quedan cupos disponibles en este dia.'
         : `${hourOptions.length} horario${hourOptions.length === 1 ? '' : 's'} disponible${hourOptions.length === 1 ? '' : 's'} en este dia.`;
   const exceptionRangeDayCount = getRangeDayCount(exceptionRangeForm.startDate, exceptionRangeForm.endDate);
+  const showInlineManagementPanels = false;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -366,7 +417,29 @@ export default function AppointmentsScreen({
         )}
       </section>
 
-      <div className={`grid gap-6 ${isPsychologist ? 'xl:grid-cols-[1.15fr_0.85fr]' : 'grid-cols-1'}`}>
+      {isPsychologist && (
+        <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">Acciones rapidas</h3>
+              <p className="mt-1 text-sm text-gray-500">Abre formularios en modales para mantener la agenda limpia mientras trabajas.</p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button type="button" onClick={openNewAppointmentModal} className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700">
+                <CalendarPlus size={16} className="mr-2" /> Nueva cita
+              </button>
+              <button type="button" onClick={() => setIsAvailabilityModalOpen(true)} className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
+                <Save size={16} className="mr-2" /> Disponibilidad semanal
+              </button>
+              <button type="button" onClick={openExceptionsModal} className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
+                <Calendar size={16} className="mr-2" /> Excepciones por fecha
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <div className="grid grid-cols-1 gap-6">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
           <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-bold text-gray-800 flex items-center"><Calendar className="mr-2 text-indigo-500" size={20} /> Citas registradas</h3><span className="text-xs uppercase tracking-wider text-gray-400 font-semibold">{filteredAppointments.length} resultados</span></div>
           <div className="space-y-3">
@@ -397,7 +470,7 @@ export default function AppointmentsScreen({
           </div>
         </div>
 
-        {isPsychologist && <div className="space-y-6">
+        {showInlineManagementPanels && isPsychologist && <div className="space-y-6">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
             <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-bold text-gray-800 flex items-center"><CalendarPlus className="mr-2 text-indigo-500" size={20} /> {editingAppointmentId ? 'Editar cita' : 'Nueva cita'}</h3>{editingAppointmentId && <button onClick={resetForm} className="text-sm font-medium text-gray-500 hover:text-gray-800 transition">Limpiar</button>}</div>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -579,6 +652,202 @@ export default function AppointmentsScreen({
           </div>
         </div>}
       </div>
+
+      {isPsychologist && isAvailabilityModalOpen && (
+        <ModalShell
+          title="Disponibilidad semanal"
+          description="Agrega uno o varios bloques por dia para cubrir manana, tarde o turnos partidos."
+          onClose={closeAvailabilityModal}
+        >
+          {availabilityActionError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{availabilityActionError}</div>}
+          <div className="space-y-3">
+            {normalizedAvailabilityDraft.map((entry) => <div key={entry.weekday} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-800">{weekdayLabels[entry.weekday]}</p>
+                    <p className="text-xs text-gray-500">{entry.blocks.length > 0 ? `${entry.blocks.length} bloque(s)` : 'Sin disponibilidad ese dia'}</p>
+                  </div>
+                  <button type="button" onClick={() => handleAddAvailabilityBlock(entry.weekday)} disabled={isSavingAvailability} className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition disabled:opacity-60"><Plus size={14} className="mr-2" /> Agregar bloque</button>
+                </div>
+                <div className="space-y-2">
+                  {entry.blocks.map((block) => <div key={block.id} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-center">
+                    <select value={block.startTime} onChange={(event) => handleAvailabilityBlockChange(entry.weekday, block.id, 'startTime', event.target.value)} disabled={isSavingAvailability} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                      {availabilityStartOptions.map((option) => <option key={option.value} value={option.value}>Desde {option.label}</option>)}
+                    </select>
+                    <select value={block.endTime} onChange={(event) => handleAvailabilityBlockChange(entry.weekday, block.id, 'endTime', event.target.value)} disabled={isSavingAvailability} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                      {availabilityEndOptions.map((option) => <option key={option.value} value={option.value}>Hasta {option.label}</option>)}
+                    </select>
+                    <button type="button" onClick={() => handleRemoveAvailabilityBlock(entry.weekday, block.id)} disabled={isSavingAvailability} className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 p-2.5 text-red-700 hover:bg-red-100 transition disabled:opacity-60"><Trash2 size={16} /></button>
+                  </div>)}
+                  {entry.blocks.length === 0 && <div className="rounded-lg border border-dashed border-gray-300 bg-white px-3 py-3 text-sm text-gray-500">No hay bloques configurados.</div>}
+                </div>
+              </div>
+            </div>)}
+          </div>
+          <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button type="button" onClick={closeAvailabilityModal} className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Cerrar</button>
+            <button type="button" onClick={handleSaveAvailability} disabled={isSavingAvailability} className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"><Save size={16} className="mr-2" /> {isSavingAvailability ? 'Guardando...' : 'Guardar'}</button>
+          </div>
+        </ModalShell>
+      )}
+
+      {isPsychologist && isExceptionsModalOpen && (
+        <ModalShell
+          title="Excepciones por fecha"
+          description="Bloquea un dia completo, crea horarios especiales o marca vacaciones de varios dias."
+          onClose={closeExceptionsModal}
+        >
+          {availabilityExceptionActionError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{availabilityExceptionActionError}</div>}
+          <form onSubmit={handleSaveExceptionRange} className="mb-4 space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <h4 className="font-semibold text-slate-800">Bloquear periodo</h4>
+              <p className="mt-1 text-xs text-slate-500">Ideal para vacaciones, congresos o ausencias de varios dias. Creara dias no disponibles en todo el rango.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Inicio</label>
+                <input type="date" value={exceptionRangeForm.startDate} onChange={(event) => handleExceptionRangeFieldChange('startDate', event.target.value)} disabled={isSavingAvailabilityException} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Fin</label>
+                <input type="date" value={exceptionRangeForm.endDate} onChange={(event) => handleExceptionRangeFieldChange('endDate', event.target.value)} disabled={isSavingAvailabilityException} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-slate-500">
+                {exceptionRangeDayCount > 0
+                  ? `Se bloquearan ${exceptionRangeDayCount} dia${exceptionRangeDayCount === 1 ? '' : 's'} completos.`
+                  : 'Selecciona un rango valido para bloquear el periodo.'}
+              </p>
+              <button type="submit" disabled={isSavingAvailabilityException || exceptionRangeDayCount === 0} className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800 transition disabled:opacity-60 disabled:cursor-not-allowed">
+                {isSavingAvailabilityException ? 'Guardando...' : 'Bloquear periodo'}
+              </button>
+            </div>
+          </form>
+
+          <form onSubmit={handleSaveException} className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h4 className="font-semibold text-gray-800">{editingExceptionDate ? 'Editar excepcion' : 'Nueva excepcion'}</h4>
+                <p className="text-xs text-gray-500 mt-1">Usa esta configuracion para vacaciones, feriados o un horario especial en una fecha puntual.</p>
+              </div>
+              {editingExceptionDate && <button type="button" onClick={resetExceptionForm} className="text-sm font-medium text-gray-500 hover:text-gray-800 transition">Limpiar</button>}
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Fecha</label>
+                <input type="date" value={exceptionForm.date} onChange={(event) => handleExceptionFieldChange('date', event.target.value)} disabled={isSavingAvailabilityException} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+              </div>
+              <label className="inline-flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm text-gray-700">
+                <input type="checkbox" checked={exceptionForm.isUnavailable} onChange={(event) => handleExceptionFieldChange('isUnavailable', event.target.checked)} disabled={isSavingAvailabilityException} className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                Marcar este dia como no disponible
+              </label>
+            </div>
+
+            {!exceptionForm.isUnavailable && <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Bloques para esta fecha</p>
+                  <p className="text-xs text-gray-500">Estos horarios reemplazan la disponibilidad semanal solo en este dia.</p>
+                </div>
+                <button type="button" onClick={handleAddExceptionBlock} disabled={isSavingAvailabilityException} className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition disabled:opacity-60"><Plus size={14} className="mr-2" /> Agregar bloque</button>
+              </div>
+              <div className="space-y-2">
+                {exceptionForm.blocks.map((block) => <div key={block.id} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 items-center">
+                  <select value={block.startTime} onChange={(event) => handleExceptionBlockChange(block.id, 'startTime', event.target.value)} disabled={isSavingAvailabilityException} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    {availabilityStartOptions.map((option) => <option key={option.value} value={option.value}>Desde {option.label}</option>)}
+                  </select>
+                  <select value={block.endTime} onChange={(event) => handleExceptionBlockChange(block.id, 'endTime', event.target.value)} disabled={isSavingAvailabilityException} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    {availabilityEndOptions.map((option) => <option key={option.value} value={option.value}>Hasta {option.label}</option>)}
+                  </select>
+                  <button type="button" onClick={() => handleRemoveExceptionBlock(block.id)} disabled={isSavingAvailabilityException} className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 p-2.5 text-red-700 hover:bg-red-100 transition disabled:opacity-60"><Trash2 size={16} /></button>
+                </div>)}
+              </div>
+            </div>}
+
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" onClick={resetExceptionForm} className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Limpiar</button>
+              <button type="submit" disabled={isSavingAvailabilityException || !exceptionForm.date} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed">
+                {isSavingAvailabilityException ? 'Guardando...' : editingExceptionDate ? 'Guardar excepcion' : 'Crear excepcion'}
+              </button>
+            </div>
+          </form>
+
+          <div className="mt-4 space-y-3">
+            {availabilityExceptions.length > 0 ? availabilityExceptions.map((exception) => (
+              <div key={exception.date} className="rounded-xl border border-gray-200 bg-white p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-800 capitalize">{formatExceptionDate(exception.date)}</p>
+                    <p className="mt-1 text-sm text-gray-500">
+                      {exception.isUnavailable
+                        ? 'Dia completo no disponible.'
+                        : exception.blocks.map((block) => `${String(block.startTime).slice(0, 5)}-${String(block.endTime).slice(0, 5)}`).join(' | ')}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => handleEditException(exception)} className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 transition"><Pencil size={14} className="mr-2" /> Editar</button>
+                    <button type="button" onClick={() => handleDeleteException(exception.date)} disabled={isSavingAvailabilityException} className="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 transition disabled:opacity-60"><Trash2 size={14} className="mr-2" /> Eliminar</button>
+                  </div>
+                </div>
+              </div>
+            )) : <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500">Todavia no hay excepciones configuradas.</div>}
+          </div>
+        </ModalShell>
+      )}
+
+      {isPsychologist && isAppointmentModalOpen && (
+        <ModalShell
+          title={editingAppointmentId ? 'Editar cita' : 'Nueva cita'}
+          description="Agenda sesiones, ajusta el estado y deja notas logisticas sin salir del calendario."
+          onClose={closeAppointmentModal}
+        >
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {appointmentActionError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{appointmentActionError}</div>}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Paciente</label>
+              <select name="pacienteId" value={form.pacienteId || patients[0]?.id || ''} onChange={handleChange} disabled={isSavingAppointment} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                <option value="">Selecciona un paciente</option>
+                {patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.nombre}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Fecha</label>
+                <input type="date" name="fecha" value={form.fecha || todayDate} onChange={handleChange} disabled={isSavingAppointment} className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                <p className="mt-1 text-xs text-gray-500">{weekdayLabels[selectedFormWeekday]}: {blockSummary}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Hora</label>
+                <select name="hora24" value={form.hora24} onChange={handleChange} disabled={isSavingAppointment || ((selectedDayBlocks.length === 0 || selectedDayAvailability.isUnavailable) && !form.hora24)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                  <option value="">{selectedDayAvailability.isUnavailable ? 'Dia no disponible' : selectedDayBlocks.length > 0 ? 'Selecciona un horario' : 'Dia sin disponibilidad'}</option>
+                  {hourOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">{availableSlotsMessage}</p>
+                <p className="mt-1 text-xs text-gray-500">Las sesiones duran 60 minutos y se agendan por hora exacta.</p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Estado</label>
+              <select name="estado" value={form.estado} onChange={handleChange} disabled={isSavingAppointment} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                <option value="pendiente">Pendiente</option>
+                <option value="completada">Completada</option>
+                <option value="cancelada">Cancelada</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Notas</label>
+              <textarea name="notas" value={form.notas} onChange={handleChange} disabled={isSavingAppointment} rows="4" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none" placeholder="Detalles logisticos, contexto o recordatorios de la sesion..." />
+            </div>
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button type="button" onClick={closeAppointmentModal} className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Cancelar</button>
+              <button type="submit" disabled={isSavingAppointment || patients.length === 0} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed">{isSavingAppointment ? 'Guardando...' : editingAppointmentId ? 'Guardar cambios' : 'Crear cita'}</button>
+            </div>
+          </form>
+        </ModalShell>
+      )}
     </div>
   );
 }
