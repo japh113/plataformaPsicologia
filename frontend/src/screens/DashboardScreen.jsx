@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, AlertCircle, Calendar, CheckSquare, Clock3, Plus, User } from 'lucide-react';
+import { Activity, AlertCircle, Bell, Calendar, CheckSquare, Clock3, Plus, User } from 'lucide-react';
 import { getRiskColor, sortPatientsByRisk } from '../utils/risk';
 import FutureFeatureCard from '../components/shared/FutureFeatureCard';
 
@@ -9,7 +9,89 @@ const getPatientSummary = (patient) => {
   return `${reason} - ${age}`;
 };
 
-export default function DashboardScreen({ currentUser, patients, appointments, onOpenPatient, onNewPatient }) {
+const getReminderAccent = (priority) => (
+  priority === 'high'
+    ? 'border-red-200 bg-red-50'
+    : priority === 'medium'
+      ? 'border-amber-200 bg-amber-50'
+      : 'border-indigo-200 bg-indigo-50'
+);
+
+const getReminderBadge = (priority) => (
+  priority === 'high'
+    ? 'bg-red-100 text-red-700 border-red-200'
+    : priority === 'medium'
+      ? 'bg-amber-100 text-amber-700 border-amber-200'
+      : 'bg-indigo-100 text-indigo-700 border-indigo-200'
+);
+
+const getReminderLabel = (priority) => {
+  if (priority === 'high') return 'Alta';
+  if (priority === 'medium') return 'Media';
+  return 'Suave';
+};
+
+function RemindersPanel({ reminders, patients, isPsychologist, onOpenPatient, onViewAppointments }) {
+  return (
+    <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="text-lg md:text-xl font-bold flex items-center text-gray-800">
+          <Bell className="mr-2 text-indigo-500" /> Recordatorios
+        </h2>
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+          {reminders.length}
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {reminders.length > 0 ? reminders.map((reminder) => {
+          const patient = reminder.patientId ? patients.find((currentPatient) => currentPatient.id === reminder.patientId) : null;
+          const canOpenPatient = reminder.action === 'open-patient' && patient;
+
+          return (
+            <div key={reminder.id} className={`rounded-xl border p-4 ${getReminderAccent(reminder.priority)}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-gray-900">{reminder.title}</p>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getReminderBadge(reminder.priority)}`}>
+                      {getReminderLabel(reminder.priority)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-600">{reminder.description}</p>
+                  {(reminder.date || reminder.time) && (
+                    <p className="mt-2 text-xs font-medium text-gray-500">
+                      {[reminder.date, reminder.time?.slice(0, 5)].filter(Boolean).join(' - ')}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {canOpenPatient && (
+                  <button onClick={() => onOpenPatient(patient)} className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 transition">
+                    {isPsychologist ? 'Abrir expediente' : 'Ver seguimiento'}
+                  </button>
+                )}
+                {reminder.action === 'open-appointments' && (
+                  <button onClick={onViewAppointments} className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 transition">
+                    Ver agenda
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        }) : (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
+            No hay recordatorios activos por ahora.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function DashboardScreen({ currentUser, patients, appointments, reminders, onOpenPatient, onNewPatient, onViewAppointments }) {
   const isPsychologist = currentUser?.role === 'psychologist';
   const nextAppointment = appointments[0];
   const patientProfile = patients[0] || null;
@@ -127,7 +209,7 @@ export default function DashboardScreen({ currentUser, patients, appointments, o
               </div>
             </div>
 
-            <FutureFeatureCard title="Mensajes y recordatorios" description="Reservamos este espacio para notificaciones y recordatorios personalizados." className="min-h-[128px]" />
+            <RemindersPanel reminders={reminders} patients={patients} isPsychologist={isPsychologist} onOpenPatient={onOpenPatient} onViewAppointments={onViewAppointments} />
           </div>
         </div>
       </div>
@@ -245,7 +327,7 @@ export default function DashboardScreen({ currentUser, patients, appointments, o
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FutureFeatureCard title="Finanzas y cobros" description="Modulo visual reservado para pagos, facturas y control financiero." className="min-h-[128px]" />
+            <RemindersPanel reminders={reminders} patients={patients} isPsychologist={isPsychologist} onOpenPatient={onOpenPatient} onViewAppointments={onViewAppointments} />
             <FutureFeatureCard title="Asistente Clinico IA" description="Se mantiene visible en la experiencia, pero bloqueado hasta una siguiente fase." className="min-h-[128px]" />
           </div>
         </div>

@@ -29,6 +29,7 @@ import {
 import { createAppointment, deleteAppointment, getAppointments, updateAppointment } from './api/appointments';
 import { getAuthToken } from './api/client';
 import { getCurrentUser, login, logout } from './api/auth';
+import { getMyReminders } from './api/reminders';
 import {
   mapBackendPatientToUiPatient,
   mapBackendTaskToUiTask,
@@ -78,6 +79,7 @@ export default function App() {
   const [availability, setAvailability] = useState([]);
   const [availabilityDraft, setAvailabilityDraft] = useState([]);
   const [availabilityExceptions, setAvailabilityExceptions] = useState([]);
+  const [reminders, setReminders] = useState([]);
   const [mostrarModalNuevoPaciente, setMostrarModalNuevoPaciente] = useState(false);
   const [nuevoPacienteForm, setNuevoPacienteForm] = useState({ nombre: '', edad: '', motivo: '', riesgo: 'bajo' });
   const [notasTemp, setNotasTemp] = useState('');
@@ -111,6 +113,7 @@ export default function App() {
     setAvailability([]);
     setAvailabilityDraft([]);
     setAvailabilityExceptions([]);
+    setReminders([]);
     setNotasTemp('');
     setErrorCarga('');
     setAppointmentActionError('');
@@ -129,17 +132,18 @@ export default function App() {
     setErrorCarga('');
 
     try {
-      const requests = [getPatients(), getAppointments()];
+      const requests = [getPatients(), getAppointments(), getMyReminders()];
 
       if (currentUser.role === 'psychologist') {
         requests.push(getMyAvailability());
         requests.push(getMyAvailabilityExceptions());
       }
 
-      const [backendPatients, backendAppointments, backendAvailability = [], backendAvailabilityExceptions = []] = await Promise.all(requests);
+      const [backendPatients, backendAppointments, backendReminders, backendAvailability = [], backendAvailabilityExceptions = []] = await Promise.all(requests);
 
       setPacientes(backendPatients.map(mapBackendPatientToUiPatient));
       setAppointments(sortAppointments(backendAppointments.map(mapBackendAppointmentToUiAppointment)));
+      setReminders(backendReminders);
       setAvailability(backendAvailability);
       setAvailabilityDraft(backendAvailability);
       setAvailabilityExceptions(backendAvailabilityExceptions);
@@ -213,6 +217,19 @@ export default function App() {
 
   const syncAppointmentsState = (updater) => {
     setAppointments((currentAppointments) => sortAppointments(typeof updater === 'function' ? updater(currentAppointments) : updater));
+  };
+
+  const refreshReminders = async () => {
+    if (!currentUser) {
+      return;
+    }
+
+    try {
+      const nextReminders = await getMyReminders();
+      setReminders(nextReminders);
+    } catch {
+      // Keep the current reminders on screen if the refresh fails.
+    }
   };
 
   const abrirNotas = (paciente) => {
@@ -300,6 +317,7 @@ export default function App() {
       };
 
       syncPatientState(nextPatient);
+      await refreshReminders();
       return true;
     } catch (error) {
       window.alert(error.message || 'No se pudo crear la tarea.');
@@ -334,6 +352,7 @@ export default function App() {
       };
 
       syncPatientState(nextPatient);
+      await refreshReminders();
     } catch (error) {
       window.alert(error.message || 'No se pudo actualizar la tarea.');
     } finally {
@@ -357,6 +376,7 @@ export default function App() {
       };
 
       syncPatientState(nextPatient);
+      await refreshReminders();
     } catch (error) {
       window.alert(error.message || 'No se pudo eliminar la tarea.');
     } finally {
@@ -376,6 +396,7 @@ export default function App() {
       const createdAppointment = await createAppointment(mapUiAppointmentToBackendAppointment(appointmentForm));
       const uiAppointment = mapBackendAppointmentToUiAppointment(createdAppointment);
       syncAppointmentsState((currentAppointments) => [...currentAppointments, uiAppointment]);
+      await refreshReminders();
       return true;
     } catch (error) {
       setAppointmentActionError(error.message || 'No se pudo crear la cita.');
@@ -400,6 +421,7 @@ export default function App() {
       syncAppointmentsState((currentAppointments) =>
         currentAppointments.map((appointment) => (appointment.id === appointmentId ? uiAppointment : appointment)),
       );
+      await refreshReminders();
       return true;
     } catch (error) {
       setAppointmentActionError(error.message || 'No se pudo actualizar la cita.');
@@ -421,6 +443,7 @@ export default function App() {
     try {
       await deleteAppointment(appointmentId);
       syncAppointmentsState((currentAppointments) => currentAppointments.filter((appointment) => appointment.id !== appointmentId));
+      await refreshReminders();
       return true;
     } catch (error) {
       window.alert(error.message || 'No se pudo eliminar la cita.');
@@ -591,8 +614,10 @@ export default function App() {
           currentUser={currentUser}
           patients={pacientes}
           appointments={todayAppointments}
+          reminders={reminders}
           onOpenPatient={abrirNotas}
           onNewPatient={() => setMostrarModalNuevoPaciente(true)}
+          onViewAppointments={() => setVistaActiva('appointments')}
         />
       );
     }
