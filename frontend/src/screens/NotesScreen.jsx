@@ -50,6 +50,7 @@ export default function NotesScreen({
   const initialMatchedSession = patient?.sesiones?.find((session) => session.citaId === (prefilledAppointmentId || null)) || null;
   const [showTaskInput, setShowTaskInput] = useState(false);
   const [taskText, setTaskText] = useState('');
+  const [activeSection, setActiveSection] = useState(initialMatchedSession || prefilledAppointmentId ? 'sesiones' : 'resumen');
   const [selectedSessionId, setSelectedSessionId] = useState(initialMatchedSession?.id || null);
   const [sessionForm, setSessionForm] = useState(
     initialMatchedSession
@@ -70,6 +71,7 @@ export default function NotesScreen({
     return Math.round((completed / patient.tareas.length) * 100);
   }, [patient]);
   const sessions = patient?.sesiones || [];
+  const pendingTasks = useMemo(() => (patient?.tareas || []).filter((task) => !task.completada), [patient?.tareas]);
   const patientAppointments = useMemo(
     () =>
       (appointments || [])
@@ -90,6 +92,11 @@ export default function NotesScreen({
       ),
     [patientAppointments, todayDate],
   );
+  const appointmentSummary = useMemo(() => ({
+    total: patientAppointments.length,
+    completed: patientAppointments.filter((appointment) => appointment.estado === 'completada').length,
+    upcoming: patientAppointments.filter((appointment) => appointment.fecha >= todayDate && appointment.estado !== 'cancelada').length,
+  }), [patientAppointments, todayDate]);
 
   if (!patient) return null;
 
@@ -129,6 +136,7 @@ export default function NotesScreen({
   };
 
   const handleEditSession = (session) => {
+    setActiveSection('sesiones');
     setSelectedSessionId(session.id);
     setSessionForm({
       citaId: session.citaId || '',
@@ -169,6 +177,18 @@ export default function NotesScreen({
     }
   };
 
+  const psychologistSections = [
+    { id: 'resumen', label: 'Resumen' },
+    { id: 'sesiones', label: 'Sesiones' },
+    { id: 'tareas', label: 'Tareas' },
+    { id: 'nota-general', label: 'Nota general' },
+  ];
+  const patientSections = [
+    { id: 'resumen', label: 'Resumen' },
+    { id: 'tareas', label: 'Tareas' },
+  ];
+  const visibleSections = isPsychologist ? psychologistSections : patientSections;
+
   return (
     <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 h-full animate-in slide-in-from-right-4 duration-300">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3">
@@ -186,13 +206,69 @@ export default function NotesScreen({
         </button>
       </div>
 
+      <div className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+        {visibleSections.map((section) => (
+          <button
+            key={section.id}
+            type="button"
+            onClick={() => setActiveSection(section.id)}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${activeSection === section.id ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-indigo-100' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}
+          >
+            {section.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           {isPsychologist ? (
             <>
-              <FutureFeatureCard title="Asistente Clinico IA" description="Mantuvimos el modulo visible, bloqueado y marcado como proxima fase para no perder el concepto del producto." />
+              {activeSection === 'resumen' && <FutureFeatureCard title="Asistente Clinico IA" description="Mantuvimos el modulo visible, bloqueado y marcado como proxima fase para no perder el concepto del producto." />}
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
+              {activeSection === 'resumen' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Agenda</p>
+                      <p className="mt-2 text-3xl font-black text-indigo-900">{appointmentSummary.upcoming}</p>
+                      <p className="mt-1 text-sm text-indigo-800">Citas activas de hoy en adelante.</p>
+                    </div>
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Sesiones</p>
+                      <p className="mt-2 text-3xl font-black text-emerald-900">{sessions.length}</p>
+                      <p className="mt-1 text-sm text-emerald-800">Notas clinicas registradas.</p>
+                    </div>
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Adherencia</p>
+                      <p className="mt-2 text-3xl font-black text-amber-900">{adherence}%</p>
+                      <p className="mt-1 text-sm text-amber-800">{pendingTasks.length} tarea(s) pendiente(s).</p>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                    <h3 className="text-lg font-bold text-slate-900">Resumen del caso</h3>
+                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Motivo de consulta</p>
+                        <p className="mt-2 text-sm text-slate-700">{patient.motivo || 'Motivo no registrado'}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultima sesion</p>
+                        <p className="mt-2 text-sm text-slate-700">{patient.ultimaSesion ? formatSessionDate(patient.ultimaSesion) : 'Sin sesiones registradas'}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Tareas pendientes</p>
+                        <p className="mt-2 text-sm text-slate-700">{pendingTasks.length > 0 ? pendingTasks.map((task) => task.texto).slice(0, 3).join(' | ') : 'No hay tareas pendientes.'}</p>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Citas completadas elegibles</p>
+                        <p className="mt-2 text-sm text-slate-700">{eligibleSessionAppointments.length} cita(s) disponibles para registrar sesion.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeSection === 'sesiones' && <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 flex items-center">
@@ -317,9 +393,9 @@ export default function NotesScreen({
                     </div>
                   </div>
                 </div>
-              </div>
+              </div>}
 
-              <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
+              {activeSection === 'nota-general' && <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-4 py-4 border-b border-gray-200 bg-white">
                   <h3 className="font-semibold text-gray-800">Nota general del expediente</h3>
                   <p className="mt-1 text-xs text-gray-500">Este espacio queda para contexto transversal del caso, antecedentes o recordatorios clinicos no ligados a una sola sesion.</p>
@@ -330,26 +406,145 @@ export default function NotesScreen({
                   placeholder="Escribe aqui la nota general del expediente..."
                   className="w-full h-[240px] p-4 bg-transparent focus:outline-none resize-none leading-relaxed"
                 />
-              </div>
+              </div>}
 
-              <button
+              {activeSection === 'nota-general' && <button
                 onClick={onSaveNotes}
                 disabled={isSavingNotes}
                 className="flex items-center justify-center w-full px-4 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition font-medium shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Save size={18} className="mr-2" /> {isSavingNotes ? 'Guardando...' : 'Guardar nota general'}
-              </button>
+              </button>}
+
+              {activeSection === 'tareas' && (
+                <div className="bg-gray-50 p-4 md:p-5 rounded-xl border border-gray-200">
+                  <h3 className="font-bold text-gray-800 mb-2 flex items-center text-sm md:text-base">
+                    <CheckSquare className="mr-2 text-indigo-500" size={20} /> Tareas Asignadas
+                  </h3>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Adherencia actual: <span className="font-bold text-gray-700">{adherence}%</span>
+                  </p>
+
+                  <div className="space-y-3 mb-4 max-h-80 overflow-y-auto pr-1">
+                    {!patient.tareas || patient.tareas.length === 0 ? (
+                      <p className="text-sm text-gray-500 italic text-center py-4 bg-white rounded border border-dashed border-gray-300">No hay tareas pendientes</p>
+                    ) : (
+                      patient.tareas.map((task) => (
+                        <div key={task.id} className="flex items-start bg-white p-3 rounded-lg border border-gray-200 group shadow-sm">
+                          <input
+                            type="checkbox"
+                            checked={task.completada}
+                            disabled={processingTaskId === task.id}
+                            onChange={() => onToggleTask(task.id)}
+                            className="mt-1 h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer shrink-0 disabled:cursor-not-allowed"
+                          />
+                          <span className={`ml-3 text-xs md:text-sm flex-1 ${task.completada ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.texto}</span>
+                          <button
+                            onClick={() => onDeleteTask(task.id)}
+                            disabled={processingTaskId === task.id}
+                            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition ml-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {showTaskInput ? (
+                    <div className="animate-in fade-in zoom-in-95 duration-200">
+                      <textarea
+                        autoFocus
+                        value={taskText}
+                        onChange={(e) => setTaskText(e.target.value)}
+                        placeholder="Ej. Registro diario de emociones..."
+                        className="w-full p-3 border border-indigo-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none mb-2 shadow-sm"
+                        rows="2"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleAddTask();
+                          }
+                        }}
+                      />
+                      <div className="flex space-x-2">
+                        <button onClick={() => setShowTaskInput(false)} disabled={isCreatingTask} className="flex-1 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:bg-gray-50 disabled:text-gray-400">
+                          Cancelar
+                        </button>
+                        <button onClick={handleAddTask} disabled={isCreatingTask} className="flex-1 py-2 text-sm text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition disabled:opacity-60 disabled:cursor-not-allowed">
+                          {isCreatingTask ? 'Guardando...' : 'Guardar'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => setShowTaskInput(true)} className="flex items-center justify-center w-full p-2.5 text-sm text-indigo-700 bg-indigo-100/50 border border-indigo-200 border-dashed rounded-lg hover:bg-indigo-100 transition font-medium">
+                      <Plus size={16} className="mr-2" /> Asignar nueva tarea
+                    </button>
+                  )}
+                </div>
+              )}
             </>
           ) : (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-              <div className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500 border border-slate-200">
-                <Shield size={14} className="mr-2" /> Privacidad clinica
-              </div>
-              <h3 className="mt-4 text-xl font-black text-slate-900">Notas del terapeuta protegidas</h3>
-              <p className="mt-2 text-sm text-slate-600">
-                Las notas clinicas y el historial de sesiones del profesional no se muestran desde la cuenta del paciente. Aqui solo veras tu seguimiento, tareas y agenda.
-              </p>
-            </div>
+            <>
+              {activeSection === 'resumen' && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
+                  <div className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500 border border-slate-200">
+                    <Shield size={14} className="mr-2" /> Privacidad clinica
+                  </div>
+                  <h3 className="mt-4 text-xl font-black text-slate-900">Notas del terapeuta protegidas</h3>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Las notas clinicas y el historial de sesiones del profesional no se muestran desde la cuenta del paciente. Aqui solo veras tu seguimiento, tareas y agenda.
+                  </p>
+                  <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Citas</p>
+                      <p className="mt-2 text-3xl font-black text-indigo-900">{appointmentSummary.upcoming}</p>
+                      <p className="mt-1 text-sm text-indigo-800">Sesiones activas de hoy en adelante.</p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Adherencia</p>
+                      <p className="mt-2 text-3xl font-black text-emerald-900">{adherence}%</p>
+                      <p className="mt-1 text-sm text-emerald-800">Progreso actual en tareas.</p>
+                    </div>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Pendientes</p>
+                      <p className="mt-2 text-3xl font-black text-amber-900">{pendingTasks.length}</p>
+                      <p className="mt-1 text-sm text-amber-800">Tareas por completar.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeSection === 'tareas' && (
+                <div className="bg-gray-50 p-4 md:p-5 rounded-xl border border-gray-200">
+                  <h3 className="font-bold text-gray-800 mb-2 flex items-center text-sm md:text-base">
+                    <CheckSquare className="mr-2 text-indigo-500" size={20} /> Mis tareas
+                  </h3>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Adherencia actual: <span className="font-bold text-gray-700">{adherence}%</span>
+                  </p>
+
+                  <div className="space-y-3 mb-4 max-h-80 overflow-y-auto pr-1">
+                    {!patient.tareas || patient.tareas.length === 0 ? (
+                      <p className="text-sm text-gray-500 italic text-center py-4 bg-white rounded border border-dashed border-gray-300">No hay tareas pendientes</p>
+                    ) : (
+                      patient.tareas.map((task) => (
+                        <div key={task.id} className="flex items-start bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                          <input
+                            type="checkbox"
+                            checked={task.completada}
+                            disabled={processingTaskId === task.id}
+                            onChange={() => onToggleTask(task.id)}
+                            className="mt-1 h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer shrink-0 disabled:cursor-not-allowed"
+                          />
+                          <span className={`ml-3 text-xs md:text-sm flex-1 ${task.completada ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.texto}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -365,76 +560,26 @@ export default function NotesScreen({
             </div>
           )}
 
-          <div className="bg-gray-50 p-4 md:p-5 rounded-xl border border-gray-200">
-            <h3 className="font-bold text-gray-800 mb-2 flex items-center text-sm md:text-base">
-              <CheckSquare className="mr-2 text-indigo-500" size={20} /> Tareas Asignadas
-            </h3>
-            <p className="text-xs text-gray-500 mb-4">
-              Adherencia actual: <span className="font-bold text-gray-700">{adherence}%</span>
-            </p>
-
-            <div className="space-y-3 mb-4 max-h-60 overflow-y-auto pr-1">
-              {!patient.tareas || patient.tareas.length === 0 ? (
-                <p className="text-sm text-gray-500 italic text-center py-4 bg-white rounded border border-dashed border-gray-300">No hay tareas pendientes</p>
-              ) : (
-                patient.tareas.map((task) => (
-                  <div key={task.id} className="flex items-start bg-white p-3 rounded-lg border border-gray-200 group shadow-sm">
-                    <input
-                      type="checkbox"
-                      checked={task.completada}
-                      disabled={processingTaskId === task.id}
-                      onChange={() => onToggleTask(task.id)}
-                      className="mt-1 h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer shrink-0 disabled:cursor-not-allowed"
-                    />
-                    <span className={`ml-3 text-xs md:text-sm flex-1 ${task.completada ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.texto}</span>
-                    {isPsychologist && (
-                      <button
-                        onClick={() => onDeleteTask(task.id)}
-                        disabled={processingTaskId === task.id}
-                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition ml-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
-                  </div>
-                ))
-              )}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+            <h3 className="font-bold text-slate-900">Ficha rapida</h3>
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Motivo</p>
+                <p className="mt-2 text-slate-700">{patient.motivo || 'Motivo no registrado'}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultima sesion</p>
+                <p className="mt-2 text-slate-700">{patient.ultimaSesion ? formatSessionDate(patient.ultimaSesion) : 'Sin sesiones registradas'}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Tareas pendientes</p>
+                <p className="mt-2 text-slate-700">{pendingTasks.length}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Citas registradas</p>
+                <p className="mt-2 text-slate-700">{appointmentSummary.total}</p>
+              </div>
             </div>
-
-            {isPsychologist && (
-              <>
-                {showTaskInput ? (
-                  <div className="animate-in fade-in zoom-in-95 duration-200">
-                    <textarea
-                      autoFocus
-                      value={taskText}
-                      onChange={(e) => setTaskText(e.target.value)}
-                      placeholder="Ej. Registro diario de emociones..."
-                      className="w-full p-3 border border-indigo-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none mb-2 shadow-sm"
-                      rows="2"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleAddTask();
-                        }
-                      }}
-                    />
-                    <div className="flex space-x-2">
-                      <button onClick={() => setShowTaskInput(false)} disabled={isCreatingTask} className="flex-1 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:bg-gray-50 disabled:text-gray-400">
-                        Cancelar
-                      </button>
-                      <button onClick={handleAddTask} disabled={isCreatingTask} className="flex-1 py-2 text-sm text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition disabled:opacity-60 disabled:cursor-not-allowed">
-                        {isCreatingTask ? 'Guardando...' : 'Guardar'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button onClick={() => setShowTaskInput(true)} className="flex items-center justify-center w-full p-2.5 text-sm text-indigo-700 bg-indigo-100/50 border border-indigo-200 border-dashed rounded-lg hover:bg-indigo-100 transition font-medium">
-                    <Plus size={16} className="mr-2" /> Asignar nueva tarea
-                  </button>
-                )}
-              </>
-            )}
           </div>
         </div>
       </div>
