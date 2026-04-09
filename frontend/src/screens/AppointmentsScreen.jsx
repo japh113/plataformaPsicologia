@@ -8,8 +8,8 @@ const exceptionDateFormatter = new Intl.DateTimeFormat('es-MX', { weekday: 'shor
 const getStatusBadge = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
 const getMiniAppointmentChip = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
 const getAppointmentAccent = (estado) => (estado === 'completada' ? 'border-l-green-500 bg-green-50/40' : estado === 'cancelada' ? 'border-l-red-500 bg-red-50/40' : 'border-l-indigo-500 bg-indigo-50/40');
-const getSessionIndicatorClasses = (sessionState) => (sessionState === 'registered' ? 'bg-emerald-500 ring-emerald-100' : sessionState === 'missing' ? 'bg-amber-500 ring-amber-100' : '');
-const getSessionBadgeClasses = (sessionState) => (sessionState === 'registered' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : sessionState === 'missing' ? 'border-amber-200 bg-amber-50 text-amber-700' : '');
+const getSessionIndicatorClasses = (sessionState) => (sessionState === 'registered' ? 'bg-emerald-500 ring-emerald-100' : sessionState === 'missing' ? 'bg-sky-500 ring-sky-100' : '');
+const getSessionBadgeClasses = (sessionState) => (sessionState === 'registered' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : sessionState === 'missing' ? 'border-sky-200 bg-sky-50 text-sky-700' : '');
 const getDayNumberBadge = ({ isToday, isActive, isHovered, isCurrentMonth }) => (isActive ? 'bg-indigo-600 text-white shadow-sm' : isHovered ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-200' : isToday ? 'bg-indigo-100 text-indigo-700' : isCurrentMonth ? 'text-slate-900' : 'text-slate-400');
 const getExceptionPillClasses = (isUnavailable) => (isUnavailable ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-700');
 const getExceptionDotClasses = (isUnavailable) => (isUnavailable ? 'bg-red-500 ring-red-100' : 'bg-amber-500 ring-amber-100');
@@ -497,10 +497,10 @@ export default function AppointmentsScreen({
 
       {isPsychologist && (
         <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Pendiente clinico</p>
-            <p className="mt-2 text-3xl font-black text-amber-900">{clinicalSummary.completedWithoutSession}</p>
-            <p className="mt-1 text-sm text-amber-800">Citas completadas sin sesion registrada.</p>
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700">Pendiente clinico</p>
+            <p className="mt-2 text-3xl font-black text-sky-900">{clinicalSummary.completedWithoutSession}</p>
+            <p className="mt-1 text-sm text-sky-800">Citas completadas sin sesion registrada.</p>
           </div>
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Cierre clinico</p>
