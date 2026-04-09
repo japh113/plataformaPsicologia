@@ -458,6 +458,17 @@ export default function AppointmentsScreen({
         : `${hourOptions.length} horario${hourOptions.length === 1 ? '' : 's'} disponible${hourOptions.length === 1 ? '' : 's'} en este dia.`;
   const isHourSelectDisabled = isSavingAppointment || hasSameDayPatientConflict || ((selectedDayBlocks.length === 0 || selectedDayAvailability.isUnavailable) && !form.hora24);
   const exceptionRangeDayCount = getRangeDayCount(exceptionRangeForm.startDate, exceptionRangeForm.endDate);
+  const clinicalSummary = useMemo(() => {
+    const completedWithoutSession = appointments.filter((appointment) => getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id)) === 'missing').length;
+    const completedWithSession = appointments.filter((appointment) => getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id)) === 'registered').length;
+    const upcomingPending = appointments.filter((appointment) => appointment.estado === 'pendiente' && appointment.fecha >= todayDate).length;
+
+    return {
+      completedWithoutSession,
+      completedWithSession,
+      upcomingPending,
+    };
+  }, [appointmentSessionIds, appointments, todayDate]);
   const showInlineManagementPanels = false;
 
   return (
@@ -483,6 +494,26 @@ export default function AppointmentsScreen({
           </select>}
         </div>
       </div>
+
+      {isPsychologist && (
+        <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Pendiente clinico</p>
+            <p className="mt-2 text-3xl font-black text-amber-900">{clinicalSummary.completedWithoutSession}</p>
+            <p className="mt-1 text-sm text-amber-800">Citas completadas sin sesion registrada.</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Cierre clinico</p>
+            <p className="mt-2 text-3xl font-black text-emerald-900">{clinicalSummary.completedWithSession}</p>
+            <p className="mt-1 text-sm text-emerald-800">Citas completadas con sesion registrada.</p>
+          </div>
+          <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Agenda activa</p>
+            <p className="mt-2 text-3xl font-black text-indigo-900">{clinicalSummary.upcomingPending}</p>
+            <p className="mt-1 text-sm text-indigo-800">Citas pendientes de hoy en adelante.</p>
+          </div>
+        </section>
+      )}
 
       <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
