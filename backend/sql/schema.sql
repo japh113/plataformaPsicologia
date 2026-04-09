@@ -106,7 +106,19 @@ CREATE TABLE IF NOT EXISTS patient_sessions (
   created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   session_date DATE NOT NULL,
   note_format TEXT NOT NULL DEFAULT 'simple' CHECK (note_format IN ('simple', 'soap')),
+  session_objective TEXT NOT NULL DEFAULT '',
+  clinical_observations TEXT NOT NULL DEFAULT '',
+  next_steps TEXT NOT NULL DEFAULT '',
   content TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE patient_sessions
+  ADD COLUMN IF NOT EXISTS session_objective TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE patient_sessions
+  ADD COLUMN IF NOT EXISTS clinical_observations TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE patient_sessions
+  ADD COLUMN IF NOT EXISTS next_steps TEXT NOT NULL DEFAULT '';

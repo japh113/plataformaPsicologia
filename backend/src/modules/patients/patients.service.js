@@ -67,6 +67,9 @@ const psychologistSessionSelectColumn = `,
           'appointmentId', ps.appointment_id,
           'sessionDate', ps.session_date,
           'noteFormat', ps.note_format,
+          'sessionObjective', ps.session_objective,
+          'clinicalObservations', ps.clinical_observations,
+          'nextSteps', ps.next_steps,
           'content', ps.content,
           'createdAt', ps.created_at,
           'updatedAt', ps.updated_at
@@ -91,6 +94,9 @@ const mapSessionRow = (session) => ({
   appointmentId: session.appointmentId === null || typeof session.appointmentId === 'undefined' ? null : String(session.appointmentId),
   sessionDate: normalizeDateValue(session.sessionDate),
   noteFormat: session.noteFormat || 'simple',
+  sessionObjective: session.sessionObjective || '',
+  clinicalObservations: session.clinicalObservations || '',
+  nextSteps: session.nextSteps || '',
   content: session.content || '',
   createdAt: session.createdAt,
   updatedAt: session.updatedAt,
@@ -121,6 +127,7 @@ const getPatientBaseQuery = (includeSessions = false) => `
 `;
 
 const mapPatientResult = (result) => (result.rows[0] ? mapPatientRow(result.rows[0]) : null);
+const normalizeOptionalText = (value) => (typeof value === 'string' ? value.trim() : '');
 
 export const getAllPatients = async (actor) => {
   const includeSessions = isPsychologist(actor);
@@ -478,14 +485,20 @@ export const createPatientSession = async (patientId, payload, actor) => {
         created_by_user_id,
         session_date,
         note_format,
-      content
+        session_objective,
+        clinical_observations,
+        next_steps,
+        content
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING
         id,
         appointment_id AS "appointmentId",
         session_date AS "sessionDate",
         note_format AS "noteFormat",
+        session_objective AS "sessionObjective",
+        clinical_observations AS "clinicalObservations",
+        next_steps AS "nextSteps",
         content,
         created_at AS "createdAt",
         updated_at AS "updatedAt"
@@ -496,6 +509,9 @@ export const createPatientSession = async (patientId, payload, actor) => {
       actor.id,
       normalizeDateValue(appointment.scheduled_date),
       payload.noteFormat,
+      normalizeOptionalText(payload.sessionObjective),
+      normalizeOptionalText(payload.clinicalObservations),
+      normalizeOptionalText(payload.nextSteps),
       payload.content.trim(),
     ],
   );
@@ -520,6 +536,9 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
         appointment_id AS "appointmentId",
         session_date AS "sessionDate",
         note_format AS "noteFormat",
+        session_objective AS "sessionObjective",
+        clinical_observations AS "clinicalObservations",
+        next_steps AS "nextSteps",
         content,
         created_at AS "createdAt",
         updated_at AS "updatedAt"
@@ -537,6 +556,15 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
   const currentSession = currentSessionResult.rows[0];
   const nextNoteFormat = Object.prototype.hasOwnProperty.call(payload, 'noteFormat') ? payload.noteFormat : currentSession.noteFormat;
   const nextContent = Object.prototype.hasOwnProperty.call(payload, 'content') ? payload.content.trim() : currentSession.content;
+  const nextSessionObjective = Object.prototype.hasOwnProperty.call(payload, 'sessionObjective')
+    ? normalizeOptionalText(payload.sessionObjective)
+    : currentSession.sessionObjective;
+  const nextClinicalObservations = Object.prototype.hasOwnProperty.call(payload, 'clinicalObservations')
+    ? normalizeOptionalText(payload.clinicalObservations)
+    : currentSession.clinicalObservations;
+  const nextSteps = Object.prototype.hasOwnProperty.call(payload, 'nextSteps')
+    ? normalizeOptionalText(payload.nextSteps)
+    : currentSession.nextSteps;
   const nextAppointmentId = Object.prototype.hasOwnProperty.call(payload, 'appointmentId')
     ? Number(payload.appointmentId)
     : currentSession.appointmentId;
@@ -554,7 +582,10 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
         appointment_id = $3,
         session_date = $4,
         note_format = $5,
-        content = $6,
+        session_objective = $6,
+        clinical_observations = $7,
+        next_steps = $8,
+        content = $9,
         updated_at = NOW()
       WHERE patient_id = $1 AND id = $2
       RETURNING
@@ -562,11 +593,24 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
         appointment_id AS "appointmentId",
         session_date AS "sessionDate",
         note_format AS "noteFormat",
+        session_objective AS "sessionObjective",
+        clinical_observations AS "clinicalObservations",
+        next_steps AS "nextSteps",
         content,
         created_at AS "createdAt",
         updated_at AS "updatedAt"
     `,
-    [patientId, sessionId, Number(appointment.id), normalizeDateValue(appointment.scheduled_date), nextNoteFormat, nextContent],
+    [
+      patientId,
+      sessionId,
+      Number(appointment.id),
+      normalizeDateValue(appointment.scheduled_date),
+      nextNoteFormat,
+      nextSessionObjective,
+      nextClinicalObservations,
+      nextSteps,
+      nextContent,
+    ],
   );
 
   await refreshPatientLastSessionDate(patientId);

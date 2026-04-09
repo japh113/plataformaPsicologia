@@ -1,4 +1,14 @@
 const allowedFormats = new Set(['simple', 'soap']);
+const structuredFieldKeys = ['sessionObjective', 'clinicalObservations', 'nextSteps'];
+
+const validateOptionalTextField = (payload, key, errors) => {
+  if (
+    Object.prototype.hasOwnProperty.call(payload || {}, key) &&
+    typeof payload[key] !== 'string'
+  ) {
+    errors.push(`${key} must be a string when provided`);
+  }
+};
 
 export const validateCreateSessionPayload = (payload) => {
   const errors = [];
@@ -15,12 +25,14 @@ export const validateCreateSessionPayload = (payload) => {
     errors.push('content is required');
   }
 
+  structuredFieldKeys.forEach((key) => validateOptionalTextField(payload, key, errors));
+
   return errors;
 };
 
 export const validateUpdateSessionPayload = (payload) => {
   const errors = [];
-  const hasAnyField = ['noteFormat', 'content', 'appointmentId'].some((key) => Object.prototype.hasOwnProperty.call(payload || {}, key));
+  const hasAnyField = ['noteFormat', 'content', 'appointmentId', ...structuredFieldKeys].some((key) => Object.prototype.hasOwnProperty.call(payload || {}, key));
 
   if (!hasAnyField) {
     return ['At least one field must be provided'];
@@ -33,6 +45,8 @@ export const validateUpdateSessionPayload = (payload) => {
   if (Object.prototype.hasOwnProperty.call(payload || {}, 'content') && (typeof payload.content !== 'string' || payload.content.trim().length === 0)) {
     errors.push('content must be a non-empty string');
   }
+
+  structuredFieldKeys.forEach((key) => validateOptionalTextField(payload, key, errors));
 
   if (
     Object.prototype.hasOwnProperty.call(payload || {}, 'appointmentId') &&

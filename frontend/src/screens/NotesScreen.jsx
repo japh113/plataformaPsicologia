@@ -3,7 +3,14 @@ import { AlertCircle, CheckSquare, FileText, Plus, Save, Shield, Trash2 } from '
 import { getRiskColor } from '../utils/risk';
 import FutureFeatureCard from '../components/shared/FutureFeatureCard';
 
-const emptySessionForm = { citaId: '', formato: 'simple', contenido: '' };
+const emptySessionForm = {
+  citaId: '',
+  formato: 'simple',
+  objetivo: '',
+  observaciones: '',
+  proximoPaso: '',
+  contenido: '',
+};
 const riskOptions = [
   { value: 'bajo', label: 'Bajo' },
   { value: 'medio', label: 'Medio' },
@@ -93,6 +100,9 @@ export default function NotesScreen({
       ? {
         citaId: initialMatchedSession.citaId || '',
         formato: initialMatchedSession.formato || 'simple',
+        objetivo: initialMatchedSession.objetivo || '',
+        observaciones: initialMatchedSession.observaciones || '',
+        proximoPaso: initialMatchedSession.proximoPaso || '',
         contenido: initialMatchedSession.contenido || '',
       }
       : {
@@ -164,9 +174,8 @@ export default function NotesScreen({
   const resetSessionForm = () => {
     setSelectedSessionId(null);
     setSessionForm({
+      ...emptySessionForm,
       citaId: prefilledAppointmentId || '',
-      formato: 'simple',
-      contenido: '',
     });
   };
 
@@ -231,6 +240,9 @@ export default function NotesScreen({
     setSessionForm({
       citaId: session.citaId || '',
       formato: session.formato || 'simple',
+      objetivo: session.objetivo || '',
+      observaciones: session.observaciones || '',
+      proximoPaso: session.proximoPaso || '',
       contenido: session.contenido || '',
     });
   };
@@ -243,6 +255,9 @@ export default function NotesScreen({
     const payload = {
       appointmentId: sessionForm.citaId,
       noteFormat: sessionForm.formato,
+      sessionObjective: sessionForm.objetivo,
+      clinicalObservations: sessionForm.observaciones,
+      nextSteps: sessionForm.proximoPaso,
       content: sessionForm.contenido,
     };
 
@@ -534,6 +549,38 @@ export default function NotesScreen({
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${sessionForm.formato === 'simple' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}>Simple</span>
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${sessionForm.formato === 'soap' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}>SOAP</span>
                       </div>
+                      <div className="grid grid-cols-1 gap-4 px-4 pt-4 md:grid-cols-3">
+                        <div className="rounded-xl border border-slate-200 bg-white p-3">
+                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Objetivo</label>
+                          <textarea
+                            value={sessionForm.objetivo}
+                            onChange={(event) => setSessionForm((current) => ({ ...current, objetivo: event.target.value }))}
+                            placeholder="Meta central de la sesion..."
+                            className="h-24 w-full resize-none bg-transparent text-sm leading-relaxed text-slate-700 focus:outline-none"
+                          />
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-3">
+                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Observaciones</label>
+                          <textarea
+                            value={sessionForm.observaciones}
+                            onChange={(event) => setSessionForm((current) => ({ ...current, observaciones: event.target.value }))}
+                            placeholder="Evolucion, respuesta o hallazgos..."
+                            className="h-24 w-full resize-none bg-transparent text-sm leading-relaxed text-slate-700 focus:outline-none"
+                          />
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-white p-3">
+                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Plan siguiente</label>
+                          <textarea
+                            value={sessionForm.proximoPaso}
+                            onChange={(event) => setSessionForm((current) => ({ ...current, proximoPaso: event.target.value }))}
+                            placeholder="Siguiente enfoque, tarea o seguimiento..."
+                            className="h-24 w-full resize-none bg-transparent text-sm leading-relaxed text-slate-700 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div className="px-4 pt-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Resumen libre</p>
+                      </div>
                       <textarea
                         value={sessionForm.contenido}
                         onChange={(event) => setSessionForm((current) => ({ ...current, contenido: event.target.value }))}
@@ -577,6 +624,16 @@ export default function NotesScreen({
                               {session.citaId && (
                                 <p className="mt-1 text-xs font-medium text-slate-500">
                                   Cita vinculada: {(patientAppointments.find((appointment) => appointment.id === session.citaId)?.fecha) || session.fecha}
+                                </p>
+                              )}
+                              {session.objetivo && (
+                                <p className="mt-2 text-xs font-medium text-indigo-700">
+                                  Objetivo: <span className="font-normal text-slate-600">{session.objetivo}</span>
+                                </p>
+                              )}
+                              {session.proximoPaso && (
+                                <p className="mt-1 text-xs font-medium text-emerald-700">
+                                  Plan siguiente: <span className="font-normal text-slate-600">{session.proximoPaso}</span>
                                 </p>
                               )}
                               <p className="mt-2 text-sm text-slate-600 line-clamp-4 whitespace-pre-wrap">{session.contenido || 'Sin contenido registrado.'}</p>
