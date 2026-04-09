@@ -149,6 +149,22 @@ const getVisibleCalendarAppointments = (entries, baseLimit) => {
   const sameSlotEntries = overflowEntries.filter((entry) => entry.hora24 === lastVisible.hora24);
   return [...visibleEntries, ...sameSlotEntries];
 };
+const groupCalendarAppointmentsBySlot = (entries) => {
+  const groups = [];
+
+  entries.forEach((entry) => {
+    const lastGroup = groups[groups.length - 1];
+
+    if (lastGroup && lastGroup[0]?.hora24 === entry.hora24) {
+      lastGroup.push(entry);
+      return;
+    }
+
+    groups.push([entry]);
+  });
+
+  return groups;
+};
 
 function ModalShell({ title, description, onClose, children }) {
   return (
@@ -678,6 +694,7 @@ export default function AppointmentsScreen({
             {weekDates.map((weekDate) => {
               const dayAppointments = weeklyAppointments[weekDate.isoDate] || [];
               const visibleDayAppointments = getVisibleCalendarAppointments(dayAppointments, 3);
+              const visibleDayAppointmentGroups = groupCalendarAppointmentsBySlot(visibleDayAppointments);
               const dayException = availabilityExceptionsMap.get(weekDate.isoDate);
               const isActive = selectedDate === weekDate.isoDate;
               const isHovered = hoveredDate === weekDate.isoDate;
@@ -688,11 +705,20 @@ export default function AppointmentsScreen({
                   <p className="mt-2 text-sm font-bold text-gray-900">{weekDate.shortLabel}</p>
                   {dayException && <div className={`mt-2 inline-flex max-w-full items-center rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'}</div>}
                   <div className="mt-3 space-y-2">
-                    {visibleDayAppointments.map((appointment) => {
-                      const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
-                      const displayStatus = getAppointmentDisplayStatus(appointment);
-                      return <div key={appointment.id} className={`flex items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)}`}><p className="truncate">{appointment.hora}</p>{sessionState !== 'none' && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
-                    })}
+                    {visibleDayAppointmentGroups.map((group) => (
+                      <div key={`${weekDate.isoDate}-${group[0].hora24}`} className={`grid gap-1 ${group.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                        {group.map((appointment) => {
+                          const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
+                          const displayStatus = getAppointmentDisplayStatus(appointment);
+                          return (
+                            <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)}`}>
+                              <p className="truncate">{appointment.hora}</p>
+                              {sessionState !== 'none' && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
                     {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-400">{dayException?.isUnavailable ? 'Dia bloqueado' : 'Sin citas'}</div>}
                     {dayAppointments.length > visibleDayAppointments.length && <p className="text-[11px] font-medium text-indigo-600">+{dayAppointments.length - visibleDayAppointments.length} mas</p>}
                   </div>
@@ -707,6 +733,7 @@ export default function AppointmentsScreen({
               {monthDates.map((monthDate) => {
                 const dayAppointments = monthlyAppointments[monthDate.isoDate] || [];
                 const visibleDayAppointments = getVisibleCalendarAppointments(dayAppointments, 2);
+                const visibleDayAppointmentGroups = groupCalendarAppointmentsBySlot(visibleDayAppointments);
                 const dayException = availabilityExceptionsMap.get(monthDate.isoDate);
                 const isActive = selectedDate === monthDate.isoDate;
                 const isHovered = hoveredDate === monthDate.isoDate;
@@ -716,11 +743,15 @@ export default function AppointmentsScreen({
                     <div className="flex h-full flex-col">
                       <div className="flex items-center justify-between"><span className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition ${getDayNumberBadge({ isToday, isActive, isHovered, isCurrentMonth: monthDate.isCurrentMonth })}`}>{monthDate.dayNumber}</span>{dayException && <span className={`inline-flex h-2.5 w-2.5 rounded-full ring-4 ${getExceptionDotClasses(dayException.isUnavailable)}`} title={dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'} />}</div>
                       {dayException && <div className={`mt-1 inline-flex w-fit rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Bloqueado' : 'Especial'}</div>}
-                      <div className="mt-2 flex-1 space-y-1 overflow-hidden">{visibleDayAppointments.map((appointment) => {
-                        const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
-                        const displayStatus = getAppointmentDisplayStatus(appointment);
-                        return <div key={appointment.id} className={`flex items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)}`}><div className="truncate">{appointment.hora}</div>{sessionState !== 'none' && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
-                      })}</div>
+                      <div className="mt-2 flex-1 space-y-1 overflow-hidden">{visibleDayAppointmentGroups.map((group) => (
+                        <div key={`${monthDate.isoDate}-${group[0].hora24}`} className={`grid gap-1 ${group.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                          {group.map((appointment) => {
+                            const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
+                            const displayStatus = getAppointmentDisplayStatus(appointment);
+                            return <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)}`}><div className="truncate">{appointment.hora}</div>{sessionState !== 'none' && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
+                          })}
+                        </div>
+                      ))}</div>
                       {dayAppointments.length > visibleDayAppointments.length && <p className="mt-1 text-[10px] font-semibold leading-none text-indigo-700">+{dayAppointments.length - visibleDayAppointments.length}</p>}
                     </div>
                   </button>
