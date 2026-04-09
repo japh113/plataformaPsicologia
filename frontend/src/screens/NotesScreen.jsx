@@ -178,6 +178,7 @@ export default function NotesScreen({
   const [selectedSessionId, setSelectedSessionId] = useState(initialMatchedSession?.id || null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSessionModal, setShowSessionModal] = useState(Boolean(initialMatchedSession || prefilledAppointmentId));
+  const [showNotesModal, setShowNotesModal] = useState(false);
   const [agendaFilter, setAgendaFilter] = useState('proximas');
   const [profileForm, setProfileForm] = useState({
     riesgo: patient?.riesgo || 'bajo',
@@ -279,7 +280,6 @@ export default function NotesScreen({
       { id: 'agenda', label: 'Agenda' },
       { id: 'sesiones', label: 'Sesiones' },
       { id: 'tareas', label: 'Tareas' },
-      { id: 'nota-general', label: 'Nota general' },
     ]
     : [
       { id: 'resumen', label: 'Resumen' },
@@ -804,31 +804,6 @@ export default function NotesScreen({
     </SectionCard>
   );
 
-  const renderGeneralNoteTab = () => (
-    <SectionCard
-      title="Nota general del expediente"
-      description="Contexto transversal del caso que no depende de una sola sesion."
-    >
-      <textarea
-        value={notesTemp}
-        onChange={(event) => setNotesTemp(event.target.value)}
-        placeholder="Escribe aqui la nota general del expediente..."
-        className="h-[320px] w-full rounded-3xl border border-slate-300 bg-slate-50 px-5 py-4 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-      />
-      <div className="mt-4 flex justify-end">
-        <button
-          type="button"
-          onClick={onSaveNotes}
-          disabled={isSavingNotes}
-          className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Save size={16} className="mr-2" />
-          {isSavingNotes ? 'Guardando...' : 'Guardar nota general'}
-        </button>
-      </div>
-    </SectionCard>
-  );
-
   const renderPatientSummaryTab = () => (
     <div className="space-y-5">
       <SectionCard title="Resumen" description="Una vista simple de tu seguimiento actual.">
@@ -871,7 +846,6 @@ export default function NotesScreen({
     if (activeSection === 'agenda') return renderAgendaTab();
     if (activeSection === 'sesiones') return renderSessionsTab();
     if (activeSection === 'tareas') return renderTasksTab();
-    if (activeSection === 'nota-general') return renderGeneralNoteTab();
     return renderSummaryTab();
   };
 
@@ -909,18 +883,25 @@ export default function NotesScreen({
               </button>
               {isPsychologist && (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => setShowProfileModal(true)}
-                    className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                  >
-                    Editar ficha
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openNewSessionModal()}
-                    className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
-                  >
+              <button
+                type="button"
+                onClick={() => setShowProfileModal(true)}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Editar ficha
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowNotesModal(true)}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                Nota general
+              </button>
+              <button
+                type="button"
+                onClick={() => openNewSessionModal()}
+                className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
+              >
                     Nueva sesion
                   </button>
                 </>
@@ -951,7 +932,7 @@ export default function NotesScreen({
             {renderActiveSection()}
           </div>
 
-          <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+          <div className="hidden space-y-4 xl:sticky xl:top-6 xl:self-start xl:block">
             {isPsychologist && patient.riesgo === 'alto' && (
               <div className="rounded-[28px] border border-red-200 bg-red-50 p-5 shadow-sm">
                 <div className="flex items-start gap-3">
@@ -1044,6 +1025,42 @@ export default function NotesScreen({
               >
                 <Save size={16} className="mr-2" />
                 {isSavingPatientProfile ? 'Guardando...' : 'Guardar ficha'}
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+
+      {showNotesModal && isPsychologist && (
+        <ModalShell
+          title="Nota general del expediente"
+          description="Contexto transversal del caso que no depende de una sola sesion."
+          onClose={() => setShowNotesModal(false)}
+        >
+          <div className="space-y-4">
+            <textarea
+              value={notesTemp}
+              onChange={(event) => setNotesTemp(event.target.value)}
+              placeholder="Escribe aqui la nota general del expediente..."
+              className="h-[320px] w-full rounded-3xl border border-slate-300 bg-slate-50 px-5 py-4 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowNotesModal(false)}
+                disabled={isSavingNotes}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={onSaveNotes}
+                disabled={isSavingNotes}
+                className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={16} className="mr-2" />
+                {isSavingNotes ? 'Guardando...' : 'Guardar nota general'}
               </button>
             </div>
           </div>
