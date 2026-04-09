@@ -179,6 +179,21 @@ export default function AppointmentsScreen({
       }),
     [appointments, matchesSessionCoverageFilter, statusFilter],
   );
+  const activeSummaryFilter = useMemo(() => {
+    if (statusFilter === 'completada' && sessionCoverageFilter === 'missing') {
+      return 'missing';
+    }
+
+    if (statusFilter === 'completada' && sessionCoverageFilter === 'registered') {
+      return 'registered';
+    }
+
+    if (statusFilter === 'pendiente' && sessionCoverageFilter === 'todos') {
+      return 'pending';
+    }
+
+    return 'none';
+  }, [sessionCoverageFilter, statusFilter]);
   const weekDates = useMemo(() => getWeekDates(calendarAnchorDate), [calendarAnchorDate]);
   const weekRangeLabel = useMemo(() => getWeekRangeLabel(calendarAnchorDate), [calendarAnchorDate]);
   const monthDates = useMemo(() => getMonthDates(calendarAnchorDate), [calendarAnchorDate]);
@@ -331,6 +346,33 @@ export default function AppointmentsScreen({
   const handleSelectDate = (date) => { setSelectedDate(date); if (!date) return; setCalendarAnchorDate(date); onDismissAppointmentError?.(); };
   const handleMoveCalendar = (direction) => setCalendarAnchorDate((currentDate) => calendarView === 'month' ? shiftDateByMonths(currentDate, direction) : shiftDateByDays(currentDate, direction * 7));
   const handleResetCalendar = () => { setCalendarAnchorDate(todayDate); if (selectedDate) setSelectedDate(todayDate); };
+  const handleSummaryFilter = (summaryKey) => {
+    if (activeSummaryFilter === summaryKey) {
+      setStatusFilter('todos');
+      setSessionCoverageFilter('todos');
+      setSelectedDate('');
+      return;
+    }
+
+    setSelectedDate('');
+
+    if (summaryKey === 'missing') {
+      setStatusFilter('completada');
+      setSessionCoverageFilter('missing');
+      return;
+    }
+
+    if (summaryKey === 'registered') {
+      setStatusFilter('completada');
+      setSessionCoverageFilter('registered');
+      return;
+    }
+
+    if (summaryKey === 'pending') {
+      setStatusFilter('pendiente');
+      setSessionCoverageFilter('todos');
+    }
+  };
 
   const updateDraftEntries = (updater) => {
     onDismissAvailabilityError?.();
@@ -497,21 +539,21 @@ export default function AppointmentsScreen({
 
       {isPsychologist && (
         <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+          <button type="button" onClick={() => handleSummaryFilter('missing')} className={`rounded-2xl border p-4 text-left transition ${activeSummaryFilter === 'missing' ? 'border-sky-400 bg-sky-100 ring-2 ring-sky-200' : 'border-sky-200 bg-sky-50 hover:bg-sky-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700">Pendiente clinico</p>
             <p className="mt-2 text-3xl font-black text-sky-900">{clinicalSummary.completedWithoutSession}</p>
             <p className="mt-1 text-sm text-sky-800">Citas completadas sin sesion registrada.</p>
-          </div>
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+          </button>
+          <button type="button" onClick={() => handleSummaryFilter('registered')} className={`rounded-2xl border p-4 text-left transition ${activeSummaryFilter === 'registered' ? 'border-emerald-400 bg-emerald-100 ring-2 ring-emerald-200' : 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Cierre clinico</p>
             <p className="mt-2 text-3xl font-black text-emerald-900">{clinicalSummary.completedWithSession}</p>
             <p className="mt-1 text-sm text-emerald-800">Citas completadas con sesion registrada.</p>
-          </div>
-          <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+          </button>
+          <button type="button" onClick={() => handleSummaryFilter('pending')} className={`rounded-2xl border p-4 text-left transition ${activeSummaryFilter === 'pending' ? 'border-indigo-400 bg-indigo-100 ring-2 ring-indigo-200' : 'border-indigo-200 bg-indigo-50 hover:bg-indigo-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Agenda activa</p>
             <p className="mt-2 text-3xl font-black text-indigo-900">{clinicalSummary.upcomingPending}</p>
             <p className="mt-1 text-sm text-indigo-800">Citas pendientes de hoy en adelante.</p>
-          </div>
+          </button>
         </section>
       )}
 
