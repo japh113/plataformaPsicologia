@@ -585,9 +585,7 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
     : currentSession.appointmentId;
 
   const appointment = await ensureAppointmentBelongsToPatient(nextAppointmentId, patientId);
-  if (Object.prototype.hasOwnProperty.call(payload, 'appointmentId')) {
-    ensureAppointmentEligibleForSession(appointment);
-  }
+  ensureAppointmentEligibleForSession(appointment);
   await ensureAppointmentSessionUniqueness(Number(appointment.id), Number(sessionId));
 
   const result = await db.query(
