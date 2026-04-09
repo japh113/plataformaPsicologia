@@ -8,6 +8,8 @@ const exceptionDateFormatter = new Intl.DateTimeFormat('es-MX', { weekday: 'shor
 const getStatusBadge = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
 const getMiniAppointmentChip = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
 const getAppointmentAccent = (estado) => (estado === 'completada' ? 'border-l-green-500 bg-green-50/40' : estado === 'cancelada' ? 'border-l-red-500 bg-red-50/40' : 'border-l-indigo-500 bg-indigo-50/40');
+const getSessionIndicatorClasses = (sessionState) => (sessionState === 'registered' ? 'bg-emerald-500 ring-emerald-100' : sessionState === 'missing' ? 'bg-amber-500 ring-amber-100' : '');
+const getSessionBadgeClasses = (sessionState) => (sessionState === 'registered' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : sessionState === 'missing' ? 'border-amber-200 bg-amber-50 text-amber-700' : '');
 const getDayNumberBadge = ({ isToday, isActive, isHovered, isCurrentMonth }) => (isActive ? 'bg-indigo-600 text-white shadow-sm' : isHovered ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-200' : isToday ? 'bg-indigo-100 text-indigo-700' : isCurrentMonth ? 'text-slate-900' : 'text-slate-400');
 const getExceptionPillClasses = (isUnavailable) => (isUnavailable ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-700');
 const getExceptionDotClasses = (isUnavailable) => (isUnavailable ? 'bg-red-500 ring-red-100' : 'bg-amber-500 ring-amber-100');
@@ -95,6 +97,16 @@ const formatBlockedRangeLabel = (range) => (
     ? formatExceptionDate(range.startDate)
     : `${formatExceptionDate(range.startDate)} - ${formatExceptionDate(range.endDate)}`
 );
+const getAppointmentSessionState = (appointment, hasLinkedSession) => {
+  if (appointment.estado !== 'completada') {
+    return 'none';
+  }
+
+  return hasLinkedSession ? 'registered' : 'missing';
+};
+const getAppointmentSessionLabel = (sessionState) => (
+  sessionState === 'registered' ? 'Sesion registrada' : sessionState === 'missing' ? 'Falta sesion' : ''
+);
 
 function ModalShell({ title, description, onClose, children }) {
   return (
@@ -144,6 +156,13 @@ export default function AppointmentsScreen({
   const blockedExceptionRanges = useMemo(() => buildBlockedRanges(availabilityExceptions), [availabilityExceptions]);
   const datedAvailabilityExceptions = useMemo(() => (availabilityExceptions || []).filter((exception) => !exception.isUnavailable), [availabilityExceptions]);
   const appointmentsForCalendar = useMemo(() => statusFilter === 'todos' ? appointments : appointments.filter((appointment) => appointment.estado === statusFilter), [appointments, statusFilter]);
+  const appointmentSessionIds = useMemo(
+    () =>
+      new Set(
+        patients.flatMap((patient) => (patient.sesiones || []).map((session) => session.citaId)).filter(Boolean),
+      ),
+    [patients],
+  );
   const weekDates = useMemo(() => getWeekDates(calendarAnchorDate), [calendarAnchorDate]);
   const weekRangeLabel = useMemo(() => getWeekRangeLabel(calendarAnchorDate), [calendarAnchorDate]);
   const monthDates = useMemo(() => getMonthDates(calendarAnchorDate), [calendarAnchorDate]);
@@ -464,16 +483,26 @@ export default function AppointmentsScreen({
           </div>
         </div>
 
-        {isPsychologist && availabilityExceptions.length > 0 && (
+        {isPsychologist && (
           <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Excepciones</span>
-            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExceptionPillClasses(true)}`}>
-              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getExceptionDotClasses(true)}`} />
-              Dia bloqueado
+            {availabilityExceptions.length > 0 && <>
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Excepciones</span>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExceptionPillClasses(true)}`}>
+                <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getExceptionDotClasses(true)}`} />
+                Dia bloqueado
+              </span>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExceptionPillClasses(false)}`}>
+                <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getExceptionDotClasses(false)}`} />
+                Horario especial
+              </span>
+            </>}
+            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getSessionBadgeClasses('registered')}`}>
+              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses('registered')}`} />
+              Sesion registrada
             </span>
-            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExceptionPillClasses(false)}`}>
-              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getExceptionDotClasses(false)}`} />
-              Horario especial
+            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getSessionBadgeClasses('missing')}`}>
+              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses('missing')}`} />
+              Falta sesion
             </span>
           </div>
         )}
@@ -492,7 +521,10 @@ export default function AppointmentsScreen({
                   <p className="mt-2 text-sm font-bold text-gray-900">{weekDate.shortLabel}</p>
                   {dayException && <div className={`mt-2 inline-flex max-w-full items-center rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'}</div>}
                   <div className="mt-3 space-y-2">
-                    {dayAppointments.slice(0, 3).map((appointment) => <div key={appointment.id} className={`rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(appointment.estado)}`}><p className="truncate">{appointment.hora}</p></div>)}
+                    {dayAppointments.slice(0, 3).map((appointment) => {
+                      const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
+                      return <div key={appointment.id} className={`flex items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(appointment.estado)}`}><p className="truncate">{appointment.hora}</p>{sessionState !== 'none' && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
+                    })}
                     {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-400">{dayException?.isUnavailable ? 'Dia bloqueado' : 'Sin citas'}</div>}
                     {dayAppointments.length > 3 && <p className="text-[11px] font-medium text-indigo-600">+{dayAppointments.length - 3} mas</p>}
                   </div>
@@ -515,7 +547,10 @@ export default function AppointmentsScreen({
                     <div className="flex h-full flex-col">
                       <div className="flex items-center justify-between"><span className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition ${getDayNumberBadge({ isToday, isActive, isHovered, isCurrentMonth: monthDate.isCurrentMonth })}`}>{monthDate.dayNumber}</span>{dayException && <span className={`inline-flex h-2.5 w-2.5 rounded-full ring-4 ${getExceptionDotClasses(dayException.isUnavailable)}`} title={dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'} />}</div>
                       {dayException && <div className={`mt-1 inline-flex w-fit rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Bloqueado' : 'Especial'}</div>}
-                      <div className="mt-2 flex-1 space-y-1 overflow-hidden">{dayAppointments.slice(0, 2).map((appointment) => <div key={appointment.id} className={`rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(appointment.estado)}`}><div className="truncate">{appointment.hora}</div></div>)}</div>
+                      <div className="mt-2 flex-1 space-y-1 overflow-hidden">{dayAppointments.slice(0, 2).map((appointment) => {
+                        const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
+                        return <div key={appointment.id} className={`flex items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(appointment.estado)}`}><div className="truncate">{appointment.hora}</div>{sessionState !== 'none' && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
+                      })}</div>
                       {dayAppointments.length > 2 && <p className="mt-1 text-[10px] font-semibold leading-none text-indigo-700">+{dayAppointments.length - 2}</p>}
                     </div>
                   </button>
@@ -555,6 +590,8 @@ export default function AppointmentsScreen({
             {filteredAppointments.map((appointment) => {
               const patient = patients.find((currentPatient) => currentPatient.id === appointment.pacienteId);
               const linkedSession = patient?.sesiones?.find((session) => session.citaId === appointment.id) || null;
+              const sessionState = getAppointmentSessionState(appointment, Boolean(linkedSession));
+              const sessionLabel = getAppointmentSessionLabel(sessionState);
               const isFutureAppointment = appointment.fecha > todayDate;
               const canOpenSessionFlow =
                 isPsychologist &&
@@ -568,7 +605,7 @@ export default function AppointmentsScreen({
                 <div key={appointment.id} tabIndex={0} onMouseEnter={() => setHoveredDate(appointment.fecha)} onMouseLeave={() => setHoveredDate('')} onFocus={() => setHoveredDate(appointment.fecha)} onBlur={() => setHoveredDate('')} className={`rounded-xl border border-gray-200 border-l-4 p-4 transition outline-none focus-visible:ring-2 focus-visible:ring-indigo-200 ${getAppointmentAccent(appointment.estado)} ${isLinkedToSelectedDate ? 'ring-2 ring-indigo-100 shadow-sm' : isLinkedToHoveredDate ? 'ring-2 ring-slate-200' : ''}`}>
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{patient?.nombre || 'Paciente no disponible'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(appointment.estado)}`}>{appointment.estado}</span></div>
+                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{patient?.nombre || 'Paciente no disponible'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(appointment.estado)}`}>{appointment.estado}</span>{sessionState !== 'none' && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}</div>
                       <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500"><span className="inline-flex items-center"><Calendar size={14} className="mr-1.5" /> {appointment.fecha}</span><span className="inline-flex items-center"><Clock3 size={14} className="mr-1.5" /> {appointment.hora}</span></div>
                       {appointment.notas && <p className="mt-3 text-sm text-gray-600">{appointment.notas}</p>}
                     </div>
