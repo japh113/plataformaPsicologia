@@ -194,6 +194,7 @@ export default function AppointmentsScreen({
 
     return 'none';
   }, [sessionCoverageFilter, statusFilter]);
+  const hasActiveFilters = selectedDate || statusFilter !== 'todos' || sessionCoverageFilter !== 'todos';
   const weekDates = useMemo(() => getWeekDates(calendarAnchorDate), [calendarAnchorDate]);
   const weekRangeLabel = useMemo(() => getWeekRangeLabel(calendarAnchorDate), [calendarAnchorDate]);
   const monthDates = useMemo(() => getMonthDates(calendarAnchorDate), [calendarAnchorDate]);
@@ -346,11 +347,14 @@ export default function AppointmentsScreen({
   const handleSelectDate = (date) => { setSelectedDate(date); if (!date) return; setCalendarAnchorDate(date); onDismissAppointmentError?.(); };
   const handleMoveCalendar = (direction) => setCalendarAnchorDate((currentDate) => calendarView === 'month' ? shiftDateByMonths(currentDate, direction) : shiftDateByDays(currentDate, direction * 7));
   const handleResetCalendar = () => { setCalendarAnchorDate(todayDate); if (selectedDate) setSelectedDate(todayDate); };
+  const handleClearFilters = () => {
+    setSelectedDate('');
+    setStatusFilter('todos');
+    setSessionCoverageFilter('todos');
+  };
   const handleSummaryFilter = (summaryKey) => {
     if (activeSummaryFilter === summaryKey) {
-      setStatusFilter('todos');
-      setSessionCoverageFilter('todos');
-      setSelectedDate('');
+      handleClearFilters();
       return;
     }
 
@@ -534,6 +538,7 @@ export default function AppointmentsScreen({
             <option value="missing">Completadas sin sesion</option>
             <option value="registered">Completadas con sesion</option>
           </select>}
+          {isPsychologist && hasActiveFilters && <button type="button" onClick={handleClearFilters} className="px-3 py-2.5 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Limpiar filtros</button>}
         </div>
       </div>
 
