@@ -116,7 +116,7 @@ function ModalShell({ title, description, onClose, children }) {
 }
 
 export default function AppointmentsScreen({
-  currentUser, patients, appointments, availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
+  currentUser, patients, appointments, availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
   isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
@@ -555,6 +555,8 @@ export default function AppointmentsScreen({
             {filteredAppointments.map((appointment) => {
               const patient = patients.find((currentPatient) => currentPatient.id === appointment.pacienteId);
               const linkedSession = patient?.sesiones?.find((session) => session.citaId === appointment.id) || null;
+              const canOpenSessionFlow = isPsychologist && patient && appointment.estado !== 'cancelada';
+              const isProcessingThisAppointment = processingAppointmentId === appointment.id;
               const isLinkedToHoveredDate = hoveredDate === appointment.fecha;
               const isLinkedToSelectedDate = selectedDate === appointment.fecha;
               return (
@@ -567,12 +569,20 @@ export default function AppointmentsScreen({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {patient && <button onClick={() => onOpenPatient(patient)} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition text-sm font-medium">Ver expediente</button>}
-                      {isPsychologist && patient && appointment.estado !== 'cancelada' && (
+                      {canOpenSessionFlow && (
                         <button
-                          onClick={() => onOpenPatient(patient, { appointmentId: appointment.id })}
-                          className="px-3 py-2 bg-white text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition text-sm font-medium"
+                          onClick={() => {
+                            if (linkedSession || appointment.estado === 'completada') {
+                              onOpenPatient(patient, { appointmentId: appointment.id });
+                              return;
+                            }
+
+                            onOpenAppointmentSession?.(appointment, patient);
+                          }}
+                          disabled={isProcessingThisAppointment}
+                          className="px-3 py-2 bg-white text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          {linkedSession ? 'Ver sesion' : appointment.estado === 'completada' ? 'Registrar sesion' : 'Preparar sesion'}
+                          {linkedSession ? 'Ver sesion' : appointment.estado === 'completada' ? 'Registrar sesion' : isProcessingThisAppointment ? 'Completando...' : 'Completar y registrar'}
                         </button>
                       )}
                       {isPsychologist && <>

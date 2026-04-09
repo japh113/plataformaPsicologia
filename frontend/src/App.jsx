@@ -555,6 +555,30 @@ export default function App() {
     }
   };
 
+  const handleOpenSessionFromAppointment = async (appointment, patient) => {
+    if (!isPsychologist || !appointment || !patient) {
+      return false;
+    }
+
+    if (appointment.estado === 'cancelada') {
+      return false;
+    }
+
+    if (appointment.estado !== 'completada') {
+      const wasUpdated = await handleUpdateAppointment(appointment.id, {
+        ...appointment,
+        estado: 'completada',
+      });
+
+      if (!wasUpdated) {
+        return false;
+      }
+    }
+
+    abrirNotas(patient, { appointmentId: appointment.id });
+    return true;
+  };
+
   const handleUpdateAvailability = async (entries) => {
     if (!isPsychologist || savingAvailability) {
       return false;
@@ -735,6 +759,7 @@ export default function App() {
           availabilityExceptions={availabilityExceptions}
           todayDate={todayDate}
           onOpenPatient={abrirNotas}
+          onOpenAppointmentSession={handleOpenSessionFromAppointment}
           onCreateAppointment={handleCreateAppointment}
           onUpdateAppointment={handleUpdateAppointment}
           onDeleteAppointment={handleDeleteAppointment}
