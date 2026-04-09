@@ -4,6 +4,11 @@ import { getRiskColor } from '../utils/risk';
 import FutureFeatureCard from '../components/shared/FutureFeatureCard';
 
 const emptySessionForm = { citaId: '', formato: 'simple', contenido: '' };
+const riskOptions = [
+  { value: 'bajo', label: 'Bajo' },
+  { value: 'medio', label: 'Medio' },
+  { value: 'alto', label: 'Alto' },
+];
 
 const getPatientSummary = (patient) => {
   const reason = patient.motivo || 'Motivo no registrado';
@@ -25,6 +30,29 @@ const formatSessionDate = (value) => {
   }).format(new Date(Number(year), Number(month) - 1, Number(day)));
 };
 
+const formatAppointmentDateTime = (appointment) => {
+  if (!appointment?.fecha) {
+    return 'Fecha no registrada';
+  }
+
+  const [year = '0', month = '1', day = '1'] = String(appointment.fecha).split('-');
+  const dateLabel = new Intl.DateTimeFormat('es-MX', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  }).format(new Date(Number(year), Number(month) - 1, Number(day)));
+
+  return `${dateLabel} - ${appointment.hora}`;
+};
+
+const getAppointmentStatusClasses = (status) => (
+  status === 'completada'
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : status === 'cancelada'
+      ? 'border-red-200 bg-red-50 text-red-700'
+      : 'border-indigo-200 bg-indigo-50 text-indigo-700'
+);
+
 export default function NotesScreen({
   currentUser,
   patient,
@@ -32,6 +60,9 @@ export default function NotesScreen({
   todayDate,
   prefilledAppointmentId,
   setVistaActiva,
+  onViewAppointments,
+  onUpdatePatientProfile,
+  onOpenAppointmentSession,
   notesTemp,
   setNotesTemp,
   onSaveNotes,
@@ -42,6 +73,7 @@ export default function NotesScreen({
   onUpdateSession,
   onDeleteSession,
   isSavingNotes = false,
+  isSavingPatientProfile = false,
   isSavingSession = false,
   isCreatingTask = false,
   processingTaskId = null,
@@ -52,6 +84,10 @@ export default function NotesScreen({
   const [taskText, setTaskText] = useState('');
   const [activeSection, setActiveSection] = useState(initialMatchedSession || prefilledAppointmentId ? 'sesiones' : 'resumen');
   const [selectedSessionId, setSelectedSessionId] = useState(initialMatchedSession?.id || null);
+  const [profileForm, setProfileForm] = useState({
+    riesgo: patient?.riesgo || 'bajo',
+    motivo: patient?.motivo || '',
+  });
   const [sessionForm, setSessionForm] = useState(
     initialMatchedSession
       ? {
@@ -70,7 +106,7 @@ export default function NotesScreen({
     const completed = patient.tareas.filter((task) => task.completada).length;
     return Math.round((completed / patient.tareas.length) * 100);
   }, [patient]);
-  const sessions = patient?.sesiones || [];
+  const sessions = useMemo(() => patient?.sesiones || [], [patient?.sesiones]);
   const pendingTasks = useMemo(() => (patient?.tareas || []).filter((task) => !task.completada), [patient?.tareas]);
   const patientAppointments = useMemo(
     () =>
@@ -88,15 +124,24 @@ export default function NotesScreen({
       patientAppointments.filter(
         (appointment) =>
           appointment.estado === 'completada' &&
-          appointment.fecha <= todayDate,
+          appointment.fecha <= todayDate &&
+          !sessions.some((session) => session.citaId === appointment.id),
       ),
-    [patientAppointments, todayDate],
+    [patientAppointments, sessions, todayDate],
   );
   const appointmentSummary = useMemo(() => ({
     total: patientAppointments.length,
     completed: patientAppointments.filter((appointment) => appointment.estado === 'completada').length,
     upcoming: patientAppointments.filter((appointment) => appointment.fecha >= todayDate && appointment.estado !== 'cancelada').length,
   }), [patientAppointments, todayDate]);
+  const appointmentSessionsMap = useMemo(() => new Map(sessions.filter((session) => session.citaId).map((session) => [session.citaId, session])), [sessions]);
+  const upcomingAppointments = useMemo(
+    () =>
+      patientAppointments.filter(
+        (appointment) => appointment.fecha >= todayDate && appointment.estado !== 'cancelada',
+      ),
+    [patientAppointments, todayDate],
+  );
 
   if (!patient) return null;
 
@@ -132,6 +177,51 @@ export default function NotesScreen({
     if (wasCreated) {
       setTaskText('');
       setShowTaskInput(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!isPsychologist || isSavingPatientProfile) {
+      return;
+    }
+
+    await onUpdatePatientProfile?.({
+      riesgo: profileForm.riesgo,
+      motivo: profileForm.motivo.trim(),
+    });
+  };
+
+  const handleOpenSessionFromRecord = async (appointment) => {
+    if (!appointment) {
+      return;
+    }
+
+    const linkedSession = appointmentSessionsMap.get(appointment.id);
+
+    if (linkedSession) {
+      handleEditSession(linkedSession);
+      return;
+    }
+
+    if (appointment.estado === 'completada') {
+      setActiveSection('sesiones');
+      setSelectedSessionId(null);
+      setSessionForm({
+        ...emptySessionForm,
+        citaId: appointment.id,
+      });
+      return;
+    }
+
+    const wasOpened = await onOpenAppointmentSession?.(appointment, patient);
+
+    if (wasOpened) {
+      setActiveSection('sesiones');
+      setSelectedSessionId(null);
+      setSessionForm({
+        ...emptySessionForm,
+        citaId: appointment.id,
+      });
     }
   };
 
@@ -244,24 +334,141 @@ export default function NotesScreen({
                       <p className="mt-1 text-sm text-amber-800">{pendingTasks.length} tarea(s) pendiente(s).</p>
                     </div>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                    <h3 className="text-lg font-bold text-slate-900">Resumen del caso</h3>
-                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div className="rounded-xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Motivo de consulta</p>
-                        <p className="mt-2 text-sm text-slate-700">{patient.motivo || 'Motivo no registrado'}</p>
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-bold text-slate-900">Ficha del expediente</h3>
+                          <p className="mt-1 text-sm text-slate-500">Actualiza el riesgo y el motivo de consulta sin salir del contexto clinico.</p>
+                        </div>
+                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] ${getRiskColor(profileForm.riesgo)}`}>
+                          {profileForm.riesgo}
+                        </span>
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultima sesion</p>
-                        <p className="mt-2 text-sm text-slate-700">{patient.ultimaSesion ? formatSessionDate(patient.ultimaSesion) : 'Sin sesiones registradas'}</p>
+
+                      <div className="mt-4 grid grid-cols-1 gap-4">
+                        <div>
+                          <label className="mb-1 block text-sm font-semibold text-slate-700">Nivel de riesgo</label>
+                          <select
+                            value={profileForm.riesgo}
+                            onChange={(event) => setProfileForm((current) => ({ ...current, riesgo: event.target.value }))}
+                            disabled={isSavingPatientProfile}
+                            className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          >
+                            {riskOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-sm font-semibold text-slate-700">Motivo de consulta</label>
+                          <textarea
+                            value={profileForm.motivo}
+                            onChange={(event) => setProfileForm((current) => ({ ...current, motivo: event.target.value }))}
+                            disabled={isSavingPatientProfile}
+                            rows="4"
+                            className="w-full rounded-lg border border-gray-300 bg-white p-3 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Resume el motivo principal de consulta o el encuadre actual del caso..."
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultima sesion</p>
+                            <p className="mt-2 text-sm text-slate-700">{patient.ultimaSesion ? formatSessionDate(patient.ultimaSesion) : 'Sin sesiones registradas'}</p>
+                          </div>
+                          <div className="rounded-xl border border-slate-200 bg-white p-4">
+                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Citas elegibles</p>
+                            <p className="mt-2 text-sm text-slate-700">{eligibleSessionAppointments.length} cita(s) completada(s) listas para registrar sesion.</p>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={handleSaveProfile}
+                            disabled={isSavingPatientProfile}
+                            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+                          >
+                            <Save size={16} className="mr-2" /> {isSavingPatientProfile ? 'Guardando...' : 'Guardar ficha'}
+                          </button>
+                        </div>
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Tareas pendientes</p>
-                        <p className="mt-2 text-sm text-slate-700">{pendingTasks.length > 0 ? pendingTasks.map((task) => task.texto).slice(0, 3).join(' | ') : 'No hay tareas pendientes.'}</p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-bold text-slate-900">Proximas citas</h3>
+                          <p className="mt-1 text-sm text-slate-500">Salta desde el expediente hacia la agenda o al registro de sesion cuando toque cerrar clinicamente.</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onViewAppointments?.(upcomingAppointments[0]?.fecha || '')}
+                          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                        >
+                          Ver agenda
+                        </button>
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-white p-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Citas completadas elegibles</p>
-                        <p className="mt-2 text-sm text-slate-700">{eligibleSessionAppointments.length} cita(s) disponibles para registrar sesion.</p>
+
+                      <div className="mt-4 space-y-3">
+                        {upcomingAppointments.length > 0 ? upcomingAppointments.slice(0, 5).map((appointment) => {
+                          const linkedSession = appointmentSessionsMap.get(appointment.id);
+                          const canRegisterFromRecord = appointment.fecha <= todayDate && appointment.estado !== 'cancelada';
+
+                          return (
+                            <div key={appointment.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="font-semibold text-slate-800">{formatAppointmentDateTime(appointment)}</p>
+                                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getAppointmentStatusClasses(appointment.estado)}`}>
+                                      {appointment.estado}
+                                    </span>
+                                    {linkedSession && (
+                                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+                                        Sesion registrada
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="mt-2 text-sm text-slate-600">
+                                    {appointment.notas?.trim() ? appointment.notas : 'Sin notas logisticas registradas.'}
+                                  </p>
+                                </div>
+
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => onViewAppointments?.(appointment.fecha)}
+                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                                  >
+                                    Abrir en agenda
+                                  </button>
+                                  {canRegisterFromRecord && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenSessionFromRecord(appointment)}
+                                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                                        linkedSession
+                                          ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                                          : 'border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                                      }`}
+                                    >
+                                      {linkedSession ? 'Ver sesion' : appointment.estado === 'completada' ? 'Registrar sesion' : 'Completar y registrar'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }) : (
+                          <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                            No hay citas activas de hoy en adelante para este paciente.
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -510,6 +717,37 @@ export default function NotesScreen({
                       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Pendientes</p>
                       <p className="mt-2 text-3xl font-black text-amber-900">{pendingTasks.length}</p>
                       <p className="mt-1 text-sm text-amber-800">Tareas por completar.</p>
+                    </div>
+                  </div>
+                  <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900">Proximas citas</h3>
+                        <p className="mt-1 text-sm text-slate-500">Consulta tus siguientes sesiones y abre la agenda cuando necesites revisar fechas.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onViewAppointments?.(upcomingAppointments[0]?.fecha || '')}
+                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                      >
+                        Ver agenda
+                      </button>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {upcomingAppointments.length > 0 ? upcomingAppointments.slice(0, 3).map((appointment) => (
+                        <div key={appointment.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-slate-800">{formatAppointmentDateTime(appointment)}</p>
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getAppointmentStatusClasses(appointment.estado)}`}>
+                              {appointment.estado}
+                            </span>
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                          No hay citas activas programadas en este momento.
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

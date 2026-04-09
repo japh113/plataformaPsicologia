@@ -128,16 +128,18 @@ function ModalShell({ title, description, onClose, children }) {
 }
 
 export default function AppointmentsScreen({
+  viewContext,
   currentUser, patients, appointments, availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
   isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
-  const [selectedDate, setSelectedDate] = useState(isPsychologist ? '' : todayDate);
+  const initialFocusedDate = viewContext?.date || todayDate;
+  const [selectedDate, setSelectedDate] = useState(() => (isPsychologist ? (viewContext?.date || '') : initialFocusedDate));
   const [statusFilter, setStatusFilter] = useState('todos');
   const [sessionCoverageFilter, setSessionCoverageFilter] = useState('todos');
   const [editingAppointmentId, setEditingAppointmentId] = useState(null);
   const [form, setForm] = useState(emptyForm);
-  const [calendarAnchorDate, setCalendarAnchorDate] = useState(todayDate);
+  const [calendarAnchorDate, setCalendarAnchorDate] = useState(initialFocusedDate);
   const [calendarView, setCalendarView] = useState('week');
   const [hoveredDate, setHoveredDate] = useState('');
   const [editingExceptionDate, setEditingExceptionDate] = useState('');

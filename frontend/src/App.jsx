@@ -86,6 +86,7 @@ export default function App() {
   const [vistaActiva, setVistaActiva] = useState('dashboard');
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null);
   const [sessionDraftAppointmentId, setSessionDraftAppointmentId] = useState(null);
+  const [appointmentsViewContext, setAppointmentsViewContext] = useState({ date: '', nonce: 0 });
   const [pacientes, setPacientes] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [availability, setAvailability] = useState([]);
@@ -99,6 +100,7 @@ export default function App() {
   const [errorCarga, setErrorCarga] = useState('');
   const [guardandoPaciente, setGuardandoPaciente] = useState(false);
   const [guardandoNotas, setGuardandoNotas] = useState(false);
+  const [guardandoPerfilPaciente, setGuardandoPerfilPaciente] = useState(false);
   const [guardandoSesion, setGuardandoSesion] = useState(false);
   const [creandoTarea, setCreandoTarea] = useState(false);
   const [procesandoTareaId, setProcesandoTareaId] = useState(null);
@@ -123,6 +125,7 @@ export default function App() {
     setVistaActiva('dashboard');
     setPacienteSeleccionado(null);
     setSessionDraftAppointmentId(null);
+    setAppointmentsViewContext({ date: '', nonce: 0 });
     setPacientes([]);
     setAppointments([]);
     setAvailability([]);
@@ -257,6 +260,11 @@ export default function App() {
     setVistaActiva('notas');
   };
 
+  const abrirAgenda = (date = '') => {
+    setAppointmentsViewContext({ date, nonce: Date.now() });
+    setVistaActiva('appointments');
+  };
+
   const handleInputChange = (e) => {
     setNuevoPacienteForm({ ...nuevoPacienteForm, [e.target.name]: e.target.value });
   };
@@ -316,6 +324,34 @@ export default function App() {
       window.alert(error.message || 'No se pudieron guardar las notas.');
     } finally {
       setGuardandoNotas(false);
+    }
+  };
+
+  const actualizarPerfilPaciente = async (changes) => {
+    if (!isPsychologist || !pacienteSeleccionado || guardandoPerfilPaciente) {
+      return false;
+    }
+
+    const patientToUpdate = pacientes.find((patient) => patient.id === pacienteSeleccionado.id) || pacienteSeleccionado;
+    setGuardandoPerfilPaciente(true);
+
+    try {
+      const updatedApiPatient = await updatePatient(
+        patientToUpdate.id,
+        mapUiPatientToBackendPatient({
+          ...patientToUpdate,
+          ...changes,
+        }),
+      );
+
+      const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
+      syncPatientState(updatedPatient);
+      return true;
+    } catch (error) {
+      window.alert(error.message || 'No se pudo actualizar la ficha del paciente.');
+      return false;
+    } finally {
+      setGuardandoPerfilPaciente(false);
     }
   };
 
@@ -756,6 +792,8 @@ export default function App() {
     if (vistaActiva === 'appointments') {
       return (
         <AppointmentsScreen
+          key={`appointments-${appointmentsViewContext.nonce || 'default'}-${currentUser?.id || 'anonymous'}`}
+          viewContext={appointmentsViewContext}
           currentUser={currentUser}
           patients={pacientes}
           appointments={appointments}
@@ -803,6 +841,9 @@ export default function App() {
           todayDate={todayDate}
           prefilledAppointmentId={sessionDraftAppointmentId}
           setVistaActiva={setVistaActiva}
+          onViewAppointments={abrirAgenda}
+          onUpdatePatientProfile={actualizarPerfilPaciente}
+          onOpenAppointmentSession={handleOpenSessionFromAppointment}
           notesTemp={notasTemp}
           setNotesTemp={setNotasTemp}
           onSaveNotes={guardarNotas}
@@ -813,6 +854,7 @@ export default function App() {
           onUpdateSession={updateSession}
           onDeleteSession={removeSession}
           isSavingNotes={guardandoNotas}
+          isSavingPatientProfile={guardandoPerfilPaciente}
           isSavingSession={guardandoSesion}
           isCreatingTask={creandoTarea}
           processingTaskId={procesandoTareaId}
