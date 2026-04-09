@@ -94,6 +94,7 @@ export const mapBackendAppointmentToUiAppointment = (appointment) => ({
   hora24: toInputTime(appointment.scheduledTime),
   estado: backendToUiStatusMap[appointment.status] || 'pendiente',
   notas: appointment.notes || '',
+  sesionRegistrada: Boolean(appointment.hasLinkedSession),
 });
 
 export const mapUiAppointmentToBackendAppointment = (appointment) => ({
@@ -169,3 +170,28 @@ export const getMonthDates = (anchorDateString) => {
     };
   });
 };
+
+export const isAppointmentOverdue = (appointment, now = new Date()) => {
+  if (!appointment || appointment.estado !== 'pendiente' || !appointment.fecha) {
+    return false;
+  }
+
+  const scheduledTime = appointment.hora24 || '00:00';
+  const [year = '0', month = '1', day = '1'] = String(appointment.fecha).split('-');
+  const [hours = '0', minutes = '0'] = String(scheduledTime).split(':');
+  const endDate = new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hours),
+    Number(minutes) + 60,
+    0,
+    0,
+  );
+
+  return now > endDate;
+};
+
+export const getAppointmentDisplayStatus = (appointment, now = new Date()) => (
+  isAppointmentOverdue(appointment, now) ? 'por cerrar' : appointment.estado
+);

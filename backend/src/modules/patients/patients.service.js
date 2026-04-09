@@ -177,6 +177,20 @@ const refreshPatientLastSessionDate = async (patientId) => {
   );
 };
 
+const markAppointmentAsCompleted = async (appointmentId) => {
+  await db.query(
+    `
+      UPDATE appointments
+      SET
+        status = 'completed',
+        updated_at = NOW()
+      WHERE id = $1
+        AND status <> 'completed'
+    `,
+    [appointmentId],
+  );
+};
+
 const ensureAppointmentBelongsToPatient = async (appointmentId, patientId) => {
   if (!appointmentId) {
     const error = new Error('Debes seleccionar una cita para registrar la sesion');
@@ -516,6 +530,7 @@ export const createPatientSession = async (patientId, payload, actor) => {
     ],
   );
 
+  await markAppointmentAsCompleted(Number(appointment.id));
   await refreshPatientLastSessionDate(patientId);
   return mapSessionRow(result.rows[0]);
 };
@@ -613,6 +628,7 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
     ],
   );
 
+  await markAppointmentAsCompleted(Number(appointment.id));
   await refreshPatientLastSessionDate(patientId);
   return mapSessionRow(result.rows[0]);
 };

@@ -1,13 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Calendar, CalendarPlus, ChevronLeft, ChevronRight, Clock3, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
-import { formatAppointmentDisplayHour, getAppointmentHourOptions, getMonthDates, getMonthLabel, getMonthWeekdayHeaders, getWeekDates, getWeekRangeLabel, shiftDateByDays, shiftDateByMonths } from '../mappers/appointments';
+import { formatAppointmentDisplayHour, getAppointmentDisplayStatus, getAppointmentHourOptions, getMonthDates, getMonthLabel, getMonthWeekdayHeaders, getWeekDates, getWeekRangeLabel, isAppointmentOverdue, shiftDateByDays, shiftDateByMonths } from '../mappers/appointments';
 
 const emptyForm = { pacienteId: '', fecha: '', hora24: '', estado: 'pendiente', notas: '' };
 const weekdayLabels = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
 const exceptionDateFormatter = new Intl.DateTimeFormat('es-MX', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-const getStatusBadge = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
-const getMiniAppointmentChip = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
-const getAppointmentAccent = (estado) => (estado === 'completada' ? 'border-l-green-500 bg-green-50/40' : estado === 'cancelada' ? 'border-l-red-500 bg-red-50/40' : 'border-l-indigo-500 bg-indigo-50/40');
+const getStatusBadge = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : estado === 'por cerrar' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
+const getMiniAppointmentChip = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : estado === 'por cerrar' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
+const getAppointmentAccent = (estado) => (estado === 'completada' ? 'border-l-green-500 bg-green-50/40' : estado === 'cancelada' ? 'border-l-red-500 bg-red-50/40' : estado === 'por cerrar' ? 'border-l-amber-500 bg-amber-50/40' : 'border-l-indigo-500 bg-indigo-50/40');
 const getSessionIndicatorClasses = (sessionState) => (sessionState === 'registered' ? 'bg-emerald-500 ring-emerald-100' : sessionState === 'missing' ? 'bg-sky-500 ring-sky-100' : '');
 const getSessionBadgeClasses = (sessionState) => (sessionState === 'registered' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : sessionState === 'missing' ? 'border-sky-200 bg-sky-50 text-sky-700' : '');
 const getDayNumberBadge = ({ isToday, isActive, isHovered, isCurrentMonth }) => (isActive ? 'bg-indigo-600 text-white shadow-sm' : isHovered ? 'bg-indigo-100 text-indigo-700 ring-2 ring-indigo-200' : isToday ? 'bg-indigo-100 text-indigo-700' : isCurrentMonth ? 'text-slate-900' : 'text-slate-400');
@@ -346,6 +346,23 @@ export default function AppointmentsScreen({
     if (wasSaved) { setSelectedDate(resolvedDate); setCalendarAnchorDate(resolvedDate); closeAppointmentModal(); }
   };
   const handleDelete = async (appointmentId) => { if (window.confirm('Se eliminara esta cita. Deseas continuar?')) await onDeleteAppointment(appointmentId); };
+  const handleUpdateAppointmentStatus = async (appointment, nextStatus) => {
+    if (!appointment) {
+      return false;
+    }
+
+    return onUpdateAppointment(appointment.id, {
+      ...appointment,
+      estado: nextStatus,
+    });
+  };
+  const handleCancelAppointment = async (appointment) => {
+    if (!window.confirm('La cita se marcara como cancelada. Deseas continuar?')) {
+      return false;
+    }
+
+    return handleUpdateAppointmentStatus(appointment, 'cancelada');
+  };
   const handleSelectDate = (date) => { setSelectedDate(date); if (!date) return; setCalendarAnchorDate(date); onDismissAppointmentError?.(); };
   const handleMoveCalendar = (direction) => setCalendarAnchorDate((currentDate) => calendarView === 'month' ? shiftDateByMonths(currentDate, direction) : shiftDateByDays(currentDate, direction * 7));
   const handleResetCalendar = () => { setCalendarAnchorDate(todayDate); if (selectedDate) setSelectedDate(todayDate); };
@@ -509,7 +526,7 @@ export default function AppointmentsScreen({
   const clinicalSummary = useMemo(() => {
     const completedWithoutSession = appointments.filter((appointment) => getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id)) === 'missing').length;
     const completedWithSession = appointments.filter((appointment) => getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id)) === 'registered').length;
-    const upcomingPending = appointments.filter((appointment) => appointment.estado === 'pendiente' && appointment.fecha >= todayDate).length;
+    const upcomingPending = appointments.filter((appointment) => appointment.estado === 'pendiente' && !isAppointmentOverdue(appointment) && appointment.fecha >= todayDate).length;
 
     return {
       completedWithoutSession,
@@ -531,7 +548,7 @@ export default function AppointmentsScreen({
           {isPsychologist && <button type="button" onClick={() => handleSelectDate('')} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 transition">Ver todas</button>}
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="todos">Todos los estados</option>
-            <option value="pendiente">Pendientes</option>
+            <option value="pendiente">Pendientes y por cerrar</option>
             <option value="completada">Completadas</option>
             <option value="cancelada">Canceladas</option>
           </select>
@@ -624,7 +641,8 @@ export default function AppointmentsScreen({
                   <div className="mt-3 space-y-2">
                     {dayAppointments.slice(0, 3).map((appointment) => {
                       const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
-                      return <div key={appointment.id} className={`flex items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(appointment.estado)}`}><p className="truncate">{appointment.hora}</p>{sessionState !== 'none' && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
+                      const displayStatus = getAppointmentDisplayStatus(appointment);
+                      return <div key={appointment.id} className={`flex items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)}`}><p className="truncate">{appointment.hora}</p>{sessionState !== 'none' && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
                     })}
                     {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-400">{dayException?.isUnavailable ? 'Dia bloqueado' : 'Sin citas'}</div>}
                     {dayAppointments.length > 3 && <p className="text-[11px] font-medium text-indigo-600">+{dayAppointments.length - 3} mas</p>}
@@ -650,7 +668,8 @@ export default function AppointmentsScreen({
                       {dayException && <div className={`mt-1 inline-flex w-fit rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Bloqueado' : 'Especial'}</div>}
                       <div className="mt-2 flex-1 space-y-1 overflow-hidden">{dayAppointments.slice(0, 2).map((appointment) => {
                         const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
-                        return <div key={appointment.id} className={`flex items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(appointment.estado)}`}><div className="truncate">{appointment.hora}</div>{sessionState !== 'none' && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
+                        const displayStatus = getAppointmentDisplayStatus(appointment);
+                        return <div key={appointment.id} className={`flex items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)}`}><div className="truncate">{appointment.hora}</div>{sessionState !== 'none' && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
                       })}</div>
                       {dayAppointments.length > 2 && <p className="mt-1 text-[10px] font-semibold leading-none text-indigo-700">+{dayAppointments.length - 2}</p>}
                     </div>
@@ -693,7 +712,9 @@ export default function AppointmentsScreen({
               const linkedSession = patient?.sesiones?.find((session) => session.citaId === appointment.id) || null;
               const sessionState = getAppointmentSessionState(appointment, Boolean(linkedSession));
               const sessionLabel = getAppointmentSessionLabel(sessionState);
+              const displayStatus = getAppointmentDisplayStatus(appointment);
               const isFutureAppointment = appointment.fecha > todayDate;
+              const isOverduePendingAppointment = isAppointmentOverdue(appointment);
               const canOpenSessionFlow =
                 isPsychologist &&
                 patient &&
@@ -703,11 +724,14 @@ export default function AppointmentsScreen({
               const isLinkedToHoveredDate = hoveredDate === appointment.fecha;
               const isLinkedToSelectedDate = selectedDate === appointment.fecha;
               return (
-                <div key={appointment.id} tabIndex={0} onMouseEnter={() => setHoveredDate(appointment.fecha)} onMouseLeave={() => setHoveredDate('')} onFocus={() => setHoveredDate(appointment.fecha)} onBlur={() => setHoveredDate('')} className={`rounded-xl border border-gray-200 border-l-4 p-4 transition outline-none focus-visible:ring-2 focus-visible:ring-indigo-200 ${getAppointmentAccent(appointment.estado)} ${isLinkedToSelectedDate ? 'ring-2 ring-indigo-100 shadow-sm' : isLinkedToHoveredDate ? 'ring-2 ring-slate-200' : ''}`}>
+                <div key={appointment.id} tabIndex={0} onMouseEnter={() => setHoveredDate(appointment.fecha)} onMouseLeave={() => setHoveredDate('')} onFocus={() => setHoveredDate(appointment.fecha)} onBlur={() => setHoveredDate('')} className={`rounded-xl border border-gray-200 border-l-4 p-4 transition outline-none focus-visible:ring-2 focus-visible:ring-indigo-200 ${getAppointmentAccent(displayStatus)} ${isLinkedToSelectedDate ? 'ring-2 ring-indigo-100 shadow-sm' : isLinkedToHoveredDate ? 'ring-2 ring-slate-200' : ''}`}>
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{patient?.nombre || 'Paciente no disponible'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(appointment.estado)}`}>{appointment.estado}</span>{sessionState !== 'none' && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}</div>
+                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{patient?.nombre || 'Paciente no disponible'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(displayStatus)}`}>{displayStatus}</span>{sessionState !== 'none' && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}</div>
                       <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500"><span className="inline-flex items-center"><Calendar size={14} className="mr-1.5" /> {appointment.fecha}</span><span className="inline-flex items-center"><Clock3 size={14} className="mr-1.5" /> {appointment.hora}</span></div>
+                      {isOverduePendingAppointment && (
+                        <p className="mt-2 text-sm font-medium text-amber-700">La hora de esta cita ya paso y todavia necesita cierre operativo.</p>
+                      )}
                       {appointment.notas && <p className="mt-3 text-sm text-gray-600">{appointment.notas}</p>}
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -726,6 +750,11 @@ export default function AppointmentsScreen({
                           className="px-3 py-2 bg-white text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           {linkedSession ? 'Ver sesion' : appointment.estado === 'completada' ? 'Registrar sesion' : isProcessingThisAppointment ? 'Completando...' : 'Completar y registrar'}
+                        </button>
+                      )}
+                      {isPsychologist && isOverduePendingAppointment && !linkedSession && (
+                        <button onClick={() => handleCancelAppointment(appointment)} disabled={isProcessingThisAppointment} className="px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed">
+                          Cancelar
                         </button>
                       )}
                       {isPsychologist && <>

@@ -591,6 +591,17 @@ export default function App() {
     }
   };
 
+  const handleUpdateAppointmentStatus = async (appointment, nextStatus) => {
+    if (!appointment) {
+      return false;
+    }
+
+    return handleUpdateAppointment(appointment.id, {
+      ...appointment,
+      estado: nextStatus,
+    });
+  };
+
   const handleOpenSessionFromAppointment = async (appointment, patient) => {
     if (!isPsychologist || !appointment || !patient) {
       return false;
@@ -844,6 +855,7 @@ export default function App() {
           onViewAppointments={abrirAgenda}
           onUpdatePatientProfile={actualizarPerfilPaciente}
           onOpenAppointmentSession={handleOpenSessionFromAppointment}
+          onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
           notesTemp={notasTemp}
           setNotesTemp={setNotasTemp}
           onSaveNotes={guardarNotas}

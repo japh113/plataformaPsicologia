@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertCircle, CheckSquare, FileText, Plus, Save, Shield, Trash2 } from 'lucide-react';
 import { getRiskColor } from '../utils/risk';
 import FutureFeatureCard from '../components/shared/FutureFeatureCard';
+import { getAppointmentDisplayStatus, isAppointmentOverdue } from '../mappers/appointments';
 
 const emptySessionForm = {
   citaId: '',
@@ -53,11 +54,13 @@ const formatAppointmentDateTime = (appointment) => {
 };
 
 const getAppointmentStatusClasses = (status) => (
-  status === 'completada'
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-    : status === 'cancelada'
-      ? 'border-red-200 bg-red-50 text-red-700'
-      : 'border-indigo-200 bg-indigo-50 text-indigo-700'
+  status === 'por cerrar'
+    ? 'border-amber-200 bg-amber-50 text-amber-700'
+    : status === 'completada'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : status === 'cancelada'
+        ? 'border-red-200 bg-red-50 text-red-700'
+        : 'border-indigo-200 bg-indigo-50 text-indigo-700'
 );
 
 export default function NotesScreen({
@@ -70,6 +73,7 @@ export default function NotesScreen({
   onViewAppointments,
   onUpdatePatientProfile,
   onOpenAppointmentSession,
+  onUpdateAppointmentStatus,
   notesTemp,
   setNotesTemp,
   onSaveNotes,
@@ -142,8 +146,8 @@ export default function NotesScreen({
   const appointmentSummary = useMemo(() => ({
     total: patientAppointments.length,
     completed: patientAppointments.filter((appointment) => appointment.estado === 'completada').length,
-    upcoming: patientAppointments.filter((appointment) => appointment.fecha >= todayDate && appointment.estado !== 'cancelada').length,
-  }), [patientAppointments, todayDate]);
+    upcoming: patientAppointments.filter((appointment) => appointment.estado !== 'cancelada' && !isAppointmentOverdue(appointment)).length,
+  }), [patientAppointments]);
   const appointmentSessionsMap = useMemo(() => new Map(sessions.filter((session) => session.citaId).map((session) => [session.citaId, session])), [sessions]);
   const upcomingAppointments = useMemo(
     () =>
@@ -232,6 +236,18 @@ export default function NotesScreen({
         citaId: appointment.id,
       });
     }
+  };
+
+  const handleCancelAppointmentFromRecord = async (appointment) => {
+    if (!appointment) {
+      return;
+    }
+
+    if (!window.confirm('La cita se marcara como cancelada. Deseas continuar?')) {
+      return;
+    }
+
+    await onUpdateAppointmentStatus?.(appointment, 'cancelada');
   };
 
   const handleEditSession = (session) => {
@@ -417,7 +433,7 @@ export default function NotesScreen({
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="text-lg font-bold text-slate-900">Proximas citas</h3>
+                          <h3 className="text-lg font-bold text-slate-900">Agenda del paciente</h3>
                           <p className="mt-1 text-sm text-slate-500">Salta desde el expediente hacia la agenda o al registro de sesion cuando toque cerrar clinicamente.</p>
                         </div>
                         <button
@@ -433,6 +449,8 @@ export default function NotesScreen({
                         {upcomingAppointments.length > 0 ? upcomingAppointments.slice(0, 5).map((appointment) => {
                           const linkedSession = appointmentSessionsMap.get(appointment.id);
                           const canRegisterFromRecord = appointment.fecha <= todayDate && appointment.estado !== 'cancelada';
+                          const appointmentDisplayStatus = getAppointmentDisplayStatus(appointment);
+                          const isOverduePendingAppointment = isAppointmentOverdue(appointment);
 
                           return (
                             <div key={appointment.id} className="rounded-xl border border-slate-200 bg-white p-4">
@@ -440,8 +458,8 @@ export default function NotesScreen({
                                 <div>
                                   <div className="flex flex-wrap items-center gap-2">
                                     <p className="font-semibold text-slate-800">{formatAppointmentDateTime(appointment)}</p>
-                                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getAppointmentStatusClasses(appointment.estado)}`}>
-                                      {appointment.estado}
+                                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getAppointmentStatusClasses(appointmentDisplayStatus)}`}>
+                                      {appointmentDisplayStatus}
                                     </span>
                                     {linkedSession && (
                                       <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
@@ -473,6 +491,15 @@ export default function NotesScreen({
                                       }`}
                                     >
                                       {linkedSession ? 'Ver sesion' : appointment.estado === 'completada' ? 'Registrar sesion' : 'Completar y registrar'}
+                                    </button>
+                                  )}
+                                  {isOverduePendingAppointment && !linkedSession && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCancelAppointmentFromRecord(appointment)}
+                                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100"
+                                    >
+                                      Cancelar
                                     </button>
                                   )}
                                 </div>
@@ -779,7 +806,7 @@ export default function NotesScreen({
                   <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-lg font-bold text-slate-900">Proximas citas</h3>
+                        <h3 className="text-lg font-bold text-slate-900">Agenda</h3>
                         <p className="mt-1 text-sm text-slate-500">Consulta tus siguientes sesiones y abre la agenda cuando necesites revisar fechas.</p>
                       </div>
                       <button
@@ -795,8 +822,8 @@ export default function NotesScreen({
                         <div key={appointment.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-semibold text-slate-800">{formatAppointmentDateTime(appointment)}</p>
-                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getAppointmentStatusClasses(appointment.estado)}`}>
-                              {appointment.estado}
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getAppointmentStatusClasses(getAppointmentDisplayStatus(appointment))}`}>
+                              {getAppointmentDisplayStatus(appointment)}
                             </span>
                           </div>
                         </div>

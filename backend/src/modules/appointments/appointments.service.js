@@ -28,14 +28,19 @@ const getTodayDateString = () => {
   return `${year}-${month}-${day}`;
 };
 
-const mapAppointmentRow = (row) => ({
-  id: String(row.id),
-  patientId: String(row.patient_id),
-  scheduledDate: normalizeDateValue(row.scheduled_date),
-  scheduledTime: row.scheduled_time,
-  status: row.status,
-  notes: row.notes,
-});
+const mapAppointmentRow = (row) => {
+  const hasLinkedSession = Boolean(row.has_linked_session);
+
+  return {
+    id: String(row.id),
+    patientId: String(row.patient_id),
+    scheduledDate: normalizeDateValue(row.scheduled_date),
+    scheduledTime: row.scheduled_time,
+    status: hasLinkedSession ? 'completed' : row.status,
+    notes: row.notes,
+    hasLinkedSession,
+  };
+};
 
 const normalizeScheduledTime = (value) => {
   const [hours = '00', minutes = '00', seconds = '00'] = String(value).split(':');
@@ -52,6 +57,20 @@ const createScheduleConflictError = (message) => {
   error.status = 409;
   return error;
 };
+
+const appointmentSelectColumns = `
+  a.id,
+  a.patient_id,
+  a.scheduled_date,
+  a.scheduled_time,
+  a.status,
+  a.notes,
+  EXISTS (
+    SELECT 1
+    FROM patient_sessions ps
+    WHERE ps.appointment_id = a.id
+  ) AS has_linked_session
+`;
 
 const ensureAppointmentCompletionIsAllowed = ({ scheduledDate, status }) => {
   if (status !== 'completed') {
@@ -209,12 +228,7 @@ export const listAppointments = async ({ date = null, actor }) => {
   const result = await db.query(
     `
       SELECT
-        id,
-        patient_id,
-        scheduled_date,
-        scheduled_time,
-        status,
-        notes
+        ${appointmentSelectColumns}
       FROM appointments a
       WHERE ${dateClause}${accessScope.clause}
       ORDER BY scheduled_date ASC, scheduled_time ASC, id ASC
@@ -230,12 +244,7 @@ export const getAppointmentById = async (id, actor) => {
   const result = await db.query(
     `
       SELECT
-        id,
-        patient_id,
-        scheduled_date,
-        scheduled_time,
-        status,
-        notes
+        ${appointmentSelectColumns}
       FROM appointments a
       WHERE a.id = $1
         AND ${accessScope.clause}
@@ -305,7 +314,7 @@ export const createAppointment = async (payload, actor) => {
     ],
   );
 
-  return mapAppointmentRow(result.rows[0]);
+  return getAppointmentById(result.rows[0].id, actor);
 };
 
 export const updateAppointment = async (id, payload, actor) => {
@@ -327,6 +336,25 @@ export const updateAppointment = async (id, payload, actor) => {
   const nextScheduledDate = payload.scheduledDate || currentAppointment.scheduledDate;
   const nextScheduledTime = normalizeScheduledTime(payload.scheduledTime || currentAppointment.scheduledTime);
   const nextStatus = payload.status || currentAppointment.status;
+  const isChangingLinkedAppointmentSchedule =
+    currentAppointment.hasLinkedSession && (
+      nextPatientId !== currentAppointment.patientId
+      || nextScheduledDate !== currentAppointment.scheduledDate
+      || nextScheduledTime !== normalizeScheduledTime(currentAppointment.scheduledTime)
+    );
+
+  if (currentAppointment.hasLinkedSession && nextStatus !== 'completed') {
+    const error = new Error('No puedes marcar como pendiente o cancelada una cita que ya tiene sesion registrada.');
+    error.status = 409;
+    throw error;
+  }
+
+  if (isChangingLinkedAppointmentSchedule) {
+    const error = new Error('No puedes reprogramar una cita que ya tiene sesion registrada.');
+    error.status = 409;
+    throw error;
+  }
+
   const shouldValidateScheduleAvailability =
     nextStatus !== 'cancelled' && (
       currentAppointment.status === 'cancelled'
@@ -386,7 +414,7 @@ export const updateAppointment = async (id, payload, actor) => {
     ],
   );
 
-  return mapAppointmentRow(result.rows[0]);
+  return getAppointmentById(result.rows[0].id, actor);
 };
 
 export const deleteAppointment = async (id, actor) => {

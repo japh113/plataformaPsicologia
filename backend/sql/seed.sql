@@ -182,6 +182,14 @@ WHERE ps.appointment_id IS NULL
   AND ps.patient_id = a.patient_id
   AND ps.session_date = a.scheduled_date;
 
+UPDATE appointments a
+SET
+  status = 'completed',
+  updated_at = NOW()
+FROM patient_sessions ps
+WHERE ps.appointment_id = a.id
+  AND a.status <> 'completed';
+
 DELETE FROM patient_sessions ps
 USING patient_sessions duplicated
 WHERE ps.appointment_id IS NOT NULL
