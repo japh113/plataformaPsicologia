@@ -85,6 +85,7 @@ const buildDateRangeStrings = (startDate, endDate) => {
 export default function App() {
   const [vistaActiva, setVistaActiva] = useState('dashboard');
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null);
+  const [sessionDraftAppointmentId, setSessionDraftAppointmentId] = useState(null);
   const [pacientes, setPacientes] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [availability, setAvailability] = useState([]);
@@ -121,6 +122,7 @@ export default function App() {
   const resetSessionState = () => {
     setVistaActiva('dashboard');
     setPacienteSeleccionado(null);
+    setSessionDraftAppointmentId(null);
     setPacientes([]);
     setAppointments([]);
     setAvailability([]);
@@ -247,9 +249,10 @@ export default function App() {
     }
   };
 
-  const abrirNotas = (paciente) => {
+  const abrirNotas = (paciente, options = {}) => {
     const pacienteActualizado = pacientes.find((currentPatient) => currentPatient.id === paciente.id) || paciente;
     setPacienteSeleccionado(pacienteActualizado);
+    setSessionDraftAppointmentId(options.appointmentId || null);
     setNotasTemp(pacienteActualizado.notas || '');
     setVistaActiva('notas');
   };
@@ -763,10 +766,11 @@ export default function App() {
     if (vistaActiva === 'notas') {
       return (
         <NotesScreen
-          key={pacienteSeleccionado?.id || 'notes-screen'}
+          key={`${pacienteSeleccionado?.id || 'notes-screen'}-${sessionDraftAppointmentId || 'none'}`}
           currentUser={currentUser}
           patient={pacienteSeleccionado}
           appointments={appointments}
+          prefilledAppointmentId={sessionDraftAppointmentId}
           setVistaActiva={setVistaActiva}
           notesTemp={notasTemp}
           setNotesTemp={setNotasTemp}

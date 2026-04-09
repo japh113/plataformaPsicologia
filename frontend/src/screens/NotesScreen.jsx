@@ -29,6 +29,7 @@ export default function NotesScreen({
   currentUser,
   patient,
   appointments,
+  prefilledAppointmentId,
   setVistaActiva,
   notesTemp,
   setNotesTemp,
@@ -45,10 +46,22 @@ export default function NotesScreen({
   processingTaskId = null,
   processingSessionId = null,
 }) {
+  const initialMatchedSession = patient?.sesiones?.find((session) => session.citaId === (prefilledAppointmentId || null)) || null;
   const [showTaskInput, setShowTaskInput] = useState(false);
   const [taskText, setTaskText] = useState('');
-  const [selectedSessionId, setSelectedSessionId] = useState(null);
-  const [sessionForm, setSessionForm] = useState(emptySessionForm);
+  const [selectedSessionId, setSelectedSessionId] = useState(initialMatchedSession?.id || null);
+  const [sessionForm, setSessionForm] = useState(
+    initialMatchedSession
+      ? {
+        citaId: initialMatchedSession.citaId || '',
+        formato: initialMatchedSession.formato || 'simple',
+        contenido: initialMatchedSession.contenido || '',
+      }
+      : {
+        ...emptySessionForm,
+        citaId: prefilledAppointmentId || '',
+      },
+  );
   const isPsychologist = currentUser?.role === 'psychologist';
   const adherence = useMemo(() => {
     if (!patient?.tareas?.length) return 0;
@@ -76,7 +89,7 @@ export default function NotesScreen({
   const resetSessionForm = () => {
     setSelectedSessionId(null);
     setSessionForm({
-      citaId: '',
+      citaId: prefilledAppointmentId || '',
       formato: 'simple',
       contenido: '',
     });

@@ -530,6 +530,7 @@ export default function AppointmentsScreen({
           <div className="space-y-3">
             {filteredAppointments.map((appointment) => {
               const patient = patients.find((currentPatient) => currentPatient.id === appointment.pacienteId);
+              const linkedSession = patient?.sesiones?.find((session) => session.citaId === appointment.id) || null;
               const isLinkedToHoveredDate = hoveredDate === appointment.fecha;
               const isLinkedToSelectedDate = selectedDate === appointment.fecha;
               return (
@@ -542,6 +543,14 @@ export default function AppointmentsScreen({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {patient && <button onClick={() => onOpenPatient(patient)} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition text-sm font-medium">Ver expediente</button>}
+                      {isPsychologist && patient && appointment.estado !== 'cancelada' && (
+                        <button
+                          onClick={() => onOpenPatient(patient, { appointmentId: appointment.id })}
+                          className="px-3 py-2 bg-white text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition text-sm font-medium"
+                        >
+                          {linkedSession ? 'Ver sesion' : appointment.estado === 'completada' ? 'Registrar sesion' : 'Preparar sesion'}
+                        </button>
+                      )}
                       {isPsychologist && <>
                         <button onClick={() => handleEditAppointment(appointment)} className="px-3 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 transition text-sm font-medium inline-flex items-center"><Pencil size={14} className="mr-2" /> Editar</button>
                         <button onClick={() => handleDelete(appointment.id)} disabled={processingAppointmentId === appointment.id} className="px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition text-sm font-medium inline-flex items-center disabled:opacity-60 disabled:cursor-not-allowed"><Trash2 size={14} className="mr-2" /> Eliminar</button>
