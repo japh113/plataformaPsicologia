@@ -107,6 +107,48 @@ const getAppointmentSessionState = (appointment, hasLinkedSession) => {
 const getAppointmentSessionLabel = (sessionState) => (
   sessionState === 'registered' ? 'Sesion registrada' : sessionState === 'missing' ? 'Falta sesion' : ''
 );
+const calendarStatusPriority = {
+  cancelada: 0,
+  'por cerrar': 1,
+  pendiente: 2,
+  completada: 3,
+};
+const sortCalendarDayAppointments = (entries) => (
+  [...entries].sort((left, right) => {
+    const timeCompare = (left.hora24 || '').localeCompare(right.hora24 || '');
+
+    if (timeCompare !== 0) {
+      return timeCompare;
+    }
+
+    const leftStatus = getAppointmentDisplayStatus(left);
+    const rightStatus = getAppointmentDisplayStatus(right);
+    const leftPriority = calendarStatusPriority[leftStatus] ?? 99;
+    const rightPriority = calendarStatusPriority[rightStatus] ?? 99;
+
+    if (leftPriority !== rightPriority) {
+      return leftPriority - rightPriority;
+    }
+
+    return String(left.id).localeCompare(String(right.id));
+  })
+);
+const getVisibleCalendarAppointments = (entries, baseLimit) => {
+  if (entries.length <= baseLimit) {
+    return entries;
+  }
+
+  const visibleEntries = entries.slice(0, baseLimit);
+  const lastVisible = visibleEntries[visibleEntries.length - 1];
+  const overflowEntries = entries.slice(baseLimit);
+
+  if (!lastVisible || overflowEntries.length === 0) {
+    return visibleEntries;
+  }
+
+  const sameSlotEntries = overflowEntries.filter((entry) => entry.hora24 === lastVisible.hora24);
+  return [...visibleEntries, ...sameSlotEntries];
+};
 
 function ModalShell({ title, description, onClose, children }) {
   return (
@@ -277,12 +319,18 @@ export default function AppointmentsScreen({
   const weeklyAppointments = useMemo(() => {
     const grouped = Object.fromEntries(weekDates.map((weekDate) => [weekDate.isoDate, []]));
     appointmentsForCalendar.forEach((appointment) => { if (grouped[appointment.fecha]) grouped[appointment.fecha].push(appointment); });
+    Object.keys(grouped).forEach((dateKey) => {
+      grouped[dateKey] = sortCalendarDayAppointments(grouped[dateKey]);
+    });
     return grouped;
   }, [appointmentsForCalendar, weekDates]);
 
   const monthlyAppointments = useMemo(() => {
     const grouped = Object.fromEntries(monthDates.map((monthDate) => [monthDate.isoDate, []]));
     appointmentsForCalendar.forEach((appointment) => { if (grouped[appointment.fecha]) grouped[appointment.fecha].push(appointment); });
+    Object.keys(grouped).forEach((dateKey) => {
+      grouped[dateKey] = sortCalendarDayAppointments(grouped[dateKey]);
+    });
     return grouped;
   }, [appointmentsForCalendar, monthDates]);
 
@@ -629,6 +677,7 @@ export default function AppointmentsScreen({
           <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
             {weekDates.map((weekDate) => {
               const dayAppointments = weeklyAppointments[weekDate.isoDate] || [];
+              const visibleDayAppointments = getVisibleCalendarAppointments(dayAppointments, 3);
               const dayException = availabilityExceptionsMap.get(weekDate.isoDate);
               const isActive = selectedDate === weekDate.isoDate;
               const isHovered = hoveredDate === weekDate.isoDate;
@@ -639,13 +688,13 @@ export default function AppointmentsScreen({
                   <p className="mt-2 text-sm font-bold text-gray-900">{weekDate.shortLabel}</p>
                   {dayException && <div className={`mt-2 inline-flex max-w-full items-center rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'}</div>}
                   <div className="mt-3 space-y-2">
-                    {dayAppointments.slice(0, 3).map((appointment) => {
+                    {visibleDayAppointments.map((appointment) => {
                       const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
                       const displayStatus = getAppointmentDisplayStatus(appointment);
                       return <div key={appointment.id} className={`flex items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)}`}><p className="truncate">{appointment.hora}</p>{sessionState !== 'none' && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
                     })}
                     {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-400">{dayException?.isUnavailable ? 'Dia bloqueado' : 'Sin citas'}</div>}
-                    {dayAppointments.length > 3 && <p className="text-[11px] font-medium text-indigo-600">+{dayAppointments.length - 3} mas</p>}
+                    {dayAppointments.length > visibleDayAppointments.length && <p className="text-[11px] font-medium text-indigo-600">+{dayAppointments.length - visibleDayAppointments.length} mas</p>}
                   </div>
                 </button>
               );
@@ -657,6 +706,7 @@ export default function AppointmentsScreen({
             <div className="grid grid-cols-7">
               {monthDates.map((monthDate) => {
                 const dayAppointments = monthlyAppointments[monthDate.isoDate] || [];
+                const visibleDayAppointments = getVisibleCalendarAppointments(dayAppointments, 2);
                 const dayException = availabilityExceptionsMap.get(monthDate.isoDate);
                 const isActive = selectedDate === monthDate.isoDate;
                 const isHovered = hoveredDate === monthDate.isoDate;
@@ -666,12 +716,12 @@ export default function AppointmentsScreen({
                     <div className="flex h-full flex-col">
                       <div className="flex items-center justify-between"><span className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition ${getDayNumberBadge({ isToday, isActive, isHovered, isCurrentMonth: monthDate.isCurrentMonth })}`}>{monthDate.dayNumber}</span>{dayException && <span className={`inline-flex h-2.5 w-2.5 rounded-full ring-4 ${getExceptionDotClasses(dayException.isUnavailable)}`} title={dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'} />}</div>
                       {dayException && <div className={`mt-1 inline-flex w-fit rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Bloqueado' : 'Especial'}</div>}
-                      <div className="mt-2 flex-1 space-y-1 overflow-hidden">{dayAppointments.slice(0, 2).map((appointment) => {
+                      <div className="mt-2 flex-1 space-y-1 overflow-hidden">{visibleDayAppointments.map((appointment) => {
                         const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
                         const displayStatus = getAppointmentDisplayStatus(appointment);
                         return <div key={appointment.id} className={`flex items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)}`}><div className="truncate">{appointment.hora}</div>{sessionState !== 'none' && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
                       })}</div>
-                      {dayAppointments.length > 2 && <p className="mt-1 text-[10px] font-semibold leading-none text-indigo-700">+{dayAppointments.length - 2}</p>}
+                      {dayAppointments.length > visibleDayAppointments.length && <p className="mt-1 text-[10px] font-semibold leading-none text-indigo-700">+{dayAppointments.length - visibleDayAppointments.length}</p>}
                     </div>
                   </button>
                 );
