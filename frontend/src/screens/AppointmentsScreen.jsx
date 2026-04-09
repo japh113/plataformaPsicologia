@@ -172,22 +172,42 @@ export default function AppointmentsScreen({
   }, [availabilityExceptionsMap, availabilityMap, selectedFormDate]);
   const selectedFormWeekday = getWeekdayFromDateString(selectedFormDate);
   const selectedDayBlocks = selectedDayAvailability.blocks;
+  const requiresActiveSlotChecks = form.estado !== 'cancelada';
+  const sameDayPatientAppointment = useMemo(
+    () =>
+      requiresActiveSlotChecks
+        ? appointments.find(
+          (appointment) =>
+            appointment.pacienteId === form.pacienteId &&
+            appointment.fecha === selectedFormDate &&
+            appointment.estado !== 'cancelada' &&
+            appointment.id !== editingAppointmentId,
+        ) || null
+        : null,
+    [appointments, editingAppointmentId, form.pacienteId, selectedFormDate, requiresActiveSlotChecks],
+  );
+  const hasSameDayPatientConflict = Boolean(sameDayPatientAppointment);
   const occupiedHourValues = useMemo(
     () =>
       new Set(
         appointments
           .filter(
             (appointment) =>
+              requiresActiveSlotChecks &&
               appointment.fecha === selectedFormDate &&
               appointment.estado !== 'cancelada' &&
               appointment.id !== editingAppointmentId,
           )
           .map((appointment) => appointment.hora24),
       ),
-    [appointments, editingAppointmentId, selectedFormDate],
+    [appointments, editingAppointmentId, requiresActiveSlotChecks, selectedFormDate],
   );
 
   const hourOptions = useMemo(() => {
+    if (hasSameDayPatientConflict) {
+      return [];
+    }
+
     const currentHour = form.hora24;
     const blockOptions = selectedDayBlocks
       .flatMap((block) => getAppointmentHourOptions(Number(block.startTime.slice(0, 2)), Number(block.endTime.slice(0, 2)) - 1))
@@ -198,7 +218,8 @@ export default function AppointmentsScreen({
     }
 
     return [{ value: currentHour, label: `${formatAppointmentDisplayHour(currentHour)} (actual)` }, ...blockOptions];
-  }, [form.hora24, occupiedHourValues, selectedDayBlocks]);
+  }, [form.hora24, hasSameDayPatientConflict, occupiedHourValues, selectedDayBlocks]);
+  const normalizedHourValue = hourOptions.some((option) => option.value === form.hora24) ? form.hora24 : '';
 
   const weeklyAppointments = useMemo(() => {
     const grouped = Object.fromEntries(weekDates.map((weekDate) => [weekDate.isoDate, []]));
@@ -266,8 +287,8 @@ export default function AppointmentsScreen({
     event.preventDefault();
     const resolvedPatientId = form.pacienteId || patients[0]?.id || '';
     const resolvedDate = form.fecha || todayDate;
-    if (!resolvedPatientId || !resolvedDate || !form.hora24) return;
-    const payload = { pacienteId: resolvedPatientId, fecha: resolvedDate, hora24: form.hora24, estado: form.estado, notas: form.notas };
+    if (!resolvedPatientId || !resolvedDate || !normalizedHourValue || hasSameDayPatientConflict) return;
+    const payload = { pacienteId: resolvedPatientId, fecha: resolvedDate, hora24: normalizedHourValue, estado: form.estado, notas: form.notas };
     const wasSaved = editingAppointmentId ? await onUpdateAppointment(editingAppointmentId, payload) : await onCreateAppointment(payload);
     if (wasSaved) { setSelectedDate(resolvedDate); setCalendarAnchorDate(resolvedDate); closeAppointmentModal(); }
   };
@@ -391,13 +412,16 @@ export default function AppointmentsScreen({
   const availabilityStartOptions = getAppointmentHourOptions(6, 21);
   const availabilityEndOptions = getAppointmentHourOptions(7, 22);
   const availableSlotsMessage =
-    selectedDayAvailability.isUnavailable
+    hasSameDayPatientConflict
+      ? `Este paciente ya tiene una cita activa este dia a las ${sameDayPatientAppointment?.hora || ''}. Cancela o reprograma esa cita antes de agendar otra.`
+      : selectedDayAvailability.isUnavailable
       ? 'Este dia esta marcado como no disponible por una excepcion.'
       : selectedDayBlocks.length === 0
         ? 'No hay disponibilidad configurada para este dia.'
-      : hourOptions.length === 0
+        : hourOptions.length === 0
         ? 'No quedan cupos disponibles en este dia.'
         : `${hourOptions.length} horario${hourOptions.length === 1 ? '' : 's'} disponible${hourOptions.length === 1 ? '' : 's'} en este dia.`;
+  const isHourSelectDisabled = isSavingAppointment || hasSameDayPatientConflict || ((selectedDayBlocks.length === 0 || selectedDayAvailability.isUnavailable) && !form.hora24);
   const exceptionRangeDayCount = getRangeDayCount(exceptionRangeForm.startDate, exceptionRangeForm.endDate);
   const showInlineManagementPanels = false;
 
@@ -584,8 +608,8 @@ export default function AppointmentsScreen({
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Hora</label>
-                  <select name="hora24" value={form.hora24} onChange={handleChange} disabled={isSavingAppointment || ((selectedDayBlocks.length === 0 || selectedDayAvailability.isUnavailable) && !form.hora24)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                    <option value="">{selectedDayAvailability.isUnavailable ? 'Dia no disponible' : selectedDayBlocks.length > 0 ? 'Selecciona un horario' : 'Dia sin disponibilidad'}</option>
+                  <select name="hora24" value={normalizedHourValue} onChange={handleChange} disabled={isHourSelectDisabled} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    <option value="">{hasSameDayPatientConflict ? 'Paciente ya agendado este dia' : selectedDayAvailability.isUnavailable ? 'Dia no disponible' : selectedDayBlocks.length > 0 ? 'Selecciona un horario' : 'Dia sin disponibilidad'}</option>
                     {hourOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                   <p className="mt-1 text-xs text-gray-500">{availableSlotsMessage}</p>
@@ -602,7 +626,7 @@ export default function AppointmentsScreen({
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Notas</label>
                 <textarea name="notas" value={form.notas} onChange={handleChange} disabled={isSavingAppointment} rows="4" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none" placeholder="Detalles logisticos, contexto o recordatorios de la sesion..." />
               </div>
-              <button type="submit" disabled={isSavingAppointment || patients.length === 0} className="w-full px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed">{isSavingAppointment ? 'Guardando...' : editingAppointmentId ? 'Guardar cambios' : 'Crear cita'}</button>
+              <button type="submit" disabled={isSavingAppointment || patients.length === 0 || hasSameDayPatientConflict} className="w-full px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed">{isSavingAppointment ? 'Guardando...' : editingAppointmentId ? 'Guardar cambios' : 'Crear cita'}</button>
             </form>
           </div>
 
@@ -937,8 +961,8 @@ export default function AppointmentsScreen({
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Hora</label>
-                <select name="hora24" value={form.hora24} onChange={handleChange} disabled={isSavingAppointment || ((selectedDayBlocks.length === 0 || selectedDayAvailability.isUnavailable) && !form.hora24)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                  <option value="">{selectedDayAvailability.isUnavailable ? 'Dia no disponible' : selectedDayBlocks.length > 0 ? 'Selecciona un horario' : 'Dia sin disponibilidad'}</option>
+                <select name="hora24" value={normalizedHourValue} onChange={handleChange} disabled={isHourSelectDisabled} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                  <option value="">{hasSameDayPatientConflict ? 'Paciente ya agendado este dia' : selectedDayAvailability.isUnavailable ? 'Dia no disponible' : selectedDayBlocks.length > 0 ? 'Selecciona un horario' : 'Dia sin disponibilidad'}</option>
                   {hourOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
                 <p className="mt-1 text-xs text-gray-500">{availableSlotsMessage}</p>
@@ -959,7 +983,7 @@ export default function AppointmentsScreen({
             </div>
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button type="button" onClick={closeAppointmentModal} className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Cancelar</button>
-              <button type="submit" disabled={isSavingAppointment || patients.length === 0} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed">{isSavingAppointment ? 'Guardando...' : editingAppointmentId ? 'Guardar cambios' : 'Crear cita'}</button>
+              <button type="submit" disabled={isSavingAppointment || patients.length === 0 || hasSameDayPatientConflict} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed">{isSavingAppointment ? 'Guardando...' : editingAppointmentId ? 'Guardar cambios' : 'Crear cita'}</button>
             </div>
           </form>
         </ModalShell>

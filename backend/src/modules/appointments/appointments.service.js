@@ -65,6 +65,26 @@ const ensureAppointmentAvailability = async ({
     return;
   }
 
+  const patientSameDayConflict = await db.query(
+    `
+      SELECT scheduled_time
+      FROM appointments
+      WHERE patient_id = $1
+        AND scheduled_date = $2
+        AND status <> 'cancelled'
+        AND ($3::bigint IS NULL OR id <> $3)
+      ORDER BY scheduled_time ASC
+      LIMIT 1
+    `,
+    [patientId, scheduledDate, excludeAppointmentId],
+  );
+
+  if (patientSameDayConflict.rowCount > 0) {
+    throw createScheduleConflictError(
+      'Este paciente ya tiene una cita agendada en este dia. Cancela o reprograma esa cita antes de crear otra.',
+    );
+  }
+
   const patientConflict = await db.query(
     `
       SELECT 1
