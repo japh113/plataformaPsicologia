@@ -178,7 +178,6 @@ export default function NotesScreen({
   const [selectedSessionId, setSelectedSessionId] = useState(initialMatchedSession?.id || null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSessionModal, setShowSessionModal] = useState(Boolean(initialMatchedSession || prefilledAppointmentId));
-  const [showNotesModal, setShowNotesModal] = useState(false);
   const [agendaFilter, setAgendaFilter] = useState('proximas');
   const [profileForm, setProfileForm] = useState({
     riesgo: patient?.riesgo || 'bajo',
@@ -280,6 +279,7 @@ export default function NotesScreen({
       { id: 'agenda', label: 'Agenda' },
       { id: 'sesiones', label: 'Sesiones' },
       { id: 'tareas', label: 'Tareas' },
+      { id: 'nota-general', label: 'Nota general' },
     ]
     : [
       { id: 'resumen', label: 'Resumen' },
@@ -572,30 +572,24 @@ export default function NotesScreen({
               {patient.motivo || 'Todavia no hay un motivo de consulta registrado.'}
             </p>
           </div>
-        </div>
-      </SectionCard>
 
-      <SectionCard
-        title="Movimiento inmediato"
-        description="Solo lo mas importante para este momento."
-        action={(
-          <button
-            type="button"
-            onClick={() => onViewAppointments?.(nextAppointment?.fecha || todayDate)}
-            className="rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-          >
-            Ver agenda
-          </button>
-        )}
-      >
-        <div className="space-y-3">
-          {overduePendingAppointments.slice(0, 1).map((appointment) => renderAppointmentRow(appointment))}
-          {!overduePendingAppointments.length && nextAppointment && renderAppointmentRow(nextAppointment)}
-          {!overduePendingAppointments.length && !nextAppointment && (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-              No hay citas activas por revisar ahora mismo.
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Nota general</p>
+              {isPsychologist && (
+                <button
+                  type="button"
+                  onClick={() => setActiveSection('nota-general')}
+                  className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                >
+                  Abrir completa
+                </button>
+              )}
             </div>
-          )}
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+              {notesTemp?.trim() || 'Todavia no hay una nota general registrada para este expediente.'}
+            </p>
+          </div>
         </div>
       </SectionCard>
 
@@ -804,6 +798,31 @@ export default function NotesScreen({
     </SectionCard>
   );
 
+  const renderGeneralNoteTab = () => (
+    <SectionCard
+      title="Nota general del expediente"
+      description="Contexto transversal del caso que no depende de una sola sesion."
+    >
+      <textarea
+        value={notesTemp}
+        onChange={(event) => setNotesTemp(event.target.value)}
+        placeholder="Escribe aqui la nota general del expediente..."
+        className="h-[320px] w-full rounded-3xl border border-slate-300 bg-slate-50 px-5 py-4 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+      />
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={onSaveNotes}
+          disabled={isSavingNotes}
+          className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Save size={16} className="mr-2" />
+          {isSavingNotes ? 'Guardando...' : 'Guardar nota general'}
+        </button>
+      </div>
+    </SectionCard>
+  );
+
   const renderPatientSummaryTab = () => (
     <div className="space-y-5">
       <SectionCard title="Resumen" description="Una vista simple de tu seguimiento actual.">
@@ -846,6 +865,7 @@ export default function NotesScreen({
     if (activeSection === 'agenda') return renderAgendaTab();
     if (activeSection === 'sesiones') return renderSessionsTab();
     if (activeSection === 'tareas') return renderTasksTab();
+    if (activeSection === 'nota-general') return renderGeneralNoteTab();
     return renderSummaryTab();
   };
 
@@ -853,7 +873,7 @@ export default function NotesScreen({
     <>
       <div className="rounded-[30px] border border-slate-200 bg-slate-50 p-4 shadow-sm animate-in slide-in-from-right-4 duration-300 md:p-6">
         <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <button
                 type="button"
@@ -873,7 +893,7 @@ export default function NotesScreen({
               <p className="mt-3 text-sm leading-6 text-slate-600">{getPatientSummary(patient)}</p>
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 lg:self-center">
               <button
                 type="button"
                 onClick={() => onViewAppointments?.(nextAppointment?.fecha || todayDate)}
@@ -889,13 +909,6 @@ export default function NotesScreen({
                 className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 Editar ficha
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowNotesModal(true)}
-                className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                Nota general
               </button>
               <button
                 type="button"
@@ -1025,42 +1038,6 @@ export default function NotesScreen({
               >
                 <Save size={16} className="mr-2" />
                 {isSavingPatientProfile ? 'Guardando...' : 'Guardar ficha'}
-              </button>
-            </div>
-          </div>
-        </ModalShell>
-      )}
-
-      {showNotesModal && isPsychologist && (
-        <ModalShell
-          title="Nota general del expediente"
-          description="Contexto transversal del caso que no depende de una sola sesion."
-          onClose={() => setShowNotesModal(false)}
-        >
-          <div className="space-y-4">
-            <textarea
-              value={notesTemp}
-              onChange={(event) => setNotesTemp(event.target.value)}
-              placeholder="Escribe aqui la nota general del expediente..."
-              className="h-[320px] w-full rounded-3xl border border-slate-300 bg-slate-50 px-5 py-4 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-            />
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowNotesModal(false)}
-                disabled={isSavingNotes}
-                className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
-              >
-                Cerrar
-              </button>
-              <button
-                type="button"
-                onClick={onSaveNotes}
-                disabled={isSavingNotes}
-                className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Save size={16} className="mr-2" />
-                {isSavingNotes ? 'Guardando...' : 'Guardar nota general'}
               </button>
             </div>
           </div>
