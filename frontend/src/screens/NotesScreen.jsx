@@ -1,5 +1,20 @@
 import React, { useMemo, useState } from 'react';
-import { AlertCircle, CheckSquare, FileText, Plus, Save, Shield, Trash2 } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  CalendarDays,
+  CheckSquare,
+  ClipboardList,
+  Clock3,
+  FileText,
+  Plus,
+  Save,
+  Shield,
+  Sparkles,
+  Stethoscope,
+  Target,
+  Trash2,
+} from 'lucide-react';
 import { getRiskColor } from '../utils/risk';
 import FutureFeatureCard from '../components/shared/FutureFeatureCard';
 import { getAppointmentDisplayStatus, isAppointmentOverdue } from '../mappers/appointments';
@@ -12,6 +27,7 @@ const emptySessionForm = {
   proximoPaso: '',
   contenido: '',
 };
+
 const riskOptions = [
   { value: 'bajo', label: 'Bajo' },
   { value: 'medio', label: 'Medio' },
@@ -61,6 +77,50 @@ const getAppointmentStatusClasses = (status) => (
       : status === 'cancelada'
         ? 'border-red-200 bg-red-50 text-red-700'
         : 'border-indigo-200 bg-indigo-50 text-indigo-700'
+);
+
+const getSessionCoverageClasses = (hasSession) => (
+  hasSession
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : 'border-sky-200 bg-sky-50 text-sky-700'
+);
+
+const getTabButtonClasses = (isActive) => (
+  isActive
+    ? 'bg-slate-900 text-white shadow-sm'
+    : 'bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+);
+
+const getMetricCardClasses = (tone) => {
+  if (tone === 'emerald') {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-900';
+  }
+
+  if (tone === 'sky') {
+    return 'border-sky-200 bg-sky-50 text-sky-900';
+  }
+
+  if (tone === 'amber') {
+    return 'border-amber-200 bg-amber-50 text-amber-900';
+  }
+
+  return 'border-slate-200 bg-slate-100 text-slate-900';
+};
+
+const sortAppointmentsAsc = (entries) => (
+  [...entries].sort((left, right) => `${left.fecha}T${left.hora24}`.localeCompare(`${right.fecha}T${right.hora24}`))
+);
+
+const sortAppointmentsDesc = (entries) => (
+  [...entries].sort((left, right) => `${right.fecha}T${right.hora24}`.localeCompare(`${left.fecha}T${left.hora24}`))
+);
+
+const sortSessionsDesc = (entries) => (
+  [...entries].sort((left, right) => {
+    const leftKey = `${left.fecha || '0000-00-00'}T${left.actualizadaEn || left.creadaEn || '00:00:00'}`;
+    const rightKey = `${right.fecha || '0000-00-00'}T${right.actualizadaEn || right.creadaEn || '00:00:00'}`;
+    return rightKey.localeCompare(leftKey);
+  })
 );
 
 export default function NotesScreen({
@@ -114,66 +174,102 @@ export default function NotesScreen({
         citaId: prefilledAppointmentId || '',
       },
   );
+
   const isPsychologist = currentUser?.role === 'psychologist';
-  const adherence = useMemo(() => {
-    if (!patient?.tareas?.length) return 0;
-    const completed = patient.tareas.filter((task) => task.completada).length;
-    return Math.round((completed / patient.tareas.length) * 100);
-  }, [patient]);
-  const sessions = useMemo(() => patient?.sesiones || [], [patient?.sesiones]);
+  const sessions = useMemo(() => sortSessionsDesc(patient?.sesiones || []), [patient?.sesiones]);
   const pendingTasks = useMemo(() => (patient?.tareas || []).filter((task) => !task.completada), [patient?.tareas]);
+  const completedTasks = useMemo(() => (patient?.tareas || []).filter((task) => task.completada), [patient?.tareas]);
+  const adherence = patient?.tareas?.length
+    ? Math.round((completedTasks.length / patient.tareas.length) * 100)
+    : 0;
+
   const patientAppointments = useMemo(
     () =>
-      (appointments || [])
-        .filter((appointment) => appointment.pacienteId === patient?.id)
-        .sort((left, right) => {
-          const leftKey = `${left.fecha}T${left.hora24}`;
-          const rightKey = `${right.fecha}T${right.hora24}`;
-          return rightKey.localeCompare(leftKey);
-        }),
+      sortAppointmentsDesc(
+        (appointments || []).filter((appointment) => appointment.pacienteId === patient?.id),
+      ),
     [appointments, patient?.id],
   );
-  const eligibleSessionAppointments = useMemo(
-    () =>
-      patientAppointments.filter(
-        (appointment) =>
-          appointment.estado === 'completada' &&
-          appointment.fecha <= todayDate &&
-          !sessions.some((session) => session.citaId === appointment.id),
-      ),
-    [patientAppointments, sessions, todayDate],
+
+  const appointmentSessionsMap = useMemo(
+    () => new Map(sessions.filter((session) => session.citaId).map((session) => [session.citaId, session])),
+    [sessions],
   );
+
   const appointmentSummary = useMemo(() => ({
     total: patientAppointments.length,
     completed: patientAppointments.filter((appointment) => appointment.estado === 'completada').length,
     upcoming: patientAppointments.filter((appointment) => appointment.estado !== 'cancelada' && !isAppointmentOverdue(appointment)).length,
   }), [patientAppointments]);
-  const appointmentSessionsMap = useMemo(() => new Map(sessions.filter((session) => session.citaId).map((session) => [session.citaId, session])), [sessions]);
+
+  const eligibleSessionAppointments = useMemo(
+    () =>
+      sortAppointmentsAsc(
+        patientAppointments.filter(
+          (appointment) =>
+            appointment.estado === 'completada' &&
+            appointment.fecha <= todayDate &&
+            !sessions.some((session) => session.citaId === appointment.id),
+        ),
+      ),
+    [patientAppointments, sessions, todayDate],
+  );
+
   const upcomingAppointments = useMemo(
     () =>
-      patientAppointments.filter(
-        (appointment) => appointment.fecha >= todayDate && appointment.estado !== 'cancelada',
+      sortAppointmentsAsc(
+        patientAppointments.filter((appointment) => appointment.fecha >= todayDate && appointment.estado !== 'cancelada'),
       ),
     [patientAppointments, todayDate],
   );
 
-  if (!patient) return null;
+  const overduePendingAppointments = useMemo(
+    () =>
+      sortAppointmentsAsc(
+        patientAppointments.filter((appointment) => appointment.estado === 'pendiente' && isAppointmentOverdue(appointment)),
+      ),
+    [patientAppointments],
+  );
+
+  const recentAppointments = useMemo(
+    () =>
+      patientAppointments.filter((appointment) => appointment.fecha < todayDate || appointment.estado === 'cancelada'),
+    [patientAppointments, todayDate],
+  );
+
+  const nextAppointment = upcomingAppointments[0] || null;
+  const latestSession = sessions[0] || null;
+  const completedAppointmentsWithSession = patientAppointments.filter((appointment) => appointment.estado === 'completada' && appointmentSessionsMap.has(appointment.id));
+  const completedAppointmentsWithoutSession = patientAppointments.filter((appointment) => appointment.estado === 'completada' && !appointmentSessionsMap.has(appointment.id));
+
+  if (!patient) {
+    return null;
+  }
 
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) || null;
   const selectedAppointment = patientAppointments.find((appointment) => appointment.id === sessionForm.citaId) || null;
-  const sessionAppointmentOptions = (() => {
-    if (!sessionForm.citaId) {
-      return eligibleSessionAppointments;
-    }
+  const currentSessionAppointment = sessionForm.citaId
+    ? patientAppointments.find((appointment) => appointment.id === sessionForm.citaId) || null
+    : null;
+  const sessionAppointmentOptions = currentSessionAppointment && !eligibleSessionAppointments.some((appointment) => appointment.id === currentSessionAppointment.id)
+    ? [currentSessionAppointment, ...eligibleSessionAppointments]
+    : eligibleSessionAppointments;
 
-    const currentAppointment = patientAppointments.find((appointment) => appointment.id === sessionForm.citaId);
+  const psychologistSections = [
+    { id: 'resumen', label: 'Resumen' },
+    { id: 'agenda', label: 'Agenda' },
+    { id: 'sesiones', label: 'Sesiones' },
+    { id: 'tareas', label: 'Tareas' },
+    { id: 'nota-general', label: 'Nota general' },
+  ];
 
-    if (!currentAppointment || eligibleSessionAppointments.some((appointment) => appointment.id === currentAppointment.id)) {
-      return eligibleSessionAppointments;
-    }
+  const patientSections = [
+    { id: 'resumen', label: 'Resumen' },
+    { id: 'agenda', label: 'Agenda' },
+    { id: 'tareas', label: 'Tareas' },
+  ];
 
-    return [currentAppointment, ...eligibleSessionAppointments];
-  })();
+  const visibleSections = isPsychologist ? psychologistSections : patientSections;
 
   const resetSessionForm = () => {
     setSelectedSessionId(null);
@@ -184,7 +280,10 @@ export default function NotesScreen({
   };
 
   const handleAddTask = async () => {
-    if (!taskText.trim() || isCreatingTask) return;
+    if (!taskText.trim() || isCreatingTask) {
+      return;
+    }
+
     const wasCreated = await onAddTask(taskText);
 
     if (wasCreated) {
@@ -201,6 +300,19 @@ export default function NotesScreen({
     await onUpdatePatientProfile?.({
       riesgo: profileForm.riesgo,
       motivo: profileForm.motivo.trim(),
+    });
+  };
+
+  const handleEditSession = (session) => {
+    setActiveSection('sesiones');
+    setSelectedSessionId(session.id);
+    setSessionForm({
+      citaId: session.citaId || '',
+      formato: session.formato || 'simple',
+      objetivo: session.objetivo || '',
+      observaciones: session.observaciones || '',
+      proximoPaso: session.proximoPaso || '',
+      contenido: session.contenido || '',
     });
   };
 
@@ -250,19 +362,6 @@ export default function NotesScreen({
     await onUpdateAppointmentStatus?.(appointment, 'cancelada');
   };
 
-  const handleEditSession = (session) => {
-    setActiveSection('sesiones');
-    setSelectedSessionId(session.id);
-    setSessionForm({
-      citaId: session.citaId || '',
-      formato: session.formato || 'simple',
-      objetivo: session.objetivo || '',
-      observaciones: session.observaciones || '',
-      proximoPaso: session.proximoPaso || '',
-      contenido: session.contenido || '',
-    });
-  };
-
   const handleSaveSession = async () => {
     if (!sessionForm.citaId || !sessionForm.contenido.trim() || isSavingSession) {
       return;
@@ -298,611 +397,978 @@ export default function NotesScreen({
     }
   };
 
-  const psychologistSections = [
-    { id: 'resumen', label: 'Resumen' },
-    { id: 'sesiones', label: 'Sesiones' },
-    { id: 'tareas', label: 'Tareas' },
-    { id: 'nota-general', label: 'Nota general' },
-  ];
-  const patientSections = [
-    { id: 'resumen', label: 'Resumen' },
-    { id: 'tareas', label: 'Tareas' },
-  ];
-  const visibleSections = isPsychologist ? psychologistSections : patientSections;
+  const renderAppointmentActions = (appointment) => {
+    if (!appointment) {
+      return null;
+    }
 
-  return (
-    <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 h-full animate-in slide-in-from-right-4 duration-300">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3">
-        <div className="order-2 md:order-1 text-center md:text-left">
-          <h2 className="text-xl md:text-2xl font-bold text-gray-800">{patient.nombre}</h2>
-          <p className="text-gray-500 flex items-center justify-center md:justify-start mt-1 text-sm">
-            <span className={`px-2 py-0.5 rounded-full text-[10px] md:text-xs font-bold border mr-2 md:mr-3 ${getRiskColor(patient.riesgo)} uppercase`}>
-              Riesgo {patient.riesgo}
-            </span>
-            {getPatientSummary(patient)}
-          </p>
-        </div>
-        <button onClick={() => setVistaActiva('dashboard')} className="order-1 md:order-2 self-start md:self-auto text-gray-500 hover:text-gray-800 transition font-medium bg-gray-100 md:bg-transparent px-3 py-1.5 md:p-0 rounded-lg text-sm md:text-base">
-          Volver
+    const linkedSession = appointmentSessionsMap.get(appointment.id);
+    const canOpenFromExpedient = isPsychologist && appointment.estado !== 'cancelada';
+    const canCancelFromExpedient = isPsychologist && appointment.estado === 'pendiente' && isAppointmentOverdue(appointment);
+
+    return (
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onViewAppointments?.(appointment.fecha)}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+        >
+          Abrir en agenda
         </button>
+        {linkedSession && (
+          <button
+            type="button"
+            onClick={() => handleEditSession(linkedSession)}
+            className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100"
+          >
+            Ver sesion
+          </button>
+        )}
+        {!linkedSession && canOpenFromExpedient && (
+          <button
+            type="button"
+            onClick={() => handleOpenSessionFromRecord(appointment)}
+            className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
+          >
+            {appointment.estado === 'completada' ? 'Registrar sesion' : 'Completar y registrar'}
+          </button>
+        )}
+        {canCancelFromExpedient && (
+          <button
+            type="button"
+            onClick={() => handleCancelAppointmentFromRecord(appointment)}
+            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100"
+          >
+            Cancelar
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderAppointmentRow = (appointment, variant = 'default') => {
+    const linkedSession = appointmentSessionsMap.get(appointment.id);
+    const displayStatus = getAppointmentDisplayStatus(appointment);
+    const isOverduePendingAppointment = isAppointmentOverdue(appointment);
+    const isCompact = variant === 'compact';
+
+    return (
+      <div
+        key={appointment.id}
+        className={`rounded-2xl border p-4 ${isOverduePendingAppointment ? 'border-amber-200 bg-amber-50/70' : 'border-slate-200 bg-white'}`}
+      >
+        <div className={`flex ${isCompact ? 'flex-col gap-3 xl:flex-row xl:items-start xl:justify-between' : 'flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'}`}>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold text-slate-900">{formatAppointmentDateTime(appointment)}</p>
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${getAppointmentStatusClasses(displayStatus)}`}>
+                {displayStatus}
+              </span>
+              {appointment.estado === 'completada' && (
+                <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${getSessionCoverageClasses(Boolean(linkedSession))}`}>
+                  {linkedSession ? 'Sesion registrada' : 'Falta sesion'}
+                </span>
+              )}
+            </div>
+            <p className="mt-2 text-sm text-slate-500">{appointment.notas || 'Sin notas logisticas registradas.'}</p>
+            {isOverduePendingAppointment && (
+              <p className="mt-2 text-xs font-medium text-amber-700">
+                Esta cita ya paso y sigue abierta. Conviene cerrarla como completada o cancelada.
+              </p>
+            )}
+          </div>
+          {isPsychologist && renderAppointmentActions(appointment)}
+        </div>
+      </div>
+    );
+  };
+
+  const renderSummaryTab = () => (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className={`rounded-2xl border p-5 ${getMetricCardClasses('slate')}`}>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Agenda activa</p>
+          <p className="mt-3 text-3xl font-black">{appointmentSummary.upcoming}</p>
+          <p className="mt-1 text-sm text-slate-600">Citas de hoy en adelante.</p>
+        </div>
+        <div className={`rounded-2xl border p-5 ${getMetricCardClasses('amber')}`}>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Por cerrar</p>
+          <p className="mt-3 text-3xl font-black">{overduePendingAppointments.length}</p>
+          <p className="mt-1 text-sm text-amber-800">Citas vencidas pendientes de cierre.</p>
+        </div>
+        <div className={`rounded-2xl border p-5 ${getMetricCardClasses('emerald')}`}>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Sesiones</p>
+          <p className="mt-3 text-3xl font-black">{sessions.length}</p>
+          <p className="mt-1 text-sm text-emerald-800">Notas clinicas registradas.</p>
+        </div>
+        <div className={`rounded-2xl border p-5 ${getMetricCardClasses('sky')}`}>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700">Adherencia</p>
+          <p className="mt-3 text-3xl font-black">{adherence}%</p>
+          <p className="mt-1 text-sm text-sky-800">{pendingTasks.length} tarea(s) pendiente(s).</p>
+        </div>
       </div>
 
-      <div className="mb-6 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                <Stethoscope size={14} className="mr-2" /> Lectura clinica actual
+              </p>
+              <h3 className="mt-4 text-2xl font-black text-slate-900">Resumen del caso</h3>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                {patient.motivo || 'Todavia no hay un motivo de consulta registrado. Usa la ficha lateral para completar el contexto principal del caso.'}
+              </p>
+            </div>
+            {nextAppointment && (
+              <button
+                type="button"
+                onClick={() => onViewAppointments?.(nextAppointment.fecha)}
+                className="rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+              >
+                Ver agenda
+              </button>
+            )}
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Ultima sesion</p>
+              <p className="mt-3 text-lg font-semibold text-slate-900">
+                {latestSession ? formatSessionDate(latestSession.fecha) : 'Sin sesiones registradas'}
+              </p>
+              <p className="mt-2 text-sm text-slate-600">
+                {latestSession?.objetivo || latestSession?.contenido || 'Cuando registres sesiones aqui veras el ultimo cierre clinico del paciente.'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Proxima cita</p>
+              <p className="mt-3 text-lg font-semibold text-slate-900">
+                {nextAppointment ? formatAppointmentDateTime(nextAppointment) : 'Sin citas activas'}
+              </p>
+              <p className="mt-2 text-sm text-slate-600">
+                {nextAppointment?.notas || 'No hay notas logisticas registradas para la siguiente cita.'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-700">Pendiente clinico</p>
+              <p className="mt-3 text-lg font-semibold text-sky-900">
+                {completedAppointmentsWithoutSession.length} cita(s) completada(s) sin sesion
+              </p>
+              <p className="mt-2 text-sm text-sky-800">
+                {completedAppointmentsWithoutSession.length > 0
+                  ? 'Conviene cerrar estas citas con una sesion clinica para que el expediente quede completo.'
+                  : 'No hay cierres clinicos pendientes en este expediente.'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Plan siguiente</p>
+              <p className="mt-3 text-lg font-semibold text-emerald-900">
+                {latestSession?.proximoPaso || 'Sin plan siguiente documentado'}
+              </p>
+              <p className="mt-2 text-sm text-emerald-800">
+                Usa sesiones para dejar clara la siguiente accion terapeutica o la tarea sugerida.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+                <CalendarDays size={18} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Movimiento inmediato</h3>
+                <p className="text-sm text-slate-500">Lo mas urgente o proximo del expediente.</p>
+              </div>
+            </div>
+            <div className="mt-5 space-y-3">
+              {overduePendingAppointments.slice(0, 2).map((appointment) => renderAppointmentRow(appointment, 'compact'))}
+              {!overduePendingAppointments.length && nextAppointment && renderAppointmentRow(nextAppointment, 'compact')}
+              {!overduePendingAppointments.length && !nextAppointment && (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                  No hay citas activas por revisar en este momento.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <FutureFeatureCard
+            title="Asistente clinico IA"
+            description="Se mantiene visible como siguiente capa del producto: resumenes de sesion, transcripcion y apoyo documental sin perder el foco del MVP."
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAgendaTab = () => (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Por cerrar</p>
+          <p className="mt-3 text-3xl font-black text-amber-900">{overduePendingAppointments.length}</p>
+          <p className="mt-1 text-sm text-amber-800">Citas vencidas que aun requieren cierre.</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Con sesion</p>
+          <p className="mt-3 text-3xl font-black text-emerald-900">{completedAppointmentsWithSession.length}</p>
+          <p className="mt-1 text-sm text-emerald-800">Citas completadas ya documentadas.</p>
+        </div>
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700">Sin sesion</p>
+          <p className="mt-3 text-3xl font-black text-sky-900">{completedAppointmentsWithoutSession.length}</p>
+          <p className="mt-1 text-sm text-sky-800">Citas completadas que aun no se documentan.</p>
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-black text-slate-900">Agenda del paciente</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Revisa rapido lo vencido, lo proximo y el historial reciente sin salir del expediente.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onViewAppointments?.(nextAppointment?.fecha || todayDate)}
+            className="rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+          >
+            Ver agenda completa
+          </button>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-2">
+          <div className="space-y-4">
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <Clock3 size={16} className="text-amber-600" />
+                <h4 className="font-semibold text-slate-900">Por cerrar clinicamente</h4>
+              </div>
+              <div className="space-y-3">
+                {overduePendingAppointments.length > 0 ? overduePendingAppointments.map((appointment) => renderAppointmentRow(appointment)) : (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                    No hay citas vencidas pendientes de cierre.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <CalendarDays size={16} className="text-indigo-600" />
+                <h4 className="font-semibold text-slate-900">Proximas citas</h4>
+              </div>
+              <div className="space-y-3">
+                {upcomingAppointments.length > 0 ? upcomingAppointments.slice(0, 6).map((appointment) => renderAppointmentRow(appointment)) : (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                    No hay citas activas programadas en este momento.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <ClipboardList size={16} className="text-slate-600" />
+              <h4 className="font-semibold text-slate-900">Historial reciente</h4>
+            </div>
+            <div className="space-y-3">
+              {recentAppointments.length > 0 ? recentAppointments.slice(0, 8).map((appointment) => renderAppointmentRow(appointment)) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                  Todavia no hay movimiento historico en la agenda de este paciente.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderSessionsTab = () => (
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-black text-slate-900">Historial de sesiones</h3>
+            <p className="mt-1 text-sm text-slate-500">Cada registro queda anclado a una cita para mantener la trazabilidad clinica.</p>
+          </div>
+          <button
+            type="button"
+            onClick={resetSessionForm}
+            className="rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+          >
+            Nueva sesion
+          </button>
+        </div>
+
+        <div className="mt-6 space-y-4">
+          {sessions.length > 0 ? sessions.map((session) => {
+            const linkedAppointment = patientAppointments.find((appointment) => appointment.id === session.citaId);
+
+            return (
+              <div
+                key={session.id}
+                className={`rounded-3xl border p-5 transition ${selectedSessionId === session.id ? 'border-indigo-200 bg-indigo-50/70 shadow-sm' : 'border-slate-200 bg-slate-50'}`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-slate-900 capitalize">{formatSessionDate(session.fecha)}</p>
+                      <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                        {session.formato}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-500">
+                      {linkedAppointment ? `Cita vinculada: ${formatAppointmentDateTime(linkedAppointment)}` : 'Sin cita visible en agenda.'}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleEditSession(session)}
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCurrentSession(session.id)}
+                      disabled={processingSessionId === session.id}
+                      className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {processingSessionId === session.id ? 'Eliminando...' : 'Eliminar'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-white/70 bg-white/80 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Objetivo</p>
+                    <p className="mt-2 text-sm text-slate-700">{session.objetivo || 'Sin objetivo documentado'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/70 bg-white/80 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Plan siguiente</p>
+                    <p className="mt-2 text-sm text-slate-700">{session.proximoPaso || 'Sin plan siguiente documentado'}</p>
+                  </div>
+                </div>
+
+                {session.observaciones && (
+                  <div className="mt-4 rounded-2xl border border-white/70 bg-white/80 p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Observaciones</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{session.observaciones}</p>
+                  </div>
+                )}
+
+                <div className="mt-4 rounded-2xl border border-white/70 bg-white/80 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Contenido</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                    {session.contenido || 'Sin contenido registrado.'}
+                  </p>
+                </div>
+              </div>
+            );
+          }) : (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+              Todavia no hay sesiones registradas para este paciente.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm xl:sticky xl:top-6">
+        <div className="flex items-start gap-3">
+          <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+            <FileText size={18} />
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-slate-900">
+              {selectedSession ? 'Editar sesion' : 'Registrar sesion'}
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              El registro queda ligado a una cita completada de hoy o anterior.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Cita vinculada</label>
+            <select
+              value={sessionForm.citaId}
+              onChange={(event) => setSessionForm((current) => ({ ...current, citaId: event.target.value }))}
+              disabled={isSavingSession}
+              className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">Selecciona una cita</option>
+              {sessionAppointmentOptions.map((appointment) => (
+                <option key={appointment.id} value={appointment.id}>
+                  {formatAppointmentDateTime(appointment)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Formato</label>
+            <select
+              value={sessionForm.formato}
+              onChange={(event) => setSessionForm((current) => ({ ...current, formato: event.target.value }))}
+              disabled={isSavingSession}
+              className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="simple">Simple</option>
+              <option value="soap">SOAP</option>
+              <option value="libre">Libre</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Objetivo de la sesion</label>
+            <textarea
+              value={sessionForm.objetivo}
+              onChange={(event) => setSessionForm((current) => ({ ...current, objetivo: event.target.value }))}
+              disabled={isSavingSession}
+              rows="3"
+              placeholder="Que se buscaba trabajar en esta sesion..."
+              className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Observaciones y evolucion</label>
+            <textarea
+              value={sessionForm.observaciones}
+              onChange={(event) => setSessionForm((current) => ({ ...current, observaciones: event.target.value }))}
+              disabled={isSavingSession}
+              rows="4"
+              placeholder="Cambios observados, tono emocional, avances o resistencias..."
+              className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Plan siguiente</label>
+            <textarea
+              value={sessionForm.proximoPaso}
+              onChange={(event) => setSessionForm((current) => ({ ...current, proximoPaso: event.target.value }))}
+              disabled={isSavingSession}
+              rows="3"
+              placeholder="Siguiente foco terapeutico, tarea o seguimiento recomendado..."
+              className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-semibold text-slate-700">Nota clinica</label>
+            <textarea
+              value={sessionForm.contenido}
+              onChange={(event) => setSessionForm((current) => ({ ...current, contenido: event.target.value }))}
+              disabled={isSavingSession}
+              rows="8"
+              placeholder="Registra el desarrollo clinico de la sesion..."
+              className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            />
+          </div>
+
+          {selectedAppointment && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Cita elegida</p>
+              <p className="mt-2 text-sm text-slate-700">{formatAppointmentDateTime(selectedAppointment)}</p>
+            </div>
+          )}
+
+          {eligibleSessionAppointments.length === 0 && !selectedSession && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              Primero debes completar una cita de hoy o anterior para poder registrar una sesion clinica.
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            {selectedSession && (
+              <button
+                type="button"
+                onClick={() => handleDeleteCurrentSession(selectedSession.id)}
+                disabled={processingSessionId === selectedSession.id}
+                className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {processingSessionId === selectedSession.id ? 'Eliminando...' : 'Eliminar sesion'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleSaveSession}
+              disabled={isSavingSession || sessionAppointmentOptions.length === 0 || !sessionForm.citaId}
+              className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Save size={16} className="mr-2" />
+              {isSavingSession ? 'Guardando...' : selectedSession ? 'Guardar cambios' : 'Guardar sesion'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderTasksTab = () => (
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-black text-slate-900">{isPsychologist ? 'Plan de tareas' : 'Mis tareas'}</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              {isPsychologist
+                ? 'Da seguimiento a la adherencia del paciente y asigna nuevas practicas desde el expediente.'
+                : 'Marca cada tarea cuando la completes para mantener actualizado tu seguimiento.'}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-right">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700">Adherencia</p>
+            <p className="mt-1 text-2xl font-black text-sky-900">{adherence}%</p>
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-3">
+          {!patient.tareas || patient.tareas.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+              No hay tareas registradas para este paciente.
+            </div>
+          ) : (
+            patient.tareas.map((task) => (
+              <div key={task.id} className="group flex items-start rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <input
+                  type="checkbox"
+                  checked={task.completada}
+                  disabled={processingTaskId === task.id}
+                  onChange={() => onToggleTask(task.id)}
+                  className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                />
+                <div className="ml-3 flex-1">
+                  <p className={`text-sm ${task.completada ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{task.texto}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {task.completada ? 'Completada por el paciente.' : 'Sigue pendiente de seguimiento.'}
+                  </p>
+                </div>
+                {isPsychologist && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteTask(task.id)}
+                    disabled={processingTaskId === task.id}
+                    className="ml-3 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-5">
+        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+              <CheckSquare size={18} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Estado del trabajo entre sesiones</h3>
+              <p className="text-sm text-slate-500">Lectura rapida del avance del paciente fuera del consultorio.</p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Completadas</p>
+              <p className="mt-2 text-3xl font-black text-emerald-900">{completedTasks.length}</p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Pendientes</p>
+              <p className="mt-2 text-3xl font-black text-amber-900">{pendingTasks.length}</p>
+            </div>
+          </div>
+        </div>
+
+        {isPsychologist && (
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-slate-900">Nueva tarea</h3>
+            <p className="mt-1 text-sm text-slate-500">Deja una instruccion concreta que el paciente pueda completar antes de la siguiente cita.</p>
+
+            {showTaskInput ? (
+              <div className="mt-5 animate-in fade-in zoom-in-95 duration-200">
+                <textarea
+                  autoFocus
+                  value={taskText}
+                  onChange={(event) => setTaskText(event.target.value)}
+                  placeholder="Ej. Registro diario de emociones o practica breve de respiracion..."
+                  rows="3"
+                  className="w-full rounded-2xl border border-indigo-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      handleAddTask();
+                    }
+                  }}
+                />
+                <div className="mt-3 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowTaskInput(false)}
+                    disabled={isCreatingTask}
+                    className="flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:bg-slate-50 disabled:text-slate-400"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddTask}
+                    disabled={isCreatingTask}
+                    className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isCreatingTask ? 'Guardando...' : 'Guardar tarea'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowTaskInput(true)}
+                className="mt-5 inline-flex w-full items-center justify-center rounded-2xl border border-dashed border-indigo-200 bg-indigo-50 px-4 py-4 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
+              >
+                <Plus size={16} className="mr-2" /> Asignar nueva tarea
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderGeneralNoteTab = () => (
+    <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+          <FileText size={18} />
+        </div>
+        <div>
+          <h3 className="text-xl font-black text-slate-900">Nota general del expediente</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Usa este espacio para contexto transversal del caso, antecedentes, hallazgos o recordatorios clinicos que no pertenecen a una sesion puntual.
+          </p>
+        </div>
+      </div>
+
+      <textarea
+        value={notesTemp}
+        onChange={(event) => setNotesTemp(event.target.value)}
+        placeholder="Escribe aqui la nota general del expediente..."
+        className="mt-6 h-[320px] w-full rounded-3xl border border-slate-300 bg-slate-50 px-5 py-4 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+      />
+
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={onSaveNotes}
+          disabled={isSavingNotes}
+          className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Save size={16} className="mr-2" />
+          {isSavingNotes ? 'Guardando...' : 'Guardar nota general'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderPatientSummaryTab = () => (
+    <div className="space-y-5">
+      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500">
+          <Shield size={14} className="mr-2" /> Privacidad clinica
+        </div>
+        <h3 className="mt-4 text-2xl font-black text-slate-900">Seguimiento visible para el paciente</h3>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+          Las notas clinicas del terapeuta y el historial de sesiones profesionales no se muestran aqui. Esta vista prioriza tu agenda, tareas y continuidad del proceso.
+        </p>
+
+        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Citas activas</p>
+            <p className="mt-3 text-3xl font-black text-slate-900">{appointmentSummary.upcoming}</p>
+            <p className="mt-1 text-sm text-slate-600">De hoy en adelante.</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Adherencia</p>
+            <p className="mt-3 text-3xl font-black text-emerald-900">{adherence}%</p>
+            <p className="mt-1 text-sm text-emerald-800">Progreso actual en tareas.</p>
+          </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Pendientes</p>
+            <p className="mt-3 text-3xl font-black text-amber-900">{pendingTasks.length}</p>
+            <p className="mt-1 text-sm text-amber-800">Tareas por completar.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-black text-slate-900">Tu agenda</h3>
+              <p className="mt-1 text-sm text-slate-500">Consulta tus siguientes sesiones y abre la agenda completa cuando necesites revisar fechas.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onViewAppointments?.(nextAppointment?.fecha || todayDate)}
+              className="rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
+            >
+              Ver agenda
+            </button>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            {upcomingAppointments.length > 0 ? upcomingAppointments.slice(0, 4).map((appointment) => renderAppointmentRow(appointment)) : (
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
+                No hay citas activas programadas en este momento.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">Enfoque actual</h3>
+              <p className="text-sm text-slate-500">Resumen operativo de tu proceso.</p>
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Proxima cita</p>
+              <p className="mt-2 text-sm text-slate-700">{nextAppointment ? formatAppointmentDateTime(nextAppointment) : 'Sin citas programadas'}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Motivo de trabajo</p>
+              <p className="mt-2 text-sm text-slate-700">{patient.motivo || 'Sin resumen disponible por ahora.'}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Tareas pendientes</p>
+              <p className="mt-2 text-sm text-slate-700">{pendingTasks.length} pendiente(s)</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderActiveSection = () => {
+    if (!isPsychologist) {
+      if (activeSection === 'agenda') return renderAgendaTab();
+      if (activeSection === 'tareas') return renderTasksTab();
+      return renderPatientSummaryTab();
+    }
+
+    if (activeSection === 'agenda') return renderAgendaTab();
+    if (activeSection === 'sesiones') return renderSessionsTab();
+    if (activeSection === 'tareas') return renderTasksTab();
+    if (activeSection === 'nota-general') return renderGeneralNoteTab();
+    return renderSummaryTab();
+  };
+
+  return (
+    <div className="rounded-[32px] border border-slate-200 bg-slate-50 p-4 shadow-sm animate-in slide-in-from-right-4 duration-300 md:p-6">
+      <div className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-white to-slate-100 p-6 shadow-sm">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <button
+              type="button"
+              onClick={() => setVistaActiva('dashboard')}
+              className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+            >
+              <ArrowLeft size={14} className="mr-2" /> Volver
+            </button>
+
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <h2 className="text-3xl font-black tracking-tight text-slate-900 md:text-4xl">{patient.nombre}</h2>
+              <span className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${getRiskColor(profileForm.riesgo)}`}>
+                Riesgo {profileForm.riesgo}
+              </span>
+            </div>
+
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">{getPatientSummary(patient)}</p>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                {appointmentSummary.total} cita(s)
+              </span>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                {sessions.length} sesion(es)
+              </span>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                {pendingTasks.length} tarea(s) pendiente(s)
+              </span>
+              {nextAppointment && (
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                  Proxima: {formatAppointmentDateTime(nextAppointment)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:w-[320px]">
+            <button
+              type="button"
+              onClick={() => onViewAppointments?.(nextAppointment?.fecha || todayDate)}
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Ver agenda
+            </button>
+            {isPsychologist && (
+              <button
+                type="button"
+                onClick={() => setActiveSection('sesiones')}
+                className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
+              >
+                Nueva sesion
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-2 rounded-[24px] border border-slate-200 bg-white p-2 shadow-sm">
         {visibleSections.map((section) => (
           <button
             key={section.id}
             type="button"
             onClick={() => setActiveSection(section.id)}
-            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${activeSection === section.id ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-indigo-100' : 'text-slate-600 hover:bg-white hover:text-slate-900'}`}
+            className={`rounded-2xl px-4 py-2.5 text-sm font-medium transition ${getTabButtonClasses(activeSection === section.id)}`}
           >
             {section.label}
           </button>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          {isPsychologist ? (
-            <>
-              {activeSection === 'resumen' && <FutureFeatureCard title="Asistente Clinico IA" description="Mantuvimos el modulo visible, bloqueado y marcado como proxima fase para no perder el concepto del producto." />}
-
-              {activeSection === 'resumen' && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Agenda</p>
-                      <p className="mt-2 text-3xl font-black text-indigo-900">{appointmentSummary.upcoming}</p>
-                      <p className="mt-1 text-sm text-indigo-800">Citas activas de hoy en adelante.</p>
-                    </div>
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Sesiones</p>
-                      <p className="mt-2 text-3xl font-black text-emerald-900">{sessions.length}</p>
-                      <p className="mt-1 text-sm text-emerald-800">Notas clinicas registradas.</p>
-                    </div>
-                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Adherencia</p>
-                      <p className="mt-2 text-3xl font-black text-amber-900">{adherence}%</p>
-                      <p className="mt-1 text-sm text-amber-800">{pendingTasks.length} tarea(s) pendiente(s).</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-lg font-bold text-slate-900">Ficha del expediente</h3>
-                          <p className="mt-1 text-sm text-slate-500">Actualiza el riesgo y el motivo de consulta sin salir del contexto clinico.</p>
-                        </div>
-                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] ${getRiskColor(profileForm.riesgo)}`}>
-                          {profileForm.riesgo}
-                        </span>
-                      </div>
-
-                      <div className="mt-4 grid grid-cols-1 gap-4">
-                        <div>
-                          <label className="mb-1 block text-sm font-semibold text-slate-700">Nivel de riesgo</label>
-                          <select
-                            value={profileForm.riesgo}
-                            onChange={(event) => setProfileForm((current) => ({ ...current, riesgo: event.target.value }))}
-                            disabled={isSavingPatientProfile}
-                            className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          >
-                            {riskOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="mb-1 block text-sm font-semibold text-slate-700">Motivo de consulta</label>
-                          <textarea
-                            value={profileForm.motivo}
-                            onChange={(event) => setProfileForm((current) => ({ ...current, motivo: event.target.value }))}
-                            disabled={isSavingPatientProfile}
-                            rows="4"
-                            className="w-full rounded-lg border border-gray-300 bg-white p-3 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            placeholder="Resume el motivo principal de consulta o el encuadre actual del caso..."
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                          <div className="rounded-xl border border-slate-200 bg-white p-4">
-                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultima sesion</p>
-                            <p className="mt-2 text-sm text-slate-700">{patient.ultimaSesion ? formatSessionDate(patient.ultimaSesion) : 'Sin sesiones registradas'}</p>
-                          </div>
-                          <div className="rounded-xl border border-slate-200 bg-white p-4">
-                            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Citas elegibles</p>
-                            <p className="mt-2 text-sm text-slate-700">{eligibleSessionAppointments.length} cita(s) completada(s) listas para registrar sesion.</p>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            onClick={handleSaveProfile}
-                            disabled={isSavingPatientProfile}
-                            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
-                          >
-                            <Save size={16} className="mr-2" /> {isSavingPatientProfile ? 'Guardando...' : 'Guardar ficha'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-lg font-bold text-slate-900">Agenda del paciente</h3>
-                          <p className="mt-1 text-sm text-slate-500">Salta desde el expediente hacia la agenda o al registro de sesion cuando toque cerrar clinicamente.</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => onViewAppointments?.(upcomingAppointments[0]?.fecha || '')}
-                          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                        >
-                          Ver agenda
-                        </button>
-                      </div>
-
-                      <div className="mt-4 space-y-3">
-                        {upcomingAppointments.length > 0 ? upcomingAppointments.slice(0, 5).map((appointment) => {
-                          const linkedSession = appointmentSessionsMap.get(appointment.id);
-                          const canRegisterFromRecord = appointment.fecha <= todayDate && appointment.estado !== 'cancelada';
-                          const appointmentDisplayStatus = getAppointmentDisplayStatus(appointment);
-                          const isOverduePendingAppointment = isAppointmentOverdue(appointment);
-
-                          return (
-                            <div key={appointment.id} className="rounded-xl border border-slate-200 bg-white p-4">
-                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                <div>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <p className="font-semibold text-slate-800">{formatAppointmentDateTime(appointment)}</p>
-                                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getAppointmentStatusClasses(appointmentDisplayStatus)}`}>
-                                      {appointmentDisplayStatus}
-                                    </span>
-                                    {linkedSession && (
-                                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                                        Sesion registrada
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="mt-2 text-sm text-slate-600">
-                                    {appointment.notas?.trim() ? appointment.notas : 'Sin notas logisticas registradas.'}
-                                  </p>
-                                </div>
-
-                                <div className="flex flex-wrap gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => onViewAppointments?.(appointment.fecha)}
-                                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                                  >
-                                    Abrir en agenda
-                                  </button>
-                                  {canRegisterFromRecord && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenSessionFromRecord(appointment)}
-                                      className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                                        linkedSession
-                                          ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                                          : 'border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                                      }`}
-                                    >
-                                      {linkedSession ? 'Ver sesion' : appointment.estado === 'completada' ? 'Registrar sesion' : 'Completar y registrar'}
-                                    </button>
-                                  )}
-                                  {isOverduePendingAppointment && !linkedSession && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleCancelAppointmentFromRecord(appointment)}
-                                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100"
-                                    >
-                                      Cancelar
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        }) : (
-                          <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
-                            No hay citas activas de hoy en adelante para este paciente.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeSection === 'sesiones' && <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-900 flex items-center">
-                      <FileText className="mr-2 text-indigo-500" size={20} /> Historial de sesiones
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-500">Registra cada sesion por separado para construir un seguimiento clinico cronologico.</p>
-                  </div>
-                  <button onClick={resetSessionForm} className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
-                    <Plus size={16} className="mr-2" /> Nueva sesion
-                  </button>
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <h4 className="font-semibold text-slate-800">{selectedSession ? 'Editar sesion' : 'Registrar sesion'}</h4>
-                        <p className="mt-1 text-xs text-slate-500">Puedes dejar nota simple hoy y migrar a SOAP mas adelante sin perder historial.</p>
-                      </div>
-                      {selectedSession && (
-                        <button onClick={resetSessionForm} className="text-sm font-medium text-slate-500 transition hover:text-slate-800">
-                          Limpiar
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">Cita vinculada</label>
-                        <select value={sessionForm.citaId} onChange={(event) => setSessionForm((current) => ({ ...current, citaId: event.target.value }))} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                          <option value="">{sessionAppointmentOptions.length > 0 ? 'Selecciona una cita completada' : 'No hay citas elegibles'}</option>
-                          {sessionAppointmentOptions.map((appointment) => (
-                            <option key={appointment.id} value={appointment.id}>
-                              {appointment.fecha} - {appointment.hora} - {appointment.estado}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="mt-1 text-xs text-gray-500">
-                          Solo se muestran citas completadas de hoy o anteriores.
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">Formato</label>
-                        <select value={sessionForm.formato} onChange={(event) => setSessionForm((current) => ({ ...current, formato: event.target.value }))} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                          <option value="simple">Simple</option>
-                          <option value="soap">SOAP</option>
-                        </select>
-                        <p className="mt-1 text-xs text-gray-500">
-                          {selectedAppointment ? `Fecha derivada de la cita: ${selectedAppointment.fecha} a las ${selectedAppointment.hora}.` : 'Selecciona una cita para completar el registro.'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-                      <div className="px-4 pt-4 flex gap-2">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${sessionForm.formato === 'simple' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}>Simple</span>
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${sessionForm.formato === 'soap' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'}`}>SOAP</span>
-                      </div>
-                      <div className="grid grid-cols-1 gap-4 px-4 pt-4 md:grid-cols-3">
-                        <div className="rounded-xl border border-slate-200 bg-white p-3">
-                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Objetivo</label>
-                          <textarea
-                            value={sessionForm.objetivo}
-                            onChange={(event) => setSessionForm((current) => ({ ...current, objetivo: event.target.value }))}
-                            placeholder="Meta central de la sesion..."
-                            className="h-24 w-full resize-none bg-transparent text-sm leading-relaxed text-slate-700 focus:outline-none"
-                          />
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-white p-3">
-                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Observaciones</label>
-                          <textarea
-                            value={sessionForm.observaciones}
-                            onChange={(event) => setSessionForm((current) => ({ ...current, observaciones: event.target.value }))}
-                            placeholder="Evolucion, respuesta o hallazgos..."
-                            className="h-24 w-full resize-none bg-transparent text-sm leading-relaxed text-slate-700 focus:outline-none"
-                          />
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-white p-3">
-                          <label className="mb-1 block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Plan siguiente</label>
-                          <textarea
-                            value={sessionForm.proximoPaso}
-                            onChange={(event) => setSessionForm((current) => ({ ...current, proximoPaso: event.target.value }))}
-                            placeholder="Siguiente enfoque, tarea o seguimiento..."
-                            className="h-24 w-full resize-none bg-transparent text-sm leading-relaxed text-slate-700 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-                      <div className="px-4 pt-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Resumen libre</p>
-                      </div>
-                      <textarea
-                        value={sessionForm.contenido}
-                        onChange={(event) => setSessionForm((current) => ({ ...current, contenido: event.target.value }))}
-                        placeholder="Escribe el resumen clinico, observaciones, avances y recomendaciones de esta sesion..."
-                        className="h-[260px] w-full resize-none bg-transparent p-4 leading-relaxed focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                      {selectedSession && (
-                        <button onClick={() => handleDeleteCurrentSession(selectedSession.id)} disabled={processingSessionId === selectedSession.id} className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
-                          {processingSessionId === selectedSession.id ? 'Eliminando...' : 'Eliminar sesion'}
-                        </button>
-                      )}
-                      <button onClick={handleSaveSession} disabled={isSavingSession || sessionAppointmentOptions.length === 0 || !sessionForm.citaId} className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed">
-                        <Save size={16} className="mr-2" /> {isSavingSession ? 'Guardando...' : selectedSession ? 'Guardar cambios' : 'Guardar sesion'}
-                      </button>
-                    </div>
-                    {eligibleSessionAppointments.length === 0 && (
-                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                        Primero debes completar una cita de hoy o anterior para poder registrar una sesion clinica.
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                    <h4 className="font-semibold text-slate-800">Sesiones anteriores</h4>
-                    <p className="mt-1 text-xs text-slate-500">Cada registro queda ordenado por fecha para consultar la evolucion del caso.</p>
-
-                    <div className="mt-4 space-y-3 max-h-[420px] overflow-y-auto pr-1">
-                      {sessions.length > 0 ? sessions.map((session) => (
-                        <div key={session.id} className={`rounded-xl border p-4 transition ${selectedSessionId === session.id ? 'border-indigo-300 bg-indigo-50' : 'border-slate-200 bg-slate-50'}`}>
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="font-semibold text-slate-800 capitalize">{formatSessionDate(session.fecha)}</p>
-                                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                                  {session.formato}
-                                </span>
-                              </div>
-                              {session.citaId && (
-                                <p className="mt-1 text-xs font-medium text-slate-500">
-                                  Cita vinculada: {(patientAppointments.find((appointment) => appointment.id === session.citaId)?.fecha) || session.fecha}
-                                </p>
-                              )}
-                              {session.objetivo && (
-                                <p className="mt-2 text-xs font-medium text-indigo-700">
-                                  Objetivo: <span className="font-normal text-slate-600">{session.objetivo}</span>
-                                </p>
-                              )}
-                              {session.proximoPaso && (
-                                <p className="mt-1 text-xs font-medium text-emerald-700">
-                                  Plan siguiente: <span className="font-normal text-slate-600">{session.proximoPaso}</span>
-                                </p>
-                              )}
-                              <p className="mt-2 text-sm text-slate-600 line-clamp-4 whitespace-pre-wrap">{session.contenido || 'Sin contenido registrado.'}</p>
-                            </div>
-                          </div>
-
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button onClick={() => handleEditSession(session)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
-                              Editar
-                            </button>
-                            <button onClick={() => handleDeleteCurrentSession(session.id)} disabled={processingSessionId === session.id} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
-                              Eliminar
-                            </button>
-                          </div>
-                        </div>
-                      )) : (
-                        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                          Todavia no hay sesiones registradas para este paciente.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>}
-
-              {activeSection === 'nota-general' && <div className="bg-gray-50 rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-4 py-4 border-b border-gray-200 bg-white">
-                  <h3 className="font-semibold text-gray-800">Nota general del expediente</h3>
-                  <p className="mt-1 text-xs text-gray-500">Este espacio queda para contexto transversal del caso, antecedentes o recordatorios clinicos no ligados a una sola sesion.</p>
-                </div>
-                <textarea
-                  value={notesTemp}
-                  onChange={(e) => setNotesTemp(e.target.value)}
-                  placeholder="Escribe aqui la nota general del expediente..."
-                  className="w-full h-[240px] p-4 bg-transparent focus:outline-none resize-none leading-relaxed"
-                />
-              </div>}
-
-              {activeSection === 'nota-general' && <button
-                onClick={onSaveNotes}
-                disabled={isSavingNotes}
-                className="flex items-center justify-center w-full px-4 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition font-medium shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <Save size={18} className="mr-2" /> {isSavingNotes ? 'Guardando...' : 'Guardar nota general'}
-              </button>}
-
-              {activeSection === 'tareas' && (
-                <div className="bg-gray-50 p-4 md:p-5 rounded-xl border border-gray-200">
-                  <h3 className="font-bold text-gray-800 mb-2 flex items-center text-sm md:text-base">
-                    <CheckSquare className="mr-2 text-indigo-500" size={20} /> Tareas Asignadas
-                  </h3>
-                  <p className="text-xs text-gray-500 mb-4">
-                    Adherencia actual: <span className="font-bold text-gray-700">{adherence}%</span>
-                  </p>
-
-                  <div className="space-y-3 mb-4 max-h-80 overflow-y-auto pr-1">
-                    {!patient.tareas || patient.tareas.length === 0 ? (
-                      <p className="text-sm text-gray-500 italic text-center py-4 bg-white rounded border border-dashed border-gray-300">No hay tareas pendientes</p>
-                    ) : (
-                      patient.tareas.map((task) => (
-                        <div key={task.id} className="flex items-start bg-white p-3 rounded-lg border border-gray-200 group shadow-sm">
-                          <input
-                            type="checkbox"
-                            checked={task.completada}
-                            disabled={processingTaskId === task.id}
-                            onChange={() => onToggleTask(task.id)}
-                            className="mt-1 h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer shrink-0 disabled:cursor-not-allowed"
-                          />
-                          <span className={`ml-3 text-xs md:text-sm flex-1 ${task.completada ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.texto}</span>
-                          <button
-                            onClick={() => onDeleteTask(task.id)}
-                            disabled={processingTaskId === task.id}
-                            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition ml-2 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {showTaskInput ? (
-                    <div className="animate-in fade-in zoom-in-95 duration-200">
-                      <textarea
-                        autoFocus
-                        value={taskText}
-                        onChange={(e) => setTaskText(e.target.value)}
-                        placeholder="Ej. Registro diario de emociones..."
-                        className="w-full p-3 border border-indigo-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none mb-2 shadow-sm"
-                        rows="2"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleAddTask();
-                          }
-                        }}
-                      />
-                      <div className="flex space-x-2">
-                        <button onClick={() => setShowTaskInput(false)} disabled={isCreatingTask} className="flex-1 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:bg-gray-50 disabled:text-gray-400">
-                          Cancelar
-                        </button>
-                        <button onClick={handleAddTask} disabled={isCreatingTask} className="flex-1 py-2 text-sm text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition disabled:opacity-60 disabled:cursor-not-allowed">
-                          {isCreatingTask ? 'Guardando...' : 'Guardar'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button onClick={() => setShowTaskInput(true)} className="flex items-center justify-center w-full p-2.5 text-sm text-indigo-700 bg-indigo-100/50 border border-indigo-200 border-dashed rounded-lg hover:bg-indigo-100 transition font-medium">
-                      <Plus size={16} className="mr-2" /> Asignar nueva tarea
-                    </button>
-                  )}
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              {activeSection === 'resumen' && (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6">
-                  <div className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-500 border border-slate-200">
-                    <Shield size={14} className="mr-2" /> Privacidad clinica
-                  </div>
-                  <h3 className="mt-4 text-xl font-black text-slate-900">Notas del terapeuta protegidas</h3>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Las notas clinicas y el historial de sesiones del profesional no se muestran desde la cuenta del paciente. Aqui solo veras tu seguimiento, tareas y agenda.
-                  </p>
-                  <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Citas</p>
-                      <p className="mt-2 text-3xl font-black text-indigo-900">{appointmentSummary.upcoming}</p>
-                      <p className="mt-1 text-sm text-indigo-800">Sesiones activas de hoy en adelante.</p>
-                    </div>
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Adherencia</p>
-                      <p className="mt-2 text-3xl font-black text-emerald-900">{adherence}%</p>
-                      <p className="mt-1 text-sm text-emerald-800">Progreso actual en tareas.</p>
-                    </div>
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Pendientes</p>
-                      <p className="mt-2 text-3xl font-black text-amber-900">{pendingTasks.length}</p>
-                      <p className="mt-1 text-sm text-amber-800">Tareas por completar.</p>
-                    </div>
-                  </div>
-                  <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <h3 className="text-lg font-bold text-slate-900">Agenda</h3>
-                        <p className="mt-1 text-sm text-slate-500">Consulta tus siguientes sesiones y abre la agenda cuando necesites revisar fechas.</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => onViewAppointments?.(upcomingAppointments[0]?.fecha || '')}
-                        className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                      >
-                        Ver agenda
-                      </button>
-                    </div>
-                    <div className="mt-4 space-y-3">
-                      {upcomingAppointments.length > 0 ? upcomingAppointments.slice(0, 3).map((appointment) => (
-                        <div key={appointment.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-semibold text-slate-800">{formatAppointmentDateTime(appointment)}</p>
-                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getAppointmentStatusClasses(getAppointmentDisplayStatus(appointment))}`}>
-                              {getAppointmentDisplayStatus(appointment)}
-                            </span>
-                          </div>
-                        </div>
-                      )) : (
-                        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                          No hay citas activas programadas en este momento.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeSection === 'tareas' && (
-                <div className="bg-gray-50 p-4 md:p-5 rounded-xl border border-gray-200">
-                  <h3 className="font-bold text-gray-800 mb-2 flex items-center text-sm md:text-base">
-                    <CheckSquare className="mr-2 text-indigo-500" size={20} /> Mis tareas
-                  </h3>
-                  <p className="text-xs text-gray-500 mb-4">
-                    Adherencia actual: <span className="font-bold text-gray-700">{adherence}%</span>
-                  </p>
-
-                  <div className="space-y-3 mb-4 max-h-80 overflow-y-auto pr-1">
-                    {!patient.tareas || patient.tareas.length === 0 ? (
-                      <p className="text-sm text-gray-500 italic text-center py-4 bg-white rounded border border-dashed border-gray-300">No hay tareas pendientes</p>
-                    ) : (
-                      patient.tareas.map((task) => (
-                        <div key={task.id} className="flex items-start bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
-                          <input
-                            type="checkbox"
-                            checked={task.completada}
-                            disabled={processingTaskId === task.id}
-                            onChange={() => onToggleTask(task.id)}
-                            className="mt-1 h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer shrink-0 disabled:cursor-not-allowed"
-                          />
-                          <span className={`ml-3 text-xs md:text-sm flex-1 ${task.completada ? 'line-through text-gray-400' : 'text-gray-700'}`}>{task.texto}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_0.65fr]">
+        <div className="space-y-5">
+          {renderActiveSection()}
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-5 xl:sticky xl:top-6 xl:self-start">
           {isPsychologist && patient.riesgo === 'alto' && (
-            <div className="bg-red-50 p-4 md:p-5 rounded-xl border border-red-200 shadow-sm animate-in zoom-in duration-300">
-              <h3 className="font-bold text-red-800 mb-2 flex items-center text-sm md:text-base">
-                <AlertCircle size={18} className="mr-2" />
-                Protocolo de Crisis
-              </h3>
-              <p className="text-xs md:text-sm text-red-600 mb-4">Verificar red de apoyo y recursos disponibles.</p>
-              <button className="w-full py-2.5 bg-red-600 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-red-700 transition">Ver Contactos</button>
+            <div className="rounded-[28px] border border-red-200 bg-red-50 p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="rounded-2xl bg-red-100 p-3 text-red-700">
+                  <AlertCircle size={18} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-red-900">Protocolo de crisis</h3>
+                  <p className="mt-1 text-sm text-red-700">
+                    Riesgo alto detectado. Conviene revisar red de apoyo, recursos inmediatos y plan de contencion.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <h3 className="font-bold text-slate-900">Ficha rapida</h3>
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Motivo</p>
-                <p className="mt-2 text-slate-700">{patient.motivo || 'Motivo no registrado'}</p>
+          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+                <ClipboardList size={18} />
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultima sesion</p>
-                <p className="mt-2 text-slate-700">{patient.ultimaSesion ? formatSessionDate(patient.ultimaSesion) : 'Sin sesiones registradas'}</p>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Panel del caso</h3>
+                <p className="text-sm text-slate-500">Contexto rapido mientras navegas el expediente.</p>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Tareas pendientes</p>
-                <p className="mt-2 text-slate-700">{pendingTasks.length}</p>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Motivo de consulta</p>
+                <p className="mt-2 text-sm text-slate-700">{patient.motivo || 'Motivo no registrado'}</p>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Citas registradas</p>
-                <p className="mt-2 text-slate-700">{appointmentSummary.total}</p>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Ultima sesion</p>
+                <p className="mt-2 text-sm text-slate-700">{patient.ultimaSesion ? formatSessionDate(patient.ultimaSesion) : 'Sin sesiones registradas'}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Proxima cita</p>
+                <p className="mt-2 text-sm text-slate-700">{nextAppointment ? formatAppointmentDateTime(nextAppointment) : 'Sin citas activas'}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Sesiones</p>
+                  <p className="mt-2 text-2xl font-black text-slate-900">{sessions.length}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Pendientes</p>
+                  <p className="mt-2 text-2xl font-black text-slate-900">{pendingTasks.length}</p>
+                </div>
               </div>
             </div>
           </div>
+
+          {isPsychologist && (
+            <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+                  <Target size={18} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Ficha editable</h3>
+                  <p className="text-sm text-slate-500">Actualiza riesgo y encuadre sin salir del expediente.</p>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">Nivel de riesgo</label>
+                  <select
+                    value={profileForm.riesgo}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, riesgo: event.target.value }))}
+                    disabled={isSavingPatientProfile}
+                    className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  >
+                    {riskOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">Motivo de consulta</label>
+                  <textarea
+                    value={profileForm.motivo}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, motivo: event.target.value }))}
+                    disabled={isSavingPatientProfile}
+                    rows="5"
+                    placeholder="Resume el motivo principal de consulta o el encuadre actual del caso..."
+                    className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  disabled={isSavingPatientProfile}
+                  className="inline-flex w-full items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save size={16} className="mr-2" />
+                  {isSavingPatientProfile ? 'Guardando...' : 'Guardar ficha'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
