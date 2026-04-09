@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Calendar, CalendarPlus, ChevronLeft, ChevronRight, Clock3, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { formatAppointmentDisplayHour, getAppointmentHourOptions, getMonthDates, getMonthLabel, getMonthWeekdayHeaders, getWeekDates, getWeekRangeLabel, shiftDateByDays, shiftDateByMonths } from '../mappers/appointments';
 
@@ -134,6 +134,7 @@ export default function AppointmentsScreen({
   const isPsychologist = currentUser?.role === 'psychologist';
   const [selectedDate, setSelectedDate] = useState(isPsychologist ? '' : todayDate);
   const [statusFilter, setStatusFilter] = useState('todos');
+  const [sessionCoverageFilter, setSessionCoverageFilter] = useState('todos');
   const [editingAppointmentId, setEditingAppointmentId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [calendarAnchorDate, setCalendarAnchorDate] = useState(todayDate);
@@ -155,13 +156,28 @@ export default function AppointmentsScreen({
   );
   const blockedExceptionRanges = useMemo(() => buildBlockedRanges(availabilityExceptions), [availabilityExceptions]);
   const datedAvailabilityExceptions = useMemo(() => (availabilityExceptions || []).filter((exception) => !exception.isUnavailable), [availabilityExceptions]);
-  const appointmentsForCalendar = useMemo(() => statusFilter === 'todos' ? appointments : appointments.filter((appointment) => appointment.estado === statusFilter), [appointments, statusFilter]);
   const appointmentSessionIds = useMemo(
     () =>
       new Set(
         patients.flatMap((patient) => (patient.sesiones || []).map((session) => session.citaId)).filter(Boolean),
       ),
     [patients],
+  );
+  const matchesSessionCoverageFilter = useCallback((appointment) => {
+    if (sessionCoverageFilter === 'todos') {
+      return true;
+    }
+
+    const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
+    return sessionCoverageFilter === sessionState;
+  }, [appointmentSessionIds, sessionCoverageFilter]);
+  const appointmentsForCalendar = useMemo(
+    () =>
+      appointments.filter((appointment) => {
+        const matchesStatus = statusFilter === 'todos' ? true : appointment.estado === statusFilter;
+        return matchesStatus && matchesSessionCoverageFilter(appointment);
+      }),
+    [appointments, matchesSessionCoverageFilter, statusFilter],
   );
   const weekDates = useMemo(() => getWeekDates(calendarAnchorDate), [calendarAnchorDate]);
   const weekRangeLabel = useMemo(() => getWeekRangeLabel(calendarAnchorDate), [calendarAnchorDate]);
@@ -255,8 +271,8 @@ export default function AppointmentsScreen({
   const filteredAppointments = useMemo(() => appointments.filter((appointment) => {
     const matchesDate = selectedDate ? appointment.fecha === selectedDate : true;
     const matchesStatus = statusFilter === 'todos' ? true : appointment.estado === statusFilter;
-    return matchesDate && matchesStatus;
-  }), [appointments, selectedDate, statusFilter]);
+    return matchesDate && matchesStatus && matchesSessionCoverageFilter(appointment);
+  }), [appointments, matchesSessionCoverageFilter, selectedDate, statusFilter]);
 
   const resetForm = () => { setEditingAppointmentId(null); setForm(emptyForm); onDismissAppointmentError?.(); };
   const openNewAppointmentModal = () => {
@@ -460,6 +476,11 @@ export default function AppointmentsScreen({
             <option value="completada">Completadas</option>
             <option value="cancelada">Canceladas</option>
           </select>
+          {isPsychologist && <select value={sessionCoverageFilter} onChange={(event) => setSessionCoverageFilter(event.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            <option value="todos">Todas las sesiones</option>
+            <option value="missing">Completadas sin sesion</option>
+            <option value="registered">Completadas con sesion</option>
+          </select>}
         </div>
       </div>
 
