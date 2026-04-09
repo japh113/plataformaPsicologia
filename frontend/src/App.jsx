@@ -564,6 +564,11 @@ export default function App() {
       return false;
     }
 
+    if (appointment.fecha > todayDate) {
+      setAppointmentActionError('No puedes completar y registrar una cita futura.');
+      return false;
+    }
+
     if (appointment.estado !== 'completada') {
       const wasUpdated = await handleUpdateAppointment(appointment.id, {
         ...appointment,
@@ -795,6 +800,7 @@ export default function App() {
           currentUser={currentUser}
           patient={pacienteSeleccionado}
           appointments={appointments}
+          todayDate={todayDate}
           prefilledAppointmentId={sessionDraftAppointmentId}
           setVistaActiva={setVistaActiva}
           notesTemp={notasTemp}

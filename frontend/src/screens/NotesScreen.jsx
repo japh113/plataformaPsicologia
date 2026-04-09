@@ -29,6 +29,7 @@ export default function NotesScreen({
   currentUser,
   patient,
   appointments,
+  todayDate,
   prefilledAppointmentId,
   setVistaActiva,
   notesTemp,
@@ -80,11 +81,33 @@ export default function NotesScreen({
         }),
     [appointments, patient?.id],
   );
+  const eligibleSessionAppointments = useMemo(
+    () =>
+      patientAppointments.filter(
+        (appointment) =>
+          appointment.estado === 'completada' &&
+          appointment.fecha <= todayDate,
+      ),
+    [patientAppointments, todayDate],
+  );
 
   if (!patient) return null;
 
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) || null;
   const selectedAppointment = patientAppointments.find((appointment) => appointment.id === sessionForm.citaId) || null;
+  const sessionAppointmentOptions = (() => {
+    if (!sessionForm.citaId) {
+      return eligibleSessionAppointments;
+    }
+
+    const currentAppointment = patientAppointments.find((appointment) => appointment.id === sessionForm.citaId);
+
+    if (!currentAppointment || eligibleSessionAppointments.some((appointment) => appointment.id === currentAppointment.id)) {
+      return eligibleSessionAppointments;
+    }
+
+    return [currentAppointment, ...eligibleSessionAppointments];
+  })();
 
   const resetSessionForm = () => {
     setSelectedSessionId(null);
@@ -200,15 +223,15 @@ export default function NotesScreen({
                       <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">Cita vinculada</label>
                         <select value={sessionForm.citaId} onChange={(event) => setSessionForm((current) => ({ ...current, citaId: event.target.value }))} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                          <option value="">{patientAppointments.length > 0 ? 'Selecciona una cita' : 'No hay citas registradas'}</option>
-                          {patientAppointments.map((appointment) => (
+                          <option value="">{sessionAppointmentOptions.length > 0 ? 'Selecciona una cita completada' : 'No hay citas elegibles'}</option>
+                          {sessionAppointmentOptions.map((appointment) => (
                             <option key={appointment.id} value={appointment.id}>
                               {appointment.fecha} - {appointment.hora} - {appointment.estado}
                             </option>
                           ))}
                         </select>
                         <p className="mt-1 text-xs text-gray-500">
-                          La sesion solo puede registrarse desde citas existentes, pasadas o futuras.
+                          Solo se muestran citas completadas de hoy o anteriores.
                         </p>
                       </div>
                       <div>
@@ -242,13 +265,13 @@ export default function NotesScreen({
                           {processingSessionId === selectedSession.id ? 'Eliminando...' : 'Eliminar sesion'}
                         </button>
                       )}
-                      <button onClick={handleSaveSession} disabled={isSavingSession || patientAppointments.length === 0 || !sessionForm.citaId} className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed">
+                      <button onClick={handleSaveSession} disabled={isSavingSession || sessionAppointmentOptions.length === 0 || !sessionForm.citaId} className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed">
                         <Save size={16} className="mr-2" /> {isSavingSession ? 'Guardando...' : selectedSession ? 'Guardar cambios' : 'Guardar sesion'}
                       </button>
                     </div>
-                    {patientAppointments.length === 0 && (
+                    {eligibleSessionAppointments.length === 0 && (
                       <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                        Primero debes registrar una cita para poder crear una sesion clinica.
+                        Primero debes completar una cita de hoy o anterior para poder registrar una sesion clinica.
                       </div>
                     )}
                   </div>

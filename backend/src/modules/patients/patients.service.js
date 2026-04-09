@@ -14,6 +14,20 @@ const normalizeDateValue = (value) => {
   return String(value).slice(0, 10);
 };
 
+const getTodayDateString = () => {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === 'year')?.value || '0000';
+  const month = parts.find((part) => part.type === 'month')?.value || '01';
+  const day = parts.find((part) => part.type === 'day')?.value || '01';
+  return `${year}-${month}-${day}`;
+};
+
 const patientSelectColumns = `
   p.id,
   p.first_name,
@@ -201,6 +215,24 @@ const ensureAppointmentSessionUniqueness = async (appointmentId, excludeSessionI
 
   if (result.rows[0]) {
     const error = new Error('Esa cita ya tiene una sesion registrada');
+    error.status = 409;
+    throw error;
+  }
+};
+
+const ensureAppointmentEligibleForSession = (appointment) => {
+  if (!appointment) {
+    return;
+  }
+
+  if (appointment.status !== 'completed') {
+    const error = new Error('Solo puedes registrar una sesion desde una cita completada.');
+    error.status = 409;
+    throw error;
+  }
+
+  if (normalizeDateValue(appointment.scheduled_date) > getTodayDateString()) {
+    const error = new Error('No puedes registrar una sesion para una cita futura.');
     error.status = 409;
     throw error;
   }
@@ -435,6 +467,7 @@ export const createPatientSession = async (patientId, payload, actor) => {
   }
 
   const appointment = await ensureAppointmentBelongsToPatient(payload.appointmentId ? Number(payload.appointmentId) : null, patientId);
+  ensureAppointmentEligibleForSession(appointment);
   await ensureAppointmentSessionUniqueness(Number(appointment.id));
 
   const result = await db.query(
@@ -509,6 +542,9 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
     : currentSession.appointmentId;
 
   const appointment = await ensureAppointmentBelongsToPatient(nextAppointmentId, patientId);
+  if (Object.prototype.hasOwnProperty.call(payload, 'appointmentId')) {
+    ensureAppointmentEligibleForSession(appointment);
+  }
   await ensureAppointmentSessionUniqueness(Number(appointment.id), Number(sessionId));
 
   const result = await db.query(

@@ -14,6 +14,20 @@ const normalizeDateValue = (value) => {
   return String(value).slice(0, 10);
 };
 
+const getTodayDateString = () => {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === 'year')?.value || '0000';
+  const month = parts.find((part) => part.type === 'month')?.value || '01';
+  const day = parts.find((part) => part.type === 'day')?.value || '01';
+  return `${year}-${month}-${day}`;
+};
+
 const mapAppointmentRow = (row) => ({
   id: String(row.id),
   patientId: String(row.patient_id),
@@ -37,6 +51,20 @@ const createScheduleConflictError = (message) => {
   const error = new Error(message);
   error.status = 409;
   return error;
+};
+
+const ensureAppointmentCompletionIsAllowed = ({ scheduledDate, status }) => {
+  if (status !== 'completed') {
+    return;
+  }
+
+  const appointmentDate = normalizeDateValue(scheduledDate);
+
+  if (appointmentDate > getTodayDateString()) {
+    const error = new Error('No puedes marcar como completada una cita futura.');
+    error.status = 409;
+    throw error;
+  }
 };
 
 const ensurePatientAccess = async (psychologistUserId, patientId) => {
@@ -224,24 +252,30 @@ export const createAppointment = async (payload, actor) => {
 
   const patientId = payload.patientId.trim();
   const scheduledTime = normalizeScheduledTime(payload.scheduledTime);
+  const nextStatus = payload.status || 'pending';
   const hasPatientAccess = await ensurePatientAccess(actor.id, patientId);
 
   if (!hasPatientAccess) {
     return null;
   }
 
+  ensureAppointmentCompletionIsAllowed({
+    scheduledDate: payload.scheduledDate,
+    status: nextStatus,
+  });
+
   await ensureAppointmentAvailability({
     actor,
     patientId,
     scheduledDate: payload.scheduledDate,
     scheduledTime,
-    status: payload.status || 'pending',
+    status: nextStatus,
   });
   await ensureInsidePsychologistAvailability({
     actor,
     scheduledDate: payload.scheduledDate,
     scheduledTime,
-    status: payload.status || 'pending',
+    status: nextStatus,
   });
 
   const result = await db.query(
@@ -266,7 +300,7 @@ export const createAppointment = async (payload, actor) => {
       patientId,
       payload.scheduledDate,
       scheduledTime,
-      payload.status || 'pending',
+      nextStatus,
       payload.notes || '',
     ],
   );
@@ -293,21 +327,35 @@ export const updateAppointment = async (id, payload, actor) => {
   const nextScheduledDate = payload.scheduledDate || currentAppointment.scheduledDate;
   const nextScheduledTime = normalizeScheduledTime(payload.scheduledTime || currentAppointment.scheduledTime);
   const nextStatus = payload.status || currentAppointment.status;
+  const shouldValidateScheduleAvailability =
+    nextStatus !== 'cancelled' && (
+      currentAppointment.status === 'cancelled'
+      || nextPatientId !== currentAppointment.patientId
+      || nextScheduledDate !== currentAppointment.scheduledDate
+      || nextScheduledTime !== normalizeScheduledTime(currentAppointment.scheduledTime)
+    );
 
-  await ensureAppointmentAvailability({
-    actor,
-    patientId: nextPatientId,
+  ensureAppointmentCompletionIsAllowed({
     scheduledDate: nextScheduledDate,
-    scheduledTime: nextScheduledTime,
-    status: nextStatus,
-    excludeAppointmentId: id,
-  });
-  await ensureInsidePsychologistAvailability({
-    actor,
-    scheduledDate: nextScheduledDate,
-    scheduledTime: nextScheduledTime,
     status: nextStatus,
   });
+
+  if (shouldValidateScheduleAvailability) {
+    await ensureAppointmentAvailability({
+      actor,
+      patientId: nextPatientId,
+      scheduledDate: nextScheduledDate,
+      scheduledTime: nextScheduledTime,
+      status: nextStatus,
+      excludeAppointmentId: id,
+    });
+    await ensureInsidePsychologistAvailability({
+      actor,
+      scheduledDate: nextScheduledDate,
+      scheduledTime: nextScheduledTime,
+      status: nextStatus,
+    });
+  }
 
   const result = await db.query(
     `

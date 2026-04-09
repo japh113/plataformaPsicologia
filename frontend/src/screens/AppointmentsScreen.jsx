@@ -555,7 +555,12 @@ export default function AppointmentsScreen({
             {filteredAppointments.map((appointment) => {
               const patient = patients.find((currentPatient) => currentPatient.id === appointment.pacienteId);
               const linkedSession = patient?.sesiones?.find((session) => session.citaId === appointment.id) || null;
-              const canOpenSessionFlow = isPsychologist && patient && appointment.estado !== 'cancelada';
+              const isFutureAppointment = appointment.fecha > todayDate;
+              const canOpenSessionFlow =
+                isPsychologist &&
+                patient &&
+                appointment.estado !== 'cancelada' &&
+                (Boolean(linkedSession) || !isFutureAppointment);
               const isProcessingThisAppointment = processingAppointmentId === appointment.id;
               const isLinkedToHoveredDate = hoveredDate === appointment.fecha;
               const isLinkedToSelectedDate = selectedDate === appointment.fecha;
