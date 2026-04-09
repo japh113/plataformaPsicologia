@@ -165,6 +165,7 @@ const groupCalendarAppointmentsBySlot = (entries) => {
 
   return groups;
 };
+const shouldShowSameSlotConnector = (group) => group.length > 1 && group.some((appointment) => appointment.estado === 'cancelada');
 const getCalendarGroupContainerClasses = (groupLength, size) => {
   if (groupLength <= 1) {
     return 'grid grid-cols-1 gap-1';
@@ -717,6 +718,7 @@ export default function AppointmentsScreen({
                     {visibleDayAppointmentGroups.map((group) => {
                       const firstAppointment = group[0];
                       const secondAppointment = group[1] || null;
+                      const showConnector = shouldShowSameSlotConnector(group);
                       const renderChip = (appointment) => {
                         const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
                         const displayStatus = getAppointmentDisplayStatus(appointment);
@@ -731,11 +733,17 @@ export default function AppointmentsScreen({
                       return (
                         <div key={`${weekDate.isoDate}-${group[0].hora24}`} className={getCalendarGroupContainerClasses(group.length, 'week')}>
                           {renderChip(firstAppointment)}
-                          {secondAppointment && (
+                          {secondAppointment && showConnector && (
                             <>
                               <div className="pointer-events-none flex items-center justify-center">
                                 <span className="h-px w-3 rounded-full bg-slate-300" />
                               </div>
+                              {renderChip(secondAppointment)}
+                            </>
+                          )}
+                          {secondAppointment && !showConnector && (
+                            <>
+                              <div className="hidden" />
                               {renderChip(secondAppointment)}
                             </>
                           )}
@@ -769,6 +777,7 @@ export default function AppointmentsScreen({
                       <div className="mt-2 flex-1 space-y-1 overflow-hidden">{visibleDayAppointmentGroups.map((group) => {
                         const firstAppointment = group[0];
                         const secondAppointment = group[1] || null;
+                        const showConnector = shouldShowSameSlotConnector(group);
                         const renderChip = (appointment) => {
                           const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
                           const displayStatus = getAppointmentDisplayStatus(appointment);
@@ -778,11 +787,17 @@ export default function AppointmentsScreen({
                         return (
                           <div key={`${monthDate.isoDate}-${group[0].hora24}`} className={getCalendarGroupContainerClasses(group.length, 'month')}>
                             {renderChip(firstAppointment)}
-                            {secondAppointment && (
+                            {secondAppointment && showConnector && (
                               <>
                                 <div className="pointer-events-none flex items-center justify-center">
                                   <span className="h-px w-2 rounded-full bg-slate-300" />
                                 </div>
+                                {renderChip(secondAppointment)}
+                              </>
+                            )}
+                            {secondAppointment && !showConnector && (
+                              <>
+                                <div className="hidden" />
                                 {renderChip(secondAppointment)}
                               </>
                             )}
