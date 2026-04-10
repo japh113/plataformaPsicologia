@@ -223,6 +223,8 @@ export default function AppointmentsScreen({
   const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
   const [waitlistForm, setWaitlistForm] = useState(emptyWaitlistForm);
   const [draggedWaitlistEntryId, setDraggedWaitlistEntryId] = useState(null);
+  const [waitlistSchedulingEntry, setWaitlistSchedulingEntry] = useState(null);
+  const [waitlistSuccessMessage, setWaitlistSuccessMessage] = useState('');
 
   const normalizedAvailabilityDraft = useMemo(() => normalizeDraftEntries(availabilityDraft || availability), [availability, availabilityDraft]);
   const availabilityMap = useMemo(() => new Map(normalizedAvailabilityDraft.map((entry) => [entry.weekday, entry.blocks])), [normalizedAvailabilityDraft]);
@@ -509,7 +511,7 @@ export default function AppointmentsScreen({
       }));
   }, [appointments, editingAppointmentId, patients, selectedFormDate, waitlistEntriesBySlot]);
 
-  const resetForm = () => { setEditingAppointmentId(null); setForm(emptyForm); onDismissAppointmentError?.(); };
+  const resetForm = () => { setEditingAppointmentId(null); setForm(emptyForm); setWaitlistSchedulingEntry(null); onDismissAppointmentError?.(); };
   const resetWaitlistForm = (date = selectedDate || todayDate) => {
     setWaitlistForm({
       ...emptyWaitlistForm,
@@ -520,6 +522,7 @@ export default function AppointmentsScreen({
   };
   const openNewAppointmentModal = () => {
     resetForm();
+    setWaitlistSuccessMessage('');
     setForm((current) => ({ ...current, fecha: selectedDate || todayDate, pacienteId: current.pacienteId || patients[0]?.id || '' }));
     setIsAppointmentModalOpen(true);
   };
@@ -567,6 +570,8 @@ export default function AppointmentsScreen({
 
     closeWaitlistModal();
     resetForm();
+    setWaitlistSuccessMessage('');
+    setWaitlistSchedulingEntry(entry);
     setSelectedDate(entry.fecha);
     setCalendarAnchorDate(entry.fecha);
     setForm({
@@ -579,6 +584,7 @@ export default function AppointmentsScreen({
     setIsAppointmentModalOpen(true);
   };
   const handleEditAppointment = (appointment) => {
+    setWaitlistSuccessMessage('');
     setEditingAppointmentId(appointment.id);
     setForm({ pacienteId: appointment.pacienteId, fecha: appointment.fecha, hora24: appointment.hora24, estado: appointment.estado, notas: appointment.notas || '' });
     setSelectedDate(appointment.fecha);
@@ -598,7 +604,14 @@ export default function AppointmentsScreen({
     if (!resolvedPatientId || !resolvedDate || !normalizedHourValue || hasSameDayPatientConflict) return;
     const payload = { pacienteId: resolvedPatientId, fecha: resolvedDate, hora24: normalizedHourValue, estado: form.estado, notas: form.notas };
     const wasSaved = editingAppointmentId ? await onUpdateAppointment(editingAppointmentId, payload) : await onCreateAppointment(payload);
-    if (wasSaved) { setSelectedDate(resolvedDate); setCalendarAnchorDate(resolvedDate); closeAppointmentModal(); }
+    if (wasSaved) {
+      if (!editingAppointmentId && waitlistSchedulingEntry) {
+        setWaitlistSuccessMessage(`Cita reagendada para ${waitlistSchedulingEntry.pacienteNombre}. La entrada salio de lista de espera.`);
+      }
+      setSelectedDate(resolvedDate);
+      setCalendarAnchorDate(resolvedDate);
+      closeAppointmentModal();
+    }
   };
   const handleSubmitWaitlist = async (event) => {
     event.preventDefault();
@@ -862,6 +875,21 @@ export default function AppointmentsScreen({
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
+      {waitlistSuccessMessage && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p>{waitlistSuccessMessage}</p>
+            <button
+              type="button"
+              onClick={() => setWaitlistSuccessMessage('')}
+              className="text-sm font-semibold text-emerald-700 transition hover:text-emerald-900"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-gray-800">{isPsychologist ? 'Agenda de Citas' : 'Mis Citas'}</h2>
