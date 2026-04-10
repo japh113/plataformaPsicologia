@@ -270,6 +270,10 @@ export default function NotesScreen({
   const completedTasks = useMemo(() => (patient?.tareas || []).filter((task) => task.completada), [patient?.tareas]);
   const pendingObjectives = useMemo(() => (patient?.objetivos || []).filter((objective) => !objective.completada), [patient?.objetivos]);
   const completedObjectives = useMemo(() => (patient?.objetivos || []).filter((objective) => objective.completada), [patient?.objetivos]);
+  const sortedObjectives = useMemo(
+    () => [...pendingObjectives, ...completedObjectives],
+    [pendingObjectives, completedObjectives],
+  );
   const adherence = patient?.tareas?.length
     ? Math.round((completedTasks.length / patient.tareas.length) * 100)
     : 0;
@@ -918,7 +922,7 @@ export default function NotesScreen({
             No hay objetivos registrados para este paciente.
           </div>
         ) : (
-          patient.objetivos.map((objective) => (
+          sortedObjectives.map((objective) => (
             <div key={objective.id} className="group flex items-start rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
               <input
                 type="checkbox"
@@ -928,6 +932,15 @@ export default function NotesScreen({
                 className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:cursor-not-allowed"
               />
               <span className={`ml-3 flex-1 text-sm ${objective.completada ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{objective.texto}</span>
+              <span
+                className={`ml-3 shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
+                  objective.completada
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    : 'border-sky-200 bg-sky-50 text-sky-700'
+                }`}
+              >
+                {objective.completada ? 'Completado' : 'En proceso'}
+              </span>
               {isPsychologist && (
                 <button
                   type="button"
@@ -1147,13 +1160,13 @@ export default function NotesScreen({
 
             <SectionCard title="Objetivos">
               <div className="space-y-3 text-sm">
-                {(patient.objetivos || []).length > 0 ? (
-                  (patient.objetivos || []).slice(0, 5).map((objective) => (
+                {sortedObjectives.length > 0 ? (
+                  sortedObjectives.slice(0, 5).map((objective) => (
                     <div key={objective.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                       <div className="flex items-start justify-between gap-3">
                         <p className={`text-sm ${objective.completada ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{objective.texto}</p>
-                        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${objective.completada ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
-                          {objective.completada ? 'Completado' : 'Pendiente'}
+                        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${objective.completada ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-sky-200 bg-sky-50 text-sky-700'}`}>
+                          {objective.completada ? 'Completado' : 'En proceso'}
                         </span>
                       </div>
                     </div>
@@ -1165,7 +1178,7 @@ export default function NotesScreen({
                 )}
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Estado general</p>
-                  <p className="mt-2 text-slate-700">{completedObjectives.length} completado(s) · {pendingObjectives.length} pendiente(s)</p>
+                  <p className="mt-2 text-slate-700">{completedObjectives.length} completado(s) · {pendingObjectives.length} en proceso</p>
                 </div>
               </div>
             </SectionCard>
