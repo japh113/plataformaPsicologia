@@ -149,7 +149,10 @@ const mapTaskRow = (task) => ({
   id: String(task.id),
   text: task.text,
   completed: Boolean(task.completed),
-  sessionId: task.sessionId === null || typeof task.sessionId === 'undefined' ? null : String(task.sessionId),
+  sessionId:
+    task.sessionId === null || typeof task.sessionId === 'undefined'
+      ? (task.session_id === null || typeof task.session_id === 'undefined' ? null : String(task.session_id))
+      : String(task.sessionId),
   sessionDate: normalizeDateValue(task.sessionDate),
   sessionObjective: task.sessionObjective || '',
 });
@@ -757,7 +760,7 @@ const createPatientChecklistItem = async (patientId, payload, actor, kind) => {
         completed
       )
       VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, text, completed, session_id
+      RETURNING id, text, completed, session_id AS "sessionId"
     `,
     [patientId, session ? Number(session.id) : null, kind, payload.text.trim(), false],
   );
@@ -809,15 +812,15 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
         completed = $5,
         updated_at = NOW()
       WHERE patient_id = $1 AND id = $2 AND kind = $3
-      RETURNING id, text, completed, session_id
+      RETURNING id, text, completed, session_id AS "sessionId"
     `,
     [patientId, taskId, kind, nextText, nextCompleted],
   );
 
   let session = null;
 
-  if (kind === 'task' && result.rows[0]?.session_id) {
-    session = await ensureSessionBelongsToPatient(Number(result.rows[0].session_id), patientId);
+  if (kind === 'task' && result.rows[0]?.sessionId) {
+    session = await ensureSessionBelongsToPatient(Number(result.rows[0].sessionId), patientId);
   }
 
   return mapTaskRow({
