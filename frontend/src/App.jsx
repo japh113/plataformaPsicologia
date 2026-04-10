@@ -634,7 +634,8 @@ export default function App() {
       await refreshSelectedPatient(pacienteSeleccionado.id);
       return true;
     } catch (error) {
-      window.alert(error.message || 'No se pudo crear la sesion.');
+      const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
+      window.alert((error.message || 'No se pudo crear la sesion.') + details);
       return false;
     } finally {
       setGuardandoSesion(false);
@@ -654,7 +655,8 @@ export default function App() {
       await refreshSelectedPatient(pacienteSeleccionado.id);
       return true;
     } catch (error) {
-      window.alert(error.message || 'No se pudo actualizar la sesion.');
+      const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
+      window.alert((error.message || 'No se pudo actualizar la sesion.') + details);
       return false;
     } finally {
       setGuardandoSesion(false);

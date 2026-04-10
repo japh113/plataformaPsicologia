@@ -554,6 +554,22 @@ export default function NotesScreen({
       return;
     }
 
+    const sessionTasksPayload = (sessionForm.tareas || [])
+      .filter((task) => task.texto?.trim())
+      .map((task) => {
+        const baseTask = {
+          text: task.texto.trim(),
+          completed: Boolean(task.completada),
+        };
+
+        return String(task.id).startsWith('draft-')
+          ? baseTask
+          : {
+            id: task.id,
+            ...baseTask,
+          };
+      });
+
     const payload = {
       appointmentId: sessionForm.citaId,
       noteFormat: 'simple',
@@ -561,13 +577,7 @@ export default function NotesScreen({
       clinicalObservations: sessionForm.observaciones,
       nextSteps: sessionForm.proximoPaso,
       content: sessionForm.contenido,
-      tasks: (sessionForm.tareas || [])
-        .filter((task) => task.texto?.trim())
-        .map((task) => ({
-          id: String(task.id).startsWith('draft-') ? null : task.id,
-          text: task.texto,
-          completed: Boolean(task.completada),
-        })),
+      tasks: sessionTasksPayload,
     };
 
     const wasSaved = selectedSession
