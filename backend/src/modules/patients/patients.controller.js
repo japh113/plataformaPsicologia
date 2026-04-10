@@ -8,6 +8,9 @@ import {
   createPatientTask,
   updatePatientTask,
   deletePatientTask,
+  createPatientObjective,
+  updatePatientObjective,
+  deletePatientObjective,
   createPatientSession,
   updatePatientSession,
   deletePatientSession,
@@ -157,6 +160,73 @@ export const deletePatientTaskHandler = async (req, res, next) => {
     }
 
     return successResponse(res, null, 'Task deleted successfully');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const createPatientObjectiveHandler = async (req, res, next) => {
+  try {
+    ensurePsychologist(req.user);
+
+    const errors = validateCreateTaskPayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const objective = await createPatientObjective(req.params.id, req.body, req.user);
+
+    if (!objective) {
+      return errorResponse(res, 'Patient not found', 404);
+    }
+
+    return successResponse(res, objective, 'Objective created successfully', 201);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const updatePatientObjectiveHandler = async (req, res, next) => {
+  try {
+    const errors = validateUpdateTaskPayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    if (isPatient(req.user)) {
+      const payloadKeys = Object.keys(req.body);
+      const onlyCompletedUpdate = payloadKeys.length === 1 && payloadKeys[0] === 'completed';
+
+      if (!onlyCompletedUpdate) {
+        throw createForbiddenError('Patients can only update objective completion');
+      }
+    }
+
+    const objective = await updatePatientObjective(req.params.id, req.params.objectiveId, req.body, req.user);
+
+    if (!objective) {
+      return errorResponse(res, 'Objective not found', 404);
+    }
+
+    return successResponse(res, objective, 'Objective updated successfully');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const deletePatientObjectiveHandler = async (req, res, next) => {
+  try {
+    ensurePsychologist(req.user);
+
+    const deleted = await deletePatientObjective(req.params.id, req.params.objectiveId, req.user);
+
+    if (!deleted) {
+      return errorResponse(res, 'Objective not found', 404);
+    }
+
+    return successResponse(res, null, 'Objective deleted successfully');
   } catch (error) {
     return next(error);
   }

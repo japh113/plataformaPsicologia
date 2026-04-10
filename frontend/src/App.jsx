@@ -20,12 +20,15 @@ import {
 } from './api/availability';
 import {
   createPatient,
+  createPatientObjective,
   createPatientSession,
   createPatientTask,
+  deletePatientObjective,
   deletePatientSession,
   deletePatientTask,
   getPatients,
   updatePatient,
+  updatePatientObjective,
   updatePatientSession,
   updatePatientTask,
 } from './api/patients';
@@ -115,6 +118,8 @@ export default function App() {
   const [guardandoSesion, setGuardandoSesion] = useState(false);
   const [creandoTarea, setCreandoTarea] = useState(false);
   const [procesandoTareaId, setProcesandoTareaId] = useState(null);
+  const [creandoObjetivo, setCreandoObjetivo] = useState(false);
+  const [procesandoObjetivoId, setProcesandoObjetivoId] = useState(null);
   const [procesandoSesionId, setProcesandoSesionId] = useState(null);
   const [guardandoCita, setGuardandoCita] = useState(false);
   const [procesandoCitaId, setProcesandoCitaId] = useState(null);
@@ -492,6 +497,86 @@ export default function App() {
       window.alert(error.message || 'No se pudo eliminar la tarea.');
     } finally {
       setProcesandoTareaId(null);
+    }
+  };
+
+  const addObjective = async (objectiveText) => {
+    if (!isPsychologist || !pacienteSeleccionado || creandoObjetivo) {
+      return false;
+    }
+
+    setCreandoObjetivo(true);
+
+    try {
+      const createdObjective = await createPatientObjective(pacienteSeleccionado.id, { text: objectiveText });
+      const uiObjective = mapBackendTaskToUiTask(createdObjective);
+      const nextPatient = {
+        ...pacienteSeleccionado,
+        objetivos: [...(pacienteSeleccionado.objetivos || []), uiObjective],
+      };
+
+      syncPatientState(nextPatient);
+      return true;
+    } catch (error) {
+      window.alert(error.message || 'No se pudo crear el objetivo.');
+      return false;
+    } finally {
+      setCreandoObjetivo(false);
+    }
+  };
+
+  const toggleObjective = async (objectiveId) => {
+    if (!pacienteSeleccionado || procesandoObjetivoId) {
+      return;
+    }
+
+    const objective = (pacienteSeleccionado.objetivos || []).find((currentObjective) => currentObjective.id === objectiveId);
+
+    if (!objective) {
+      return;
+    }
+
+    setProcesandoObjetivoId(objectiveId);
+
+    try {
+      const updatedObjective = await updatePatientObjective(pacienteSeleccionado.id, objectiveId, {
+        completed: !objective.completada,
+      });
+
+      const uiObjective = mapBackendTaskToUiTask(updatedObjective);
+      const nextPatient = {
+        ...pacienteSeleccionado,
+        objetivos: (pacienteSeleccionado.objetivos || []).map((currentObjective) => (currentObjective.id === objectiveId ? uiObjective : currentObjective)),
+      };
+
+      syncPatientState(nextPatient);
+    } catch (error) {
+      window.alert(error.message || 'No se pudo actualizar el objetivo.');
+    } finally {
+      setProcesandoObjetivoId(null);
+    }
+  };
+
+  const removeObjective = async (objectiveId) => {
+    if (!isPsychologist || !pacienteSeleccionado || procesandoObjetivoId) {
+      return;
+    }
+
+    setProcesandoObjetivoId(objectiveId);
+
+    try {
+      await deletePatientObjective(pacienteSeleccionado.id, objectiveId);
+
+      const nextPatient = {
+        ...pacienteSeleccionado,
+        objetivos: (pacienteSeleccionado.objetivos || []).filter((objective) => objective.id !== objectiveId),
+      };
+
+      syncPatientState(nextPatient);
+    } catch (error) {
+      window.alert(error.message || 'No se pudo eliminar el objetivo.');
+    } finally {
+      setProcesandoObjetivoId(null);
     }
   };
 
@@ -999,6 +1084,9 @@ export default function App() {
           onToggleTask={toggleTask}
           onDeleteTask={removeTask}
           onAddTask={addTask}
+          onToggleObjective={toggleObjective}
+          onDeleteObjective={removeObjective}
+          onAddObjective={addObjective}
           onCreateSession={createSession}
           onUpdateSession={updateSession}
           onDeleteSession={removeSession}
@@ -1007,6 +1095,8 @@ export default function App() {
           isSavingSession={guardandoSesion}
           isCreatingTask={creandoTarea}
           processingTaskId={procesandoTareaId}
+          isCreatingObjective={creandoObjetivo}
+          processingObjectiveId={procesandoObjetivoId}
           processingSessionId={procesandoSesionId}
         />
       );

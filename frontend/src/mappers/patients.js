@@ -49,6 +49,12 @@ export const mapBackendTaskToUiTask = (task) => ({
   completada: Boolean(task.completed),
 });
 
+export const mapBackendObjectiveToUiObjective = (objective) => ({
+  id: String(objective.id),
+  texto: objective.text || '',
+  completada: Boolean(objective.completed),
+});
+
 export const mapBackendSessionToUiSession = (session) => ({
   id: String(session.id),
   citaId: session.appointmentId ? String(session.appointmentId) : null,
@@ -74,6 +80,7 @@ export const mapBackendPatientToUiPatient = (patient) => {
     motivo: patient.reasonForConsultation || '',
     notas: patient.notes || '',
     tareas: Array.isArray(patient.tasks) ? patient.tasks.map(mapBackendTaskToUiTask) : [],
+    objetivos: Array.isArray(patient.objectives) ? patient.objectives.map(mapBackendObjectiveToUiObjective) : [],
     sesiones: Array.isArray(patient.sessions) ? patient.sessions.map(mapBackendSessionToUiSession) : [],
     email: patient.email || '',
     telefono: patient.phone || '',

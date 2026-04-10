@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS psychologist_availability_exception_blocks (
 CREATE TABLE IF NOT EXISTS patient_tasks (
   id BIGSERIAL PRIMARY KEY,
   patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'task' CHECK (kind IN ('task', 'objective')),
   text TEXT NOT NULL,
   completed BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -161,6 +162,16 @@ ALTER TABLE patients
 ALTER TABLE patients
   ADD CONSTRAINT patients_status_check
   CHECK (status IN ('active', 'paused', 'inactive', 'discharged'));
+
+ALTER TABLE patient_tasks
+  ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'task';
+
+ALTER TABLE patient_tasks
+  DROP CONSTRAINT IF EXISTS patient_tasks_kind_check;
+
+ALTER TABLE patient_tasks
+  ADD CONSTRAINT patient_tasks_kind_check
+  CHECK (kind IN ('task', 'objective'));
 
 WITH ranked_waitlist_entries AS (
   SELECT

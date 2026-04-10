@@ -49,6 +49,32 @@ export const deletePatientTask = async (patientId, taskId) => {
   return response.data;
 };
 
+export const createPatientObjective = async (patientId, payload) => {
+  const response = await apiRequest(`/patients/${patientId}/objectives`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
+export const updatePatientObjective = async (patientId, objectiveId, payload) => {
+  const response = await apiRequest(`/patients/${patientId}/objectives/${objectiveId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
+export const deletePatientObjective = async (patientId, objectiveId) => {
+  const response = await apiRequest(`/patients/${patientId}/objectives/${objectiveId}`, {
+    method: 'DELETE',
+  });
+
+  return response.data;
+};
+
 export const createPatientSession = async (patientId, payload) => {
   const response = await apiRequest(`/patients/${patientId}/sessions`, {
     method: 'POST',

@@ -223,6 +223,9 @@ export default function NotesScreen({
   onToggleTask,
   onDeleteTask,
   onAddTask,
+  onToggleObjective,
+  onDeleteObjective,
+  onAddObjective,
   onCreateSession,
   onUpdateSession,
   onDeleteSession,
@@ -231,11 +234,15 @@ export default function NotesScreen({
   isSavingSession = false,
   isCreatingTask = false,
   processingTaskId = null,
+  isCreatingObjective = false,
+  processingObjectiveId = null,
   processingSessionId = null,
 }) {
   const initialMatchedSession = patient?.sesiones?.find((session) => session.citaId === (prefilledAppointmentId || null)) || null;
   const [showTaskInput, setShowTaskInput] = useState(false);
   const [taskText, setTaskText] = useState('');
+  const [showObjectiveInput, setShowObjectiveInput] = useState(false);
+  const [objectiveText, setObjectiveText] = useState('');
   const [activeSection, setActiveSection] = useState(initialMatchedSession || prefilledAppointmentId ? 'sesiones' : 'resumen');
   const [selectedSessionId, setSelectedSessionId] = useState(initialMatchedSession?.id || null);
   const [showSessionModal, setShowSessionModal] = useState(Boolean(initialMatchedSession || prefilledAppointmentId));
@@ -261,8 +268,13 @@ export default function NotesScreen({
   const sessions = useMemo(() => sortSessionsDesc(patient?.sesiones || []), [patient?.sesiones]);
   const pendingTasks = useMemo(() => (patient?.tareas || []).filter((task) => !task.completada), [patient?.tareas]);
   const completedTasks = useMemo(() => (patient?.tareas || []).filter((task) => task.completada), [patient?.tareas]);
+  const pendingObjectives = useMemo(() => (patient?.objetivos || []).filter((objective) => !objective.completada), [patient?.objetivos]);
+  const completedObjectives = useMemo(() => (patient?.objetivos || []).filter((objective) => objective.completada), [patient?.objetivos]);
   const adherence = patient?.tareas?.length
     ? Math.round((completedTasks.length / patient.tareas.length) * 100)
+    : 0;
+  const objectivesProgress = patient?.objetivos?.length
+    ? Math.round((completedObjectives.length / patient.objetivos.length) * 100)
     : 0;
 
   const patientAppointments = useMemo(
@@ -340,12 +352,14 @@ export default function NotesScreen({
       { id: 'agenda', label: 'Agenda' },
       { id: 'sesiones', label: 'Sesiones' },
       { id: 'tareas', label: 'Tareas' },
+      { id: 'objetivos', label: 'Objetivos' },
       { id: 'nota-general', label: 'Nota general' },
     ]
     : [
       { id: 'resumen', label: 'Resumen' },
       { id: 'agenda', label: 'Agenda' },
       { id: 'tareas', label: 'Tareas' },
+      { id: 'objetivos', label: 'Objetivos' },
     ];
 
   const resetSessionForm = () => {
@@ -729,6 +743,19 @@ export default function NotesScreen({
     );
   };
 
+  const handleAddObjective = async () => {
+    if (!objectiveText.trim() || isCreatingObjective) {
+      return;
+    }
+
+    const wasCreated = await onAddObjective(objectiveText);
+
+    if (wasCreated) {
+      setObjectiveText('');
+      setShowObjectiveInput(false);
+    }
+  };
+
   const renderSessionsTab = () => (
     <SectionCard
       title="Sesiones"
@@ -875,6 +902,96 @@ export default function NotesScreen({
     </SectionCard>
   );
 
+  const renderObjectivesTab = () => (
+    <SectionCard
+      title={isPsychologist ? 'Objetivos del proceso' : 'Mis objetivos'}
+      description={isPsychologist ? 'Seguimiento de objetivos clinicos y de proceso del paciente.' : 'Marca los objetivos conforme se vayan cumpliendo.'}
+      action={(
+        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700">
+          Avance {objectivesProgress}%
+        </span>
+      )}
+    >
+      <div className="space-y-3">
+        {!patient.objetivos || patient.objetivos.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-sm text-slate-500">
+            No hay objetivos registrados para este paciente.
+          </div>
+        ) : (
+          patient.objetivos.map((objective) => (
+            <div key={objective.id} className="group flex items-start rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <input
+                type="checkbox"
+                checked={objective.completada}
+                disabled={processingObjectiveId === objective.id}
+                onChange={() => onToggleObjective(objective.id)}
+                className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:cursor-not-allowed"
+              />
+              <span className={`ml-3 flex-1 text-sm ${objective.completada ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{objective.texto}</span>
+              {isPsychologist && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteObjective(objective.id)}
+                  disabled={processingObjectiveId === objective.id}
+                  className="ml-3 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+            </div>
+          ))
+        )}
+
+        {isPsychologist && (
+          showObjectiveInput ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <textarea
+                autoFocus
+                value={objectiveText}
+                onChange={(event) => setObjectiveText(event.target.value)}
+                placeholder="Ej. Reducir evitacion social o establecer una rutina de sueno mas estable..."
+                rows="3"
+                className="w-full rounded-2xl border border-emerald-300 bg-slate-50 px-4 py-3 text-sm focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    handleAddObjective();
+                  }
+                }}
+              />
+              <div className="mt-3 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowObjectiveInput(false)}
+                  disabled={isCreatingObjective}
+                  className="flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:bg-slate-50 disabled:text-slate-400"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddObjective}
+                  disabled={isCreatingObjective}
+                  className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isCreatingObjective ? 'Guardando...' : 'Guardar objetivo'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowObjectiveInput(true)}
+              className="inline-flex w-full items-center justify-center rounded-2xl border border-dashed border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100"
+            >
+              <Plus size={16} className="mr-2" /> Agregar objetivo
+            </button>
+          )
+        )}
+      </div>
+    </SectionCard>
+  );
+
   const renderGeneralNoteTab = () => (
     <SectionCard
       title="Nota general del expediente"
@@ -936,12 +1053,14 @@ export default function NotesScreen({
     if (!isPsychologist) {
       if (activeSection === 'agenda') return renderAgendaTab();
       if (activeSection === 'tareas') return renderTasksTab();
+      if (activeSection === 'objetivos') return renderObjectivesTab();
       return renderPatientSummaryTab();
     }
 
     if (activeSection === 'agenda') return renderAgendaTab();
     if (activeSection === 'sesiones') return renderSessionsTab();
     if (activeSection === 'tareas') return renderTasksTab();
+    if (activeSection === 'objetivos') return renderObjectivesTab();
     if (activeSection === 'nota-general') return renderGeneralNoteTab();
     return renderSummaryOverview();
   };
@@ -1026,22 +1145,27 @@ export default function NotesScreen({
               </div>
             )}
 
-            <SectionCard title="Ficha rapida">
+            <SectionCard title="Objetivos">
               <div className="space-y-3 text-sm">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultima sesion</p>
-                  <p className="mt-1 text-slate-700">{patient.ultimaSesion ? formatSessionDate(patient.ultimaSesion) : 'Sin sesiones registradas'}</p>
-                  {patient.ultimaSesion && (
-                    <p className="mt-1 text-xs text-slate-500">{getRelativeLastSessionLabel(patient.ultimaSesion, todayDate)}</p>
-                  )}
-                </div>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Proxima cita</p>
-                  <p className="mt-1 text-slate-700">{nextAppointment ? formatAppointmentDateTime(nextAppointment) : 'Sin citas activas'}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Pendientes</p>
-                  <p className="mt-1 text-slate-700">{pendingTasks.length} tarea(s)</p>
+                {(patient.objetivos || []).length > 0 ? (
+                  (patient.objetivos || []).slice(0, 5).map((objective) => (
+                    <div key={objective.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className={`text-sm ${objective.completada ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{objective.texto}</p>
+                        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${objective.completada ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                          {objective.completada ? 'Completado' : 'Pendiente'}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+                    No hay objetivos registrados.
+                  </div>
+                )}
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Estado general</p>
+                  <p className="mt-2 text-slate-700">{completedObjectives.length} completado(s) · {pendingObjectives.length} pendiente(s)</p>
                 </div>
               </div>
             </SectionCard>

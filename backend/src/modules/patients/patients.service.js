@@ -53,9 +53,26 @@ const patientSelectColumns = `
       )
       FROM patient_tasks pt
       WHERE pt.patient_id = p.id
+        AND pt.kind = 'task'
     ),
     '[]'::json
-  ) AS tasks
+  ) AS tasks,
+  COALESCE(
+    (
+      SELECT json_agg(
+        json_build_object(
+          'id', pt.id,
+          'text', pt.text,
+          'completed', pt.completed
+        )
+        ORDER BY pt.created_at ASC, pt.id ASC
+      )
+      FROM patient_tasks pt
+      WHERE pt.patient_id = p.id
+        AND pt.kind = 'objective'
+    ),
+    '[]'::json
+  ) AS objectives
 `;
 
 const psychologistSessionSelectColumn = `,
@@ -116,6 +133,7 @@ const mapPatientRow = (row) => ({
   age: row.age,
   reasonForConsultation: row.reason_for_consultation,
   tasks: Array.isArray(row.tasks) ? row.tasks.map(mapTaskRow) : [],
+  objectives: Array.isArray(row.objectives) ? row.objectives.map(mapTaskRow) : [],
   sessions: Array.isArray(row.sessions) ? row.sessions.map(mapSessionRow) : [],
 });
 
@@ -386,7 +404,7 @@ export const deletePatient = async (id, actor) => {
   return result.rowCount > 0;
 };
 
-export const createPatientTask = async (patientId, payload, actor) => {
+const createPatientChecklistItem = async (patientId, payload, actor, kind) => {
   ensurePsychologist(actor);
 
   const patient = await getPatientById(patientId, actor);
@@ -399,19 +417,20 @@ export const createPatientTask = async (patientId, payload, actor) => {
     `
       INSERT INTO patient_tasks (
         patient_id,
+        kind,
         text,
         completed
       )
-      VALUES ($1, $2, $3)
+      VALUES ($1, $2, $3, $4)
       RETURNING id, text, completed
     `,
-    [patientId, payload.text.trim(), false],
+    [patientId, kind, payload.text.trim(), false],
   );
 
   return mapTaskRow(result.rows[0]);
 };
 
-export const updatePatientTask = async (patientId, taskId, payload, actor) => {
+const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kind) => {
   const patient = await getPatientById(patientId, actor);
 
   if (!patient) {
@@ -422,10 +441,10 @@ export const updatePatientTask = async (patientId, taskId, payload, actor) => {
     `
       SELECT id, patient_id, text, completed
       FROM patient_tasks
-      WHERE patient_id = $1 AND id = $2
+      WHERE patient_id = $1 AND id = $2 AND kind = $3
       LIMIT 1
     `,
-    [patientId, taskId],
+    [patientId, taskId, kind],
   );
 
   if (!currentTaskResult.rows[0]) {
@@ -446,19 +465,19 @@ export const updatePatientTask = async (patientId, taskId, payload, actor) => {
     `
       UPDATE patient_tasks
       SET
-        text = $3,
-        completed = $4,
+        text = $4,
+        completed = $5,
         updated_at = NOW()
-      WHERE patient_id = $1 AND id = $2
+      WHERE patient_id = $1 AND id = $2 AND kind = $3
       RETURNING id, text, completed
     `,
-    [patientId, taskId, nextText, nextCompleted],
+    [patientId, taskId, kind, nextText, nextCompleted],
   );
 
   return mapTaskRow(result.rows[0]);
 };
 
-export const deletePatientTask = async (patientId, taskId, actor) => {
+const deletePatientChecklistItem = async (patientId, taskId, actor, kind) => {
   ensurePsychologist(actor);
 
   const patient = await getPatientById(patientId, actor);
@@ -470,13 +489,20 @@ export const deletePatientTask = async (patientId, taskId, actor) => {
   const result = await db.query(
     `
       DELETE FROM patient_tasks
-      WHERE patient_id = $1 AND id = $2
+      WHERE patient_id = $1 AND id = $2 AND kind = $3
     `,
-    [patientId, taskId],
+    [patientId, taskId, kind],
   );
 
   return result.rowCount > 0;
 };
+
+export const createPatientTask = async (patientId, payload, actor) => createPatientChecklistItem(patientId, payload, actor, 'task');
+export const updatePatientTask = async (patientId, taskId, payload, actor) => updatePatientChecklistItem(patientId, taskId, payload, actor, 'task');
+export const deletePatientTask = async (patientId, taskId, actor) => deletePatientChecklistItem(patientId, taskId, actor, 'task');
+export const createPatientObjective = async (patientId, payload, actor) => createPatientChecklistItem(patientId, payload, actor, 'objective');
+export const updatePatientObjective = async (patientId, objectiveId, payload, actor) => updatePatientChecklistItem(patientId, objectiveId, payload, actor, 'objective');
+export const deletePatientObjective = async (patientId, objectiveId, actor) => deletePatientChecklistItem(patientId, objectiveId, actor, 'objective');
 
 export const createPatientSession = async (patientId, payload, actor) => {
   ensurePsychologist(actor);

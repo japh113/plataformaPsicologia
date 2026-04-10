@@ -8,6 +8,9 @@ import {
   createPatientTaskHandler,
   updatePatientTaskHandler,
   deletePatientTaskHandler,
+  createPatientObjectiveHandler,
+  updatePatientObjectiveHandler,
+  deletePatientObjectiveHandler,
   createPatientSessionHandler,
   updatePatientSessionHandler,
   deletePatientSessionHandler,
@@ -24,6 +27,9 @@ router.delete('/:id', deletePatientHandler);
 router.post('/:id/tasks', createPatientTaskHandler);
 router.patch('/:id/tasks/:taskId', updatePatientTaskHandler);
 router.delete('/:id/tasks/:taskId', deletePatientTaskHandler);
+router.post('/:id/objectives', createPatientObjectiveHandler);
+router.patch('/:id/objectives/:objectiveId', updatePatientObjectiveHandler);
+router.delete('/:id/objectives/:objectiveId', deletePatientObjectiveHandler);
 router.post('/:id/sessions', createPatientSessionHandler);
 router.patch('/:id/sessions/:sessionId', updatePatientSessionHandler);
 router.delete('/:id/sessions/:sessionId', deletePatientSessionHandler);

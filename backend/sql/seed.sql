@@ -179,20 +179,25 @@ WHERE NOT EXISTS (
 
 INSERT INTO patient_tasks (
   patient_id,
+  kind,
   text,
   completed
 )
-SELECT seed.patient_id, seed.text, seed.completed
+SELECT seed.patient_id, seed.kind, seed.text, seed.completed
 FROM (
   VALUES
-    ('1', 'Llamar al psiquiatra para ajustar dosis', FALSE),
-    ('1', 'Registro de pensamientos automaticos', TRUE),
-    ('2', 'Practicar respiracion diafragmatica (10 min/dia)', FALSE)
-) AS seed(patient_id, text, completed)
+    ('1', 'task', 'Llamar al psiquiatra para ajustar dosis', FALSE),
+    ('1', 'task', 'Registro de pensamientos automaticos', TRUE),
+    ('2', 'task', 'Practicar respiracion diafragmatica (10 min/dia)', FALSE),
+    ('1', 'objective', 'Mejorar higiene del sueno', FALSE),
+    ('1', 'objective', 'Reducir rumiacion nocturna', TRUE),
+    ('2', 'objective', 'Tolerar mejor reuniones sociales cortas', FALSE)
+ ) AS seed(patient_id, kind, text, completed)
 WHERE NOT EXISTS (
   SELECT 1
   FROM patient_tasks pt
   WHERE pt.patient_id = seed.patient_id
+    AND pt.kind = seed.kind
     AND pt.text = seed.text
 );
 
