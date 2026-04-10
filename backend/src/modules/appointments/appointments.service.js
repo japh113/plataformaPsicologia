@@ -651,7 +651,7 @@ export const deleteWaitlistEntry = async (id, actor) => {
   ensurePsychologist(actor);
 
   const accessScope = buildPatientAccessScope(actor, 'w.patient_id', 2);
-  const client = await db.connect();
+  const client = await db.getClient();
 
   try {
     await client.query('BEGIN');
@@ -692,7 +692,7 @@ export const reorderWaitlistEntries = async (payload, actor) => {
   const scheduledTime = normalizeScheduledTime(payload.scheduledTime);
   const entryIds = payload.entryIds.map((entryId) => String(entryId));
   const accessScope = buildPatientAccessScope(actor, 'w.patient_id', 4);
-  const client = await db.connect();
+  const client = await db.getClient();
 
   try {
     await client.query('BEGIN');
