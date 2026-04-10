@@ -12,6 +12,16 @@ const normalizeAge = (value) => {
   return parsedValue;
 };
 
+const normalizeDate = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  return String(value).slice(0, 10);
+};
+
+const normalizeBoolean = (value) => Boolean(value);
+
 export const buildPatientEntity = (payload, id) => {
   const firstName = payload.firstName?.trim() || '';
   const lastName = payload.lastName?.trim() || '';
@@ -31,3 +41,25 @@ export const buildPatientEntity = (payload, id) => {
     reasonForConsultation: payload.reasonForConsultation?.trim() || '',
   };
 };
+
+export const buildPatientInterviewEntity = (payload = {}) => ({
+  birthDate: normalizeDate(payload.birthDate),
+  birthPlace: payload.birthPlace?.trim() || '',
+  occupation: payload.occupation?.trim() || '',
+  hobbies: payload.hobbies?.trim() || '',
+  maritalStatus: payload.maritalStatus?.trim() || '',
+  familyMembers: payload.familyMembers?.trim() || '',
+  livesWith: payload.livesWith?.trim() || '',
+  physicalIllnesses: payload.physicalIllnesses?.trim() || '',
+  insomnia: normalizeBoolean(payload.insomnia),
+  nightmares: normalizeBoolean(payload.nightmares),
+  fearsOrPhobias: normalizeBoolean(payload.fearsOrPhobias),
+  accidents: normalizeBoolean(payload.accidents),
+  alcoholUse: normalizeBoolean(payload.alcoholUse),
+  tobaccoUse: normalizeBoolean(payload.tobaccoUse),
+  drugUse: normalizeBoolean(payload.drugUse),
+  psychologicalAbuse: normalizeBoolean(payload.psychologicalAbuse),
+  physicalAbuse: normalizeBoolean(payload.physicalAbuse),
+  deathWish: normalizeBoolean(payload.deathWish),
+  suicideAttempts: normalizeBoolean(payload.suicideAttempts),
+});

@@ -15,6 +15,34 @@ CREATE TABLE IF NOT EXISTS patients (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS patient_intakes (
+  patient_id TEXT PRIMARY KEY REFERENCES patients(id) ON DELETE CASCADE,
+  birth_date DATE NOT NULL,
+  birth_place TEXT NOT NULL DEFAULT '',
+  occupation TEXT NOT NULL DEFAULT '',
+  hobbies TEXT NOT NULL DEFAULT '',
+  marital_status TEXT NOT NULL DEFAULT '',
+  family_members TEXT NOT NULL DEFAULT '',
+  lives_with TEXT NOT NULL DEFAULT '',
+  physical_illnesses TEXT NOT NULL DEFAULT '',
+  insomnia BOOLEAN NOT NULL DEFAULT FALSE,
+  nightmares BOOLEAN NOT NULL DEFAULT FALSE,
+  fears_or_phobias BOOLEAN NOT NULL DEFAULT FALSE,
+  accidents BOOLEAN NOT NULL DEFAULT FALSE,
+  alcohol_use BOOLEAN NOT NULL DEFAULT FALSE,
+  tobacco_use BOOLEAN NOT NULL DEFAULT FALSE,
+  drug_use BOOLEAN NOT NULL DEFAULT FALSE,
+  psychological_abuse BOOLEAN NOT NULL DEFAULT FALSE,
+  physical_abuse BOOLEAN NOT NULL DEFAULT FALSE,
+  death_wish BOOLEAN NOT NULL DEFAULT FALSE,
+  suicide_attempts BOOLEAN NOT NULL DEFAULT FALSE,
+  completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_by_user_id TEXT,
+  updated_by_user_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   first_name TEXT NOT NULL,
@@ -27,6 +55,24 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE patient_intakes
+  DROP CONSTRAINT IF EXISTS patient_intakes_completed_by_user_id_fkey;
+
+ALTER TABLE patient_intakes
+  ADD CONSTRAINT patient_intakes_completed_by_user_id_fkey
+  FOREIGN KEY (completed_by_user_id)
+  REFERENCES users(id)
+  ON DELETE SET NULL;
+
+ALTER TABLE patient_intakes
+  DROP CONSTRAINT IF EXISTS patient_intakes_updated_by_user_id_fkey;
+
+ALTER TABLE patient_intakes
+  ADD CONSTRAINT patient_intakes_updated_by_user_id_fkey
+  FOREIGN KEY (updated_by_user_id)
+  REFERENCES users(id)
+  ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS psychologist_patient_access (
   psychologist_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

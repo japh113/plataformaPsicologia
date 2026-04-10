@@ -5,6 +5,7 @@ import {
   createPatientHandler,
   updatePatientHandler,
   deletePatientHandler,
+  upsertPatientInterviewHandler,
   createPatientTaskHandler,
   updatePatientTaskHandler,
   deletePatientTaskHandler,
@@ -23,6 +24,7 @@ router.get('/:id', getPatient);
 router.post('/', createPatientHandler);
 router.put('/:id', updatePatientHandler);
 router.delete('/:id', deletePatientHandler);
+router.put('/:id/interview', upsertPatientInterviewHandler);
 
 router.post('/:id/tasks', createPatientTaskHandler);
 router.patch('/:id/tasks/:taskId', updatePatientTaskHandler);

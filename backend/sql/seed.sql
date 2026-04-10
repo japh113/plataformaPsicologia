@@ -136,6 +136,59 @@ VALUES
   ('u_psy_1', '5')
 ON CONFLICT (psychologist_user_id, patient_id) DO NOTHING;
 
+INSERT INTO patient_intakes (
+  patient_id,
+  birth_date,
+  birth_place,
+  occupation,
+  hobbies,
+  marital_status,
+  family_members,
+  lives_with,
+  physical_illnesses,
+  insomnia,
+  nightmares,
+  fears_or_phobias,
+  accidents,
+  alcohol_use,
+  tobacco_use,
+  drug_use,
+  psychological_abuse,
+  physical_abuse,
+  death_wish,
+  suicide_attempts,
+  completed_at,
+  completed_by_user_id,
+  updated_by_user_id
+)
+VALUES
+  (
+    '2',
+    '1991-09-15',
+    'Monterrey, Nuevo Leon',
+    'Disenadora grafica',
+    'Leer y caminar',
+    'Soltera',
+    'Mama, papa y una hermana',
+    'Con una roomie',
+    'Ninguna reportada',
+    TRUE,
+    FALSE,
+    TRUE,
+    FALSE,
+    FALSE,
+    FALSE,
+    FALSE,
+    FALSE,
+    FALSE,
+    FALSE,
+    FALSE,
+    '2026-04-06T17:30:00Z',
+    'u_pat_2',
+    'u_pat_2'
+  )
+ON CONFLICT (patient_id) DO NOTHING;
+
 INSERT INTO psychologist_availability (
   psychologist_user_id,
   weekday,

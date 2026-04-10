@@ -3,6 +3,7 @@ import './App.css';
 import Sidebar from './components/layout/Sidebar';
 import MobileNav from './components/layout/MobileNav';
 import NewPatientModal from './modals/NewPatientModal';
+import PatientInterviewModal from './modals/PatientInterviewModal';
 import DashboardScreen from './screens/DashboardScreen';
 import PatientsScreen from './screens/PatientsScreen';
 import NotesScreen from './screens/NotesScreen';
@@ -27,6 +28,7 @@ import {
   deletePatientSession,
   deletePatientTask,
   getPatients,
+  upsertPatientInterview,
   updatePatient,
   updatePatientObjective,
   updatePatientSession,
@@ -49,6 +51,7 @@ import {
   mapBackendPatientToUiPatient,
   mapBackendSessionToUiSession,
   mapBackendTaskToUiTask,
+  mapUiInterviewToBackendInterview,
   mapUiPatientToBackendPatient,
 } from './mappers/patients';
 import {
@@ -58,6 +61,7 @@ import {
   mapBackendWaitlistToUiWaitlistEntry,
   mapUiAppointmentToBackendAppointment,
 } from './mappers/appointments';
+import { buildInterviewForm as buildInterviewDraftForm } from './utils/patientInterview';
 
 const syncPatientInCollection = (patients, nextPatient) =>
   patients.map((patient) => (patient.id === nextPatient.id ? nextPatient : patient));
@@ -116,6 +120,7 @@ export default function App() {
   const [guardandoNotas, setGuardandoNotas] = useState(false);
   const [guardandoPerfilPaciente, setGuardandoPerfilPaciente] = useState(false);
   const [guardandoSesion, setGuardandoSesion] = useState(false);
+  const [guardandoEntrevista, setGuardandoEntrevista] = useState(false);
   const [creandoTarea, setCreandoTarea] = useState(false);
   const [procesandoTareaId, setProcesandoTareaId] = useState(null);
   const [creandoObjetivo, setCreandoObjetivo] = useState(false);
@@ -135,10 +140,15 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
+  const [patientInterviewForm, setPatientInterviewForm] = useState(buildInterviewDraftForm(null, ''));
 
   const isPsychologist = currentUser?.role === 'psychologist';
   const todayDate = getTodayDateString();
   const todayAppointments = useMemo(() => filterAppointmentsByDate(appointments, todayDate), [appointments, todayDate]);
+  const patientProfile = useMemo(
+    () => (currentUser?.role === 'patient' ? pacientes.find((patient) => patient.id === currentUser.patientId) || null : null),
+    [currentUser, pacientes],
+  );
 
   const resetSessionState = () => {
     setVistaActiva('dashboard');
@@ -159,6 +169,7 @@ export default function App() {
     setAvailabilityActionError('');
     setAvailabilityExceptionActionError('');
     setGuardandoSesion(false);
+    setGuardandoEntrevista(false);
     setProcesandoSesionId(null);
     setMostrarModalNuevoPaciente(false);
     setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
@@ -241,6 +252,14 @@ export default function App() {
 
     cargarDatos();
   }, [currentUser, cargarDatos]);
+
+  useEffect(() => {
+    if (currentUser?.role !== 'patient' || !patientProfile) {
+      return;
+    }
+
+    setPatientInterviewForm(buildInterviewDraftForm(patientProfile, todayDate));
+  }, [currentUser, patientProfile, todayDate]);
 
   const handleLogin = async (credentials) => {
     if (loggingIn) {
@@ -415,6 +434,57 @@ export default function App() {
     } finally {
       setGuardandoPerfilPaciente(false);
     }
+  };
+
+  const handleInterviewFieldChange = (field, value) => {
+    setPatientInterviewForm((currentForm) => ({
+      ...currentForm,
+      [field]: value,
+    }));
+  };
+
+  const handleInterviewIndicatorToggle = (indicatorKey) => {
+    setPatientInterviewForm((currentForm) => ({
+      ...currentForm,
+      indicadores: {
+        ...currentForm.indicadores,
+        [indicatorKey]: !currentForm.indicadores?.[indicatorKey],
+      },
+    }));
+  };
+
+  const saveInterview = async (patientId, interviewForm) => {
+    if (!patientId || guardandoEntrevista) {
+      return false;
+    }
+
+    setGuardandoEntrevista(true);
+
+    try {
+      const updatedApiPatient = await upsertPatientInterview(patientId, mapUiInterviewToBackendInterview(interviewForm));
+      const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
+      syncPatientState(updatedPatient);
+
+      if (currentUser?.role === 'patient' && currentUser.patientId === patientId) {
+        setPatientInterviewForm(buildInterviewDraftForm(updatedPatient, todayDate));
+      }
+
+      return true;
+    } catch (error) {
+      const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
+      window.alert((error.message || 'No se pudo guardar la entrevista.') + details);
+      return false;
+    } finally {
+      setGuardandoEntrevista(false);
+    }
+  };
+
+  const handleSaveRequiredInterview = async () => {
+    if (!patientProfile) {
+      return;
+    }
+
+    await saveInterview(patientProfile.id, patientInterviewForm);
   };
 
   const addTask = async (taskText) => {
@@ -1090,9 +1160,11 @@ export default function App() {
           onCreateSession={createSession}
           onUpdateSession={updateSession}
           onDeleteSession={removeSession}
+          onSaveInterview={saveInterview}
           isSavingNotes={guardandoNotas}
           isSavingPatientProfile={guardandoPerfilPaciente}
           isSavingSession={guardandoSesion}
+          isSavingInterview={guardandoEntrevista}
           isCreatingTask={creandoTarea}
           processingTaskId={procesandoTareaId}
           isCreatingObjective={creandoObjetivo}
@@ -1137,6 +1209,20 @@ export default function App() {
       <main className="flex-1 flex flex-col h-screen overflow-auto bg-slate-50/50 w-full">
         <div className="p-4 md:p-8">{renderMainContent()}</div>
       </main>
+
+      {currentUser?.role === 'patient' && patientProfile && !patientProfile.entrevistaCompleta && (
+        <PatientInterviewModal
+          patient={patientProfile}
+          form={patientInterviewForm}
+          onChange={handleInterviewFieldChange}
+          onToggleIndicator={handleInterviewIndicatorToggle}
+          onSubmit={handleSaveRequiredInterview}
+          isSubmitting={guardandoEntrevista}
+          title="Entrevista inicial"
+          description="Antes de continuar, necesitamos que completes esta entrevista una sola vez. Despues quedara visible para ti y editable solo para tu psicologo."
+          allowClose={false}
+        />
+      )}
     </div>
   );
 }

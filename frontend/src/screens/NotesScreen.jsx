@@ -15,6 +15,12 @@ import {
 import { getRiskColor } from '../utils/risk';
 import FutureFeatureCard from '../components/shared/FutureFeatureCard';
 import { getAppointmentDisplayStatus, isAppointmentOverdue } from '../mappers/appointments';
+import PatientInterviewModal from '../modals/PatientInterviewModal';
+import {
+  buildInterviewForm,
+  formatInterviewDate,
+  interviewIndicatorGroups,
+} from '../utils/patientInterview';
 
 const emptySessionForm = {
   citaId: '',
@@ -229,9 +235,11 @@ export default function NotesScreen({
   onCreateSession,
   onUpdateSession,
   onDeleteSession,
+  onSaveInterview,
   isSavingNotes = false,
   isSavingPatientProfile = false,
   isSavingSession = false,
+  isSavingInterview = false,
   isCreatingTask = false,
   processingTaskId = null,
   isCreatingObjective = false,
@@ -247,8 +255,10 @@ export default function NotesScreen({
   const [selectedSessionId, setSelectedSessionId] = useState(initialMatchedSession?.id || null);
   const [showSessionModal, setShowSessionModal] = useState(Boolean(initialMatchedSession || prefilledAppointmentId));
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [agendaFilter, setAgendaFilter] = useState('proximas');
   const [profileForm, setProfileForm] = useState(buildProfileForm(patient));
+  const [interviewForm, setInterviewForm] = useState(buildInterviewForm(patient, todayDate));
   const [sessionForm, setSessionForm] = useState(
     initialMatchedSession
       ? {
@@ -338,6 +348,8 @@ export default function NotesScreen({
   const patientRisk = patient.riesgo || 'sin riesgo';
   const patientStatus = patient.estado || 'activo';
   const patientReason = patient.motivo?.trim() || '';
+  const patientInterview = patient.entrevista || null;
+  const hasCompletedInterview = Boolean(patient.entrevistaCompleta && patientInterview);
   const nextAppointment = upcomingAppointments[0] || null;
   const latestSession = sessions[0] || null;
   const completedAppointmentsWithoutSession = patientAppointments.filter((appointment) => appointment.estado === 'completada' && !appointmentSessionsMap.has(appointment.id));
@@ -353,6 +365,7 @@ export default function NotesScreen({
   const visibleSections = isPsychologist
     ? [
       { id: 'resumen', label: 'Resumen' },
+      { id: 'entrevista', label: 'Entrevista' },
       { id: 'agenda', label: 'Agenda' },
       { id: 'sesiones', label: 'Sesiones' },
       { id: 'tareas', label: 'Tareas' },
@@ -361,6 +374,7 @@ export default function NotesScreen({
     ]
     : [
       { id: 'resumen', label: 'Resumen' },
+      { id: 'entrevista', label: 'Entrevista' },
       { id: 'agenda', label: 'Agenda' },
       { id: 'tareas', label: 'Tareas' },
       { id: 'objetivos', label: 'Objetivos' },
@@ -387,6 +401,16 @@ export default function NotesScreen({
   const closeProfileModal = () => {
     setProfileForm(buildProfileForm(patient));
     setShowProfileModal(false);
+  };
+
+  const openInterviewModal = () => {
+    setInterviewForm(buildInterviewForm(patient, todayDate));
+    setShowInterviewModal(true);
+  };
+
+  const closeInterviewModal = () => {
+    setInterviewForm(buildInterviewForm(patient, todayDate));
+    setShowInterviewModal(false);
   };
 
   const openNewSessionModal = (appointmentId = prefilledAppointmentId || '') => {
@@ -747,6 +771,35 @@ export default function NotesScreen({
     );
   };
 
+  const handleInterviewFieldChange = (field, value) => {
+    setInterviewForm((currentForm) => ({
+      ...currentForm,
+      [field]: value,
+    }));
+  };
+
+  const handleInterviewIndicatorToggle = (indicatorKey) => {
+    setInterviewForm((currentForm) => ({
+      ...currentForm,
+      indicadores: {
+        ...currentForm.indicadores,
+        [indicatorKey]: !currentForm.indicadores?.[indicatorKey],
+      },
+    }));
+  };
+
+  const handleSaveInterview = async () => {
+    if (!onSaveInterview || isSavingInterview) {
+      return;
+    }
+
+    const wasSaved = await onSaveInterview(patient.id, interviewForm);
+
+    if (wasSaved) {
+      setShowInterviewModal(false);
+    }
+  };
+
   const handleAddObjective = async () => {
     if (!objectiveText.trim() || isCreatingObjective) {
       return;
@@ -1005,6 +1058,116 @@ export default function NotesScreen({
     </SectionCard>
   );
 
+  const renderInterviewTab = () => (
+    <SectionCard
+      title="Entrevista inicial"
+      description="Registro base del paciente al inicio del proceso clinico."
+      action={
+        isPsychologist ? (
+          <button
+            type="button"
+            onClick={openInterviewModal}
+            className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            {hasCompletedInterview ? 'Editar entrevista' : 'Registrar entrevista'}
+          </button>
+        ) : null
+      }
+    >
+      {hasCompletedInterview ? (
+        <div className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_180px]">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Nombre</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{patient.nombre}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Edad</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{getPatientAgeLabel(patient)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Fecha</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{formatInterviewDate(patientInterview.fechaEntrevista)}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Fecha de nacimiento</p>
+              <p className="mt-2 text-sm text-slate-700">{formatInterviewDate(patientInterview.fechaNacimiento)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Lugar de nacimiento</p>
+              <p className="mt-2 text-sm text-slate-700">{patientInterview.lugarNacimiento || 'No registrado'}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ocupacion</p>
+              <p className="mt-2 text-sm text-slate-700">{patientInterview.ocupacion || 'No registrado'}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Hobbies</p>
+              <p className="mt-2 text-sm text-slate-700">{patientInterview.hobbies || 'No registrado'}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Estado civil</p>
+              <p className="mt-2 text-sm text-slate-700">{patientInterview.estadoCivil || 'No registrado'}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Quienes conforman su familia</p>
+              <p className="mt-2 text-sm text-slate-700">{patientInterview.familia || 'No registrado'}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Con quienes vive</p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{patientInterview.viveCon || 'No registrado'}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Enfermedades fisicas</p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{patientInterview.enfermedadesFisicas || 'No registrado'}</p>
+            </div>
+          </div>
+
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+            <h4 className="text-lg font-black text-slate-900">Indicadores relevantes</h4>
+            <div className="mt-4 grid gap-3">
+              {interviewIndicatorGroups.map((group, index) => (
+                <div key={`interview-readonly-${index}`} className="grid gap-3 md:grid-cols-2">
+                  {group.map((indicator) => (
+                    indicator ? (
+                      <div
+                        key={indicator.key}
+                        className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm ${
+                          patientInterview.indicadores?.[indicator.key]
+                            ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
+                            : 'border-slate-200 bg-white text-slate-500'
+                        }`}
+                      >
+                        <span>{indicator.label}</span>
+                        <span className="text-xs font-bold uppercase tracking-[0.16em]">
+                          {patientInterview.indicadores?.[indicator.key] ? 'Si' : 'No'}
+                        </span>
+                      </div>
+                    ) : (
+                      <div key={`interview-readonly-empty-${index}`} className="hidden md:block" />
+                    )
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-4 py-8 text-sm text-amber-700">
+          {isPsychologist
+            ? 'Este paciente aun no ha completado la entrevista inicial. Puedes registrarla desde aqui si hace falta.'
+            : 'Tu entrevista inicial sigue pendiente. Debes completarla para continuar usando la plataforma.'}
+        </div>
+      )}
+    </SectionCard>
+  );
+
   const renderGeneralNoteTab = () => (
     <SectionCard
       title="Nota general del expediente"
@@ -1064,12 +1227,14 @@ export default function NotesScreen({
 
   const renderActiveSection = () => {
     if (!isPsychologist) {
+      if (activeSection === 'entrevista') return renderInterviewTab();
       if (activeSection === 'agenda') return renderAgendaTab();
       if (activeSection === 'tareas') return renderTasksTab();
       if (activeSection === 'objetivos') return renderObjectivesTab();
       return renderPatientSummaryTab();
     }
 
+    if (activeSection === 'entrevista') return renderInterviewTab();
     if (activeSection === 'agenda') return renderAgendaTab();
     if (activeSection === 'sesiones') return renderSessionsTab();
     if (activeSection === 'tareas') return renderTasksTab();
@@ -1365,6 +1530,21 @@ export default function NotesScreen({
             </div>
           </div>
         </ModalShell>
+      )}
+
+      {showInterviewModal && isPsychologist && (
+        <PatientInterviewModal
+          patient={patient}
+          form={interviewForm}
+          onChange={handleInterviewFieldChange}
+          onToggleIndicator={handleInterviewIndicatorToggle}
+          onSubmit={handleSaveInterview}
+          isSubmitting={isSavingInterview}
+          title={hasCompletedInterview ? 'Editar entrevista inicial' : 'Registrar entrevista inicial'}
+          description="La entrevista queda visible para el paciente, pero solo el psicologo puede editarla despues de completada."
+          allowClose
+          onClose={closeInterviewModal}
+        />
       )}
     </>
   );

@@ -23,6 +23,15 @@ export const updatePatient = async (id, payload) => {
   return response.data;
 };
 
+export const upsertPatientInterview = async (id, payload) => {
+  const response = await apiRequest(`/patients/${id}/interview`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
 export const createPatientTask = async (patientId, payload) => {
   const response = await apiRequest(`/patients/${patientId}/tasks`, {
     method: 'POST',
