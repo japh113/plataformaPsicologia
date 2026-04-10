@@ -48,7 +48,7 @@ Esto implica:
 
 ### Patron de estado
 `App.jsx` centraliza casi todo el estado de negocio:
-- sesion actual
+- nota clinica actual
 - pacientes
 - citas
 - disponibilidad
@@ -97,7 +97,7 @@ Lo menos portable hoy es:
 - `notes`
 - `tasks`
 
-La mayor parte de la logica real de tareas y sesiones se centralizo dentro de `patients`.
+La mayor parte de la logica real de tareas y notas clinicas se centralizo dentro de `patients`.
 
 ## Base de datos
 
@@ -111,7 +111,7 @@ Tablas importantes:
 - `appointments`
 - `appointment_waitlist_entries`
 - `patient_tasks`
-- `patient_sessions`
+- `patient_clinical_notes`
 - `psychologist_availability`
 - `psychologist_availability_blocks`
 - `psychologist_availability_exceptions`
@@ -133,14 +133,14 @@ Tablas importantes:
 - motivo de consulta
 - nota general
 - tareas
-- sesiones clinicas
+- notas clinicas
 
 ### Citas
 - duran 60 minutos
 - solo se agendan por hora exacta
 - no se permiten solapamientos
 - un paciente no puede tener mas de una cita activa el mismo dia
-- citas con sesion vinculada no pueden volver a `pendiente` ni `cancelada`
+- citas con nota clinica vinculada no pueden volver a `pendiente` ni `cancelada`
 
 ### Disponibilidad
 - disponibilidad semanal por multiples bloques
@@ -148,10 +148,10 @@ Tablas importantes:
 - bloqueos por rango tipo vacaciones
 - no se puede recortar disponibilidad dejando citas fuera
 
-### Sesiones clinicas
+### Notas Clinicas
 - solo se registran desde una cita existente
-- no se permiten sesiones sobre citas futuras
-- al registrar sesion, la cita queda tratada como completada
+- no se permiten notas clinicas sobre citas futuras
+- al registrar una nota clinica, la cita queda tratada como completada
 
 ### Waitlist
 - espera por horario especifico `fecha + hora`

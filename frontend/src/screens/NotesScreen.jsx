@@ -573,7 +573,7 @@ export default function NotesScreen({
     const payload = {
       appointmentId: sessionForm.citaId,
       noteFormat: 'simple',
-      sessionObjective: sessionForm.objetivo,
+      clinicalNoteObjective: sessionForm.objetivo,
       clinicalObservations: sessionForm.observaciones,
       nextSteps: sessionForm.proximoPaso,
       content: sessionForm.contenido,

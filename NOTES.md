@@ -27,7 +27,7 @@ Esto debe mantenerse en mente en futuros chats, aunque el trabajo inmediato siga
 - excepciones por fecha
 - bloqueos por rango
 - recordatorios in-app
-- historial clinico por sesiones
+- historial clinico por notas clinicas
 - expediente del paciente
 - lista de espera por slot con prioridad y drag & drop
 
@@ -40,8 +40,8 @@ Razon:
 - en contexto clinico y operativo es mas seguro que el psicologo decida
 - el sistema sugiere al primer paciente en espera, pero no actua solo
 
-### 2. Sesiones desde citas
-No se puede registrar una sesion libremente.
+### 2. Notas Clinicas desde citas
+No se puede registrar una nota clinica libremente.
 
 Razon:
 - el expediente debe amarrarse a la operacion real de agenda
@@ -93,7 +93,7 @@ cd backend
 npm run db:schema
 npm run db:seed
 npm run db:normalize-appointments
-npm run db:normalize-future-sessions
+npm run db:normalize-future-clinical-notes
 ```
 
 ### Frontend

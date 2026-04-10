@@ -7,7 +7,7 @@ INSERT INTO patients (
   phone,
   risk_level,
   status,
-  last_session_date,
+  last_clinical_note_date,
   notes,
   age,
   reason_for_consultation
@@ -278,34 +278,34 @@ WHERE NOT EXISTS (
     AND a.scheduled_time = seed.scheduled_time
 );
 
-UPDATE patient_sessions ps
+UPDATE patient_clinical_notes pcn
 SET appointment_id = a.id
 FROM appointments a
-WHERE ps.appointment_id IS NULL
-  AND ps.patient_id = a.patient_id
-  AND ps.session_date = a.scheduled_date;
+WHERE pcn.appointment_id IS NULL
+  AND pcn.patient_id = a.patient_id
+  AND pcn.clinical_note_date = a.scheduled_date;
 
 UPDATE appointments a
 SET
   status = 'completed',
   updated_at = NOW()
-FROM patient_sessions ps
-WHERE ps.appointment_id = a.id
+FROM patient_clinical_notes pcn
+WHERE pcn.appointment_id = a.id
   AND a.status <> 'completed';
 
-DELETE FROM patient_sessions ps
-USING patient_sessions duplicated
-WHERE ps.appointment_id IS NOT NULL
-  AND duplicated.appointment_id = ps.appointment_id
-  AND duplicated.id < ps.id;
+DELETE FROM patient_clinical_notes pcn
+USING patient_clinical_notes duplicated
+WHERE pcn.appointment_id IS NOT NULL
+  AND duplicated.appointment_id = pcn.appointment_id
+  AND duplicated.id < pcn.id;
 
-INSERT INTO patient_sessions (
+INSERT INTO patient_clinical_notes (
   patient_id,
   appointment_id,
   created_by_user_id,
-  session_date,
+  clinical_note_date,
   note_format,
-  session_objective,
+  clinical_note_objective,
   clinical_observations,
   next_steps,
   content
@@ -314,9 +314,9 @@ SELECT
   seed.patient_id,
   a.id,
   seed.created_by_user_id,
-  seed.session_date,
+  seed.clinical_note_date,
   seed.note_format,
-  seed.session_objective,
+  seed.clinical_note_objective,
   seed.clinical_observations,
   seed.next_steps,
   seed.content
@@ -325,19 +325,19 @@ FROM (
     ('1', 'u_psy_1', '2026-04-05'::date, 'simple', 'Identificar detonantes recientes de ansiedad.', 'Reconoce mejor los picos de activacion y responde a la respiracion guiada.', 'Mantener registro de pensamientos y revisar disparadores la proxima semana.', 'Sesion enfocada en identificar detonantes de ansiedad y revisar estrategias de regulacion.'),
     ('2', 'u_psy_1', '2026-04-04'::date, 'simple', 'Reordenar rutina de sueno.', 'Mejoro ligeramente la higiene nocturna, pero sigue costando desconectarse del trabajo.', 'Sostener horario fijo de descanso y reducir pantallas antes de dormir.', 'Seguimiento de rutina de sueno y ajuste de habitos nocturnos.'),
     ('1', 'u_psy_1', '2026-04-01'::date, 'simple', 'Fortalecer adherencia a tareas entre sesiones.', 'Completo parcialmente el registro y pudo detectar dos pensamientos automaticos frecuentes.', 'Retomar registro diario y revisar avances en la proxima sesion.', 'Se trabajo registro de pensamientos automaticos y adherencia a tareas.')
-) AS seed(patient_id, created_by_user_id, session_date, note_format, session_objective, clinical_observations, next_steps, content)
+) AS seed(patient_id, created_by_user_id, clinical_note_date, note_format, clinical_note_objective, clinical_observations, next_steps, content)
 INNER JOIN appointments a
   ON a.patient_id = seed.patient_id
- AND a.scheduled_date = seed.session_date
+ AND a.scheduled_date = seed.clinical_note_date
 WHERE NOT EXISTS (
   SELECT 1
-  FROM patient_sessions ps
-  WHERE ps.appointment_id = a.id
+  FROM patient_clinical_notes pcn
+  WHERE pcn.appointment_id = a.id
 );
 
-UPDATE patient_sessions ps
+UPDATE patient_clinical_notes pcn
 SET
-  session_objective = seed.session_objective,
+  clinical_note_objective = seed.clinical_note_objective,
   clinical_observations = seed.clinical_observations,
   next_steps = seed.next_steps
 FROM (
@@ -345,25 +345,25 @@ FROM (
     ('1', '2026-04-05'::date, 'Identificar detonantes recientes de ansiedad.', 'Reconoce mejor los picos de activacion y responde a la respiracion guiada.', 'Mantener registro de pensamientos y revisar disparadores la proxima semana.'),
     ('2', '2026-04-04'::date, 'Reordenar rutina de sueno.', 'Mejoro ligeramente la higiene nocturna, pero sigue costando desconectarse del trabajo.', 'Sostener horario fijo de descanso y reducir pantallas antes de dormir.'),
     ('1', '2026-04-01'::date, 'Fortalecer adherencia a tareas entre sesiones.', 'Completo parcialmente el registro y pudo detectar dos pensamientos automaticos frecuentes.', 'Retomar registro diario y revisar avances en la proxima sesion.')
-) AS seed(patient_id, session_date, session_objective, clinical_observations, next_steps)
-WHERE ps.patient_id = seed.patient_id
-  AND ps.session_date = seed.session_date
-  AND COALESCE(ps.session_objective, '') = ''
-  AND COALESCE(ps.clinical_observations, '') = ''
-  AND COALESCE(ps.next_steps, '') = '';
+) AS seed(patient_id, clinical_note_date, clinical_note_objective, clinical_observations, next_steps)
+WHERE pcn.patient_id = seed.patient_id
+  AND pcn.clinical_note_date = seed.clinical_note_date
+  AND COALESCE(pcn.clinical_note_objective, '') = ''
+  AND COALESCE(pcn.clinical_observations, '') = ''
+  AND COALESCE(pcn.next_steps, '') = '';
 
-WITH latest_patient_sessions AS (
-  SELECT DISTINCT ON (ps.patient_id)
-    ps.patient_id,
-    ps.id AS session_id
-  FROM patient_sessions ps
-  ORDER BY ps.patient_id, ps.session_date DESC, ps.created_at DESC, ps.id DESC
+WITH latest_patient_clinical_notes AS (
+  SELECT DISTINCT ON (pcn.patient_id)
+    pcn.patient_id,
+    pcn.id AS clinical_note_id
+  FROM patient_clinical_notes pcn
+  ORDER BY pcn.patient_id, pcn.clinical_note_date DESC, pcn.created_at DESC, pcn.id DESC
 )
 UPDATE patient_tasks pt
 SET
-  session_id = latest_patient_sessions.session_id,
+  clinical_note_id = latest_patient_clinical_notes.clinical_note_id,
   updated_at = NOW()
-FROM latest_patient_sessions
-WHERE pt.patient_id = latest_patient_sessions.patient_id
+FROM latest_patient_clinical_notes
+WHERE pt.patient_id = latest_patient_clinical_notes.patient_id
   AND pt.kind = 'task'
-  AND pt.session_id IS NULL;
+  AND pt.clinical_note_id IS NULL;

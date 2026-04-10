@@ -35,7 +35,7 @@ export const buildPatientEntity = (payload, id) => {
     phone: payload.phone?.trim() || '',
     riskLevel: payload.riskLevel || 'none',
     status: payload.status || 'active',
-    lastSessionDate: payload.lastSessionDate || null,
+    lastClinicalNoteDate: payload.lastClinicalNoteDate || payload.lastSessionDate || null,
     notes: payload.notes || '',
     age: normalizeAge(payload.age),
     reasonForConsultation: payload.reasonForConsultation?.trim() || '',

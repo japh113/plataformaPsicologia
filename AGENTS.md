@@ -8,7 +8,7 @@ PsicoPanel es una plataforma clinica para psicologos y pacientes con foco en:
 - agenda
 - seguimiento clinico
 - tareas
-- sesiones
+- notas clinicas
 - disponibilidad
 - lista de espera
 
@@ -53,13 +53,13 @@ Significa:
 - se agendan por hora exacta
 - no se permiten solapamientos
 - un paciente no puede tener multiples citas activas el mismo dia
-- si una cita tiene sesion vinculada, no debe volver a pendiente o cancelada
+- si una cita tiene nota clinica vinculada, no debe volver a pendiente o cancelada
 - no se pueden completar citas futuras
 
-### Sesiones
-- no se registra sesion sin cita
-- no se registran sesiones para citas futuras
-- el flujo correcto es cita -> completada -> sesion
+### Notas Clinicas
+- no se registra nota clinica sin cita
+- no se registran notas clinicas para citas futuras
+- el flujo correcto es cita -> completada -> nota clinica
 
 ### Waitlist
 - la asignacion desde lista de espera debe ser manual, no automatica

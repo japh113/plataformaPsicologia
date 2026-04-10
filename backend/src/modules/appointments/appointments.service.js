@@ -105,8 +105,8 @@ const getAppointmentSelectColumns = (waitlistParamIndex = null) => `
   a.notes,
   EXISTS (
     SELECT 1
-    FROM patient_sessions ps
-    WHERE ps.appointment_id = a.id
+    FROM patient_clinical_notes pcn
+    WHERE pcn.appointment_id = a.id
   ) AS has_linked_clinical_note,
   ${waitlistParamIndex
     ? `COALESCE((

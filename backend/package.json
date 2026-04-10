@@ -10,7 +10,7 @@
     "db:seed": "node scripts/run-sql-file.js sql/seed.sql",
     "db:init": "npm run db:schema && npm run db:seed",
     "db:normalize-appointments": "node scripts/normalize-appointment-times.js",
-    "db:normalize-future-sessions": "node scripts/normalize-future-sessions.js"
+    "db:normalize-future-clinical-notes": "node scripts/normalize-future-clinical-notes.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

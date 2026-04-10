@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS patients (
   phone TEXT NOT NULL DEFAULT '',
   risk_level TEXT NOT NULL DEFAULT 'none' CHECK (risk_level IN ('none', 'low', 'medium', 'high')),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'inactive', 'discharged')),
-  last_session_date DATE,
+  last_clinical_note_date DATE,
   notes TEXT NOT NULL DEFAULT '',
   age INTEGER CHECK (age IS NULL OR age >= 0),
   reason_for_consultation TEXT NOT NULL DEFAULT '',
@@ -128,7 +128,7 @@ CREATE TABLE IF NOT EXISTS psychologist_availability_exception_blocks (
 CREATE TABLE IF NOT EXISTS patient_tasks (
   id BIGSERIAL PRIMARY KEY,
   patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-  session_id BIGINT,
+  clinical_note_id BIGINT,
   kind TEXT NOT NULL DEFAULT 'task' CHECK (kind IN ('task', 'objective')),
   text TEXT NOT NULL,
   completed BOOLEAN NOT NULL DEFAULT FALSE,
@@ -172,14 +172,46 @@ CREATE UNIQUE INDEX IF NOT EXISTS appointment_waitlist_entries_active_unique_idx
   ON appointment_waitlist_entries (patient_id, scheduled_date, scheduled_time)
   WHERE status = 'active';
 
-CREATE TABLE IF NOT EXISTS patient_sessions (
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'patients'
+      AND column_name = 'last_session_date'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'patients'
+      AND column_name = 'last_clinical_note_date'
+  ) THEN
+    ALTER TABLE patients RENAME COLUMN last_session_date TO last_clinical_note_date;
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_name = 'patient_sessions'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.tables
+    WHERE table_name = 'patient_clinical_notes'
+  ) THEN
+    ALTER TABLE patient_sessions RENAME TO patient_clinical_notes;
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS patient_clinical_notes (
   id BIGSERIAL PRIMARY KEY,
   patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
   appointment_id BIGINT NOT NULL UNIQUE REFERENCES appointments(id) ON DELETE CASCADE,
   created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-  session_date DATE NOT NULL,
+  clinical_note_date DATE NOT NULL,
   note_format TEXT NOT NULL DEFAULT 'simple' CHECK (note_format IN ('simple', 'soap')),
-  session_objective TEXT NOT NULL DEFAULT '',
+  clinical_note_objective TEXT NOT NULL DEFAULT '',
   clinical_observations TEXT NOT NULL DEFAULT '',
   next_steps TEXT NOT NULL DEFAULT '',
   content TEXT NOT NULL DEFAULT '',
@@ -187,13 +219,47 @@ CREATE TABLE IF NOT EXISTS patient_sessions (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE patient_sessions
-  ADD COLUMN IF NOT EXISTS session_objective TEXT NOT NULL DEFAULT '';
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'patient_clinical_notes'
+      AND column_name = 'session_date'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'patient_clinical_notes'
+      AND column_name = 'clinical_note_date'
+  ) THEN
+    ALTER TABLE patient_clinical_notes RENAME COLUMN session_date TO clinical_note_date;
+  END IF;
+END $$;
 
-ALTER TABLE patient_sessions
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'patient_clinical_notes'
+      AND column_name = 'session_objective'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'patient_clinical_notes'
+      AND column_name = 'clinical_note_objective'
+  ) THEN
+    ALTER TABLE patient_clinical_notes RENAME COLUMN session_objective TO clinical_note_objective;
+  END IF;
+END $$;
+
+ALTER TABLE patient_clinical_notes
+  ADD COLUMN IF NOT EXISTS clinical_note_objective TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE patient_clinical_notes
   ADD COLUMN IF NOT EXISTS clinical_observations TEXT NOT NULL DEFAULT '';
 
-ALTER TABLE patient_sessions
+ALTER TABLE patient_clinical_notes
   ADD COLUMN IF NOT EXISTS next_steps TEXT NOT NULL DEFAULT '';
 
 ALTER TABLE patients
@@ -210,16 +276,36 @@ ALTER TABLE patients
   ADD CONSTRAINT patients_status_check
   CHECK (status IN ('active', 'paused', 'inactive', 'discharged'));
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'patient_tasks'
+      AND column_name = 'session_id'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'patient_tasks'
+      AND column_name = 'clinical_note_id'
+  ) THEN
+    ALTER TABLE patient_tasks RENAME COLUMN session_id TO clinical_note_id;
+  END IF;
+END $$;
+
 ALTER TABLE patient_tasks
-  ADD COLUMN IF NOT EXISTS session_id BIGINT;
+  ADD COLUMN IF NOT EXISTS clinical_note_id BIGINT;
 
 ALTER TABLE patient_tasks
   DROP CONSTRAINT IF EXISTS patient_tasks_session_id_fkey;
 
 ALTER TABLE patient_tasks
-  ADD CONSTRAINT patient_tasks_session_id_fkey
-  FOREIGN KEY (session_id)
-  REFERENCES patient_sessions(id)
+  DROP CONSTRAINT IF EXISTS patient_tasks_clinical_note_id_fkey;
+
+ALTER TABLE patient_tasks
+  ADD CONSTRAINT patient_tasks_clinical_note_id_fkey
+  FOREIGN KEY (clinical_note_id)
+  REFERENCES patient_clinical_notes(id)
   ON DELETE CASCADE;
 
 ALTER TABLE patient_tasks
@@ -247,18 +333,18 @@ SET priority_position = ranked_waitlist_entries.normalized_priority_position
 FROM ranked_waitlist_entries
 WHERE appointment_waitlist_entry.id = ranked_waitlist_entries.id;
 
-WITH latest_patient_sessions AS (
-  SELECT DISTINCT ON (ps.patient_id)
-    ps.patient_id,
-    ps.id AS session_id
-  FROM patient_sessions ps
-  ORDER BY ps.patient_id, ps.session_date DESC, ps.created_at DESC, ps.id DESC
+WITH latest_patient_clinical_notes AS (
+  SELECT DISTINCT ON (pcn.patient_id)
+    pcn.patient_id,
+    pcn.id AS clinical_note_id
+  FROM patient_clinical_notes pcn
+  ORDER BY pcn.patient_id, pcn.clinical_note_date DESC, pcn.created_at DESC, pcn.id DESC
 )
 UPDATE patient_tasks pt
 SET
-  session_id = latest_patient_sessions.session_id,
+  clinical_note_id = latest_patient_clinical_notes.clinical_note_id,
   updated_at = NOW()
-FROM latest_patient_sessions
-WHERE pt.patient_id = latest_patient_sessions.patient_id
+FROM latest_patient_clinical_notes
+WHERE pt.patient_id = latest_patient_clinical_notes.patient_id
   AND pt.kind = 'task'
-  AND pt.session_id IS NULL;
+  AND pt.clinical_note_id IS NULL;

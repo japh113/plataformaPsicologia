@@ -34,7 +34,7 @@ Nota:
 - Excepciones por fecha y bloqueos por rango
 - Lista de espera por horario con prioridad y drag & drop
 - Tareas por paciente
-- Historial clinico por sesiones
+- Historial clinico por notas clinicas
 - Recordatorios in-app
 
 ## Estructura
@@ -85,11 +85,11 @@ cd backend
 npm run db:schema
 npm run db:seed
 npm run db:normalize-appointments
-npm run db:normalize-future-sessions
+npm run db:normalize-future-clinical-notes
 ```
 
 ## Nota importante
-Este repo ya trae bastante contexto conversacional convertido en codigo. Antes de tocar agenda, disponibilidad, sesiones o lista de espera, conviene leer:
+Este repo ya trae bastante contexto conversacional convertido en codigo. Antes de tocar agenda, disponibilidad, notas clinicas o lista de espera, conviene leer:
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md)
 - [`AGENTS.md`](./AGENTS.md)
 - [`NOTES.md`](./NOTES.md)

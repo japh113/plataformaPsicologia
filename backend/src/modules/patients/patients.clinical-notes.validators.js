@@ -1,5 +1,6 @@
 const allowedFormats = new Set(['simple', 'soap']);
-const structuredFieldKeys = ['sessionObjective', 'clinicalObservations', 'nextSteps'];
+const structuredFieldKeys = ['clinicalNoteObjective', 'clinicalObservations', 'nextSteps'];
+const legacyStructuredFieldKeys = ['sessionObjective'];
 
 const validateTasksField = (payload, errors) => {
   if (!Object.prototype.hasOwnProperty.call(payload || {}, 'tasks')) {
@@ -55,7 +56,7 @@ export const validateCreateClinicalNotePayload = (payload) => {
     errors.push('content is required');
   }
 
-  structuredFieldKeys.forEach((key) => validateOptionalTextField(payload, key, errors));
+  [...structuredFieldKeys, ...legacyStructuredFieldKeys].forEach((key) => validateOptionalTextField(payload, key, errors));
   validateTasksField(payload, errors);
 
   return errors;
@@ -63,7 +64,7 @@ export const validateCreateClinicalNotePayload = (payload) => {
 
 export const validateUpdateClinicalNotePayload = (payload) => {
   const errors = [];
-  const hasAnyField = ['noteFormat', 'content', 'appointmentId', 'tasks', ...structuredFieldKeys].some((key) => Object.prototype.hasOwnProperty.call(payload || {}, key));
+  const hasAnyField = ['noteFormat', 'content', 'appointmentId', 'tasks', ...structuredFieldKeys, ...legacyStructuredFieldKeys].some((key) => Object.prototype.hasOwnProperty.call(payload || {}, key));
 
   if (!hasAnyField) {
     return ['At least one field must be provided'];
@@ -77,7 +78,7 @@ export const validateUpdateClinicalNotePayload = (payload) => {
     errors.push('content must be a non-empty string');
   }
 
-  structuredFieldKeys.forEach((key) => validateOptionalTextField(payload, key, errors));
+  [...structuredFieldKeys, ...legacyStructuredFieldKeys].forEach((key) => validateOptionalTextField(payload, key, errors));
   validateTasksField(payload, errors);
 
   if (

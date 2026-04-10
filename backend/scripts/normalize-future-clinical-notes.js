@@ -20,32 +20,32 @@ const client = await db.getClient();
 try {
   await client.query('BEGIN');
 
-  const futureSessionsResult = await client.query(
+  const futureClinicalNotesResult = await client.query(
     `
       SELECT
-        ps.id,
-        ps.patient_id,
-        ps.appointment_id,
+        pcn.id,
+        pcn.patient_id,
+        pcn.appointment_id,
         a.scheduled_date
-      FROM patient_sessions ps
+      FROM patient_clinical_notes pcn
       INNER JOIN appointments a
-        ON a.id = ps.appointment_id
+        ON a.id = pcn.appointment_id
       WHERE a.scheduled_date > $1::date
-      ORDER BY a.scheduled_date ASC, a.scheduled_time ASC, ps.id ASC
+      ORDER BY a.scheduled_date ASC, a.scheduled_time ASC, pcn.id ASC
     `,
     [todayDate],
   );
 
-  const deletedSessionIds = futureSessionsResult.rows.map((row) => row.id);
-  const affectedPatientIds = new Set(futureSessionsResult.rows.map((row) => row.patient_id));
+  const deletedClinicalNoteIds = futureClinicalNotesResult.rows.map((row) => row.id);
+  const affectedPatientIds = new Set(futureClinicalNotesResult.rows.map((row) => row.patient_id));
 
-  if (deletedSessionIds.length > 0) {
+  if (deletedClinicalNoteIds.length > 0) {
     await client.query(
       `
-        DELETE FROM patient_sessions
+        DELETE FROM patient_clinical_notes
         WHERE id = ANY($1::bigint[])
       `,
-      [deletedSessionIds],
+      [deletedClinicalNoteIds],
     );
   }
 
@@ -59,8 +59,8 @@ try {
         AND a.status = 'completed'
         AND NOT EXISTS (
           SELECT 1
-          FROM patient_sessions ps
-          WHERE ps.appointment_id = a.id
+          FROM patient_clinical_notes pcn
+          WHERE pcn.appointment_id = a.id
         )
       RETURNING a.id, a.patient_id, a.scheduled_date, a.scheduled_time
     `,
@@ -76,10 +76,10 @@ try {
       `
         UPDATE patients p
         SET
-          last_session_date = (
-            SELECT MAX(ps.session_date)
-            FROM patient_sessions ps
-            WHERE ps.patient_id = p.id
+          last_clinical_note_date = (
+            SELECT MAX(pcn.clinical_note_date)
+            FROM patient_clinical_notes pcn
+            WHERE pcn.patient_id = p.id
           ),
           updated_at = NOW()
         WHERE p.id = ANY($1::text[])
@@ -94,9 +94,9 @@ try {
     JSON.stringify(
       {
         todayDate,
-        deletedFutureSessionCount: deletedSessionIds.length,
+        deletedFutureClinicalNoteCount: deletedClinicalNoteIds.length,
         revertedFutureCompletedAppointmentCount: futureCompletedAppointmentsResult.rowCount,
-        deletedFutureSessionIds: deletedSessionIds,
+        deletedFutureClinicalNoteIds: deletedClinicalNoteIds,
         revertedFutureAppointmentIds: futureCompletedAppointmentsResult.rows.map((row) => row.id),
       },
       null,
@@ -105,7 +105,7 @@ try {
   );
 } catch (error) {
   await client.query('ROLLBACK');
-  console.error('Failed to normalize future sessions');
+  console.error('Failed to normalize future clinical notes');
   console.error(error);
   process.exitCode = 1;
 } finally {

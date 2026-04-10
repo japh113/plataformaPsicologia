@@ -43,7 +43,7 @@ const patientSelectColumns = `
   p.phone,
   p.risk_level,
   p.status,
-  p.last_session_date,
+  p.last_clinical_note_date,
   p.notes,
   p.age,
   p.reason_for_consultation,
@@ -88,15 +88,15 @@ const patientSelectColumns = `
           'id', pt.id,
           'text', pt.text,
           'completed', pt.completed,
-          'clinicalNoteId', pt.session_id,
-          'clinicalNoteDate', ps.session_date,
-          'clinicalNoteObjective', ps.session_objective
+          'clinicalNoteId', pt.clinical_note_id,
+          'clinicalNoteDate', pcn.clinical_note_date,
+          'clinicalNoteObjective', pcn.clinical_note_objective
         )
-        ORDER BY ps.session_date DESC NULLS LAST, pt.created_at ASC, pt.id ASC
+        ORDER BY pcn.clinical_note_date DESC NULLS LAST, pt.created_at ASC, pt.id ASC
       )
       FROM patient_tasks pt
-      LEFT JOIN patient_sessions ps
-        ON ps.id = pt.session_id
+      LEFT JOIN patient_clinical_notes pcn
+        ON pcn.id = pt.clinical_note_id
       WHERE pt.patient_id = p.id
         AND pt.kind = 'task'
     ),
@@ -125,21 +125,21 @@ const psychologistClinicalNoteSelectColumn = `,
     (
       SELECT json_agg(
         json_build_object(
-          'id', ps.id,
-          'appointmentId', ps.appointment_id,
-          'clinicalNoteDate', ps.session_date,
-          'noteFormat', ps.note_format,
-          'clinicalNoteObjective', ps.session_objective,
-          'clinicalObservations', ps.clinical_observations,
-          'nextSteps', ps.next_steps,
-          'content', ps.content,
-          'createdAt', ps.created_at,
-          'updatedAt', ps.updated_at
+          'id', pcn.id,
+          'appointmentId', pcn.appointment_id,
+          'clinicalNoteDate', pcn.clinical_note_date,
+          'noteFormat', pcn.note_format,
+          'clinicalNoteObjective', pcn.clinical_note_objective,
+          'clinicalObservations', pcn.clinical_observations,
+          'nextSteps', pcn.next_steps,
+          'content', pcn.content,
+          'createdAt', pcn.created_at,
+          'updatedAt', pcn.updated_at
         )
-        ORDER BY ps.session_date DESC, ps.created_at DESC, ps.id DESC
+        ORDER BY pcn.clinical_note_date DESC, pcn.created_at DESC, pcn.id DESC
       )
-      FROM patient_sessions ps
-      WHERE ps.patient_id = p.id
+      FROM patient_clinical_notes pcn
+      WHERE pcn.patient_id = p.id
     ),
     '[]'::json
   ) AS clinical_notes
@@ -153,7 +153,7 @@ const mapTaskRow = (task) => ({
     task.clinicalNoteId === null || typeof task.clinicalNoteId === 'undefined'
       ? (
           task.sessionId === null || typeof task.sessionId === 'undefined'
-            ? (task.session_id === null || typeof task.session_id === 'undefined' ? null : String(task.session_id))
+            ? (task.clinical_note_id === null || typeof task.clinical_note_id === 'undefined' ? null : String(task.clinical_note_id))
             : String(task.sessionId)
         )
       : String(task.clinicalNoteId),
@@ -214,7 +214,7 @@ const mapPatientRow = (row) => ({
   phone: row.phone,
   riskLevel: row.risk_level,
   status: row.status,
-  lastSessionDate: normalizeDateValue(row.last_session_date),
+  lastClinicalNoteDate: normalizeDateValue(row.last_clinical_note_date),
   notes: row.notes,
   age: row.age,
   reasonForConsultation: row.reason_for_consultation,
@@ -246,9 +246,9 @@ const ensureClinicalNoteBelongsToPatient = async (clinicalNoteId, patientId) => 
     `
       SELECT
         id,
-        session_date,
-        session_objective
-      FROM patient_sessions
+        clinical_note_date,
+        clinical_note_objective
+      FROM patient_clinical_notes
       WHERE id = $1
         AND patient_id = $2
       LIMIT 1
@@ -283,7 +283,7 @@ const syncClinicalNoteTasks = async (client, patientId, clinicalNoteId, tasks) =
       SELECT id
       FROM patient_tasks
       WHERE patient_id = $1
-        AND session_id = $2
+        AND clinical_note_id = $2
         AND kind = 'task'
     `,
     [patientId, clinicalNoteId],
@@ -299,7 +299,7 @@ const syncClinicalNoteTasks = async (client, patientId, clinicalNoteId, tasks) =
       `
         DELETE FROM patient_tasks
         WHERE patient_id = $1
-          AND session_id = $2
+          AND clinical_note_id = $2
           AND kind = 'task'
           AND id = ANY($3::bigint[])
       `,
@@ -317,7 +317,7 @@ const syncClinicalNoteTasks = async (client, patientId, clinicalNoteId, tasks) =
             completed = $5,
             updated_at = NOW()
           WHERE patient_id = $1
-            AND session_id = $2
+            AND clinical_note_id = $2
             AND kind = 'task'
             AND id = $3
         `,
@@ -330,7 +330,7 @@ const syncClinicalNoteTasks = async (client, patientId, clinicalNoteId, tasks) =
       `
         INSERT INTO patient_tasks (
           patient_id,
-          session_id,
+          clinical_note_id,
           kind,
           text,
           completed
@@ -410,15 +410,15 @@ export const getPatientById = async (id, actor) => {
   return mapPatientResult(result);
 };
 
-const refreshPatientLastSessionDate = async (patientId) => {
+const refreshPatientLastClinicalNoteDate = async (patientId) => {
   await db.query(
     `
       UPDATE patients
       SET
-        last_session_date = (
-          SELECT MAX(ps.session_date)
-          FROM patient_sessions ps
-          WHERE ps.patient_id = $1
+        last_clinical_note_date = (
+          SELECT MAX(pcn.clinical_note_date)
+          FROM patient_clinical_notes pcn
+          WHERE pcn.patient_id = $1
         ),
         updated_at = NOW()
       WHERE id = $1
@@ -476,7 +476,7 @@ const ensureAppointmentClinicalNoteUniqueness = async (appointmentId, excludeCli
   const result = await db.query(
     `
       SELECT id
-      FROM patient_sessions
+      FROM patient_clinical_notes
       WHERE appointment_id = $1
         AND ($2::bigint IS NULL OR id <> $2)
       LIMIT 1
@@ -529,7 +529,7 @@ export const createPatient = async (payload, actor) => {
           phone,
           risk_level,
           status,
-          last_session_date,
+          last_clinical_note_date,
           notes,
           age,
           reason_for_consultation
@@ -545,7 +545,7 @@ export const createPatient = async (payload, actor) => {
         patient.phone,
         patient.riskLevel,
         patient.status,
-        patient.lastSessionDate,
+        patient.lastClinicalNoteDate,
         patient.notes,
         patient.age,
         patient.reasonForConsultation,
@@ -597,7 +597,7 @@ export const updatePatient = async (id, payload, actor) => {
         phone = $6,
         risk_level = $7,
         status = $8,
-        last_session_date = $9,
+        last_clinical_note_date = $9,
         notes = $10,
         age = $11,
         reason_for_consultation = $12,
@@ -613,7 +613,7 @@ export const updatePatient = async (id, payload, actor) => {
       updatedPatient.phone,
       updatedPatient.riskLevel,
       updatedPatient.status,
-      updatedPatient.lastSessionDate,
+      updatedPatient.lastClinicalNoteDate,
       updatedPatient.notes,
       updatedPatient.age,
       updatedPatient.reasonForConsultation,
@@ -756,23 +756,23 @@ const createPatientChecklistItem = async (patientId, payload, actor, kind) => {
 
   const result = await db.query(
     `
-      INSERT INTO patient_tasks (
-        patient_id,
-        session_id,
-        kind,
-        text,
-        completed
-      )
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, text, completed, session_id AS "clinicalNoteId"
+        INSERT INTO patient_tasks (
+          patient_id,
+          clinical_note_id,
+          kind,
+          text,
+          completed
+        )
+        VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, text, completed, clinical_note_id AS "clinicalNoteId"
     `,
     [patientId, session ? Number(session.id) : null, kind, payload.text.trim(), false],
   );
 
   return mapTaskRow({
     ...result.rows[0],
-    clinicalNoteDate: session?.session_date || null,
-    clinicalNoteObjective: session?.session_objective || '',
+    clinicalNoteDate: session?.clinical_note_date || null,
+    clinicalNoteObjective: session?.clinical_note_objective || '',
   });
 };
 
@@ -786,7 +786,7 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
   const currentTaskResult = await db.query(
     `
       SELECT id, patient_id, text, completed
-           , session_id
+           , clinical_note_id
       FROM patient_tasks
       WHERE patient_id = $1 AND id = $2 AND kind = $3
       LIMIT 1
@@ -816,7 +816,7 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
         completed = $5,
         updated_at = NOW()
       WHERE patient_id = $1 AND id = $2 AND kind = $3
-      RETURNING id, text, completed, session_id AS "clinicalNoteId"
+      RETURNING id, text, completed, clinical_note_id AS "clinicalNoteId"
     `,
     [patientId, taskId, kind, nextText, nextCompleted],
   );
@@ -829,8 +829,8 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
 
   return mapTaskRow({
     ...result.rows[0],
-    clinicalNoteDate: session?.session_date || null,
-    clinicalNoteObjective: session?.session_objective || '',
+    clinicalNoteDate: session?.clinical_note_date || null,
+    clinicalNoteObjective: session?.clinical_note_objective || '',
   });
 };
 
@@ -880,13 +880,13 @@ export const createPatientClinicalNote = async (patientId, payload, actor) => {
 
     const result = await client.query(
       `
-        INSERT INTO patient_sessions (
+        INSERT INTO patient_clinical_notes (
           patient_id,
           appointment_id,
           created_by_user_id,
-          session_date,
+          clinical_note_date,
           note_format,
-          session_objective,
+          clinical_note_objective,
           clinical_observations,
           next_steps,
           content
@@ -895,9 +895,9 @@ export const createPatientClinicalNote = async (patientId, payload, actor) => {
         RETURNING
           id,
           appointment_id AS "appointmentId",
-          session_date AS "clinicalNoteDate",
+          clinical_note_date AS "clinicalNoteDate",
           note_format AS "noteFormat",
-          session_objective AS "clinicalNoteObjective",
+          clinical_note_objective AS "clinicalNoteObjective",
           clinical_observations AS "clinicalObservations",
           next_steps AS "nextSteps",
           content,
@@ -910,7 +910,7 @@ export const createPatientClinicalNote = async (patientId, payload, actor) => {
         actor.id,
         normalizeDateValue(appointment.scheduled_date),
         payload.noteFormat,
-        normalizeOptionalText(payload.sessionObjective),
+        normalizeOptionalText(payload.clinicalNoteObjective ?? payload.sessionObjective),
         normalizeOptionalText(payload.clinicalObservations),
         normalizeOptionalText(payload.nextSteps),
         payload.content.trim(),
@@ -936,10 +936,10 @@ export const createPatientClinicalNote = async (patientId, payload, actor) => {
       `
         UPDATE patients
         SET
-          last_session_date = (
-            SELECT MAX(ps.session_date)
-            FROM patient_sessions ps
-            WHERE ps.patient_id = $1
+          last_clinical_note_date = (
+            SELECT MAX(pcn.clinical_note_date)
+            FROM patient_clinical_notes pcn
+            WHERE pcn.patient_id = $1
           ),
           updated_at = NOW()
         WHERE id = $1
@@ -966,45 +966,47 @@ export const updatePatientClinicalNote = async (patientId, clinicalNoteId, paylo
     return null;
   }
 
-  const currentSessionResult = await db.query(
+  const currentClinicalNoteResult = await db.query(
     `
       SELECT
         id,
         appointment_id AS "appointmentId",
-        session_date AS "sessionDate",
+        clinical_note_date AS "clinicalNoteDate",
         note_format AS "noteFormat",
-        session_objective AS "sessionObjective",
+        clinical_note_objective AS "clinicalNoteObjective",
         clinical_observations AS "clinicalObservations",
         next_steps AS "nextSteps",
         content,
         created_at AS "createdAt",
         updated_at AS "updatedAt"
-      FROM patient_sessions
+      FROM patient_clinical_notes
       WHERE patient_id = $1 AND id = $2
       LIMIT 1
     `,
     [patientId, clinicalNoteId],
   );
 
-  if (!currentSessionResult.rows[0]) {
+  if (!currentClinicalNoteResult.rows[0]) {
     return null;
   }
 
-  const currentSession = currentSessionResult.rows[0];
-  const nextNoteFormat = Object.prototype.hasOwnProperty.call(payload, 'noteFormat') ? payload.noteFormat : currentSession.noteFormat;
-  const nextContent = Object.prototype.hasOwnProperty.call(payload, 'content') ? payload.content.trim() : currentSession.content;
-  const nextSessionObjective = Object.prototype.hasOwnProperty.call(payload, 'sessionObjective')
-    ? normalizeOptionalText(payload.sessionObjective)
-    : currentSession.sessionObjective;
+  const currentClinicalNote = currentClinicalNoteResult.rows[0];
+  const nextNoteFormat = Object.prototype.hasOwnProperty.call(payload, 'noteFormat') ? payload.noteFormat : currentClinicalNote.noteFormat;
+  const nextContent = Object.prototype.hasOwnProperty.call(payload, 'content') ? payload.content.trim() : currentClinicalNote.content;
+  const nextClinicalNoteObjective = Object.prototype.hasOwnProperty.call(payload, 'clinicalNoteObjective')
+    ? normalizeOptionalText(payload.clinicalNoteObjective)
+    : Object.prototype.hasOwnProperty.call(payload, 'sessionObjective')
+      ? normalizeOptionalText(payload.sessionObjective)
+    : currentClinicalNote.clinicalNoteObjective;
   const nextClinicalObservations = Object.prototype.hasOwnProperty.call(payload, 'clinicalObservations')
     ? normalizeOptionalText(payload.clinicalObservations)
-    : currentSession.clinicalObservations;
+    : currentClinicalNote.clinicalObservations;
   const nextSteps = Object.prototype.hasOwnProperty.call(payload, 'nextSteps')
     ? normalizeOptionalText(payload.nextSteps)
-    : currentSession.nextSteps;
+    : currentClinicalNote.nextSteps;
   const nextAppointmentId = Object.prototype.hasOwnProperty.call(payload, 'appointmentId')
     ? Number(payload.appointmentId)
-    : currentSession.appointmentId;
+    : currentClinicalNote.appointmentId;
 
   const appointment = await ensureAppointmentBelongsToPatient(nextAppointmentId, patientId);
   ensureAppointmentEligibleForClinicalNote(appointment);
@@ -1017,12 +1019,12 @@ export const updatePatientClinicalNote = async (patientId, clinicalNoteId, paylo
 
     const result = await client.query(
       `
-        UPDATE patient_sessions
+        UPDATE patient_clinical_notes
         SET
           appointment_id = $3,
-          session_date = $4,
+          clinical_note_date = $4,
           note_format = $5,
-          session_objective = $6,
+          clinical_note_objective = $6,
           clinical_observations = $7,
           next_steps = $8,
           content = $9,
@@ -1031,9 +1033,9 @@ export const updatePatientClinicalNote = async (patientId, clinicalNoteId, paylo
         RETURNING
           id,
           appointment_id AS "appointmentId",
-          session_date AS "clinicalNoteDate",
+          clinical_note_date AS "clinicalNoteDate",
           note_format AS "noteFormat",
-          session_objective AS "clinicalNoteObjective",
+          clinical_note_objective AS "clinicalNoteObjective",
           clinical_observations AS "clinicalObservations",
           next_steps AS "nextSteps",
           content,
@@ -1046,7 +1048,7 @@ export const updatePatientClinicalNote = async (patientId, clinicalNoteId, paylo
         Number(appointment.id),
         normalizeDateValue(appointment.scheduled_date),
         nextNoteFormat,
-        nextSessionObjective,
+        nextClinicalNoteObjective,
         nextClinicalObservations,
         nextSteps,
         nextContent,
@@ -1071,10 +1073,10 @@ export const updatePatientClinicalNote = async (patientId, clinicalNoteId, paylo
       `
         UPDATE patients
         SET
-          last_session_date = (
-            SELECT MAX(ps.session_date)
-            FROM patient_sessions ps
-            WHERE ps.patient_id = $1
+          last_clinical_note_date = (
+            SELECT MAX(pcn.clinical_note_date)
+            FROM patient_clinical_notes pcn
+            WHERE pcn.patient_id = $1
           ),
           updated_at = NOW()
         WHERE id = $1
@@ -1103,14 +1105,14 @@ export const deletePatientClinicalNote = async (patientId, clinicalNoteId, actor
 
   const result = await db.query(
     `
-      DELETE FROM patient_sessions
+      DELETE FROM patient_clinical_notes
       WHERE patient_id = $1 AND id = $2
     `,
     [patientId, clinicalNoteId],
   );
 
   if (result.rowCount > 0) {
-    await refreshPatientLastSessionDate(patientId);
+    await refreshPatientLastClinicalNoteDate(patientId);
     return true;
   }
 
