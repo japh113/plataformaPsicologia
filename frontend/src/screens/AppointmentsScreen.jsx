@@ -560,6 +560,24 @@ export default function AppointmentsScreen({
     resetExceptionRangeForm(todayDate);
     onDismissAvailabilityExceptionError?.();
   };
+  const openAppointmentModalFromWaitlistEntry = (entry) => {
+    if (!entry) {
+      return;
+    }
+
+    closeWaitlistModal();
+    resetForm();
+    setSelectedDate(entry.fecha);
+    setCalendarAnchorDate(entry.fecha);
+    setForm({
+      pacienteId: entry.pacienteId,
+      fecha: entry.fecha,
+      hora24: entry.hora24,
+      estado: 'pendiente',
+      notas: '',
+    });
+    setIsAppointmentModalOpen(true);
+  };
   const handleEditAppointment = (appointment) => {
     setEditingAppointmentId(appointment.id);
     setForm({ pacienteId: appointment.pacienteId, fecha: appointment.fecha, hora24: appointment.hora24, estado: appointment.estado, notas: appointment.notas || '' });
@@ -1406,7 +1424,18 @@ export default function AppointmentsScreen({
                             : 'El horario ya se libero, pero la lista de espera sigue disponible para reagendar.'}
                         </p>
                       </div>
-                      {slot.entries.length > 1 && <p className="text-xs font-medium text-slate-500">Arrastra para cambiar prioridad</p>}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {slot.slotAppointments.length === 0 && slot.entries[0] && (
+                          <button
+                            type="button"
+                            onClick={() => openAppointmentModalFromWaitlistEntry(slot.entries[0])}
+                            className="inline-flex items-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100"
+                          >
+                            <CalendarPlus size={14} className="mr-2" /> Reagendar con prioridad 1
+                          </button>
+                        )}
+                        {slot.entries.length > 1 && <p className="text-xs font-medium text-slate-500">Arrastra para cambiar prioridad</p>}
+                      </div>
                     </div>
 
                     <div className="mt-3 space-y-2">
