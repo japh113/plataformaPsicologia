@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS psychologist_availability_exception_blocks (
 CREATE TABLE IF NOT EXISTS patient_tasks (
   id BIGSERIAL PRIMARY KEY,
   patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  session_id BIGINT,
   kind TEXT NOT NULL DEFAULT 'task' CHECK (kind IN ('task', 'objective')),
   text TEXT NOT NULL,
   completed BOOLEAN NOT NULL DEFAULT FALSE,
@@ -210,6 +211,18 @@ ALTER TABLE patients
   CHECK (status IN ('active', 'paused', 'inactive', 'discharged'));
 
 ALTER TABLE patient_tasks
+  ADD COLUMN IF NOT EXISTS session_id BIGINT;
+
+ALTER TABLE patient_tasks
+  DROP CONSTRAINT IF EXISTS patient_tasks_session_id_fkey;
+
+ALTER TABLE patient_tasks
+  ADD CONSTRAINT patient_tasks_session_id_fkey
+  FOREIGN KEY (session_id)
+  REFERENCES patient_sessions(id)
+  ON DELETE CASCADE;
+
+ALTER TABLE patient_tasks
   ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'task';
 
 ALTER TABLE patient_tasks
@@ -233,3 +246,19 @@ UPDATE appointment_waitlist_entries AS appointment_waitlist_entry
 SET priority_position = ranked_waitlist_entries.normalized_priority_position
 FROM ranked_waitlist_entries
 WHERE appointment_waitlist_entry.id = ranked_waitlist_entries.id;
+
+WITH latest_patient_sessions AS (
+  SELECT DISTINCT ON (ps.patient_id)
+    ps.patient_id,
+    ps.id AS session_id
+  FROM patient_sessions ps
+  ORDER BY ps.patient_id, ps.session_date DESC, ps.created_at DESC, ps.id DESC
+)
+UPDATE patient_tasks pt
+SET
+  session_id = latest_patient_sessions.session_id,
+  updated_at = NOW()
+FROM latest_patient_sessions
+WHERE pt.patient_id = latest_patient_sessions.patient_id
+  AND pt.kind = 'task'
+  AND pt.session_id IS NULL;

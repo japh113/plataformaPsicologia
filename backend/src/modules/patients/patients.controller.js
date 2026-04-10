@@ -17,7 +17,11 @@ import {
   deletePatientSession,
 } from './patients.service.js';
 import { validateCreatePatient, validatePatientPayload } from './patients.validators.js';
-import { validateCreateTaskPayload, validateUpdateTaskPayload } from './patients.tasks.validators.js';
+import {
+  validateCreateObjectivePayload,
+  validateCreateTaskPayload,
+  validateUpdateTaskPayload,
+} from './patients.tasks.validators.js';
 import { validatePatientInterviewPayload } from './patients.intake.validators.js';
 import { validateCreateSessionPayload, validateUpdateSessionPayload } from './patients.sessions.validators.js';
 import { createForbiddenError, ensurePsychologist, isPatient } from '../auth/auth.permissions.js';
@@ -124,7 +128,7 @@ export const createPatientTaskHandler = async (req, res, next) => {
   try {
     ensurePsychologist(req.user);
 
-    const errors = validateCreateTaskPayload(req.body);
+    const errors = validateCreateObjectivePayload(req.body);
 
     if (errors.length > 0) {
       return errorResponse(res, 'Validation error', 400, errors);

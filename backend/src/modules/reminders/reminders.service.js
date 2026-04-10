@@ -188,6 +188,7 @@ const getPsychologistTaskReminders = async (actor) => {
       INNER JOIN psychologist_patient_access spa
         ON spa.patient_id = pt.patient_id
       WHERE spa.psychologist_user_id = $1
+        AND pt.kind = 'task'
         AND pt.completed = FALSE
       GROUP BY p.id, p.full_name, p.risk_level
       ORDER BY pending_count DESC, p.full_name ASC
@@ -209,6 +210,7 @@ const getPatientTaskReminders = async (actor) => {
       INNER JOIN patients p
         ON p.id = pt.patient_id
       WHERE pt.patient_id = $1
+        AND pt.kind = 'task'
         AND pt.completed = FALSE
       GROUP BY p.id
     `,

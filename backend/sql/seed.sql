@@ -351,3 +351,19 @@ WHERE ps.patient_id = seed.patient_id
   AND COALESCE(ps.session_objective, '') = ''
   AND COALESCE(ps.clinical_observations, '') = ''
   AND COALESCE(ps.next_steps, '') = '';
+
+WITH latest_patient_sessions AS (
+  SELECT DISTINCT ON (ps.patient_id)
+    ps.patient_id,
+    ps.id AS session_id
+  FROM patient_sessions ps
+  ORDER BY ps.patient_id, ps.session_date DESC, ps.created_at DESC, ps.id DESC
+)
+UPDATE patient_tasks pt
+SET
+  session_id = latest_patient_sessions.session_id,
+  updated_at = NOW()
+FROM latest_patient_sessions
+WHERE pt.patient_id = latest_patient_sessions.patient_id
+  AND pt.kind = 'task'
+  AND pt.session_id IS NULL;

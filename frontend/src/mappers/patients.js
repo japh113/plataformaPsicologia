@@ -47,6 +47,9 @@ export const mapBackendTaskToUiTask = (task) => ({
   id: String(task.id),
   texto: task.text || '',
   completada: Boolean(task.completed),
+  sesionId: task.sessionId ? String(task.sessionId) : null,
+  fechaSesion: task.sessionDate || null,
+  objetivoSesion: task.sessionObjective || '',
 });
 
 export const mapBackendObjectiveToUiObjective = (objective) => ({

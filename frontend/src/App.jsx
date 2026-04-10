@@ -487,7 +487,7 @@ export default function App() {
     await saveInterview(patientProfile.id, patientInterviewForm);
   };
 
-  const addTask = async (taskText) => {
+  const addTask = async (sessionId, taskText) => {
     if (!isPsychologist || !pacienteSeleccionado || creandoTarea) {
       return false;
     }
@@ -495,7 +495,7 @@ export default function App() {
     setCreandoTarea(true);
 
     try {
-      const createdTask = await createPatientTask(pacienteSeleccionado.id, { text: taskText });
+      const createdTask = await createPatientTask(pacienteSeleccionado.id, { text: taskText, sessionId });
       const uiTask = mapBackendTaskToUiTask(createdTask);
       const nextPatient = {
         ...pacienteSeleccionado,
@@ -722,6 +722,7 @@ export default function App() {
         ...pacienteSeleccionado,
         ultimaSesion: nextSessions[0]?.fecha || null,
         sesiones: nextSessions,
+        tareas: (pacienteSeleccionado.tareas || []).filter((task) => task.sesionId !== String(sessionId)),
       };
 
       syncPatientState(nextPatient);

@@ -87,11 +87,16 @@ const patientSelectColumns = `
         json_build_object(
           'id', pt.id,
           'text', pt.text,
-          'completed', pt.completed
+          'completed', pt.completed,
+          'sessionId', pt.session_id,
+          'sessionDate', ps.session_date,
+          'sessionObjective', ps.session_objective
         )
-        ORDER BY pt.created_at ASC, pt.id ASC
+        ORDER BY ps.session_date DESC NULLS LAST, pt.created_at ASC, pt.id ASC
       )
       FROM patient_tasks pt
+      LEFT JOIN patient_sessions ps
+        ON ps.id = pt.session_id
       WHERE pt.patient_id = p.id
         AND pt.kind = 'task'
     ),
@@ -144,6 +149,9 @@ const mapTaskRow = (task) => ({
   id: String(task.id),
   text: task.text,
   completed: Boolean(task.completed),
+  sessionId: task.sessionId === null || typeof task.sessionId === 'undefined' ? null : String(task.sessionId),
+  sessionDate: normalizeDateValue(task.sessionDate),
+  sessionObjective: task.sessionObjective || '',
 });
 
 const mapSessionRow = (session) => ({
@@ -219,6 +227,36 @@ const getPatientBaseQuery = (includeSessions = false) => `
 
 const mapPatientResult = (result) => (result.rows[0] ? mapPatientRow(result.rows[0]) : null);
 const normalizeOptionalText = (value) => (typeof value === 'string' ? value.trim() : '');
+
+const ensureSessionBelongsToPatient = async (sessionId, patientId) => {
+  if (!sessionId) {
+    const error = new Error('Debes vincular la tarea a una sesion.');
+    error.status = 400;
+    throw error;
+  }
+
+  const result = await db.query(
+    `
+      SELECT
+        id,
+        session_date,
+        session_objective
+      FROM patient_sessions
+      WHERE id = $1
+        AND patient_id = $2
+      LIMIT 1
+    `,
+    [sessionId, patientId],
+  );
+
+  if (!result.rows[0]) {
+    const error = new Error('La sesion seleccionada no pertenece a este paciente.');
+    error.status = 400;
+    throw error;
+  }
+
+  return result.rows[0];
+};
 
 const getPatientInterviewById = async (patientId) => {
   const result = await db.query(
@@ -626,21 +664,32 @@ const createPatientChecklistItem = async (patientId, payload, actor, kind) => {
     return null;
   }
 
+  let session = null;
+
+  if (kind === 'task') {
+    session = await ensureSessionBelongsToPatient(Number(payload.sessionId), patientId);
+  }
+
   const result = await db.query(
     `
       INSERT INTO patient_tasks (
         patient_id,
+        session_id,
         kind,
         text,
         completed
       )
-      VALUES ($1, $2, $3, $4)
-      RETURNING id, text, completed
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, text, completed, session_id
     `,
-    [patientId, kind, payload.text.trim(), false],
+    [patientId, session ? Number(session.id) : null, kind, payload.text.trim(), false],
   );
 
-  return mapTaskRow(result.rows[0]);
+  return mapTaskRow({
+    ...result.rows[0],
+    sessionDate: session?.session_date || null,
+    sessionObjective: session?.session_objective || '',
+  });
 };
 
 const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kind) => {
@@ -653,6 +702,7 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
   const currentTaskResult = await db.query(
     `
       SELECT id, patient_id, text, completed
+           , session_id
       FROM patient_tasks
       WHERE patient_id = $1 AND id = $2 AND kind = $3
       LIMIT 1
@@ -682,12 +732,22 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
         completed = $5,
         updated_at = NOW()
       WHERE patient_id = $1 AND id = $2 AND kind = $3
-      RETURNING id, text, completed
+      RETURNING id, text, completed, session_id
     `,
     [patientId, taskId, kind, nextText, nextCompleted],
   );
 
-  return mapTaskRow(result.rows[0]);
+  let session = null;
+
+  if (kind === 'task' && result.rows[0]?.session_id) {
+    session = await ensureSessionBelongsToPatient(Number(result.rows[0].session_id), patientId);
+  }
+
+  return mapTaskRow({
+    ...result.rows[0],
+    sessionDate: session?.session_date || null,
+    sessionObjective: session?.session_objective || '',
+  });
 };
 
 const deletePatientChecklistItem = async (patientId, taskId, actor, kind) => {

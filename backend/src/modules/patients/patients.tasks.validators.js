@@ -1,12 +1,20 @@
-export const validateCreateTaskPayload = (payload) => {
+const validateCreateChecklistPayload = (payload, { requireSessionId = false } = {}) => {
   const errors = [];
 
   if (!payload.text?.trim()) {
     errors.push('text is required');
   }
 
+  if (requireSessionId && (typeof payload?.sessionId === 'undefined' || payload?.sessionId === null || !String(payload.sessionId).trim())) {
+    errors.push('sessionId is required');
+  }
+
   return errors;
 };
+
+export const validateCreateTaskPayload = (payload) => validateCreateChecklistPayload(payload, { requireSessionId: true });
+
+export const validateCreateObjectivePayload = (payload) => validateCreateChecklistPayload(payload);
 
 export const validateUpdateTaskPayload = (payload) => {
   const errors = [];
