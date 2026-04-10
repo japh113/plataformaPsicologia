@@ -7,6 +7,7 @@ import {
   getAppointmentHandler,
   listAppointmentsHandler,
   listWaitlistEntriesHandler,
+  reorderWaitlistEntriesHandler,
   updateAppointmentHandler,
 } from './appointments.controller.js';
 
@@ -15,6 +16,7 @@ const router = Router();
 router.get('/', listAppointmentsHandler);
 router.get('/waitlist', listWaitlistEntriesHandler);
 router.post('/waitlist', createWaitlistEntryHandler);
+router.patch('/waitlist/reorder', reorderWaitlistEntriesHandler);
 router.delete('/waitlist/:id', deleteWaitlistEntryHandler);
 router.get('/:id', getAppointmentHandler);
 router.post('/', createAppointmentHandler);

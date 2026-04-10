@@ -200,7 +200,7 @@ function ModalShell({ title, description, onClose, children }) {
 
 export default function AppointmentsScreen({
   viewContext,
-  currentUser, patients, appointments, waitlistEntries = [], availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onCreateAppointmentWaitlist, onDeleteAppointmentWaitlist, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
+  currentUser, patients, appointments, waitlistEntries = [], availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onCreateAppointmentWaitlist, onDeleteAppointmentWaitlist, onReorderAppointmentWaitlist, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
   isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingWaitlist = false, processingWaitlistId = null, waitlistActionError = '', onDismissWaitlistError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
@@ -222,6 +222,7 @@ export default function AppointmentsScreen({
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
   const [waitlistForm, setWaitlistForm] = useState(emptyWaitlistForm);
+  const [draggedWaitlistEntryId, setDraggedWaitlistEntryId] = useState(null);
 
   const normalizedAvailabilityDraft = useMemo(() => normalizeDraftEntries(availabilityDraft || availability), [availability, availabilityDraft]);
   const availabilityMap = useMemo(() => new Map(normalizedAvailabilityDraft.map((entry) => [entry.weekday, entry.blocks])), [normalizedAvailabilityDraft]);
@@ -396,6 +397,53 @@ export default function AppointmentsScreen({
         }),
     [selectedWaitlistDate, waitlistEntries],
   );
+  const waitlistGroupsForSelectedDate = useMemo(() => {
+    const groupedBySlot = new Map();
+
+    waitlistEntriesForSelectedDate.forEach((entry) => {
+      const currentEntries = groupedBySlot.get(entry.hora24) || [];
+      groupedBySlot.set(entry.hora24, [...currentEntries, entry]);
+    });
+
+    return [...groupedBySlot.entries()]
+      .sort((left, right) => left[0].localeCompare(right[0]))
+      .map(([hour24, entries]) => {
+        const slotAppointments = appointments.filter(
+          (appointment) =>
+            appointment.fecha === selectedWaitlistDate &&
+            appointment.hora24 === hour24 &&
+            appointment.estado !== 'cancelada',
+        );
+
+        return {
+          hora24: hour24,
+          hora: formatAppointmentDisplayHour(hour24),
+          entries: [...entries].sort((left, right) => {
+            const priorityCompare = Number(left.prioridad || 0) - Number(right.prioridad || 0);
+            if (priorityCompare !== 0) {
+              return priorityCompare;
+            }
+
+            return String(left.creadaEn || '').localeCompare(String(right.creadaEn || ''));
+          }),
+          slotAppointments,
+        };
+      });
+  }, [appointments, selectedWaitlistDate, waitlistEntriesForSelectedDate]);
+  const waitlistTopPriorityBySlot = useMemo(() => {
+    const nextMap = new Map();
+
+    waitlistEntries.forEach((entry) => {
+      const slotKey = buildAppointmentSlotKey(entry.fecha, entry.hora24);
+      const currentTopEntry = nextMap.get(slotKey);
+
+      if (!currentTopEntry || Number(entry.prioridad || 0) < Number(currentTopEntry.prioridad || 0)) {
+        nextMap.set(slotKey, entry);
+      }
+    });
+
+    return nextMap;
+  }, [waitlistEntries]);
   const occupiedSlotOptions = useMemo(() => {
     const groupedBySlot = new Map();
 
@@ -558,6 +606,29 @@ export default function AppointmentsScreen({
 
     await onDeleteAppointmentWaitlist?.(waitlistEntryId);
   };
+  const handleReorderWaitlistEntries = async (slot, draggedEntryId, targetEntryId) => {
+    if (!slot || !draggedEntryId || !targetEntryId || draggedEntryId === targetEntryId || isSavingWaitlist) {
+      return;
+    }
+
+    const currentOrder = slot.entries.map((entry) => entry.id);
+    const draggedIndex = currentOrder.indexOf(draggedEntryId);
+    const targetIndex = currentOrder.indexOf(targetEntryId);
+
+    if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) {
+      return;
+    }
+
+    const nextOrder = [...currentOrder];
+    const [draggedEntryIdValue] = nextOrder.splice(draggedIndex, 1);
+    nextOrder.splice(targetIndex, 0, draggedEntryIdValue);
+
+    await onReorderAppointmentWaitlist?.({
+      fecha: selectedWaitlistDate,
+      hora24: slot.hora24,
+      entryIds: nextOrder,
+    });
+  };
   const handleUpdateAppointmentStatus = async (appointment, nextStatus) => {
     if (!appointment) {
       return false;
@@ -573,7 +644,22 @@ export default function AppointmentsScreen({
       return false;
     }
 
-    return handleUpdateAppointmentStatus(appointment, 'cancelada');
+    const wasCancelled = await handleUpdateAppointmentStatus(appointment, 'cancelada');
+
+    if (wasCancelled && appointment.waitlistCount > 0) {
+      setSelectedDate(appointment.fecha);
+      setCalendarAnchorDate(appointment.fecha);
+      setWaitlistForm({
+        pacienteId: '',
+        fecha: appointment.fecha,
+        hora24: appointment.hora24,
+        notas: '',
+      });
+      setIsWaitlistModalOpen(true);
+      onDismissWaitlistError?.();
+    }
+
+    return wasCancelled;
   };
   const handleSelectDate = (date) => { setSelectedDate(date); if (!date) return; setCalendarAnchorDate(date); onDismissAppointmentError?.(); };
   const handleMoveCalendar = (direction) => setCalendarAnchorDate((currentDate) => calendarView === 'month' ? shiftDateByMonths(currentDate, direction) : shiftDateByDays(currentDate, direction * 7));
@@ -980,6 +1066,7 @@ export default function AppointmentsScreen({
               const sessionState = getAppointmentSessionState(appointment, Boolean(linkedSession));
               const sessionLabel = getAppointmentSessionLabel(sessionState);
               const displayStatus = getAppointmentDisplayStatus(appointment);
+              const topWaitlistEntry = waitlistTopPriorityBySlot.get(buildAppointmentSlotKey(appointment.fecha, appointment.hora24)) || null;
               const isFutureAppointment = appointment.fecha > todayDate;
               const isOverduePendingAppointment = isAppointmentOverdue(appointment);
               const canOpenSessionFlow =
@@ -998,6 +1085,11 @@ export default function AppointmentsScreen({
                       <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500"><span className="inline-flex items-center"><Calendar size={14} className="mr-1.5" /> {appointment.fecha}</span><span className="inline-flex items-center"><Clock3 size={14} className="mr-1.5" /> {appointment.hora}</span></div>
                       {isOverduePendingAppointment && (
                         <p className="mt-2 text-sm font-medium text-amber-700">La hora de esta cita ya paso y todavia necesita cierre operativo.</p>
+                      )}
+                      {topWaitlistEntry && (
+                        <p className="mt-2 text-sm text-amber-700">
+                          Lista de espera: prioridad actual para <span className="font-semibold">{topWaitlistEntry.pacienteNombre}</span>.
+                        </p>
                       )}
                       {appointment.notas && <p className="mt-3 text-sm text-gray-600">{appointment.notas}</p>}
                     </div>
@@ -1022,6 +1114,25 @@ export default function AppointmentsScreen({
                       {isPsychologist && isOverduePendingAppointment && !linkedSession && (
                         <button onClick={() => handleCancelAppointment(appointment)} disabled={isProcessingThisAppointment} className="px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed">
                           Cancelar
+                        </button>
+                      )}
+                      {isPsychologist && appointment.waitlistCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDate(appointment.fecha);
+                            setCalendarAnchorDate(appointment.fecha);
+                            setWaitlistForm((current) => ({
+                              ...current,
+                              fecha: appointment.fecha,
+                              hora24: appointment.hora24,
+                            }));
+                            setIsWaitlistModalOpen(true);
+                            onDismissWaitlistError?.();
+                          }}
+                          className="px-3 py-2 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-100 transition text-sm font-medium inline-flex items-center"
+                        >
+                          <Users size={14} className="mr-2" /> Ver espera
                         </button>
                       )}
                       {isPsychologist && <>
@@ -1275,27 +1386,61 @@ export default function AppointmentsScreen({
                 <input type="date" value={waitlistForm.fecha} onChange={handleWaitlistChange} name="fecha" className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
               </div>
               <div className="mt-4 space-y-3">
-                {waitlistEntriesForSelectedDate.map((entry) => (
-                  <div key={entry.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div className="min-w-0">
+                {waitlistGroupsForSelectedDate.map((slot) => (
+                  <div key={slot.hora24} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-slate-900">{entry.pacienteNombre}</p>
+                          <p className="font-semibold text-slate-900">{slot.hora}</p>
                           <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getWaitlistBadgeClasses()}`}>
                             <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />
-                            {entry.hora}
+                            {slot.entries.length} en espera
                           </span>
                         </div>
-                        {entry.notas && <p className="mt-2 text-sm text-slate-600">{entry.notas}</p>}
+                        <p className="mt-1 text-xs text-slate-500">
+                          {slot.slotAppointments.length > 0
+                            ? `Horario ocupado por ${slot.slotAppointments.map((appointment) => patients.find((patient) => patient.id === appointment.pacienteId)?.nombre).filter(Boolean).join(' / ')}.`
+                            : 'El horario ya se libero, pero la lista de espera sigue disponible para reagendar.'}
+                        </p>
                       </div>
-                      <button type="button" onClick={() => handleDeleteWaitlistEntry(entry.id)} disabled={processingWaitlistId === entry.id} className="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
-                        <Trash2 size={14} className="mr-2" />
-                        {processingWaitlistId === entry.id ? 'Eliminando...' : 'Eliminar'}
-                      </button>
+                      {slot.entries.length > 1 && <p className="text-xs font-medium text-slate-500">Arrastra para cambiar prioridad</p>}
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      {slot.entries.map((entry, index) => (
+                        <div
+                          key={entry.id}
+                          draggable={!isSavingWaitlist}
+                          onDragStart={() => setDraggedWaitlistEntryId(entry.id)}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={async (event) => {
+                            event.preventDefault();
+                            await handleReorderWaitlistEntries(slot, draggedWaitlistEntryId, entry.id);
+                            setDraggedWaitlistEntryId(null);
+                          }}
+                          onDragEnd={() => setDraggedWaitlistEntryId(null)}
+                          className={`rounded-xl border bg-white p-4 transition ${draggedWaitlistEntryId === entry.id ? 'border-amber-300 opacity-70 shadow-sm' : 'border-slate-200'} ${isSavingWaitlist ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing'}`}
+                        >
+                          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">{index + 1}</span>
+                                <p className="font-semibold text-slate-900">{entry.pacienteNombre}</p>
+                                {index === 0 && <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">Siguiente sugerido</span>}
+                              </div>
+                              {entry.notas && <p className="mt-2 text-sm text-slate-600">{entry.notas}</p>}
+                            </div>
+                            <button type="button" onClick={() => handleDeleteWaitlistEntry(entry.id)} disabled={processingWaitlistId === entry.id || isSavingWaitlist} className="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
+                              <Trash2 size={14} className="mr-2" />
+                              {processingWaitlistId === entry.id ? 'Eliminando...' : 'Eliminar'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
-                {waitlistEntriesForSelectedDate.length === 0 && (
+                {waitlistGroupsForSelectedDate.length === 0 && (
                   <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
                     No hay pacientes en lista de espera para esta fecha.
                   </div>

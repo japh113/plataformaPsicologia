@@ -42,6 +42,15 @@ export const createAppointmentWaitlistEntry = async (payload) => {
   return response.data;
 };
 
+export const reorderAppointmentWaitlistEntries = async (payload) => {
+  const response = await apiRequest('/appointments/waitlist/reorder', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
 export const updateAppointment = async (id, payload) => {
   const response = await apiRequest(`/appointments/${id}`, {
     method: 'PATCH',

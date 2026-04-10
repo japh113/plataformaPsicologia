@@ -49,6 +49,7 @@ const mapWaitlistEntryRow = (row) => ({
   patientName: row.patient_full_name,
   scheduledDate: normalizeDateValue(row.scheduled_date),
   scheduledTime: row.scheduled_time,
+  priorityPosition: Number(row.priority_position || 0),
   notes: row.notes || '',
   status: row.status,
   createdAt: row.created_at,
@@ -68,6 +69,31 @@ const createScheduleConflictError = (message) => {
   const error = new Error(message);
   error.status = 409;
   return error;
+};
+
+const normalizeWaitlistPriorityForSlot = async (client, { scheduledDate, scheduledTime }) => {
+  await client.query(
+    `
+      WITH ranked_entries AS (
+        SELECT
+          id,
+          ROW_NUMBER() OVER (
+            ORDER BY priority_position ASC, created_at ASC, id ASC
+          ) AS normalized_priority_position
+        FROM appointment_waitlist_entries
+        WHERE scheduled_date = $1
+          AND scheduled_time = $2
+          AND status = 'active'
+      )
+      UPDATE appointment_waitlist_entries AS waitlist_entry
+      SET
+        priority_position = ranked_entries.normalized_priority_position,
+        updated_at = NOW()
+      FROM ranked_entries
+      WHERE waitlist_entry.id = ranked_entries.id
+    `,
+    [scheduledDate, scheduledTime],
+  );
 };
 
 const getAppointmentSelectColumns = (waitlistParamIndex = null) => `
@@ -110,6 +136,8 @@ const fulfillWaitlistEntriesForAppointment = async ({ patientId, scheduledDate, 
     `,
     [patientId, scheduledDate, scheduledTime],
   );
+
+  await normalizeWaitlistPriorityForSlot(db, { scheduledDate, scheduledTime });
 };
 
 const ensureAppointmentCompletionIsAllowed = ({ scheduledDate, status }) => {
@@ -500,6 +528,7 @@ export const listWaitlistEntries = async ({ date = null, actor }) => {
         p.full_name AS patient_full_name,
         w.scheduled_date,
         w.scheduled_time,
+        w.priority_position,
         w.status,
         w.notes,
         w.created_at
@@ -508,7 +537,7 @@ export const listWaitlistEntries = async ({ date = null, actor }) => {
         ON p.id = w.patient_id
       WHERE ${dateClause}${accessScope.clause}
         AND w.status = 'active'
-      ORDER BY w.scheduled_date ASC, w.scheduled_time ASC, w.created_at ASC
+      ORDER BY w.scheduled_date ASC, w.scheduled_time ASC, w.priority_position ASC, w.created_at ASC
     `,
     params,
   );
@@ -583,18 +612,27 @@ export const createWaitlistEntry = async (payload, actor) => {
 
   const result = await db.query(
     `
+      WITH next_priority AS (
+        SELECT COALESCE(MAX(priority_position), 0) + 1 AS value
+        FROM appointment_waitlist_entries
+        WHERE scheduled_date = $2
+          AND scheduled_time = $3
+          AND status = 'active'
+      )
       INSERT INTO appointment_waitlist_entries (
         patient_id,
         scheduled_date,
         scheduled_time,
+        priority_position,
         notes
       )
-      VALUES ($1, $2, $3, $4)
+      VALUES ($1, $2, $3, (SELECT value FROM next_priority), $4)
       RETURNING
         id,
         patient_id,
         scheduled_date,
         scheduled_time,
+        priority_position,
         status,
         notes,
         created_at
@@ -613,15 +651,135 @@ export const deleteWaitlistEntry = async (id, actor) => {
   ensurePsychologist(actor);
 
   const accessScope = buildPatientAccessScope(actor, 'w.patient_id', 2);
-  const result = await db.query(
-    `
-      DELETE FROM appointment_waitlist_entries w
-      WHERE w.id = $1
-        AND ${accessScope.clause}
-      RETURNING w.id
-    `,
-    [id, ...accessScope.params],
-  );
+  const client = await db.connect();
 
-  return result.rowCount > 0;
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `
+        DELETE FROM appointment_waitlist_entries w
+        WHERE w.id = $1
+          AND ${accessScope.clause}
+        RETURNING w.id, w.scheduled_date, w.scheduled_time
+      `,
+      [id, ...accessScope.params],
+    );
+
+    if (result.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+
+    await normalizeWaitlistPriorityForSlot(client, {
+      scheduledDate: normalizeDateValue(result.rows[0].scheduled_date),
+      scheduledTime: result.rows[0].scheduled_time,
+    });
+
+    await client.query('COMMIT');
+    return true;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const reorderWaitlistEntries = async (payload, actor) => {
+  ensurePsychologist(actor);
+
+  const scheduledTime = normalizeScheduledTime(payload.scheduledTime);
+  const entryIds = payload.entryIds.map((entryId) => String(entryId));
+  const accessScope = buildPatientAccessScope(actor, 'w.patient_id', 4);
+  const client = await db.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `
+        SELECT
+          w.id,
+          w.patient_id,
+          p.full_name AS patient_full_name,
+          w.scheduled_date,
+          w.scheduled_time,
+          w.priority_position,
+          w.status,
+          w.notes,
+          w.created_at
+        FROM appointment_waitlist_entries w
+        INNER JOIN patients p
+          ON p.id = w.patient_id
+        WHERE w.scheduled_date = $1
+          AND w.scheduled_time = $2
+          AND w.status = 'active'
+          AND w.id::text = ANY($3::text[])
+          AND ${accessScope.clause}
+      `,
+      [payload.scheduledDate, scheduledTime, entryIds, ...accessScope.params],
+    );
+
+    if (result.rowCount !== entryIds.length) {
+      throw createScheduleConflictError('No se pudieron validar todas las entradas de lista de espera para este horario.');
+    }
+
+    const matchedEntryIds = new Set(result.rows.map((row) => String(row.id)));
+    const containsUnexpectedIds = entryIds.some((entryId) => !matchedEntryIds.has(entryId));
+
+    if (containsUnexpectedIds) {
+      throw createScheduleConflictError('El nuevo orden contiene entradas invalidas para este horario.');
+    }
+
+    for (let index = 0; index < entryIds.length; index += 1) {
+      await client.query(
+        `
+          UPDATE appointment_waitlist_entries
+          SET
+            priority_position = $2,
+            updated_at = NOW()
+          WHERE id = $1
+        `,
+        [entryIds[index], index + 1],
+      );
+    }
+
+    await normalizeWaitlistPriorityForSlot(client, {
+      scheduledDate: payload.scheduledDate,
+      scheduledTime,
+    });
+
+    const refreshedEntries = await client.query(
+      `
+        SELECT
+          w.id,
+          w.patient_id,
+          p.full_name AS patient_full_name,
+          w.scheduled_date,
+          w.scheduled_time,
+          w.priority_position,
+          w.status,
+          w.notes,
+          w.created_at
+        FROM appointment_waitlist_entries w
+        INNER JOIN patients p
+          ON p.id = w.patient_id
+        WHERE w.scheduled_date = $1
+          AND w.scheduled_time = $2
+          AND w.status = 'active'
+          AND ${accessScope.clause}
+        ORDER BY w.priority_position ASC, w.created_at ASC
+      `,
+      [payload.scheduledDate, scheduledTime, ...accessScope.params],
+    );
+
+    await client.query('COMMIT');
+    return refreshedEntries.rows.map(mapWaitlistEntryRow);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };

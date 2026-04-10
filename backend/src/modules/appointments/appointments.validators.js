@@ -73,3 +73,25 @@ export const validateCreateWaitlistEntryPayload = (payload) => {
 
   return errors;
 };
+
+export const validateReorderWaitlistEntriesPayload = (payload) => {
+  const errors = [];
+
+  if (!payload.scheduledDate || !isIsoDate(payload.scheduledDate)) {
+    errors.push('scheduledDate must be in YYYY-MM-DD format');
+  }
+
+  if (!payload.scheduledTime || !isHourSlotValue(payload.scheduledTime)) {
+    errors.push('scheduledTime must be in HH:00 or HH:00:00 format');
+  }
+
+  if (!Array.isArray(payload.entryIds) || payload.entryIds.length === 0) {
+    errors.push('entryIds must be a non-empty array');
+  }
+
+  if (Array.isArray(payload.entryIds) && payload.entryIds.some((entryId) => !String(entryId).trim())) {
+    errors.push('entryIds must contain valid ids');
+  }
+
+  return errors;
+};

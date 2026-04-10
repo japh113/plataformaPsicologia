@@ -36,6 +36,7 @@ import {
   deleteAppointmentWaitlistEntry,
   getAppointments,
   getAppointmentWaitlist,
+  reorderAppointmentWaitlistEntries,
   updateAppointment,
 } from './api/appointments';
 import { getAuthToken } from './api/client';
@@ -706,6 +707,30 @@ export default function App() {
     }
   };
 
+  const handleReorderAppointmentWaitlist = async (payload) => {
+    if (!isPsychologist || guardandoListaEspera) {
+      return false;
+    }
+
+    setGuardandoListaEspera(true);
+    setWaitlistActionError('');
+
+    try {
+      await reorderAppointmentWaitlistEntries({
+        scheduledDate: payload.fecha,
+        scheduledTime: payload.hora24,
+        entryIds: payload.entryIds,
+      });
+      await refreshAppointmentsAndWaitlist();
+      return true;
+    } catch (error) {
+      setWaitlistActionError(error.message || 'No se pudo reordenar la lista de espera.');
+      return false;
+    } finally {
+      setGuardandoListaEspera(false);
+    }
+  };
+
   const handleOpenSessionFromAppointment = async (appointment, patient) => {
     if (!isPsychologist || !appointment || !patient) {
       return false;
@@ -924,6 +949,7 @@ export default function App() {
           onDeleteAppointment={handleDeleteAppointment}
           onCreateAppointmentWaitlist={handleCreateAppointmentWaitlist}
           onDeleteAppointmentWaitlist={handleDeleteAppointmentWaitlist}
+          onReorderAppointmentWaitlist={handleReorderAppointmentWaitlist}
           onUpdateAvailability={handleUpdateAvailability}
           onChangeAvailabilityDraft={setAvailabilityDraft}
           onUpsertAvailabilityException={handleUpsertAvailabilityException}

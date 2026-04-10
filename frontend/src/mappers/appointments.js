@@ -204,6 +204,7 @@ export const mapBackendWaitlistToUiWaitlistEntry = (entry) => ({
   fecha: entry.scheduledDate,
   hora24: toInputTime(entry.scheduledTime),
   hora: toDisplayHour(entry.scheduledTime),
+  prioridad: Number(entry.priorityPosition || 0),
   notas: entry.notes || '',
   estado: entry.status || 'active',
   creadaEn: entry.createdAt,

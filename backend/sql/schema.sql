@@ -104,14 +104,21 @@ CREATE TABLE IF NOT EXISTS appointment_waitlist_entries (
   patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
   scheduled_date DATE NOT NULL,
   scheduled_time TIME NOT NULL,
+  priority_position INTEGER NOT NULL DEFAULT 1,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'fulfilled', 'cancelled')),
   notes TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE appointment_waitlist_entries
+  ADD COLUMN IF NOT EXISTS priority_position INTEGER NOT NULL DEFAULT 1;
+
 CREATE INDEX IF NOT EXISTS appointment_waitlist_entries_slot_idx
   ON appointment_waitlist_entries (scheduled_date, scheduled_time, status);
+
+CREATE INDEX IF NOT EXISTS appointment_waitlist_entries_priority_idx
+  ON appointment_waitlist_entries (scheduled_date, scheduled_time, priority_position, created_at);
 
 CREATE UNIQUE INDEX IF NOT EXISTS appointment_waitlist_entries_active_unique_idx
   ON appointment_waitlist_entries (patient_id, scheduled_date, scheduled_time)
@@ -140,3 +147,18 @@ ALTER TABLE patient_sessions
 
 ALTER TABLE patient_sessions
   ADD COLUMN IF NOT EXISTS next_steps TEXT NOT NULL DEFAULT '';
+
+WITH ranked_waitlist_entries AS (
+  SELECT
+    id,
+    ROW_NUMBER() OVER (
+      PARTITION BY scheduled_date, scheduled_time
+      ORDER BY priority_position ASC, created_at ASC, id ASC
+    ) AS normalized_priority_position
+  FROM appointment_waitlist_entries
+  WHERE status = 'active'
+)
+UPDATE appointment_waitlist_entries AS appointment_waitlist_entry
+SET priority_position = ranked_waitlist_entries.normalized_priority_position
+FROM ranked_waitlist_entries
+WHERE appointment_waitlist_entry.id = ranked_waitlist_entries.id;

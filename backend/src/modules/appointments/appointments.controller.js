@@ -7,11 +7,13 @@ import {
   getAppointmentById,
   listAppointments,
   listWaitlistEntries,
+  reorderWaitlistEntries,
   updateAppointment,
 } from './appointments.service.js';
 import {
   validateCreateAppointmentPayload,
   validateCreateWaitlistEntryPayload,
+  validateReorderWaitlistEntriesPayload,
   validateUpdateAppointmentPayload,
 } from './appointments.validators.js';
 import { ensurePsychologist } from '../auth/auth.permissions.js';
@@ -109,6 +111,23 @@ export const updateAppointmentHandler = async (req, res, next) => {
     }
 
     return successResponse(res, appointment, 'Appointment updated successfully');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const reorderWaitlistEntriesHandler = async (req, res, next) => {
+  try {
+    ensurePsychologist(req.user);
+
+    const errors = validateReorderWaitlistEntriesPayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const reorderedEntries = await reorderWaitlistEntries(req.body, req.user);
+    return successResponse(res, reorderedEntries, 'Waitlist reordered successfully');
   } catch (error) {
     return next(error);
   }
