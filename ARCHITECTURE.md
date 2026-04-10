@@ -5,7 +5,24 @@ El sistema esta dividido en dos capas:
 - `frontend/`: interfaz web para psicologo y paciente
 - `backend/`: API REST autenticada sobre PostgreSQL
 
-La app funciona hoy como un producto web-first. No se migro todavia a React Native/Expo.
+La app funciona hoy como un producto `web-first`. No se migro todavia a React Native/Expo.
+
+## Direccion futura
+Aunque el repo actual es web, la direccion tecnica objetivo del producto es:
+- React Native + Expo
+- Node.js + TypeScript + Express
+- PostgreSQL
+- Railway o Render
+- Auth propia
+- Expo Notifications
+- Cloudflare R2 si se necesitan archivos
+- Resend para emails
+
+Esto implica:
+- no asumir que la UI web actual es la forma final del producto
+- intentar preservar reglas de negocio reutilizables
+- evitar decisiones que amarren innecesariamente la logica al navegador
+- recordar que la migracion movil es futura, no activa hoy
 
 ## Frontend
 
@@ -40,6 +57,21 @@ La app funciona hoy como un producto web-first. No se migro todavia a React Nati
 - reminders
 
 Las pantallas reciben callbacks ya resueltos. Esto hace el codigo simple para MVP, aunque en el futuro podria extraerse a context o a una capa de state management.
+
+### Implicacion para futura migracion mobile
+Buena parte de la logica hoy ya vive en:
+- API REST
+- servicios backend
+- mappers frontend/backend
+
+Eso ayuda porque una futura app React Native deberia poder reutilizar:
+- contrato de API
+- reglas clinicas
+- reglas de agenda, disponibilidad y waitlist
+
+Lo menos portable hoy es:
+- estado concentrado en `App.jsx`
+- algunas pantallas grandes con mucha logica visual
 
 ## Backend
 
@@ -156,3 +188,4 @@ npm run db:seed
 - `AppointmentsScreen.jsx` es una pantalla grande y de alta complejidad
 - Faltan tests automatizados
 - Hay modulos backend que podrian simplificarse o reordenarse
+- el backend aun no esta en TypeScript aunque ese es el rumbo objetivo

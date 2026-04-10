@@ -3,6 +3,21 @@
 ## Fecha de referencia
 Contexto actualizado al `2026-04-09`.
 
+## Recordatorio de producto
+- hoy se esta construyendo y operando como `web-app`
+- la meta futura sigue siendo migrar a experiencia movil
+- el stack lean objetivo a recordar es:
+  - React Native + Expo
+  - Node.js + TypeScript + Express
+  - PostgreSQL
+  - Railway o Render
+  - Auth propia
+  - Expo Notifications
+  - Cloudflare R2 si se necesitan archivos
+  - Resend para emails
+
+Esto debe mantenerse en mente en futuros chats, aunque el trabajo inmediato siga sobre la base web actual.
+
 ## Lo que ya existe
 - auth por roles
 - pacientes persistidos
@@ -59,6 +74,7 @@ Preferencias marcadas:
 - push notifications
 - email reminders
 - posible version mobile real con Expo / React Native
+- migracion progresiva del stack actual web hacia el stack lean objetivo
 
 ## Datos demo actuales
 - credenciales demo:
@@ -101,3 +117,8 @@ Pedirle al agente nuevo que lea primero:
 4. `NOTES.md`
 
 Eso suele ser suficiente para arrancar con bastante contexto sin depender del historial completo.
+
+## Convencion de trabajo a recordar
+- hacer commits descriptivos cuando una tarea quede estable
+- no dejar cambios grandes sin versionar mucho tiempo
+- push periodico a `main` cuando el cambio ya fue validado

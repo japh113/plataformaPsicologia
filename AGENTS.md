@@ -12,10 +12,33 @@ PsicoPanel es una plataforma clinica para psicologos y pacientes con foco en:
 - disponibilidad
 - lista de espera
 
+Importante:
+- hoy el producto activo en este repo es una `web-app`
+- la direccion futura es una app movil
+- cualquier agente nuevo debe tener presente ambas cosas al proponer cambios
+
+## Stack objetivo a tener presente
+Aunque hoy se trabaja sobre React web + Vite, la referencia futura del producto es:
+- React Native + Expo
+- Node.js + TypeScript + Express
+- PostgreSQL
+- Railway o Render
+- Auth propia
+- Expo Notifications
+- Cloudflare R2 si se necesitan archivos
+- Resend para emails
+
+Esto no significa migrar ahora mismo.
+Significa:
+- no perder de vista que esta web-app es una base transitoria del producto
+- favorecer logica reutilizable y contratos claros
+- evitar acoplar decisiones innecesarias solo a web cuando haya alternativa razonable
+
 ## Estado del repo
 - rama principal de trabajo: `main`
 - el proyecto ya viene con muchos cambios integrados y funcionales
 - se acostumbra hacer `commit + push` frecuente a `main` cuando el cambio esta estable
+- si un cambio es mas riesgoso o exploratorio, se puede abrir branch temporal y luego mergear
 
 ## Convenciones de trabajo
 - preservar el estilo visual ya existente
@@ -78,6 +101,12 @@ Estos archivos concentran mucho comportamiento:
    - `cd backend && npm run db:seed`
 5. Hacer commit descriptivo
 6. Push a `main` si el cambio esta estable
+
+## Regla operativa sobre commits
+- no acumular demasiado trabajo sin commit
+- preferir commits pequenos y descriptivos por feature o ajuste importante
+- si se actualizaron docs/contexto, tambien commitearlo
+- cuando el usuario lo permita, empujar periodicamente a `main`
 
 ## Commits
 Preferir mensajes concretos:
