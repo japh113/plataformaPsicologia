@@ -1,8 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Calendar, CalendarPlus, ChevronLeft, ChevronRight, Clock3, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
+import { Calendar, CalendarPlus, ChevronLeft, ChevronRight, Clock3, Pencil, Plus, Save, Trash2, Users, X } from 'lucide-react';
 import { formatAppointmentDisplayHour, getAppointmentDisplayStatus, getAppointmentHourOptions, getMonthDates, getMonthLabel, getMonthWeekdayHeaders, getWeekDates, getWeekRangeLabel, isAppointmentOverdue, shiftDateByDays, shiftDateByMonths } from '../mappers/appointments';
 
 const emptyForm = { pacienteId: '', fecha: '', hora24: '', estado: 'pendiente', notas: '' };
+const emptyWaitlistForm = { pacienteId: '', fecha: '', hora24: '', notas: '' };
 const weekdayLabels = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
 const exceptionDateFormatter = new Intl.DateTimeFormat('es-MX', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const getStatusBadge = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : estado === 'por cerrar' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
@@ -14,8 +15,11 @@ const getDayNumberBadge = ({ isToday, isActive, isHovered, isCurrentMonth }) => 
 const getExceptionPillClasses = (isUnavailable) => (isUnavailable ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-700');
 const getExceptionDotClasses = (isUnavailable) => (isUnavailable ? 'bg-red-500 ring-red-100' : 'bg-amber-500 ring-amber-100');
 const getExceptionCellAccent = (isUnavailable) => (isUnavailable ? 'border-red-200 bg-red-50/40' : 'border-amber-200 bg-amber-50/40');
+const getWaitlistBadgeClasses = () => 'border-amber-200 bg-amber-50 text-amber-700';
+const getWaitlistCountDotClasses = () => 'bg-amber-500 ring-amber-100';
 const getWeekdayFromDateString = (value) => { const [y = '0', m = '1', d = '1'] = String(value).split('-'); return new Date(Number(y), Number(m) - 1, Number(d)).getDay(); };
 const createTempId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const buildAppointmentSlotKey = (date, hour24) => `${date}::${hour24}`;
 const normalizeBlocks = (blocks, prefix) => (blocks || []).map((block, index) => ({ id: block.id || `${prefix}-${index}`, startTime: String(block.startTime || '').slice(0, 5), endTime: String(block.endTime || '').slice(0, 5) }));
 const normalizeDraftEntries = (entries) => (entries || []).map((entry) => ({ weekday: entry.weekday, blocks: normalizeBlocks(entry.blocks, `tmp-${entry.weekday}`) }));
 const createDefaultExceptionBlock = () => ({ id: createTempId('exception-block'), startTime: '09:00', endTime: '10:00' });
@@ -196,8 +200,8 @@ function ModalShell({ title, description, onClose, children }) {
 
 export default function AppointmentsScreen({
   viewContext,
-  currentUser, patients, appointments, availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
-  isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
+  currentUser, patients, appointments, waitlistEntries = [], availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onCreateAppointmentWaitlist, onDeleteAppointmentWaitlist, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
+  isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingWaitlist = false, processingWaitlistId = null, waitlistActionError = '', onDismissWaitlistError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
   const initialFocusedDate = viewContext?.date || todayDate;
@@ -214,8 +218,10 @@ export default function AppointmentsScreen({
   const [exceptionRangeForm, setExceptionRangeForm] = useState({ startDate: todayDate, endDate: todayDate });
   const [editingExceptionRange, setEditingExceptionRange] = useState(null);
   const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
+  const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
+  const [waitlistForm, setWaitlistForm] = useState(emptyWaitlistForm);
 
   const normalizedAvailabilityDraft = useMemo(() => normalizeDraftEntries(availabilityDraft || availability), [availability, availabilityDraft]);
   const availabilityMap = useMemo(() => new Map(normalizedAvailabilityDraft.map((entry) => [entry.weekday, entry.blocks])), [normalizedAvailabilityDraft]);
@@ -270,6 +276,7 @@ export default function AppointmentsScreen({
   const monthLabel = useMemo(() => getMonthLabel(calendarAnchorDate), [calendarAnchorDate]);
   const monthWeekdayHeaders = useMemo(() => getMonthWeekdayHeaders(), []);
   const selectedFormDate = form.fecha || todayDate;
+  const selectedWaitlistDate = waitlistForm.fecha || selectedDate || todayDate;
 
   const selectedDayAvailability = useMemo(() => {
     const exception = availabilityExceptionsMap.get(selectedFormDate);
@@ -364,8 +371,105 @@ export default function AppointmentsScreen({
     const matchesStatus = statusFilter === 'todos' ? true : appointment.estado === statusFilter;
     return matchesDate && matchesStatus && matchesSessionCoverageFilter(appointment);
   }), [appointments, matchesSessionCoverageFilter, selectedDate, statusFilter]);
+  const waitlistEntriesBySlot = useMemo(() => {
+    const nextMap = new Map();
+
+    waitlistEntries.forEach((entry) => {
+      const key = buildAppointmentSlotKey(entry.fecha, entry.hora24);
+      const currentEntries = nextMap.get(key) || [];
+      nextMap.set(key, [...currentEntries, entry]);
+    });
+
+    return nextMap;
+  }, [waitlistEntries]);
+  const waitlistEntriesForSelectedDate = useMemo(
+    () =>
+      [...waitlistEntries]
+        .filter((entry) => entry.fecha === selectedWaitlistDate)
+        .sort((left, right) => {
+          const slotCompare = `${left.fecha}T${left.hora24}`.localeCompare(`${right.fecha}T${right.hora24}`);
+          if (slotCompare !== 0) {
+            return slotCompare;
+          }
+
+          return String(left.creadaEn || '').localeCompare(String(right.creadaEn || ''));
+        }),
+    [selectedWaitlistDate, waitlistEntries],
+  );
+  const occupiedSlotOptions = useMemo(() => {
+    const groupedBySlot = new Map();
+
+    appointments
+      .filter((appointment) => appointment.fecha === selectedWaitlistDate && appointment.estado !== 'cancelada')
+      .forEach((appointment) => {
+        const currentAppointments = groupedBySlot.get(appointment.hora24) || [];
+        groupedBySlot.set(appointment.hora24, [...currentAppointments, appointment]);
+      });
+
+    return [...groupedBySlot.entries()]
+      .sort((left, right) => left[0].localeCompare(right[0]))
+      .map(([hour24, slotAppointments]) => {
+        const currentWaitlistEntries = waitlistEntriesBySlot.get(buildAppointmentSlotKey(selectedWaitlistDate, hour24)) || [];
+        const patientNames = slotAppointments
+          .map((appointment) => patients.find((patient) => patient.id === appointment.pacienteId)?.nombre)
+          .filter(Boolean)
+          .join(' / ');
+
+        return {
+          value: hour24,
+          label: `${formatAppointmentDisplayHour(hour24)}${patientNames ? ` • ${patientNames}` : ''}${currentWaitlistEntries.length > 0 ? ` • Espera ${currentWaitlistEntries.length}` : ''}`,
+        };
+      });
+  }, [appointments, patients, selectedWaitlistDate, waitlistEntriesBySlot]);
+  const waitlistSameDayPatientAppointment = useMemo(
+    () =>
+      appointments.find(
+        (appointment) =>
+          appointment.pacienteId === waitlistForm.pacienteId &&
+          appointment.fecha === selectedWaitlistDate &&
+          appointment.estado !== 'cancelada',
+      ) || null,
+    [appointments, selectedWaitlistDate, waitlistForm.pacienteId],
+  );
+  const hasWaitlistSameDayConflict = Boolean(waitlistSameDayPatientAppointment);
+  const normalizedWaitlistHourValue = occupiedSlotOptions.some((option) => option.value === waitlistForm.hora24) ? waitlistForm.hora24 : '';
+  const occupiedSlotSummaries = useMemo(() => {
+    const groupedBySlot = new Map();
+
+    appointments
+      .filter(
+        (appointment) =>
+          appointment.fecha === selectedFormDate &&
+          appointment.estado !== 'cancelada' &&
+          appointment.id !== editingAppointmentId,
+      )
+      .forEach((appointment) => {
+        const currentEntries = groupedBySlot.get(appointment.hora24) || [];
+        groupedBySlot.set(appointment.hora24, [...currentEntries, appointment]);
+      });
+
+    return [...groupedBySlot.entries()]
+      .sort((left, right) => left[0].localeCompare(right[0]))
+      .map(([hour24, slotAppointments]) => ({
+        hora24: hour24,
+        hora: formatAppointmentDisplayHour(hour24),
+        patientNames: slotAppointments
+          .map((appointment) => patients.find((patient) => patient.id === appointment.pacienteId)?.nombre)
+          .filter(Boolean)
+          .join(' / '),
+        waitlistCount: (waitlistEntriesBySlot.get(buildAppointmentSlotKey(selectedFormDate, hour24)) || []).length,
+      }));
+  }, [appointments, editingAppointmentId, patients, selectedFormDate, waitlistEntriesBySlot]);
 
   const resetForm = () => { setEditingAppointmentId(null); setForm(emptyForm); onDismissAppointmentError?.(); };
+  const resetWaitlistForm = (date = selectedDate || todayDate) => {
+    setWaitlistForm({
+      ...emptyWaitlistForm,
+      fecha: date,
+      pacienteId: patients[0]?.id || '',
+    });
+    onDismissWaitlistError?.();
+  };
   const openNewAppointmentModal = () => {
     resetForm();
     setForm((current) => ({ ...current, fecha: selectedDate || todayDate, pacienteId: current.pacienteId || patients[0]?.id || '' }));
@@ -374,6 +478,14 @@ export default function AppointmentsScreen({
   const closeAppointmentModal = () => {
     setIsAppointmentModalOpen(false);
     resetForm();
+  };
+  const openWaitlistModal = () => {
+    resetWaitlistForm(selectedDate || todayDate);
+    setIsWaitlistModalOpen(true);
+  };
+  const closeWaitlistModal = () => {
+    setIsWaitlistModalOpen(false);
+    resetWaitlistForm(todayDate);
   };
   const closeAvailabilityModal = () => {
     setIsAvailabilityModalOpen(false);
@@ -409,6 +521,10 @@ export default function AppointmentsScreen({
     setIsAppointmentModalOpen(true);
   };
   const handleChange = (event) => { onDismissAppointmentError?.(); setForm((current) => ({ ...current, [event.target.name]: event.target.value })); };
+  const handleWaitlistChange = (event) => {
+    onDismissWaitlistError?.();
+    setWaitlistForm((current) => ({ ...current, [event.target.name]: event.target.value }));
+  };
   const handleSubmit = async (event) => {
     event.preventDefault();
     const resolvedPatientId = form.pacienteId || patients[0]?.id || '';
@@ -418,7 +534,30 @@ export default function AppointmentsScreen({
     const wasSaved = editingAppointmentId ? await onUpdateAppointment(editingAppointmentId, payload) : await onCreateAppointment(payload);
     if (wasSaved) { setSelectedDate(resolvedDate); setCalendarAnchorDate(resolvedDate); closeAppointmentModal(); }
   };
+  const handleSubmitWaitlist = async (event) => {
+    event.preventDefault();
+
+    if (!waitlistForm.pacienteId || !waitlistForm.fecha || !normalizedWaitlistHourValue || hasWaitlistSameDayConflict) {
+      return;
+    }
+
+    const wasSaved = await onCreateAppointmentWaitlist?.({
+      ...waitlistForm,
+      hora24: normalizedWaitlistHourValue,
+    });
+
+    if (wasSaved) {
+      resetWaitlistForm(waitlistForm.fecha);
+    }
+  };
   const handleDelete = async (appointmentId) => { if (window.confirm('Se eliminara esta cita. Deseas continuar?')) await onDeleteAppointment(appointmentId); };
+  const handleDeleteWaitlistEntry = async (waitlistEntryId) => {
+    if (!window.confirm('Se eliminara esta solicitud de lista de espera. Deseas continuar?')) {
+      return;
+    }
+
+    await onDeleteAppointmentWaitlist?.(waitlistEntryId);
+  };
   const handleUpdateAppointmentStatus = async (appointment, nextStatus) => {
     if (!appointment) {
       return false;
@@ -594,6 +733,14 @@ export default function AppointmentsScreen({
         : hourOptions.length === 0
         ? 'No quedan cupos disponibles en este dia.'
         : `${hourOptions.length} horario${hourOptions.length === 1 ? '' : 's'} disponible${hourOptions.length === 1 ? '' : 's'} en este dia.`;
+  const occupiedSlotsMessage =
+    occupiedSlotSummaries.length === 0
+      ? 'Todavia no hay horarios ocupados este dia.'
+      : 'Horarios ocupados visibles solo como referencia. Si se libera alguno, puedes gestionarlo desde lista de espera.';
+  const waitlistSlotsMessage =
+    occupiedSlotOptions.length === 0
+      ? 'Todavia no hay horarios ocupados para este dia.'
+      : `${occupiedSlotOptions.length} horario${occupiedSlotOptions.length === 1 ? '' : 's'} ocupado${occupiedSlotOptions.length === 1 ? '' : 's'} con opcion de lista de espera.`;
   const isHourSelectDisabled = isSavingAppointment || hasSameDayPatientConflict || ((selectedDayBlocks.length === 0 || selectedDayAvailability.isUnavailable) && !form.hora24);
   const exceptionRangeDayCount = getRangeDayCount(exceptionRangeForm.startDate, exceptionRangeForm.endDate);
   const clinicalSummary = useMemo(() => {
@@ -695,6 +842,10 @@ export default function AppointmentsScreen({
               <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses('missing')}`} />
               Falta sesion
             </span>
+            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getWaitlistBadgeClasses()}`}>
+              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />
+              Lista de espera
+            </span>
           </div>
         )}
 
@@ -721,7 +872,14 @@ export default function AppointmentsScreen({
                         return (
                           <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
                             <p className="truncate">{appointment.hora}</p>
-                            {sessionState !== 'none' && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
+                            <div className="flex items-center gap-1.5">
+                              {appointment.waitlistCount > 0 && (
+                                <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${getWaitlistBadgeClasses()}`} title={`${appointment.waitlistCount} en lista de espera`}>
+                                  {appointment.waitlistCount}
+                                </span>
+                              )}
+                              {sessionState !== 'none' && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
+                            </div>
                           </div>
                         );
                       };
@@ -760,7 +918,15 @@ export default function AppointmentsScreen({
                         const renderChip = (appointment) => {
                           const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
                           const displayStatus = getAppointmentDisplayStatus(appointment);
-                          return <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}><div className="truncate">{appointment.hora}</div>{sessionState !== 'none' && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}</div>;
+                          return (
+                            <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
+                              <div className="truncate">{appointment.hora}</div>
+                              <div className="flex items-center gap-1">
+                                {appointment.waitlistCount > 0 && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getWaitlistCountDotClasses()}`} title={`${appointment.waitlistCount} en lista de espera`} />}
+                                {sessionState !== 'none' && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
+                              </div>
+                            </div>
+                          );
                         };
 
                         return (
@@ -789,6 +955,9 @@ export default function AppointmentsScreen({
             <div className="flex flex-col gap-3 sm:flex-row">
               <button type="button" onClick={openNewAppointmentModal} className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700">
                 <CalendarPlus size={16} className="mr-2" /> Nueva cita
+              </button>
+              <button type="button" onClick={openWaitlistModal} className="inline-flex items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 transition hover:bg-amber-100">
+                <Users size={16} className="mr-2" /> Lista de espera
               </button>
               <button type="button" onClick={() => setIsAvailabilityModalOpen(true)} className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
                 <Save size={16} className="mr-2" /> Disponibilidad semanal
@@ -825,7 +994,7 @@ export default function AppointmentsScreen({
                 <div key={appointment.id} tabIndex={0} onMouseEnter={() => setHoveredDate(appointment.fecha)} onMouseLeave={() => setHoveredDate('')} onFocus={() => setHoveredDate(appointment.fecha)} onBlur={() => setHoveredDate('')} className={`rounded-xl border border-gray-200 border-l-4 p-4 transition outline-none focus-visible:ring-2 focus-visible:ring-indigo-200 ${getAppointmentAccent(displayStatus)} ${isLinkedToSelectedDate ? 'ring-2 ring-indigo-100 shadow-sm' : isLinkedToHoveredDate ? 'ring-2 ring-slate-200' : ''}`}>
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{patient?.nombre || 'Paciente no disponible'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(displayStatus)}`}>{displayStatus}</span>{sessionState !== 'none' && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}</div>
+                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{patient?.nombre || 'Paciente no disponible'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(displayStatus)}`}>{displayStatus}</span>{sessionState !== 'none' && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}{appointment.waitlistCount > 0 && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getWaitlistBadgeClasses()}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />Espera {appointment.waitlistCount}</span>}</div>
                       <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500"><span className="inline-flex items-center"><Calendar size={14} className="mr-1.5" /> {appointment.fecha}</span><span className="inline-flex items-center"><Clock3 size={14} className="mr-1.5" /> {appointment.hora}</span></div>
                       {isOverduePendingAppointment && (
                         <p className="mt-2 text-sm font-medium text-amber-700">La hora de esta cita ya paso y todavia necesita cierre operativo.</p>
@@ -1051,6 +1220,92 @@ export default function AppointmentsScreen({
         </div>}
       </div>
 
+      {isPsychologist && isWaitlistModalOpen && (
+        <ModalShell
+          title="Lista de espera"
+          description="Reserva la prioridad de un paciente sobre un horario ya ocupado por si luego se libera."
+          onClose={closeWaitlistModal}
+        >
+          <div className="space-y-5">
+            <form onSubmit={handleSubmitWaitlist} className="space-y-4 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+              {waitlistActionError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{waitlistActionError}</div>}
+              <div>
+                <h4 className="font-semibold text-slate-900">Agregar paciente a espera</h4>
+                <p className="mt-1 text-xs text-slate-600">Solo puedes anotar al paciente sobre horarios actualmente ocupados. Si ese espacio se libera, la solicitud queda visible para seguimiento.</p>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-700">Paciente</label>
+                <select name="pacienteId" value={waitlistForm.pacienteId} onChange={handleWaitlistChange} disabled={isSavingWaitlist} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                  <option value="">Selecciona un paciente</option>
+                  {patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.nombre}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-gray-700">Fecha</label>
+                  <input type="date" name="fecha" value={waitlistForm.fecha} onChange={handleWaitlistChange} disabled={isSavingWaitlist} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-gray-700">Horario ocupado</label>
+                  <select name="hora24" value={normalizedWaitlistHourValue} onChange={handleWaitlistChange} disabled={isSavingWaitlist || occupiedSlotOptions.length === 0 || hasWaitlistSameDayConflict} className="w-full rounded-lg border border-gray-300 bg-white p-2.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    <option value="">{hasWaitlistSameDayConflict ? 'Paciente ya agendado ese dia' : occupiedSlotOptions.length > 0 ? 'Selecciona un horario ocupado' : 'No hay horarios ocupados'}</option>
+                    {occupiedSlotOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                  <p className="mt-1 text-xs text-gray-500">{hasWaitlistSameDayConflict ? `Este paciente ya tiene una cita activa ese dia a las ${waitlistSameDayPatientAppointment?.hora || ''}.` : waitlistSlotsMessage}</p>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-700">Notas</label>
+                <textarea name="notas" value={waitlistForm.notas} onChange={handleWaitlistChange} disabled={isSavingWaitlist} rows="3" className="w-full rounded-lg border border-gray-300 bg-white p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none" placeholder="Ej. Prefiere este horario por trabajo o escuela." />
+              </div>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button type="button" onClick={() => resetWaitlistForm(waitlistForm.fecha || selectedDate || todayDate)} className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Limpiar</button>
+                <button type="submit" disabled={isSavingWaitlist || !waitlistForm.pacienteId || !waitlistForm.fecha || !normalizedWaitlistHourValue || hasWaitlistSameDayConflict} className="inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-amber-700 disabled:opacity-60 disabled:cursor-not-allowed">
+                  <Users size={16} className="mr-2" /> {isSavingWaitlist ? 'Guardando...' : 'Agregar a espera'}
+                </button>
+              </div>
+            </form>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h4 className="font-semibold text-slate-900">Solicitudes activas</h4>
+                  <p className="mt-1 text-xs text-slate-500">Visualiza la espera por fecha y elimina solicitudes que ya no apliquen.</p>
+                </div>
+                <input type="date" value={waitlistForm.fecha} onChange={handleWaitlistChange} name="fecha" className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+              </div>
+              <div className="mt-4 space-y-3">
+                {waitlistEntriesForSelectedDate.map((entry) => (
+                  <div key={entry.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-slate-900">{entry.pacienteNombre}</p>
+                          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getWaitlistBadgeClasses()}`}>
+                            <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />
+                            {entry.hora}
+                          </span>
+                        </div>
+                        {entry.notas && <p className="mt-2 text-sm text-slate-600">{entry.notas}</p>}
+                      </div>
+                      <button type="button" onClick={() => handleDeleteWaitlistEntry(entry.id)} disabled={processingWaitlistId === entry.id} className="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
+                        <Trash2 size={14} className="mr-2" />
+                        {processingWaitlistId === entry.id ? 'Eliminando...' : 'Eliminar'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {waitlistEntriesForSelectedDate.length === 0 && (
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                    No hay pacientes en lista de espera para esta fecha.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </ModalShell>
+      )}
+
       {isPsychologist && isAvailabilityModalOpen && (
         <ModalShell
           title="Disponibilidad semanal"
@@ -1247,6 +1502,20 @@ export default function AppointmentsScreen({
                 </select>
                 <p className="mt-1 text-xs text-gray-500">{availableSlotsMessage}</p>
                 <p className="mt-1 text-xs text-gray-500">Las sesiones duran 60 minutos y se agendan por hora exacta.</p>
+                {occupiedSlotSummaries.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-800">Horarios ocupados</p>
+                    <p className="mt-1 text-xs text-amber-700">{occupiedSlotsMessage}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {occupiedSlotSummaries.map((slot) => (
+                        <span key={slot.hora24} className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getWaitlistBadgeClasses()}`}>
+                          {slot.hora}
+                          {slot.waitlistCount > 0 ? ` • Espera ${slot.waitlistCount}` : ' • Ocupado'}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <div>

@@ -51,3 +51,25 @@ export const validateUpdateAppointmentPayload = (payload) => {
 
   return errors;
 };
+
+export const validateCreateWaitlistEntryPayload = (payload) => {
+  const errors = [];
+
+  if (!payload.patientId?.trim()) {
+    errors.push('patientId is required');
+  }
+
+  if (!payload.scheduledDate || !isIsoDate(payload.scheduledDate)) {
+    errors.push('scheduledDate must be in YYYY-MM-DD format');
+  }
+
+  if (!payload.scheduledTime || !isHourSlotValue(payload.scheduledTime)) {
+    errors.push('scheduledTime must be in HH:00 or HH:00:00 format');
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'notes') && typeof payload.notes !== 'string') {
+    errors.push('notes must be a string');
+  }
+
+  return errors;
+};

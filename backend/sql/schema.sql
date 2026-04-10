@@ -99,6 +99,24 @@ CREATE TABLE IF NOT EXISTS appointments (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS appointment_waitlist_entries (
+  id BIGSERIAL PRIMARY KEY,
+  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  scheduled_date DATE NOT NULL,
+  scheduled_time TIME NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'fulfilled', 'cancelled')),
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS appointment_waitlist_entries_slot_idx
+  ON appointment_waitlist_entries (scheduled_date, scheduled_time, status);
+
+CREATE UNIQUE INDEX IF NOT EXISTS appointment_waitlist_entries_active_unique_idx
+  ON appointment_waitlist_entries (patient_id, scheduled_date, scheduled_time)
+  WHERE status = 'active';
+
 CREATE TABLE IF NOT EXISTS patient_sessions (
   id BIGSERIAL PRIMARY KEY,
   patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,

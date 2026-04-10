@@ -29,7 +29,15 @@ import {
   updatePatientSession,
   updatePatientTask,
 } from './api/patients';
-import { createAppointment, deleteAppointment, getAppointments, updateAppointment } from './api/appointments';
+import {
+  createAppointment,
+  createAppointmentWaitlistEntry,
+  deleteAppointment,
+  deleteAppointmentWaitlistEntry,
+  getAppointments,
+  getAppointmentWaitlist,
+  updateAppointment,
+} from './api/appointments';
 import { getAuthToken } from './api/client';
 import { getCurrentUser, login, logout } from './api/auth';
 import { getMyReminders } from './api/reminders';
@@ -43,6 +51,7 @@ import {
   filterAppointmentsByDate,
   getTodayDateString,
   mapBackendAppointmentToUiAppointment,
+  mapBackendWaitlistToUiWaitlistEntry,
   mapUiAppointmentToBackendAppointment,
 } from './mappers/appointments';
 
@@ -89,6 +98,7 @@ export default function App() {
   const [appointmentsViewContext, setAppointmentsViewContext] = useState({ date: '', nonce: 0 });
   const [pacientes, setPacientes] = useState([]);
   const [appointments, setAppointments] = useState([]);
+  const [appointmentWaitlist, setAppointmentWaitlist] = useState([]);
   const [availability, setAvailability] = useState([]);
   const [availabilityDraft, setAvailabilityDraft] = useState([]);
   const [availabilityExceptions, setAvailabilityExceptions] = useState([]);
@@ -108,6 +118,9 @@ export default function App() {
   const [guardandoCita, setGuardandoCita] = useState(false);
   const [procesandoCitaId, setProcesandoCitaId] = useState(null);
   const [appointmentActionError, setAppointmentActionError] = useState('');
+  const [guardandoListaEspera, setGuardandoListaEspera] = useState(false);
+  const [procesandoListaEsperaId, setProcesandoListaEsperaId] = useState(null);
+  const [waitlistActionError, setWaitlistActionError] = useState('');
   const [savingAvailability, setSavingAvailability] = useState(false);
   const [availabilityActionError, setAvailabilityActionError] = useState('');
   const [savingAvailabilityException, setSavingAvailabilityException] = useState(false);
@@ -128,6 +141,7 @@ export default function App() {
     setAppointmentsViewContext({ date: '', nonce: 0 });
     setPacientes([]);
     setAppointments([]);
+    setAppointmentWaitlist([]);
     setAvailability([]);
     setAvailabilityDraft([]);
     setAvailabilityExceptions([]);
@@ -135,6 +149,7 @@ export default function App() {
     setNotasTemp('');
     setErrorCarga('');
     setAppointmentActionError('');
+    setWaitlistActionError('');
     setAvailabilityActionError('');
     setAvailabilityExceptionActionError('');
     setGuardandoSesion(false);
@@ -155,18 +170,34 @@ export default function App() {
       const requests = [getPatients(), getAppointments(), getMyReminders()];
 
       if (currentUser.role === 'psychologist') {
+        requests.push(getAppointmentWaitlist());
         requests.push(getMyAvailability());
         requests.push(getMyAvailabilityExceptions());
       }
 
-      const [backendPatients, backendAppointments, backendReminders, backendAvailability = [], backendAvailabilityExceptions = []] = await Promise.all(requests);
+      const [
+        backendPatients,
+        backendAppointments,
+        backendReminders,
+        backendWaitlist = [],
+        backendAvailability = [],
+        backendAvailabilityExceptions = [],
+      ] = await Promise.all(requests);
 
       setPacientes(backendPatients.map(mapBackendPatientToUiPatient));
       setAppointments(sortAppointments(backendAppointments.map(mapBackendAppointmentToUiAppointment)));
       setReminders(backendReminders);
-      setAvailability(backendAvailability);
-      setAvailabilityDraft(backendAvailability);
-      setAvailabilityExceptions(backendAvailabilityExceptions);
+      if (currentUser.role === 'psychologist') {
+        setAppointmentWaitlist(backendWaitlist.map(mapBackendWaitlistToUiWaitlistEntry));
+        setAvailability(backendAvailability);
+        setAvailabilityDraft(backendAvailability);
+        setAvailabilityExceptions(backendAvailabilityExceptions);
+      } else {
+        setAppointmentWaitlist([]);
+        setAvailability([]);
+        setAvailabilityDraft([]);
+        setAvailabilityExceptions([]);
+      }
     } catch (error) {
       setErrorCarga(error.message || 'No se pudieron cargar los datos del tablero.');
     } finally {
@@ -238,6 +269,31 @@ export default function App() {
   const syncAppointmentsState = (updater) => {
     setAppointments((currentAppointments) => sortAppointments(typeof updater === 'function' ? updater(currentAppointments) : updater));
   };
+
+  const refreshAppointmentsAndWaitlist = useCallback(async () => {
+    if (!currentUser) {
+      return;
+    }
+
+    const requests = [getAppointments()];
+
+    if (currentUser.role === 'psychologist') {
+      requests.push(getAppointmentWaitlist());
+    }
+
+    try {
+      const [backendAppointments, backendWaitlist = []] = await Promise.all(requests);
+      setAppointments(sortAppointments(backendAppointments.map(mapBackendAppointmentToUiAppointment)));
+
+      if (currentUser.role === 'psychologist') {
+        setAppointmentWaitlist(backendWaitlist.map(mapBackendWaitlistToUiWaitlistEntry));
+      } else {
+        setAppointmentWaitlist([]);
+      }
+    } catch {
+      // Keep current state if this background refresh fails.
+    }
+  }, [currentUser]);
 
   const refreshReminders = async () => {
     if (!currentUser) {
@@ -534,6 +590,7 @@ export default function App() {
       const createdAppointment = await createAppointment(mapUiAppointmentToBackendAppointment(appointmentForm));
       const uiAppointment = mapBackendAppointmentToUiAppointment(createdAppointment);
       syncAppointmentsState((currentAppointments) => [...currentAppointments, uiAppointment]);
+      await refreshAppointmentsAndWaitlist();
       await refreshReminders();
       return true;
     } catch (error) {
@@ -559,6 +616,7 @@ export default function App() {
       syncAppointmentsState((currentAppointments) =>
         currentAppointments.map((appointment) => (appointment.id === appointmentId ? uiAppointment : appointment)),
       );
+      await refreshAppointmentsAndWaitlist();
       await refreshReminders();
       return true;
     } catch (error) {
@@ -581,6 +639,7 @@ export default function App() {
     try {
       await deleteAppointment(appointmentId);
       syncAppointmentsState((currentAppointments) => currentAppointments.filter((appointment) => appointment.id !== appointmentId));
+      await refreshAppointmentsAndWaitlist();
       await refreshReminders();
       return true;
     } catch (error) {
@@ -600,6 +659,51 @@ export default function App() {
       ...appointment,
       estado: nextStatus,
     });
+  };
+
+  const handleCreateAppointmentWaitlist = async (waitlistForm) => {
+    if (!isPsychologist || guardandoListaEspera) {
+      return false;
+    }
+
+    setGuardandoListaEspera(true);
+    setWaitlistActionError('');
+
+    try {
+      await createAppointmentWaitlistEntry({
+        patientId: waitlistForm.pacienteId,
+        scheduledDate: waitlistForm.fecha,
+        scheduledTime: waitlistForm.hora24,
+        notes: waitlistForm.notas || '',
+      });
+      await refreshAppointmentsAndWaitlist();
+      return true;
+    } catch (error) {
+      setWaitlistActionError(error.message || 'No se pudo agregar a lista de espera.');
+      return false;
+    } finally {
+      setGuardandoListaEspera(false);
+    }
+  };
+
+  const handleDeleteAppointmentWaitlist = async (waitlistEntryId) => {
+    if (!isPsychologist || procesandoListaEsperaId) {
+      return false;
+    }
+
+    setProcesandoListaEsperaId(waitlistEntryId);
+    setWaitlistActionError('');
+
+    try {
+      await deleteAppointmentWaitlistEntry(waitlistEntryId);
+      await refreshAppointmentsAndWaitlist();
+      return true;
+    } catch (error) {
+      setWaitlistActionError(error.message || 'No se pudo eliminar la solicitud de lista de espera.');
+      return false;
+    } finally {
+      setProcesandoListaEsperaId(null);
+    }
   };
 
   const handleOpenSessionFromAppointment = async (appointment, patient) => {
@@ -808,6 +912,7 @@ export default function App() {
           currentUser={currentUser}
           patients={pacientes}
           appointments={appointments}
+          waitlistEntries={appointmentWaitlist}
           availability={availability}
           availabilityDraft={availabilityDraft}
           availabilityExceptions={availabilityExceptions}
@@ -817,6 +922,8 @@ export default function App() {
           onCreateAppointment={handleCreateAppointment}
           onUpdateAppointment={handleUpdateAppointment}
           onDeleteAppointment={handleDeleteAppointment}
+          onCreateAppointmentWaitlist={handleCreateAppointmentWaitlist}
+          onDeleteAppointmentWaitlist={handleDeleteAppointmentWaitlist}
           onUpdateAvailability={handleUpdateAvailability}
           onChangeAvailabilityDraft={setAvailabilityDraft}
           onUpsertAvailabilityException={handleUpsertAvailabilityException}
@@ -828,6 +935,10 @@ export default function App() {
           processingAppointmentId={procesandoCitaId}
           appointmentActionError={appointmentActionError}
           onDismissAppointmentError={() => setAppointmentActionError('')}
+          isSavingWaitlist={guardandoListaEspera}
+          processingWaitlistId={procesandoListaEsperaId}
+          waitlistActionError={waitlistActionError}
+          onDismissWaitlistError={() => setWaitlistActionError('')}
           isSavingAvailability={savingAvailability}
           availabilityActionError={availabilityActionError}
           onDismissAvailabilityError={() => setAvailabilityActionError('')}

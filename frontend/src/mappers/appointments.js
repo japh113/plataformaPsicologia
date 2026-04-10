@@ -95,6 +95,7 @@ export const mapBackendAppointmentToUiAppointment = (appointment) => ({
   estado: backendToUiStatusMap[appointment.status] || 'pendiente',
   notas: appointment.notes || '',
   sesionRegistrada: Boolean(appointment.hasLinkedSession),
+  waitlistCount: Number(appointment.waitlistCount || 0),
 });
 
 export const mapUiAppointmentToBackendAppointment = (appointment) => ({
@@ -195,3 +196,15 @@ export const isAppointmentOverdue = (appointment, now = new Date()) => {
 export const getAppointmentDisplayStatus = (appointment, now = new Date()) => (
   isAppointmentOverdue(appointment, now) ? 'por cerrar' : appointment.estado
 );
+
+export const mapBackendWaitlistToUiWaitlistEntry = (entry) => ({
+  id: String(entry.id),
+  pacienteId: String(entry.patientId),
+  pacienteNombre: entry.patientName,
+  fecha: entry.scheduledDate,
+  hora24: toInputTime(entry.scheduledTime),
+  hora: toDisplayHour(entry.scheduledTime),
+  notas: entry.notes || '',
+  estado: entry.status || 'active',
+  creadaEn: entry.createdAt,
+});
