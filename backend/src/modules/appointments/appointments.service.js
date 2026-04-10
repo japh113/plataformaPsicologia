@@ -691,7 +691,8 @@ export const reorderWaitlistEntries = async (payload, actor) => {
 
   const scheduledTime = normalizeScheduledTime(payload.scheduledTime);
   const entryIds = payload.entryIds.map((entryId) => String(entryId));
-  const accessScope = buildPatientAccessScope(actor, 'w.patient_id', 4);
+  const validationAccessScope = buildPatientAccessScope(actor, 'w.patient_id', 4);
+  const refreshedAccessScope = buildPatientAccessScope(actor, 'w.patient_id', 3);
   const client = await db.getClient();
 
   try {
@@ -716,9 +717,9 @@ export const reorderWaitlistEntries = async (payload, actor) => {
           AND w.scheduled_time = $2
           AND w.status = 'active'
           AND w.id::text = ANY($3::text[])
-          AND ${accessScope.clause}
+          AND ${validationAccessScope.clause}
       `,
-      [payload.scheduledDate, scheduledTime, entryIds, ...accessScope.params],
+      [payload.scheduledDate, scheduledTime, entryIds, ...validationAccessScope.params],
     );
 
     if (result.rowCount !== entryIds.length) {
@@ -768,10 +769,10 @@ export const reorderWaitlistEntries = async (payload, actor) => {
         WHERE w.scheduled_date = $1
           AND w.scheduled_time = $2
           AND w.status = 'active'
-          AND ${accessScope.clause}
+          AND ${refreshedAccessScope.clause}
         ORDER BY w.priority_position ASC, w.created_at ASC
       `,
-      [payload.scheduledDate, scheduledTime, ...accessScope.params],
+      [payload.scheduledDate, scheduledTime, ...refreshedAccessScope.params],
     );
 
     await client.query('COMMIT');
