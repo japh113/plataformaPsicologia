@@ -717,18 +717,22 @@ export default function NotesScreen({
       >
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-              {patientAppointments.length} cita(s)
-            </span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-              {sessions.length} nota(s) clinica(s)
-            </span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-              {patient.tareas?.length || 0} tarea(s) asignada(s)
-            </span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-              {pendingTasks.length} por completar
-            </span>
+            <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                {patientAppointments.length} cita(s)
+              </span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                {sessions.length} nota(s) clinica(s)
+              </span>
+            </div>
+            <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                {patient.tareas?.length || 0} tarea(s) asignada(s)
+              </span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+                {pendingTasks.length} por completar
+              </span>
+            </div>
             <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${getRiskColor(patientRisk)}`}>
               Riesgo {patientRiskLabel}
             </span>
