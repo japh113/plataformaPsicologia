@@ -15,8 +15,8 @@ const getDayNumberBadge = ({ isToday, isActive, isHovered, isCurrentMonth }) => 
 const getExceptionPillClasses = (isUnavailable) => (isUnavailable ? 'border-red-200 bg-red-50 text-red-700' : 'border-amber-200 bg-amber-50 text-amber-700');
 const getExceptionDotClasses = (isUnavailable) => (isUnavailable ? 'bg-red-500 ring-red-100' : 'bg-amber-500 ring-amber-100');
 const getExceptionCellAccent = (isUnavailable) => (isUnavailable ? 'border-red-200 bg-red-50/40' : 'border-amber-200 bg-amber-50/40');
-const getWaitlistBadgeClasses = () => 'border-amber-200 bg-amber-50 text-amber-700';
-const getWaitlistCountDotClasses = () => 'bg-amber-500 ring-amber-100';
+const getWaitlistBadgeClasses = () => 'border-violet-200 bg-violet-50 text-violet-700';
+const getWaitlistCountDotClasses = () => 'bg-violet-500 ring-violet-100';
 const getWeekdayFromDateString = (value) => { const [y = '0', m = '1', d = '1'] = String(value).split('-'); return new Date(Number(y), Number(m) - 1, Number(d)).getDay(); };
 const createTempId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const buildAppointmentSlotKey = (date, hour24) => `${date}::${hour24}`;
@@ -1062,7 +1062,7 @@ export default function AppointmentsScreen({
               <button type="button" onClick={openNewAppointmentModal} className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700">
                 <CalendarPlus size={16} className="mr-2" /> Nueva cita
               </button>
-              <button type="button" onClick={openWaitlistModal} className="inline-flex items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 transition hover:bg-amber-100">
+              <button type="button" onClick={openWaitlistModal} className="inline-flex items-center justify-center rounded-xl border border-violet-300 bg-violet-50 px-4 py-3 text-sm font-medium text-violet-800 transition hover:bg-violet-100">
                 <Users size={16} className="mr-2" /> Lista de espera
               </button>
               <button type="button" onClick={() => setIsAvailabilityModalOpen(true)} className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">
@@ -1108,7 +1108,7 @@ export default function AppointmentsScreen({
                         <p className="mt-2 text-sm font-medium text-amber-700">La hora de esta cita ya paso y todavia necesita cierre operativo.</p>
                       )}
                       {topWaitlistEntry && (
-                        <p className="mt-2 text-sm text-amber-700">
+                        <p className="mt-2 text-sm text-violet-700">
                           Lista de espera: prioridad actual para <span className="font-semibold">{topWaitlistEntry.pacienteNombre}</span>.
                         </p>
                       )}
@@ -1151,7 +1151,7 @@ export default function AppointmentsScreen({
                             setIsWaitlistModalOpen(true);
                             onDismissWaitlistError?.();
                           }}
-                          className="px-3 py-2 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-100 transition text-sm font-medium inline-flex items-center"
+                          className="px-3 py-2 bg-violet-50 text-violet-800 border border-violet-200 rounded-lg hover:bg-violet-100 transition text-sm font-medium inline-flex items-center"
                         >
                           <Users size={14} className="mr-2" /> Ver espera
                         </button>
@@ -1359,7 +1359,7 @@ export default function AppointmentsScreen({
           onClose={closeWaitlistModal}
         >
           <div className="space-y-5">
-            <form onSubmit={handleSubmitWaitlist} className="space-y-4 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+            <form onSubmit={handleSubmitWaitlist} className="space-y-4 rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
               {waitlistActionError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{waitlistActionError}</div>}
               <div>
                 <h4 className="font-semibold text-slate-900">Agregar paciente a espera</h4>
@@ -1392,7 +1392,7 @@ export default function AppointmentsScreen({
               </div>
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <button type="button" onClick={() => resetWaitlistForm(waitlistForm.fecha || selectedDate || todayDate)} className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Limpiar</button>
-                <button type="submit" disabled={isSavingWaitlist || !waitlistForm.pacienteId || !waitlistForm.fecha || !normalizedWaitlistHourValue || hasWaitlistSameDayConflict} className="inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-amber-700 disabled:opacity-60 disabled:cursor-not-allowed">
+                <button type="submit" disabled={isSavingWaitlist || !waitlistForm.pacienteId || !waitlistForm.fecha || !normalizedWaitlistHourValue || hasWaitlistSameDayConflict} className="inline-flex items-center justify-center rounded-xl bg-violet-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed">
                   <Users size={16} className="mr-2" /> {isSavingWaitlist ? 'Guardando...' : 'Agregar a espera'}
                 </button>
               </div>
@@ -1423,6 +1423,11 @@ export default function AppointmentsScreen({
                             ? `Horario ocupado por ${slot.slotAppointments.map((appointment) => patients.find((patient) => patient.id === appointment.pacienteId)?.nombre).filter(Boolean).join(' / ')}.`
                             : 'El horario ya se libero, pero la lista de espera sigue disponible para reagendar.'}
                         </p>
+                        {slot.entries[0] && (
+                          <p className="mt-2 text-xs font-medium text-violet-700">
+                            Siguiente sugerido: <span className="font-semibold">{slot.entries[0].pacienteNombre}</span>
+                          </p>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {slot.slotAppointments.length === 0 && slot.entries[0] && (
@@ -1451,7 +1456,7 @@ export default function AppointmentsScreen({
                             setDraggedWaitlistEntryId(null);
                           }}
                           onDragEnd={() => setDraggedWaitlistEntryId(null)}
-                          className={`rounded-xl border bg-white p-4 transition ${draggedWaitlistEntryId === entry.id ? 'border-amber-300 opacity-70 shadow-sm' : 'border-slate-200'} ${isSavingWaitlist ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing'}`}
+                          className={`rounded-xl border bg-white p-4 transition ${draggedWaitlistEntryId === entry.id ? 'border-violet-300 opacity-70 shadow-sm' : 'border-slate-200'} ${isSavingWaitlist ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing'}`}
                         >
                           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                             <div className="min-w-0">
@@ -1680,9 +1685,9 @@ export default function AppointmentsScreen({
                 <p className="mt-1 text-xs text-gray-500">{availableSlotsMessage}</p>
                 <p className="mt-1 text-xs text-gray-500">Las sesiones duran 60 minutos y se agendan por hora exacta.</p>
                 {occupiedSlotSummaries.length > 0 && (
-                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-800">Horarios ocupados</p>
-                    <p className="mt-1 text-xs text-amber-700">{occupiedSlotsMessage}</p>
+                  <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50/70 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-800">Horarios ocupados</p>
+                    <p className="mt-1 text-xs text-violet-700">{occupiedSlotsMessage}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {occupiedSlotSummaries.map((slot) => (
                         <span key={slot.hora24} className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getWaitlistBadgeClasses()}`}>
