@@ -45,6 +45,10 @@ const statusOptions = [
   { value: 'de alta', label: 'De alta' },
 ];
 
+const getOptionLabel = (options, value, fallback = '') => (
+  options.find((option) => option.value === value)?.label || fallback
+);
+
 const agendaFilterOptions = [
   { id: 'proximas', label: 'Proximas' },
   { id: 'por-cerrar', label: 'Por cerrar' },
@@ -360,6 +364,8 @@ export default function NotesScreen({
 
   const patientRisk = patient.riesgo || 'sin riesgo';
   const patientStatus = patient.estado || 'activo';
+  const patientRiskLabel = getOptionLabel(riskOptions, patientRisk, patientRisk);
+  const patientStatusLabel = getOptionLabel(statusOptions, patientStatus, patientStatus);
   const patientReason = patient.motivo?.trim() || '';
   const patientInterview = patient.entrevista || null;
   const hasCompletedInterview = Boolean(patient.entrevistaCompleta && patientInterview);
@@ -718,16 +724,16 @@ export default function NotesScreen({
               {sessions.length} nota(s) clinica(s)
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-              {patient.tareas?.length || 0} tarea(s) total
+              {patient.tareas?.length || 0} tarea(s) asignada(s)
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-              {pendingTasks.length} pendiente(s)
+              {pendingTasks.length} por completar
             </span>
             <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${getRiskColor(patientRisk)}`}>
-              Riesgo {patientRisk}
+              Riesgo {patientRiskLabel}
             </span>
             <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadgeClasses(patientStatus)}`}>
-              {patientStatus}
+              {patientStatusLabel}
             </span>
           </div>
 
@@ -748,9 +754,11 @@ export default function NotesScreen({
               )}
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Pendiente clinico</p>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Citas por documentar</p>
               <p className="mt-2 text-sm font-semibold text-slate-900">
-                {completedAppointmentsWithoutSession.length ? `${completedAppointmentsWithoutSession.length} cita(s) sin nota clinica` : 'Sin pendientes de documentacion'}
+                {completedAppointmentsWithoutSession.length
+                  ? `${completedAppointmentsWithoutSession.length} cita(s) completada(s) sin nota clinica`
+                  : 'Sin citas pendientes de documentacion'}
               </p>
             </div>
           </div>
@@ -766,7 +774,6 @@ export default function NotesScreen({
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Nota general del expediente</p>
-                <p className="mt-1 text-sm text-slate-500">Vista previa del contexto transversal del caso.</p>
               </div>
               {isPsychologist && (
                 <button
