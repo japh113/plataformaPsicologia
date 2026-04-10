@@ -5,6 +5,11 @@ export const getPatients = async () => {
   return response.data;
 };
 
+export const getPatient = async (id) => {
+  const response = await apiRequest(`/patients/${id}`);
+  return response.data;
+};
+
 export const createPatient = async (payload) => {
   const response = await apiRequest('/patients', {
     method: 'POST',

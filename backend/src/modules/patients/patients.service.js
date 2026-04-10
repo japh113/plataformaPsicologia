@@ -258,6 +258,83 @@ const ensureSessionBelongsToPatient = async (sessionId, patientId) => {
   return result.rows[0];
 };
 
+const normalizeSessionTaskPayloads = (tasks = []) =>
+  tasks.map((task) => ({
+    id: task.id ? Number(task.id) : null,
+    text: String(task.text || '').trim(),
+    completed: typeof task.completed === 'boolean' ? task.completed : false,
+  }));
+
+const syncSessionTasks = async (client, patientId, sessionId, tasks) => {
+  if (!Array.isArray(tasks)) {
+    return;
+  }
+
+  const normalizedTasks = normalizeSessionTaskPayloads(tasks);
+  const existingTasksResult = await client.query(
+    `
+      SELECT id
+      FROM patient_tasks
+      WHERE patient_id = $1
+        AND session_id = $2
+        AND kind = 'task'
+    `,
+    [patientId, sessionId],
+  );
+
+  const existingTaskIds = new Set(existingTasksResult.rows.map((row) => Number(row.id)));
+  const incomingTaskIds = new Set(normalizedTasks.filter((task) => task.id).map((task) => Number(task.id)));
+
+  const taskIdsToDelete = [...existingTaskIds].filter((taskId) => !incomingTaskIds.has(taskId));
+
+  if (taskIdsToDelete.length > 0) {
+    await client.query(
+      `
+        DELETE FROM patient_tasks
+        WHERE patient_id = $1
+          AND session_id = $2
+          AND kind = 'task'
+          AND id = ANY($3::bigint[])
+      `,
+      [patientId, sessionId, taskIdsToDelete],
+    );
+  }
+
+  for (const task of normalizedTasks) {
+    if (task.id && existingTaskIds.has(task.id)) {
+      await client.query(
+        `
+          UPDATE patient_tasks
+          SET
+            text = $4,
+            completed = $5,
+            updated_at = NOW()
+          WHERE patient_id = $1
+            AND session_id = $2
+            AND kind = 'task'
+            AND id = $3
+        `,
+        [patientId, sessionId, task.id, task.text, task.completed],
+      );
+      continue;
+    }
+
+    await client.query(
+      `
+        INSERT INTO patient_tasks (
+          patient_id,
+          session_id,
+          kind,
+          text,
+          completed
+        )
+        VALUES ($1, $2, 'task', $3, $4)
+      `,
+      [patientId, sessionId, task.text, task.completed],
+    );
+  }
+};
+
 const getPatientInterviewById = async (patientId) => {
   const result = await db.query(
     `
@@ -789,49 +866,88 @@ export const createPatientSession = async (patientId, payload, actor) => {
   const appointment = await ensureAppointmentBelongsToPatient(payload.appointmentId ? Number(payload.appointmentId) : null, patientId);
   ensureAppointmentEligibleForSession(appointment);
   await ensureAppointmentSessionUniqueness(Number(appointment.id));
+  const client = await db.getClient();
 
-  const result = await db.query(
-    `
-      INSERT INTO patient_sessions (
-        patient_id,
-        appointment_id,
-        created_by_user_id,
-        session_date,
-        note_format,
-        session_objective,
-        clinical_observations,
-        next_steps,
-        content
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING
-        id,
-        appointment_id AS "appointmentId",
-        session_date AS "sessionDate",
-        note_format AS "noteFormat",
-        session_objective AS "sessionObjective",
-        clinical_observations AS "clinicalObservations",
-        next_steps AS "nextSteps",
-        content,
-        created_at AS "createdAt",
-        updated_at AS "updatedAt"
-    `,
-    [
-      patientId,
-      Number(appointment.id),
-      actor.id,
-      normalizeDateValue(appointment.scheduled_date),
-      payload.noteFormat,
-      normalizeOptionalText(payload.sessionObjective),
-      normalizeOptionalText(payload.clinicalObservations),
-      normalizeOptionalText(payload.nextSteps),
-      payload.content.trim(),
-    ],
-  );
+  try {
+    await client.query('BEGIN');
 
-  await markAppointmentAsCompleted(Number(appointment.id));
-  await refreshPatientLastSessionDate(patientId);
-  return mapSessionRow(result.rows[0]);
+    const result = await client.query(
+      `
+        INSERT INTO patient_sessions (
+          patient_id,
+          appointment_id,
+          created_by_user_id,
+          session_date,
+          note_format,
+          session_objective,
+          clinical_observations,
+          next_steps,
+          content
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING
+          id,
+          appointment_id AS "appointmentId",
+          session_date AS "sessionDate",
+          note_format AS "noteFormat",
+          session_objective AS "sessionObjective",
+          clinical_observations AS "clinicalObservations",
+          next_steps AS "nextSteps",
+          content,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+      `,
+      [
+        patientId,
+        Number(appointment.id),
+        actor.id,
+        normalizeDateValue(appointment.scheduled_date),
+        payload.noteFormat,
+        normalizeOptionalText(payload.sessionObjective),
+        normalizeOptionalText(payload.clinicalObservations),
+        normalizeOptionalText(payload.nextSteps),
+        payload.content.trim(),
+      ],
+    );
+
+    const createdSession = result.rows[0];
+    await syncSessionTasks(client, patientId, Number(createdSession.id), payload.tasks);
+
+    await client.query(
+      `
+        UPDATE appointments
+        SET
+          status = 'completed',
+          updated_at = NOW()
+        WHERE id = $1
+          AND status <> 'completed'
+      `,
+      [Number(appointment.id)],
+    );
+
+    await client.query(
+      `
+        UPDATE patients
+        SET
+          last_session_date = (
+            SELECT MAX(ps.session_date)
+            FROM patient_sessions ps
+            WHERE ps.patient_id = $1
+          ),
+          updated_at = NOW()
+        WHERE id = $1
+      `,
+      [patientId],
+    );
+
+    await client.query('COMMIT');
+    return mapSessionRow(createdSession);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const updatePatientSession = async (patientId, sessionId, payload, actor) => {
@@ -887,47 +1003,86 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
   ensureAppointmentEligibleForSession(appointment);
   await ensureAppointmentSessionUniqueness(Number(appointment.id), Number(sessionId));
 
-  const result = await db.query(
-    `
-      UPDATE patient_sessions
-      SET
-        appointment_id = $3,
-        session_date = $4,
-        note_format = $5,
-        session_objective = $6,
-        clinical_observations = $7,
-        next_steps = $8,
-        content = $9,
-        updated_at = NOW()
-      WHERE patient_id = $1 AND id = $2
-      RETURNING
-        id,
-        appointment_id AS "appointmentId",
-        session_date AS "sessionDate",
-        note_format AS "noteFormat",
-        session_objective AS "sessionObjective",
-        clinical_observations AS "clinicalObservations",
-        next_steps AS "nextSteps",
-        content,
-        created_at AS "createdAt",
-        updated_at AS "updatedAt"
-    `,
-    [
-      patientId,
-      sessionId,
-      Number(appointment.id),
-      normalizeDateValue(appointment.scheduled_date),
-      nextNoteFormat,
-      nextSessionObjective,
-      nextClinicalObservations,
-      nextSteps,
-      nextContent,
-    ],
-  );
+  const client = await db.getClient();
 
-  await markAppointmentAsCompleted(Number(appointment.id));
-  await refreshPatientLastSessionDate(patientId);
-  return mapSessionRow(result.rows[0]);
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `
+        UPDATE patient_sessions
+        SET
+          appointment_id = $3,
+          session_date = $4,
+          note_format = $5,
+          session_objective = $6,
+          clinical_observations = $7,
+          next_steps = $8,
+          content = $9,
+          updated_at = NOW()
+        WHERE patient_id = $1 AND id = $2
+        RETURNING
+          id,
+          appointment_id AS "appointmentId",
+          session_date AS "sessionDate",
+          note_format AS "noteFormat",
+          session_objective AS "sessionObjective",
+          clinical_observations AS "clinicalObservations",
+          next_steps AS "nextSteps",
+          content,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"
+      `,
+      [
+        patientId,
+        sessionId,
+        Number(appointment.id),
+        normalizeDateValue(appointment.scheduled_date),
+        nextNoteFormat,
+        nextSessionObjective,
+        nextClinicalObservations,
+        nextSteps,
+        nextContent,
+      ],
+    );
+
+    await syncSessionTasks(client, patientId, Number(sessionId), payload.tasks);
+
+    await client.query(
+      `
+        UPDATE appointments
+        SET
+          status = 'completed',
+          updated_at = NOW()
+        WHERE id = $1
+          AND status <> 'completed'
+      `,
+      [Number(appointment.id)],
+    );
+
+    await client.query(
+      `
+        UPDATE patients
+        SET
+          last_session_date = (
+            SELECT MAX(ps.session_date)
+            FROM patient_sessions ps
+            WHERE ps.patient_id = $1
+          ),
+          updated_at = NOW()
+        WHERE id = $1
+      `,
+      [patientId],
+    );
+
+    await client.query('COMMIT');
+    return mapSessionRow(result.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const deletePatientSession = async (patientId, sessionId, actor) => {

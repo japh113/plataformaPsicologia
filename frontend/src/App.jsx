@@ -23,10 +23,10 @@ import {
   createPatient,
   createPatientObjective,
   createPatientSession,
-  createPatientTask,
   deletePatientObjective,
   deletePatientSession,
   deletePatientTask,
+  getPatient,
   getPatients,
   upsertPatientInterview,
   updatePatient,
@@ -49,7 +49,6 @@ import { getCurrentUser, login, logout } from './api/auth';
 import { getMyReminders } from './api/reminders';
 import {
   mapBackendPatientToUiPatient,
-  mapBackendSessionToUiSession,
   mapBackendTaskToUiTask,
   mapUiInterviewToBackendInterview,
   mapUiPatientToBackendPatient,
@@ -71,13 +70,6 @@ const sortAppointments = (appointments) =>
     const left = `${a.fecha}T${a.hora24}`;
     const right = `${b.fecha}T${b.hora24}`;
     return left.localeCompare(right);
-  });
-
-const sortSessions = (sessions) =>
-  [...sessions].sort((a, b) => {
-    const left = `${a.fecha || '0000-00-00'}T${a.actualizadaEn || a.creadaEn || '00:00:00'}`;
-    const right = `${b.fecha || '0000-00-00'}T${b.actualizadaEn || b.creadaEn || '00:00:00'}`;
-    return right.localeCompare(left);
   });
 
 const buildDateRangeStrings = (startDate, endDate) => {
@@ -121,7 +113,6 @@ export default function App() {
   const [guardandoPerfilPaciente, setGuardandoPerfilPaciente] = useState(false);
   const [guardandoSesion, setGuardandoSesion] = useState(false);
   const [guardandoEntrevista, setGuardandoEntrevista] = useState(false);
-  const [creandoTarea, setCreandoTarea] = useState(false);
   const [procesandoTareaId, setProcesandoTareaId] = useState(null);
   const [creandoObjetivo, setCreandoObjetivo] = useState(false);
   const [procesandoObjetivoId, setProcesandoObjetivoId] = useState(null);
@@ -293,6 +284,13 @@ export default function App() {
 
   const syncAppointmentsState = (updater) => {
     setAppointments((currentAppointments) => sortAppointments(typeof updater === 'function' ? updater(currentAppointments) : updater));
+  };
+
+  const refreshSelectedPatient = async (patientId) => {
+    const refreshedPatient = await getPatient(patientId);
+    const uiPatient = mapBackendPatientToUiPatient(refreshedPatient);
+    syncPatientState(uiPatient);
+    return uiPatient;
   };
 
   const refreshAppointmentsAndWaitlist = useCallback(async () => {
@@ -487,32 +485,6 @@ export default function App() {
     await saveInterview(patientProfile.id, patientInterviewForm);
   };
 
-  const addTask = async (sessionId, taskText) => {
-    if (!isPsychologist || !pacienteSeleccionado || creandoTarea) {
-      return false;
-    }
-
-    setCreandoTarea(true);
-
-    try {
-      const createdTask = await createPatientTask(pacienteSeleccionado.id, { text: taskText, sessionId });
-      const uiTask = mapBackendTaskToUiTask(createdTask);
-      const nextPatient = {
-        ...pacienteSeleccionado,
-        tareas: [...(pacienteSeleccionado.tareas || []), uiTask],
-      };
-
-      syncPatientState(nextPatient);
-      await refreshReminders();
-      return true;
-    } catch (error) {
-      window.alert(error.message || 'No se pudo crear la tarea.');
-      return false;
-    } finally {
-      setCreandoTarea(false);
-    }
-  };
-
   const toggleTask = async (taskId) => {
     if (!pacienteSeleccionado || procesandoTareaId) {
       return;
@@ -658,16 +630,8 @@ export default function App() {
     setGuardandoSesion(true);
 
     try {
-      const createdSession = await createPatientSession(pacienteSeleccionado.id, payload);
-      const uiSession = mapBackendSessionToUiSession(createdSession);
-      const sessionDate = uiSession.fecha || pacienteSeleccionado.ultimaSesion;
-      const nextPatient = {
-        ...pacienteSeleccionado,
-        ultimaSesion: sessionDate,
-        sesiones: sortSessions([...(pacienteSeleccionado.sesiones || []), uiSession]),
-      };
-
-      syncPatientState(nextPatient);
+      await createPatientSession(pacienteSeleccionado.id, payload);
+      await refreshSelectedPatient(pacienteSeleccionado.id);
       return true;
     } catch (error) {
       window.alert(error.message || 'No se pudo crear la sesion.');
@@ -686,18 +650,8 @@ export default function App() {
     setProcesandoSesionId(sessionId);
 
     try {
-      const updatedSession = await updatePatientSession(pacienteSeleccionado.id, sessionId, payload);
-      const uiSession = mapBackendSessionToUiSession(updatedSession);
-      const nextSessions = sortSessions(
-        (pacienteSeleccionado.sesiones || []).map((session) => (session.id === sessionId ? uiSession : session)),
-      );
-      const nextPatient = {
-        ...pacienteSeleccionado,
-        ultimaSesion: nextSessions[0]?.fecha || null,
-        sesiones: nextSessions,
-      };
-
-      syncPatientState(nextPatient);
+      await updatePatientSession(pacienteSeleccionado.id, sessionId, payload);
+      await refreshSelectedPatient(pacienteSeleccionado.id);
       return true;
     } catch (error) {
       window.alert(error.message || 'No se pudo actualizar la sesion.');
@@ -717,15 +671,7 @@ export default function App() {
 
     try {
       await deletePatientSession(pacienteSeleccionado.id, sessionId);
-      const nextSessions = (pacienteSeleccionado.sesiones || []).filter((session) => session.id !== sessionId);
-      const nextPatient = {
-        ...pacienteSeleccionado,
-        ultimaSesion: nextSessions[0]?.fecha || null,
-        sesiones: nextSessions,
-        tareas: (pacienteSeleccionado.tareas || []).filter((task) => task.sesionId !== String(sessionId)),
-      };
-
-      syncPatientState(nextPatient);
+      await refreshSelectedPatient(pacienteSeleccionado.id);
       return true;
     } catch (error) {
       window.alert(error.message || 'No se pudo eliminar la sesion.');
@@ -1154,7 +1100,6 @@ export default function App() {
           onSaveNotes={guardarNotas}
           onToggleTask={toggleTask}
           onDeleteTask={removeTask}
-          onAddTask={addTask}
           onToggleObjective={toggleObjective}
           onDeleteObjective={removeObjective}
           onAddObjective={addObjective}
@@ -1166,7 +1111,6 @@ export default function App() {
           isSavingPatientProfile={guardandoPerfilPaciente}
           isSavingSession={guardandoSesion}
           isSavingInterview={guardandoEntrevista}
-          isCreatingTask={creandoTarea}
           processingTaskId={procesandoTareaId}
           isCreatingObjective={creandoObjetivo}
           processingObjectiveId={procesandoObjetivoId}

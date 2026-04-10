@@ -28,6 +28,7 @@ const emptySessionForm = {
   observaciones: '',
   proximoPaso: '',
   contenido: '',
+  tareas: [],
 };
 
 const riskOptions = [
@@ -228,7 +229,6 @@ export default function NotesScreen({
   onSaveNotes,
   onToggleTask,
   onDeleteTask,
-  onAddTask,
   onToggleObjective,
   onDeleteObjective,
   onAddObjective,
@@ -240,15 +240,13 @@ export default function NotesScreen({
   isSavingPatientProfile = false,
   isSavingSession = false,
   isSavingInterview = false,
-  isCreatingTask = false,
   processingTaskId = null,
   isCreatingObjective = false,
   processingObjectiveId = null,
   processingSessionId = null,
 }) {
   const initialMatchedSession = patient?.sesiones?.find((session) => session.citaId === (prefilledAppointmentId || null)) || null;
-  const [taskEditorSessionId, setTaskEditorSessionId] = useState(null);
-  const [taskText, setTaskText] = useState('');
+  const [sessionTaskText, setSessionTaskText] = useState('');
   const [showObjectiveInput, setShowObjectiveInput] = useState(false);
   const [objectiveText, setObjectiveText] = useState('');
   const [activeSection, setActiveSection] = useState(initialMatchedSession || prefilledAppointmentId ? 'sesiones' : 'resumen');
@@ -267,6 +265,13 @@ export default function NotesScreen({
         observaciones: initialMatchedSession.observaciones || '',
         proximoPaso: initialMatchedSession.proximoPaso || '',
         contenido: initialMatchedSession.contenido || '',
+        tareas: (patient?.tareas || [])
+          .filter((task) => task.sesionId === initialMatchedSession.id)
+          .map((task) => ({
+            id: task.id,
+            texto: task.texto,
+            completada: task.completada,
+          })),
       }
       : {
         ...emptySessionForm,
@@ -297,17 +302,6 @@ export default function NotesScreen({
         (appointments || []).filter((appointment) => appointment.pacienteId === patient?.id),
       ),
     [appointments, patient?.id],
-  );
-
-  const sessionTaskGroups = useMemo(
-    () =>
-      sessions
-        .map((session) => ({
-          session,
-          tasks: (patient?.tareas || []).filter((task) => task.sesionId === session.id),
-        }))
-        .filter((group) => isPsychologist || group.tasks.length > 0),
-    [isPsychologist, patient?.tareas, sessions],
   );
 
   const orphanTasks = useMemo(
@@ -387,7 +381,6 @@ export default function NotesScreen({
       { id: 'entrevista', label: 'Entrevista' },
       { id: 'agenda', label: 'Agenda' },
       { id: 'sesiones', label: 'Sesiones' },
-      { id: 'tareas', label: 'Tareas' },
       { id: 'objetivos', label: 'Objetivos' },
       { id: 'nota-general', label: 'Nota general' },
     ]
@@ -395,12 +388,13 @@ export default function NotesScreen({
       { id: 'resumen', label: 'Resumen' },
       { id: 'entrevista', label: 'Entrevista' },
       { id: 'agenda', label: 'Agenda' },
-      { id: 'tareas', label: 'Tareas' },
+      { id: 'sesiones', label: 'Sesiones' },
       { id: 'objetivos', label: 'Objetivos' },
     ];
 
   const resetSessionForm = () => {
     setSelectedSessionId(null);
+    setSessionTaskText('');
     setSessionForm({
       ...emptySessionForm,
       citaId: prefilledAppointmentId || '',
@@ -434,6 +428,7 @@ export default function NotesScreen({
 
   const openNewSessionModal = (appointmentId = prefilledAppointmentId || '') => {
     setSelectedSessionId(null);
+    setSessionTaskText('');
     setSessionForm({
       ...emptySessionForm,
       citaId: appointmentId,
@@ -441,17 +436,45 @@ export default function NotesScreen({
     setShowSessionModal(true);
   };
 
-  const handleAddTask = async (sessionId) => {
-    if (!taskText.trim() || isCreatingTask) {
+  const handleSessionTaskDraftChange = (taskId, field, value) => {
+    setSessionForm((currentForm) => ({
+      ...currentForm,
+      tareas: (currentForm.tareas || []).map((task) => (
+        task.id === taskId
+          ? {
+            ...task,
+            [field]: value,
+          }
+          : task
+      )),
+    }));
+  };
+
+  const handleAddSessionTaskDraft = () => {
+    if (!sessionTaskText.trim()) {
       return;
     }
 
-    const wasCreated = await onAddTask(sessionId, taskText);
+    setSessionForm((currentForm) => ({
+      ...currentForm,
+      tareas: [
+        ...(currentForm.tareas || []),
+        {
+          id: `draft-${Date.now()}`,
+          texto: sessionTaskText.trim(),
+          completada: false,
+          isDraft: true,
+        },
+      ],
+    }));
+    setSessionTaskText('');
+  };
 
-    if (wasCreated) {
-      setTaskText('');
-      setTaskEditorSessionId(null);
-    }
+  const handleRemoveSessionTaskDraft = (taskId) => {
+    setSessionForm((currentForm) => ({
+      ...currentForm,
+      tareas: (currentForm.tareas || []).filter((task) => task.id !== taskId),
+    }));
   };
 
   const handleSaveProfile = async () => {
@@ -472,12 +495,20 @@ export default function NotesScreen({
 
   const handleEditSession = (session) => {
     setSelectedSessionId(session.id);
+    setSessionTaskText('');
     setSessionForm({
       citaId: session.citaId || '',
       objetivo: session.objetivo || '',
       observaciones: session.observaciones || '',
       proximoPaso: session.proximoPaso || '',
       contenido: session.contenido || '',
+      tareas: (patient?.tareas || [])
+        .filter((task) => task.sesionId === session.id)
+        .map((task) => ({
+          id: task.id,
+          texto: task.texto,
+          completada: task.completada,
+        })),
     });
     setShowSessionModal(true);
   };
@@ -530,6 +561,13 @@ export default function NotesScreen({
       clinicalObservations: sessionForm.observaciones,
       nextSteps: sessionForm.proximoPaso,
       content: sessionForm.contenido,
+      tasks: (sessionForm.tareas || [])
+        .filter((task) => task.texto?.trim())
+        .map((task) => ({
+          id: String(task.id).startsWith('draft-') ? null : task.id,
+          text: task.texto,
+          completed: Boolean(task.completada),
+        })),
     };
 
     const wasSaved = selectedSession
@@ -838,7 +876,7 @@ export default function NotesScreen({
   const renderSessionsTab = () => (
     <SectionCard
       title="Sesiones"
-      description="El historial queda visible, pero el formulario vive en una modal para no cargar la pantalla."
+      description={isPsychologist ? 'Historial clinico y tareas asignadas por sesion.' : 'Seguimiento de tus sesiones y tareas entre consultas.'}
       action={isPsychologist ? (
         <button
           type="button"
@@ -858,7 +896,7 @@ export default function NotesScreen({
           return (
             <div key={session.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold text-slate-900 capitalize">{formatSessionDate(session.fecha)}</p>
                   </div>
@@ -873,12 +911,41 @@ export default function NotesScreen({
                       {pendingTasksForSession.length} pendiente(s)
                     </span>
                   </div>
-                  {(session.objetivo || session.proximoPaso) && (
+                  {isPsychologist && (session.objetivo || session.proximoPaso) && (
                     <p className="mt-2 text-sm text-slate-700">
                       {session.objetivo || 'Sin objetivo documentado'}
                       {session.proximoPaso ? ` - ${session.proximoPaso}` : ''}
                     </p>
                   )}
+
+                  <div className="mt-4 space-y-2">
+                    {tasksForSession.length > 0 ? tasksForSession.map((task) => (
+                      <div key={task.id} className="group flex items-start rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={task.completada}
+                          disabled={processingTaskId === task.id}
+                          onChange={() => onToggleTask(task.id)}
+                          className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                        />
+                        <span className={`ml-3 flex-1 text-sm ${task.completada ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{task.texto}</span>
+                        {isPsychologist && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteTask(task.id)}
+                            disabled={processingTaskId === task.id}
+                            className="ml-3 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    )) : (
+                      <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-500">
+                        {isPsychologist ? 'Esta sesion no tiene tareas asignadas todavia.' : 'No se asignaron tareas en esta sesion.'}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {isPsychologist && (
                   <button
@@ -897,165 +964,42 @@ export default function NotesScreen({
             Todavia no hay sesiones registradas para este paciente.
           </div>
         )}
-      </div>
-    </SectionCard>
-  );
 
-  const renderTasksTab = () => (
-    <SectionCard
-      title={isPsychologist ? 'Plan de tareas' : 'Mis tareas'}
-      description={isPsychologist ? 'Cada sesion concentra sus propias tareas asignadas.' : 'Tus tareas aparecen agrupadas por la sesion que las origino.'}
-      action={(
-        <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm font-semibold text-sky-700">
-          Adherencia {adherence}%
-        </span>
-      )}
-    >
-      <div className="space-y-3">
-        {sessionTaskGroups.length === 0 && orphanTasks.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-sm text-slate-500">
-            {isPsychologist
-              ? 'Todavia no hay tareas ligadas a sesiones para este paciente.'
-              : 'Todavia no tienes tareas asignadas entre sesiones.'}
-          </div>
-        ) : (
-          <>
-            {sessionTaskGroups.map(({ session, tasks }) => (
-              <div key={session.id} className="rounded-[24px] border border-slate-200 bg-white p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900 capitalize">{formatSessionDate(session.fecha)}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {session.objetivo?.trim() || 'Sesion sin objetivo resumido.'}
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {tasks.length} tarea(s)
-                  </span>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  {tasks.length > 0 ? tasks.map((task) => (
-                    <div key={task.id} className="group flex items-start rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                      <input
-                        type="checkbox"
-                        checked={task.completada}
-                        disabled={processingTaskId === task.id}
-                        onChange={() => onToggleTask(task.id)}
-                        className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
-                      />
-                      <span className={`ml-3 flex-1 text-sm ${task.completada ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{task.texto}</span>
-                      {isPsychologist && (
-                        <button
-                          type="button"
-                          onClick={() => onDeleteTask(task.id)}
-                          disabled={processingTaskId === task.id}
-                          className="ml-3 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  )) : (
-                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                      Esta sesion no tiene tareas asignadas todavia.
-                    </div>
-                  )}
-
+        {orphanTasks.length > 0 && (
+          <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+            <div className="border-b border-slate-200 pb-3">
+              <p className="text-sm font-semibold text-slate-900">Tareas sin sesion visible</p>
+              <p className="mt-1 text-xs text-slate-500">Se conservan aqui para no perder seguimiento de datos anteriores.</p>
+            </div>
+            <div className="mt-4 space-y-3">
+              {orphanTasks.map((task) => (
+                <div key={task.id} className="group flex items-start rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                  <input
+                    type="checkbox"
+                    checked={task.completada}
+                    disabled={processingTaskId === task.id}
+                    onChange={() => onToggleTask(task.id)}
+                    className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                  />
+                  <span className={`ml-3 flex-1 text-sm ${task.completada ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{task.texto}</span>
                   {isPsychologist && (
-                    taskEditorSessionId === session.id ? (
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <textarea
-                          autoFocus
-                          value={taskText}
-                          onChange={(event) => setTaskText(event.target.value)}
-                          placeholder="Ej. Registro diario de emociones o practica breve de respiracion..."
-                          rows="3"
-                          className="w-full rounded-2xl border border-indigo-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' && !event.shiftKey) {
-                              event.preventDefault();
-                              handleAddTask(session.id);
-                            }
-                          }}
-                        />
-                        <div className="mt-3 flex gap-3">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTaskEditorSessionId(null);
-                              setTaskText('');
-                            }}
-                            disabled={isCreatingTask}
-                            className="flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:bg-slate-50 disabled:text-slate-400"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAddTask(session.id)}
-                            disabled={isCreatingTask}
-                            className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {isCreatingTask ? 'Guardando...' : 'Guardar tarea'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTaskEditorSessionId(session.id);
-                          setTaskText('');
-                        }}
-                        className="inline-flex w-full items-center justify-center rounded-2xl border border-dashed border-indigo-200 bg-indigo-50 px-4 py-4 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
-                      >
-                        <Plus size={16} className="mr-2" /> Agregar tarea a esta sesion
-                      </button>
-                    )
+                    <button
+                      type="button"
+                      onClick={() => onDeleteTask(task.id)}
+                      disabled={processingTaskId === task.id}
+                      className="ml-3 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   )}
                 </div>
-              </div>
-            ))}
-
-            {orphanTasks.length > 0 && (
-              <div className="rounded-[24px] border border-slate-200 bg-white p-4">
-                <div className="border-b border-slate-200 pb-3">
-                  <p className="text-sm font-semibold text-slate-900">Tareas sin sesion visible</p>
-                  <p className="mt-1 text-xs text-slate-500">Se conservan aqui para no perder seguimiento de datos anteriores.</p>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {orphanTasks.map((task) => (
-                    <div key={task.id} className="group flex items-start rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                      <input
-                        type="checkbox"
-                        checked={task.completada}
-                        disabled={processingTaskId === task.id}
-                        onChange={() => onToggleTask(task.id)}
-                        className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
-                      />
-                      <span className={`ml-3 flex-1 text-sm ${task.completada ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{task.texto}</span>
-                      {isPsychologist && (
-                        <button
-                          type="button"
-                          onClick={() => onDeleteTask(task.id)}
-                          disabled={processingTaskId === task.id}
-                          className="ml-3 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </SectionCard>
   );
-
   const renderObjectivesTab = () => (
     <SectionCard
       title={isPsychologist ? 'Objetivos del proceso' : 'Mis objetivos'}
@@ -1326,15 +1270,14 @@ export default function NotesScreen({
     if (!isPsychologist) {
       if (activeSection === 'entrevista') return renderInterviewTab();
       if (activeSection === 'agenda') return renderAgendaTab();
-      if (activeSection === 'tareas') return renderTasksTab();
       if (activeSection === 'objetivos') return renderObjectivesTab();
+      if (activeSection === 'sesiones') return renderSessionsTab();
       return renderPatientSummaryTab();
     }
 
     if (activeSection === 'entrevista') return renderInterviewTab();
     if (activeSection === 'agenda') return renderAgendaTab();
     if (activeSection === 'sesiones') return renderSessionsTab();
-    if (activeSection === 'tareas') return renderTasksTab();
     if (activeSection === 'objetivos') return renderObjectivesTab();
     if (activeSection === 'nota-general') return renderGeneralNoteTab();
     return renderSummaryOverview();
@@ -1440,7 +1383,7 @@ export default function NotesScreen({
                 )}
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Estado general</p>
-                  <p className="mt-2 text-slate-700">{completedObjectives.length} completado(s) · {pendingObjectives.length} en proceso</p>
+                  <p className="mt-2 text-slate-700">{completedObjectives.length} completado(s) Â· {pendingObjectives.length} en proceso</p>
                 </div>
               </div>
             </SectionCard>
@@ -1514,6 +1457,81 @@ export default function NotesScreen({
                 rows="8"
                 className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
+            </div>
+
+            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">Tareas entre sesiones</h4>
+                  <p className="mt-1 text-xs text-slate-500">Asigna aqui las tareas que el paciente debe trabajar antes de la siguiente cita.</p>
+                </div>
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                  {(sessionForm.tareas || []).length} tarea(s)
+                </span>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {(sessionForm.tareas || []).length > 0 ? (
+                  (sessionForm.tareas || []).map((task) => (
+                    <div key={task.id} className="group flex items-start rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={task.completada}
+                        onChange={() => handleSessionTaskDraftChange(task.id, 'completada', !task.completada)}
+                        disabled={isSavingSession}
+                        className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+                      />
+                      <input
+                        type="text"
+                        value={task.texto}
+                        onChange={(event) => handleSessionTaskDraftChange(task.id, 'texto', event.target.value)}
+                        disabled={isSavingSession}
+                        className={`ml-3 flex-1 border-none bg-transparent px-0 py-0 text-sm focus:outline-none focus:ring-0 ${task.completada ? 'text-slate-400 line-through' : 'text-slate-700'}`}
+                        placeholder="Describe la tarea asignada..."
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSessionTaskDraft(task.id)}
+                        disabled={isSavingSession}
+                        className="ml-3 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-500">
+                    Todavia no hay tareas en esta sesion.
+                  </div>
+                )}
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <textarea
+                    value={sessionTaskText}
+                    onChange={(event) => setSessionTaskText(event.target.value)}
+                    disabled={isSavingSession}
+                    rows="3"
+                    placeholder="Ej. Registro diario de emociones, practica de respiracion o ejercicio de exposicion gradual..."
+                    className="w-full rounded-2xl border border-indigo-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        handleAddSessionTaskDraft();
+                      }
+                    }}
+                  />
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleAddSessionTaskDraft}
+                      disabled={isSavingSession}
+                      className="inline-flex items-center justify-center rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <Plus size={16} className="mr-2" /> Agregar tarea
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {selectedAppointment && (

@@ -1,5 +1,34 @@
 const allowedFormats = new Set(['simple', 'soap']);
 const structuredFieldKeys = ['sessionObjective', 'clinicalObservations', 'nextSteps'];
+const validateTasksField = (payload, errors) => {
+  if (!Object.prototype.hasOwnProperty.call(payload || {}, 'tasks')) {
+    return;
+  }
+
+  if (!Array.isArray(payload.tasks)) {
+    errors.push('tasks must be an array when provided');
+    return;
+  }
+
+  payload.tasks.forEach((task, index) => {
+    if (typeof task !== 'object' || task === null) {
+      errors.push(`tasks[${index}] must be an object`);
+      return;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(task, 'id') && (task.id === null || typeof task.id === 'undefined' || !String(task.id).trim())) {
+      errors.push(`tasks[${index}].id must be a valid value when provided`);
+    }
+
+    if (typeof task.text !== 'string' || task.text.trim().length === 0) {
+      errors.push(`tasks[${index}].text is required`);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(task, 'completed') && typeof task.completed !== 'boolean') {
+      errors.push(`tasks[${index}].completed must be a boolean when provided`);
+    }
+  });
+};
 
 const validateOptionalTextField = (payload, key, errors) => {
   if (
@@ -26,13 +55,14 @@ export const validateCreateSessionPayload = (payload) => {
   }
 
   structuredFieldKeys.forEach((key) => validateOptionalTextField(payload, key, errors));
+  validateTasksField(payload, errors);
 
   return errors;
 };
 
 export const validateUpdateSessionPayload = (payload) => {
   const errors = [];
-  const hasAnyField = ['noteFormat', 'content', 'appointmentId', ...structuredFieldKeys].some((key) => Object.prototype.hasOwnProperty.call(payload || {}, key));
+  const hasAnyField = ['noteFormat', 'content', 'appointmentId', 'tasks', ...structuredFieldKeys].some((key) => Object.prototype.hasOwnProperty.call(payload || {}, key));
 
   if (!hasAnyField) {
     return ['At least one field must be provided'];
@@ -47,6 +77,7 @@ export const validateUpdateSessionPayload = (payload) => {
   }
 
   structuredFieldKeys.forEach((key) => validateOptionalTextField(payload, key, errors));
+  validateTasksField(payload, errors);
 
   if (
     Object.prototype.hasOwnProperty.call(payload || {}, 'appointmentId') &&
