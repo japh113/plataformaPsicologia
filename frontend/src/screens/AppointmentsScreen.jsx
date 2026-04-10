@@ -955,11 +955,12 @@ export default function AppointmentsScreen({
                       const renderChip = (appointment) => {
                         const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
                         const displayStatus = getAppointmentDisplayStatus(appointment);
+                        const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
                         return (
                           <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
                             <p className="truncate">{appointment.hora}</p>
                             <div className="flex items-center gap-1.5">
-                              {appointment.waitlistCount > 0 && (
+                              {showWaitlistIndicator && (
                                 <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${getWaitlistBadgeClasses()}`} title={`${appointment.waitlistCount} en lista de espera`}>
                                   {appointment.waitlistCount}
                                 </span>
@@ -1004,11 +1005,12 @@ export default function AppointmentsScreen({
                         const renderChip = (appointment) => {
                           const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
                           const displayStatus = getAppointmentDisplayStatus(appointment);
+                          const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
                           return (
                             <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
                               <div className="truncate">{appointment.hora}</div>
                               <div className="flex items-center gap-1">
-                                {appointment.waitlistCount > 0 && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getWaitlistCountDotClasses()}`} title={`${appointment.waitlistCount} en lista de espera`} />}
+                                {showWaitlistIndicator && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getWaitlistCountDotClasses()}`} title={`${appointment.waitlistCount} en lista de espera`} />}
                                 {sessionState !== 'none' && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
                               </div>
                             </div>
@@ -1066,7 +1068,8 @@ export default function AppointmentsScreen({
               const sessionState = getAppointmentSessionState(appointment, Boolean(linkedSession));
               const sessionLabel = getAppointmentSessionLabel(sessionState);
               const displayStatus = getAppointmentDisplayStatus(appointment);
-              const topWaitlistEntry = waitlistTopPriorityBySlot.get(buildAppointmentSlotKey(appointment.fecha, appointment.hora24)) || null;
+              const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
+              const topWaitlistEntry = showWaitlistIndicator ? waitlistTopPriorityBySlot.get(buildAppointmentSlotKey(appointment.fecha, appointment.hora24)) || null : null;
               const isFutureAppointment = appointment.fecha > todayDate;
               const isOverduePendingAppointment = isAppointmentOverdue(appointment);
               const canOpenSessionFlow =
@@ -1081,7 +1084,7 @@ export default function AppointmentsScreen({
                 <div key={appointment.id} tabIndex={0} onMouseEnter={() => setHoveredDate(appointment.fecha)} onMouseLeave={() => setHoveredDate('')} onFocus={() => setHoveredDate(appointment.fecha)} onBlur={() => setHoveredDate('')} className={`rounded-xl border border-gray-200 border-l-4 p-4 transition outline-none focus-visible:ring-2 focus-visible:ring-indigo-200 ${getAppointmentAccent(displayStatus)} ${isLinkedToSelectedDate ? 'ring-2 ring-indigo-100 shadow-sm' : isLinkedToHoveredDate ? 'ring-2 ring-slate-200' : ''}`}>
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{patient?.nombre || 'Paciente no disponible'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(displayStatus)}`}>{displayStatus}</span>{sessionState !== 'none' && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}{appointment.waitlistCount > 0 && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getWaitlistBadgeClasses()}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />Espera {appointment.waitlistCount}</span>}</div>
+                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{patient?.nombre || 'Paciente no disponible'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(displayStatus)}`}>{displayStatus}</span>{sessionState !== 'none' && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}{showWaitlistIndicator && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getWaitlistBadgeClasses()}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />Espera {appointment.waitlistCount}</span>}</div>
                       <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500"><span className="inline-flex items-center"><Calendar size={14} className="mr-1.5" /> {appointment.fecha}</span><span className="inline-flex items-center"><Clock3 size={14} className="mr-1.5" /> {appointment.hora}</span></div>
                       {isOverduePendingAppointment && (
                         <p className="mt-2 text-sm font-medium text-amber-700">La hora de esta cita ya paso y todavia necesita cierre operativo.</p>
@@ -1116,7 +1119,7 @@ export default function AppointmentsScreen({
                           Cancelar
                         </button>
                       )}
-                      {isPsychologist && appointment.waitlistCount > 0 && (
+                      {isPsychologist && showWaitlistIndicator && (
                         <button
                           type="button"
                           onClick={() => {

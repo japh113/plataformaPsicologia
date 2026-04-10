@@ -40,6 +40,48 @@ VALUES
     'Trabajando habitos de sueno y regulacion emocional.',
     34,
     'Habitos de sueno'
+  ),
+  (
+    '3',
+    'Sofia',
+    'Ramirez',
+    'Sofia Ramirez',
+    'sofia@example.com',
+    '555-777-8888',
+    'medium',
+    'active',
+    NULL,
+    'Seguimiento por manejo de estres laboral.',
+    27,
+    'Estres laboral'
+  ),
+  (
+    '4',
+    'Carlos',
+    'Mendez',
+    'Carlos Mendez',
+    'carlos@example.com',
+    '555-999-0000',
+    'low',
+    'active',
+    NULL,
+    'Primer contacto para trabajar organizacion y procrastinacion.',
+    31,
+    'Organizacion personal'
+  ),
+  (
+    '5',
+    'Valeria',
+    'Torres',
+    'Valeria Torres',
+    'valeria@example.com',
+    '555-222-6666',
+    'high',
+    'active',
+    NULL,
+    'Caso nuevo con antecedente de crisis recientes.',
+    24,
+    'Crisis de ansiedad'
 )
 ON CONFLICT (id) DO NOTHING;
 
@@ -88,7 +130,10 @@ INSERT INTO psychologist_patient_access (
 )
 VALUES
   ('u_psy_1', '1'),
-  ('u_psy_1', '2')
+  ('u_psy_1', '2'),
+  ('u_psy_1', '3'),
+  ('u_psy_1', '4'),
+  ('u_psy_1', '5')
 ON CONFLICT (psychologist_user_id, patient_id) DO NOTHING;
 
 INSERT INTO psychologist_availability (
