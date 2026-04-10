@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS patients (
   full_name TEXT NOT NULL,
   email TEXT NOT NULL DEFAULT '',
   phone TEXT NOT NULL DEFAULT '',
-  risk_level TEXT NOT NULL DEFAULT 'low' CHECK (risk_level IN ('low', 'medium', 'high')),
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  risk_level TEXT NOT NULL DEFAULT 'none' CHECK (risk_level IN ('none', 'low', 'medium', 'high')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'inactive', 'discharged')),
   last_session_date DATE,
   notes TEXT NOT NULL DEFAULT '',
   age INTEGER CHECK (age IS NULL OR age >= 0),
@@ -147,6 +147,20 @@ ALTER TABLE patient_sessions
 
 ALTER TABLE patient_sessions
   ADD COLUMN IF NOT EXISTS next_steps TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE patients
+  DROP CONSTRAINT IF EXISTS patients_risk_level_check;
+
+ALTER TABLE patients
+  ADD CONSTRAINT patients_risk_level_check
+  CHECK (risk_level IN ('none', 'low', 'medium', 'high'));
+
+ALTER TABLE patients
+  DROP CONSTRAINT IF EXISTS patients_status_check;
+
+ALTER TABLE patients
+  ADD CONSTRAINT patients_status_check
+  CHECK (status IN ('active', 'paused', 'inactive', 'discharged'));
 
 WITH ranked_waitlist_entries AS (
   SELECT

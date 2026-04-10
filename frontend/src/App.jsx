@@ -105,7 +105,7 @@ export default function App() {
   const [availabilityExceptions, setAvailabilityExceptions] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [mostrarModalNuevoPaciente, setMostrarModalNuevoPaciente] = useState(false);
-  const [nuevoPacienteForm, setNuevoPacienteForm] = useState({ nombre: '', edad: '', motivo: '', riesgo: 'bajo' });
+  const [nuevoPacienteForm, setNuevoPacienteForm] = useState({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
   const [notasTemp, setNotasTemp] = useState('');
   const [cargandoDatos, setCargandoDatos] = useState(false);
   const [errorCarga, setErrorCarga] = useState('');
@@ -156,7 +156,7 @@ export default function App() {
     setGuardandoSesion(false);
     setProcesandoSesionId(null);
     setMostrarModalNuevoPaciente(false);
-    setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'bajo' });
+    setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
   };
 
   const cargarDatos = useCallback(async () => {
@@ -346,7 +346,7 @@ export default function App() {
       );
 
       setPacientes((currentPatients) => [...currentPatients, mapBackendPatientToUiPatient(createdPatient)]);
-      setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'bajo' });
+      setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
       setMostrarModalNuevoPaciente(false);
     } catch (error) {
       window.alert(error.message || 'No se pudo crear el paciente.');
@@ -924,7 +924,7 @@ export default function App() {
           reminders={reminders}
           onOpenPatient={abrirNotas}
           onNewPatient={() => setMostrarModalNuevoPaciente(true)}
-          onViewAppointments={() => setVistaActiva('appointments')}
+          onViewAppointments={() => abrirAgenda(todayDate)}
         />
       );
     }

@@ -1,13 +1,29 @@
 const backendToUiRiskMap = {
+  none: 'sin riesgo',
   low: 'bajo',
   medium: 'medio',
   high: 'alto',
 };
 
 const uiToBackendRiskMap = {
+  'sin riesgo': 'none',
   bajo: 'low',
   medio: 'medium',
   alto: 'high',
+};
+
+const backendToUiStatusMap = {
+  active: 'activo',
+  paused: 'en pausa',
+  inactive: 'de baja',
+  discharged: 'de alta',
+};
+
+const uiToBackendStatusMap = {
+  activo: 'active',
+  'en pausa': 'paused',
+  'de baja': 'inactive',
+  'de alta': 'discharged',
 };
 
 const splitFullName = (fullName = '') => {
@@ -53,7 +69,7 @@ export const mapBackendPatientToUiPatient = (patient) => {
     id: String(patient.id),
     nombre: fullName,
     edad: patient.age ?? null,
-    riesgo: backendToUiRiskMap[patient.riskLevel] || 'bajo',
+    riesgo: backendToUiRiskMap[patient.riskLevel] || 'sin riesgo',
     ultimaSesion: patient.lastSessionDate || null,
     motivo: patient.reasonForConsultation || '',
     notas: patient.notes || '',
@@ -61,7 +77,7 @@ export const mapBackendPatientToUiPatient = (patient) => {
     sesiones: Array.isArray(patient.sessions) ? patient.sessions.map(mapBackendSessionToUiSession) : [],
     email: patient.email || '',
     telefono: patient.phone || '',
-    estado: patient.status || 'active',
+    estado: backendToUiStatusMap[patient.status] || 'activo',
   };
 };
 
@@ -73,8 +89,8 @@ export const mapUiPatientToBackendPatient = (patient) => {
     lastName,
     email: patient.email || '',
     phone: patient.telefono || '',
-    riskLevel: uiToBackendRiskMap[patient.riesgo] || 'low',
-    status: patient.estado || 'active',
+    riskLevel: uiToBackendRiskMap[patient.riesgo] || 'none',
+    status: uiToBackendStatusMap[patient.estado] || 'active',
     lastSessionDate: patient.ultimaSesion || null,
     notes: patient.notas || '',
     age: normalizeNullableAge(patient.edad),

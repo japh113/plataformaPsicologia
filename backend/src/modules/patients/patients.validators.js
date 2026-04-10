@@ -28,12 +28,12 @@ export const validatePatientPayload = (payload, { requireFirstName = false } = {
     errors.push('reasonForConsultation must be a string');
   }
 
-  if (payload.riskLevel && !['low', 'medium', 'high'].includes(payload.riskLevel)) {
-    errors.push('riskLevel must be low, medium, or high');
+  if (payload.riskLevel && !['none', 'low', 'medium', 'high'].includes(payload.riskLevel)) {
+    errors.push('riskLevel must be none, low, medium, or high');
   }
 
-  if (payload.status && !['active', 'inactive'].includes(payload.status)) {
-    errors.push('status must be active or inactive');
+  if (payload.status && !['active', 'paused', 'inactive', 'discharged'].includes(payload.status)) {
+    errors.push('status must be active, paused, inactive, or discharged');
   }
 
   if (hasOwnProperty(payload, 'age') && !validateAge(payload.age)) {

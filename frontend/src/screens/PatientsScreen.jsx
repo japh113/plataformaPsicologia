@@ -2,6 +2,16 @@ import React, { useMemo, useState } from 'react';
 import { Search, CalendarDays, FileText, CheckSquare } from 'lucide-react';
 import { getRiskColor } from '../utils/risk';
 
+const getPatientStatusClasses = (status) => (
+  status === 'activo'
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : status === 'en pausa'
+      ? 'border-amber-200 bg-amber-50 text-amber-700'
+      : status === 'de alta'
+        ? 'border-sky-200 bg-sky-50 text-sky-700'
+        : 'border-slate-200 bg-slate-100 text-slate-600'
+);
+
 const getPatientSubtitle = (patient) => {
   const reason = patient.motivo || 'Motivo no registrado';
   const age = patient.edad === null || typeof patient.edad === 'undefined' ? 'Edad no registrada' : `${patient.edad} anos`;
@@ -34,7 +44,7 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
       const matchesQuery =
         patientName.toLowerCase().includes(query.toLowerCase()) || patientReason.toLowerCase().includes(query.toLowerCase());
       const matchesRisk = riskFilter === 'todos' ? true : patient.riesgo === riskFilter;
-      const matchesStatus = statusFilter === 'todos' ? true : (patient.estado || 'active') === statusFilter;
+      const matchesStatus = statusFilter === 'todos' ? true : (patient.estado || 'activo') === statusFilter;
       const matchesSummary =
         summaryFilter === 'todos'
           ? true
@@ -105,6 +115,7 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
               className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             >
               <option value="todos">Todos los riesgos</option>
+              <option value="sin riesgo">Sin riesgo</option>
               <option value="alto">Riesgo alto</option>
               <option value="medio">Riesgo medio</option>
               <option value="bajo">Riesgo bajo</option>
@@ -115,8 +126,10 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
               className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             >
               <option value="todos">Todos los estados</option>
-              <option value="active">Activos</option>
-              <option value="inactive">Inactivos</option>
+              <option value="activo">Activo</option>
+              <option value="en pausa">En pausa</option>
+              <option value="de baja">De baja</option>
+              <option value="de alta">De alta</option>
             </select>
             {hasActiveFilters && (
               <button type="button" onClick={clearFilters} className="px-3 py-2.5 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
@@ -136,8 +149,8 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
                     <span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getRiskColor(patient.riesgo)}`}>
                       Riesgo {patient.riesgo}
                     </span>
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${(patient.estado || 'active') === 'active' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-100 text-slate-600'}`}>
-                      {(patient.estado || 'active') === 'active' ? 'Activo' : 'Inactivo'}
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getPatientStatusClasses(patient.estado || 'activo')}`}>
+                      {patient.estado || 'activo'}
                     </span>
                     {!!(patient.tareas || []).some((task) => !task.completada) && (
                       <span className="px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border border-indigo-200 bg-indigo-50 text-indigo-700">

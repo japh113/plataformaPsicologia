@@ -205,7 +205,7 @@ export default function AppointmentsScreen({
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
   const initialFocusedDate = viewContext?.date || todayDate;
-  const [selectedDate, setSelectedDate] = useState(() => (isPsychologist ? (viewContext?.date || '') : initialFocusedDate));
+  const [selectedDate, setSelectedDate] = useState(() => viewContext?.date || initialFocusedDate);
   const [statusFilter, setStatusFilter] = useState('todos');
   const [sessionCoverageFilter, setSessionCoverageFilter] = useState('todos');
   const [editingAppointmentId, setEditingAppointmentId] = useState(null);

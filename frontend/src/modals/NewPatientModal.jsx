@@ -51,6 +51,7 @@ export default function NewPatientModal({ isOpen, onClose, form, onChange, onSub
                 disabled={isSubmitting}
                 className="w-full p-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white disabled:bg-gray-50"
               >
+                <option value="sin riesgo">Sin riesgo</option>
                 <option value="bajo">Bajo (Verde)</option>
                 <option value="medio">Medio (Amarillo)</option>
                 <option value="alto">Alto (Rojo)</option>

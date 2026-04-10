@@ -23,7 +23,7 @@ export const buildPatientEntity = (payload, id) => {
     fullName: `${firstName} ${lastName}`.trim(),
     email: payload.email?.trim() || '',
     phone: payload.phone?.trim() || '',
-    riskLevel: payload.riskLevel || 'low',
+    riskLevel: payload.riskLevel || 'none',
     status: payload.status || 'active',
     lastSessionDate: payload.lastSessionDate || null,
     notes: payload.notes || '',

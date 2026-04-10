@@ -18,7 +18,6 @@ import { getAppointmentDisplayStatus, isAppointmentOverdue } from '../mappers/ap
 
 const emptySessionForm = {
   citaId: '',
-  formato: 'simple',
   objetivo: '',
   observaciones: '',
   proximoPaso: '',
@@ -26,9 +25,17 @@ const emptySessionForm = {
 };
 
 const riskOptions = [
+  { value: 'sin riesgo', label: 'Sin riesgo' },
   { value: 'bajo', label: 'Bajo' },
   { value: 'medio', label: 'Medio' },
   { value: 'alto', label: 'Alto' },
+];
+
+const statusOptions = [
+  { value: 'activo', label: 'Activo' },
+  { value: 'en pausa', label: 'En pausa' },
+  { value: 'de baja', label: 'De baja' },
+  { value: 'de alta', label: 'De alta' },
 ];
 
 const agendaFilterOptions = [
@@ -37,11 +44,9 @@ const agendaFilterOptions = [
   { id: 'historial', label: 'Historial' },
 ];
 
-const getPatientSummary = (patient) => {
-  const reason = patient.motivo || 'Motivo no registrado';
-  const age = patient.edad === null || typeof patient.edad === 'undefined' ? 'Edad no registrada' : `${patient.edad} anos`;
-  return `${reason} - ${age}`;
-};
+const getPatientAgeLabel = (patient) => (
+  patient.edad === null || typeof patient.edad === 'undefined' ? 'Edad no registrada' : `${patient.edad} anos`
+);
 
 const formatSessionDate = (value) => {
   if (!value) {
@@ -55,6 +60,47 @@ const formatSessionDate = (value) => {
     month: 'short',
     year: 'numeric',
   }).format(new Date(Number(year), Number(month) - 1, Number(day)));
+};
+
+const getRelativeLastSessionLabel = (value, todayDate) => {
+  if (!value || !todayDate) {
+    return '';
+  }
+
+  const [fromYear = '0', fromMonth = '1', fromDay = '1'] = String(value).split('-');
+  const [toYear = '0', toMonth = '1', toDay = '1'] = String(todayDate).split('-');
+  const fromDate = new Date(Number(fromYear), Number(fromMonth) - 1, Number(fromDay));
+  const toDate = new Date(Number(toYear), Number(toMonth) - 1, Number(toDay));
+  const diffDays = Math.floor((toDate.getTime() - fromDate.getTime()) / 86400000);
+
+  if (!Number.isFinite(diffDays) || diffDays < 0) {
+    return '';
+  }
+
+  if (diffDays === 0) {
+    return 'Hoy';
+  }
+
+  if (diffDays === 1) {
+    return 'Hace 1 dia';
+  }
+
+  if (diffDays < 7) {
+    return `Hace ${diffDays} dias`;
+  }
+
+  const diffWeeks = Math.floor(diffDays / 7);
+
+  if (diffWeeks === 1) {
+    return 'Hace 1 semana';
+  }
+
+  if (diffDays < 30) {
+    return `Hace ${diffWeeks} semanas`;
+  }
+
+  const diffMonths = Math.floor(diffDays / 30);
+  return diffMonths <= 1 ? 'Hace 1 mes' : `Hace ${diffMonths} meses`;
 };
 
 const formatAppointmentDateTime = (appointment) => {
@@ -86,6 +132,16 @@ const getSessionCoverageClasses = (hasSession) => (
   hasSession
     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
     : 'border-sky-200 bg-sky-50 text-sky-700'
+);
+
+const getStatusBadgeClasses = (status) => (
+  status === 'en pausa'
+    ? 'border-amber-200 bg-amber-50 text-amber-700'
+    : status === 'de alta'
+      ? 'border-sky-200 bg-sky-50 text-sky-700'
+      : status === 'de baja'
+        ? 'border-slate-200 bg-slate-100 text-slate-600'
+        : 'border-emerald-200 bg-emerald-50 text-emerald-700'
 );
 
 const sortAppointmentsAsc = (entries) => (
@@ -176,18 +232,17 @@ export default function NotesScreen({
   const [taskText, setTaskText] = useState('');
   const [activeSection, setActiveSection] = useState(initialMatchedSession || prefilledAppointmentId ? 'sesiones' : 'resumen');
   const [selectedSessionId, setSelectedSessionId] = useState(initialMatchedSession?.id || null);
-  const [showProfileModal, setShowProfileModal] = useState(false);
   const [showSessionModal, setShowSessionModal] = useState(Boolean(initialMatchedSession || prefilledAppointmentId));
   const [agendaFilter, setAgendaFilter] = useState('proximas');
   const [profileForm, setProfileForm] = useState({
-    riesgo: patient?.riesgo || 'bajo',
+    riesgo: patient?.riesgo || 'sin riesgo',
+    estado: patient?.estado || 'activo',
     motivo: patient?.motivo || '',
   });
   const [sessionForm, setSessionForm] = useState(
     initialMatchedSession
       ? {
         citaId: initialMatchedSession.citaId || '',
-        formato: initialMatchedSession.formato || 'simple',
         objetivo: initialMatchedSession.objetivo || '',
         observaciones: initialMatchedSession.observaciones || '',
         proximoPaso: initialMatchedSession.proximoPaso || '',
@@ -329,19 +384,16 @@ export default function NotesScreen({
 
     const wasUpdated = await onUpdatePatientProfile?.({
       riesgo: profileForm.riesgo,
+      estado: profileForm.estado,
       motivo: profileForm.motivo.trim(),
     });
-
-    if (wasUpdated) {
-      setShowProfileModal(false);
-    }
+    return wasUpdated;
   };
 
   const handleEditSession = (session) => {
     setSelectedSessionId(session.id);
     setSessionForm({
       citaId: session.citaId || '',
-      formato: session.formato || 'simple',
       objetivo: session.objetivo || '',
       observaciones: session.observaciones || '',
       proximoPaso: session.proximoPaso || '',
@@ -393,7 +445,7 @@ export default function NotesScreen({
 
     const payload = {
       appointmentId: sessionForm.citaId,
-      noteFormat: sessionForm.formato,
+      noteFormat: 'simple',
       sessionObjective: sessionForm.objetivo,
       clinicalObservations: sessionForm.observaciones,
       nextSteps: sessionForm.proximoPaso,
@@ -519,15 +571,6 @@ export default function NotesScreen({
       <SectionCard
         title="Resumen del caso"
         description="Una lectura rapida del estado actual del expediente sin abrir varias listas a la vez."
-        action={isPsychologist ? (
-          <button
-            type="button"
-            onClick={() => setShowProfileModal(true)}
-            className="rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-          >
-            Editar ficha
-          </button>
-        ) : null}
       >
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
@@ -543,6 +586,9 @@ export default function NotesScreen({
             <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${getRiskColor(profileForm.riesgo)}`}>
               Riesgo {profileForm.riesgo}
             </span>
+            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadgeClasses(profileForm.estado)}`}>
+              {profileForm.estado}
+            </span>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -557,6 +603,11 @@ export default function NotesScreen({
               <p className="mt-2 text-sm font-semibold text-slate-900">
                 {latestSession ? formatSessionDate(latestSession.fecha) : 'Sin sesiones registradas'}
               </p>
+              {latestSession && (
+                <p className="mt-1 text-xs text-slate-500">
+                  {getRelativeLastSessionLabel(latestSession.fecha, todayDate)}
+                </p>
+              )}
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Pendiente clinico</p>
@@ -569,9 +620,70 @@ export default function NotesScreen({
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Motivo de consulta</p>
             <p className="mt-2 text-sm leading-6 text-slate-700">
-              {patient.motivo || 'Todavia no hay un motivo de consulta registrado.'}
+              {profileForm.motivo.trim() || 'Todavia no hay un motivo de consulta registrado.'}
             </p>
           </div>
+
+          {isPsychologist && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">Nivel de riesgo</label>
+                  <select
+                    value={profileForm.riesgo}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, riesgo: event.target.value }))}
+                    disabled={isSavingPatientProfile}
+                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  >
+                    {riskOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-slate-700">Estado del paciente</label>
+                  <select
+                    value={profileForm.estado}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, estado: event.target.value }))}
+                    disabled={isSavingPatientProfile}
+                    className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  >
+                    {statusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700">Motivo de consulta</label>
+                <textarea
+                  value={profileForm.motivo}
+                  onChange={(event) => setProfileForm((current) => ({ ...current, motivo: event.target.value }))}
+                  disabled={isSavingPatientProfile}
+                  rows="4"
+                  placeholder="Resume el motivo principal de consulta o el encuadre actual del caso..."
+                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveProfile}
+                  disabled={isSavingPatientProfile}
+                  className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save size={16} className="mr-2" />
+                  {isSavingPatientProfile ? 'Guardando...' : 'Guardar resumen'}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -673,9 +785,6 @@ export default function NotesScreen({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold text-slate-900 capitalize">{formatSessionDate(session.fecha)}</p>
-                    <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                      {session.formato}
-                    </span>
                   </div>
                   <p className="mt-2 text-sm text-slate-500">
                     {linkedAppointment ? `Cita vinculada: ${formatAppointmentDateTime(linkedAppointment)}` : 'Sin cita visible en agenda.'}
@@ -683,7 +792,7 @@ export default function NotesScreen({
                   {(session.objetivo || session.proximoPaso) && (
                     <p className="mt-2 text-sm text-slate-700">
                       {session.objetivo || 'Sin objetivo documentado'}
-                      {session.proximoPaso ? ` · ${session.proximoPaso}` : ''}
+                      {session.proximoPaso ? ` - ${session.proximoPaso}` : ''}
                     </p>
                   )}
                 </div>
@@ -873,7 +982,7 @@ export default function NotesScreen({
     <>
       <div className="rounded-[30px] border border-slate-200 bg-slate-50 p-4 shadow-sm animate-in slide-in-from-right-4 duration-300 md:p-6">
         <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <button
                 type="button"
@@ -883,17 +992,13 @@ export default function NotesScreen({
                 <ArrowLeft size={14} className="mr-2" /> Volver
               </button>
 
-              <div className="mt-5 flex flex-wrap items-center gap-3">
+              <div className="mt-5">
                 <h2 className="text-3xl font-black tracking-tight text-slate-900">{patient.nombre}</h2>
-                <span className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${getRiskColor(profileForm.riesgo)}`}>
-                  Riesgo {profileForm.riesgo}
-                </span>
+                <p className="mt-3 text-sm leading-6 text-slate-600">{getPatientAgeLabel(patient)}</p>
               </div>
-
-              <p className="mt-3 text-sm leading-6 text-slate-600">{getPatientSummary(patient)}</p>
             </div>
 
-            <div className="flex flex-wrap gap-3 lg:self-center">
+            <div className="flex flex-wrap gap-3 lg:self-end">
               <button
                 type="button"
                 onClick={() => onViewAppointments?.(nextAppointment?.fecha || todayDate)}
@@ -902,22 +1007,13 @@ export default function NotesScreen({
                 Ver agenda
               </button>
               {isPsychologist && (
-                <>
-              <button
-                type="button"
-                onClick={() => setShowProfileModal(true)}
-                className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                Editar ficha
-              </button>
-              <button
-                type="button"
-                onClick={() => openNewSessionModal()}
-                className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
-              >
+                <button
+                  type="button"
+                  onClick={() => openNewSessionModal()}
+                  className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
+                >
                     Nueva sesion
-                  </button>
-                </>
+                </button>
               )}
             </div>
           </div>
@@ -965,12 +1061,11 @@ export default function NotesScreen({
             <SectionCard title="Ficha rapida">
               <div className="space-y-3 text-sm">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Motivo</p>
-                  <p className="mt-1 text-slate-700">{patient.motivo || 'Motivo no registrado'}</p>
-                </div>
-                <div>
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultima sesion</p>
                   <p className="mt-1 text-slate-700">{patient.ultimaSesion ? formatSessionDate(patient.ultimaSesion) : 'Sin sesiones registradas'}</p>
+                  {patient.ultimaSesion && (
+                    <p className="mt-1 text-xs text-slate-500">{getRelativeLastSessionLabel(patient.ultimaSesion, todayDate)}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Proxima cita</p>
@@ -985,64 +1080,6 @@ export default function NotesScreen({
           </div>
         </div>
       </div>
-
-      {showProfileModal && isPsychologist && (
-        <ModalShell
-          title="Editar ficha del paciente"
-          description="Actualiza riesgo y motivo de consulta sin cargar el expediente principal."
-          onClose={() => setShowProfileModal(false)}
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-slate-700">Nivel de riesgo</label>
-              <select
-                value={profileForm.riesgo}
-                onChange={(event) => setProfileForm((current) => ({ ...current, riesgo: event.target.value }))}
-                disabled={isSavingPatientProfile}
-                className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-              >
-                {riskOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-slate-700">Motivo de consulta</label>
-              <textarea
-                value={profileForm.motivo}
-                onChange={(event) => setProfileForm((current) => ({ ...current, motivo: event.target.value }))}
-                disabled={isSavingPatientProfile}
-                rows="6"
-                placeholder="Resume el motivo principal de consulta o el encuadre actual del caso..."
-                className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowProfileModal(false)}
-                disabled={isSavingPatientProfile}
-                className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveProfile}
-                disabled={isSavingPatientProfile}
-                className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Save size={16} className="mr-2" />
-                {isSavingPatientProfile ? 'Guardando...' : 'Guardar ficha'}
-              </button>
-            </div>
-          </div>
-        </ModalShell>
-      )}
 
       {showSessionModal && isPsychologist && (
         <ModalShell
@@ -1065,20 +1102,6 @@ export default function NotesScreen({
                     {formatAppointmentDateTime(appointment)}
                   </option>
                 ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold text-slate-700">Formato</label>
-              <select
-                value={sessionForm.formato}
-                onChange={(event) => setSessionForm((current) => ({ ...current, formato: event.target.value }))}
-                disabled={isSavingSession}
-                className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-              >
-                <option value="simple">Simple</option>
-                <option value="soap">SOAP</option>
-                <option value="libre">Libre</option>
               </select>
             </div>
 
