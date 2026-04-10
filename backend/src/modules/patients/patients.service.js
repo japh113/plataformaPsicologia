@@ -88,9 +88,9 @@ const patientSelectColumns = `
           'id', pt.id,
           'text', pt.text,
           'completed', pt.completed,
-          'sessionId', pt.session_id,
-          'sessionDate', ps.session_date,
-          'sessionObjective', ps.session_objective
+          'clinicalNoteId', pt.session_id,
+          'clinicalNoteDate', ps.session_date,
+          'clinicalNoteObjective', ps.session_objective
         )
         ORDER BY ps.session_date DESC NULLS LAST, pt.created_at ASC, pt.id ASC
       )
@@ -120,16 +120,16 @@ const patientSelectColumns = `
   ) AS objectives
 `;
 
-const psychologistSessionSelectColumn = `,
+const psychologistClinicalNoteSelectColumn = `,
   COALESCE(
     (
       SELECT json_agg(
         json_build_object(
           'id', ps.id,
           'appointmentId', ps.appointment_id,
-          'sessionDate', ps.session_date,
+          'clinicalNoteDate', ps.session_date,
           'noteFormat', ps.note_format,
-          'sessionObjective', ps.session_objective,
+          'clinicalNoteObjective', ps.session_objective,
           'clinicalObservations', ps.clinical_observations,
           'nextSteps', ps.next_steps,
           'content', ps.content,
@@ -142,32 +142,36 @@ const psychologistSessionSelectColumn = `,
       WHERE ps.patient_id = p.id
     ),
     '[]'::json
-  ) AS sessions
+  ) AS clinical_notes
 `;
 
 const mapTaskRow = (task) => ({
   id: String(task.id),
   text: task.text,
   completed: Boolean(task.completed),
-  sessionId:
-    task.sessionId === null || typeof task.sessionId === 'undefined'
-      ? (task.session_id === null || typeof task.session_id === 'undefined' ? null : String(task.session_id))
-      : String(task.sessionId),
-  sessionDate: normalizeDateValue(task.sessionDate),
-  sessionObjective: task.sessionObjective || '',
+  clinicalNoteId:
+    task.clinicalNoteId === null || typeof task.clinicalNoteId === 'undefined'
+      ? (
+          task.sessionId === null || typeof task.sessionId === 'undefined'
+            ? (task.session_id === null || typeof task.session_id === 'undefined' ? null : String(task.session_id))
+            : String(task.sessionId)
+        )
+      : String(task.clinicalNoteId),
+  clinicalNoteDate: normalizeDateValue(task.clinicalNoteDate ?? task.sessionDate),
+  clinicalNoteObjective: task.clinicalNoteObjective || task.sessionObjective || '',
 });
 
-const mapSessionRow = (session) => ({
-  id: String(session.id),
-  appointmentId: session.appointmentId === null || typeof session.appointmentId === 'undefined' ? null : String(session.appointmentId),
-  sessionDate: normalizeDateValue(session.sessionDate),
-  noteFormat: session.noteFormat || 'simple',
-  sessionObjective: session.sessionObjective || '',
-  clinicalObservations: session.clinicalObservations || '',
-  nextSteps: session.nextSteps || '',
-  content: session.content || '',
-  createdAt: session.createdAt,
-  updatedAt: session.updatedAt,
+const mapClinicalNoteRow = (clinicalNote) => ({
+  id: String(clinicalNote.id),
+  appointmentId: clinicalNote.appointmentId === null || typeof clinicalNote.appointmentId === 'undefined' ? null : String(clinicalNote.appointmentId),
+  clinicalNoteDate: normalizeDateValue(clinicalNote.clinicalNoteDate ?? clinicalNote.sessionDate),
+  noteFormat: clinicalNote.noteFormat || 'simple',
+  clinicalNoteObjective: clinicalNote.clinicalNoteObjective || clinicalNote.sessionObjective || '',
+  clinicalObservations: clinicalNote.clinicalObservations || '',
+  nextSteps: clinicalNote.nextSteps || '',
+  content: clinicalNote.content || '',
+  createdAt: clinicalNote.createdAt,
+  updatedAt: clinicalNote.updatedAt,
 });
 
 const mapInterviewRow = (interview) => {
@@ -218,22 +222,22 @@ const mapPatientRow = (row) => ({
   interview: mapInterviewRow(row.interview),
   tasks: Array.isArray(row.tasks) ? row.tasks.map(mapTaskRow) : [],
   objectives: Array.isArray(row.objectives) ? row.objectives.map(mapTaskRow) : [],
-  sessions: Array.isArray(row.sessions) ? row.sessions.map(mapSessionRow) : [],
+  clinicalNotes: Array.isArray(row.clinical_notes) ? row.clinical_notes.map(mapClinicalNoteRow) : [],
 });
 
-const getPatientBaseQuery = (includeSessions = false) => `
+const getPatientBaseQuery = (includeClinicalNotes = false) => `
   SELECT
     ${patientSelectColumns}
-    ${includeSessions ? psychologistSessionSelectColumn : ''}
+    ${includeClinicalNotes ? psychologistClinicalNoteSelectColumn : ''}
   FROM patients p
 `;
 
 const mapPatientResult = (result) => (result.rows[0] ? mapPatientRow(result.rows[0]) : null);
 const normalizeOptionalText = (value) => (typeof value === 'string' ? value.trim() : '');
 
-const ensureSessionBelongsToPatient = async (sessionId, patientId) => {
-  if (!sessionId) {
-    const error = new Error('Debes vincular la tarea a una sesion.');
+const ensureClinicalNoteBelongsToPatient = async (clinicalNoteId, patientId) => {
+  if (!clinicalNoteId) {
+    const error = new Error('Debes vincular la tarea a una nota clinica.');
     error.status = 400;
     throw error;
   }
@@ -249,11 +253,11 @@ const ensureSessionBelongsToPatient = async (sessionId, patientId) => {
         AND patient_id = $2
       LIMIT 1
     `,
-    [sessionId, patientId],
+    [clinicalNoteId, patientId],
   );
 
   if (!result.rows[0]) {
-    const error = new Error('La sesion seleccionada no pertenece a este paciente.');
+    const error = new Error('La nota clinica seleccionada no pertenece a este paciente.');
     error.status = 400;
     throw error;
   }
@@ -261,19 +265,19 @@ const ensureSessionBelongsToPatient = async (sessionId, patientId) => {
   return result.rows[0];
 };
 
-const normalizeSessionTaskPayloads = (tasks = []) =>
+const normalizeClinicalNoteTaskPayloads = (tasks = []) =>
   tasks.map((task) => ({
     id: task.id ? Number(task.id) : null,
     text: String(task.text || '').trim(),
     completed: typeof task.completed === 'boolean' ? task.completed : false,
   }));
 
-const syncSessionTasks = async (client, patientId, sessionId, tasks) => {
+const syncClinicalNoteTasks = async (client, patientId, clinicalNoteId, tasks) => {
   if (!Array.isArray(tasks)) {
     return;
   }
 
-  const normalizedTasks = normalizeSessionTaskPayloads(tasks);
+  const normalizedTasks = normalizeClinicalNoteTaskPayloads(tasks);
   const existingTasksResult = await client.query(
     `
       SELECT id
@@ -282,7 +286,7 @@ const syncSessionTasks = async (client, patientId, sessionId, tasks) => {
         AND session_id = $2
         AND kind = 'task'
     `,
-    [patientId, sessionId],
+    [patientId, clinicalNoteId],
   );
 
   const existingTaskIds = new Set(existingTasksResult.rows.map((row) => Number(row.id)));
@@ -299,7 +303,7 @@ const syncSessionTasks = async (client, patientId, sessionId, tasks) => {
           AND kind = 'task'
           AND id = ANY($3::bigint[])
       `,
-      [patientId, sessionId, taskIdsToDelete],
+      [patientId, clinicalNoteId, taskIdsToDelete],
     );
   }
 
@@ -317,7 +321,7 @@ const syncSessionTasks = async (client, patientId, sessionId, tasks) => {
             AND kind = 'task'
             AND id = $3
         `,
-        [patientId, sessionId, task.id, task.text, task.completed],
+        [patientId, clinicalNoteId, task.id, task.text, task.completed],
       );
       continue;
     }
@@ -333,7 +337,7 @@ const syncSessionTasks = async (client, patientId, sessionId, tasks) => {
         )
         VALUES ($1, $2, 'task', $3, $4)
       `,
-      [patientId, sessionId, task.text, task.completed],
+      [patientId, clinicalNoteId, task.text, task.completed],
     );
   }
 };
@@ -376,11 +380,11 @@ const getPatientInterviewById = async (patientId) => {
 };
 
 export const getAllPatients = async (actor) => {
-  const includeSessions = isPsychologist(actor);
+  const includeClinicalNotes = isPsychologist(actor);
   const accessScope = buildPatientAccessScope(actor, 'p.id');
   const result = await db.query(
     `
-      ${getPatientBaseQuery(includeSessions)}
+      ${getPatientBaseQuery(includeClinicalNotes)}
       WHERE ${accessScope.clause}
       ORDER BY p.created_at DESC, p.full_name ASC
     `,
@@ -391,11 +395,11 @@ export const getAllPatients = async (actor) => {
 };
 
 export const getPatientById = async (id, actor) => {
-  const includeSessions = isPsychologist(actor);
+  const includeClinicalNotes = isPsychologist(actor);
   const accessScope = buildPatientAccessScope(actor, 'p.id', 2);
   const result = await db.query(
     `
-      ${getPatientBaseQuery(includeSessions)}
+      ${getPatientBaseQuery(includeClinicalNotes)}
       WHERE p.id = $1
         AND ${accessScope.clause}
       LIMIT 1
@@ -439,7 +443,7 @@ const markAppointmentAsCompleted = async (appointmentId) => {
 
 const ensureAppointmentBelongsToPatient = async (appointmentId, patientId) => {
   if (!appointmentId) {
-    const error = new Error('Debes seleccionar una cita para registrar la sesion');
+    const error = new Error('Debes seleccionar una cita para registrar la nota clinica');
     error.status = 400;
     throw error;
   }
@@ -468,7 +472,7 @@ const ensureAppointmentBelongsToPatient = async (appointmentId, patientId) => {
   return result.rows[0];
 };
 
-const ensureAppointmentSessionUniqueness = async (appointmentId, excludeSessionId = null) => {
+const ensureAppointmentClinicalNoteUniqueness = async (appointmentId, excludeClinicalNoteId = null) => {
   const result = await db.query(
     `
       SELECT id
@@ -477,29 +481,29 @@ const ensureAppointmentSessionUniqueness = async (appointmentId, excludeSessionI
         AND ($2::bigint IS NULL OR id <> $2)
       LIMIT 1
     `,
-    [appointmentId, excludeSessionId],
+    [appointmentId, excludeClinicalNoteId],
   );
 
   if (result.rows[0]) {
-    const error = new Error('Esa cita ya tiene una sesion registrada');
+    const error = new Error('Esa cita ya tiene una nota clinica registrada');
     error.status = 409;
     throw error;
   }
 };
 
-const ensureAppointmentEligibleForSession = (appointment) => {
+const ensureAppointmentEligibleForClinicalNote = (appointment) => {
   if (!appointment) {
     return;
   }
 
   if (appointment.status !== 'completed') {
-    const error = new Error('Solo puedes registrar una sesion desde una cita completada.');
+    const error = new Error('Solo puedes registrar una nota clinica desde una cita completada.');
     error.status = 409;
     throw error;
   }
 
   if (normalizeDateValue(appointment.scheduled_date) > getTodayDateString()) {
-    const error = new Error('No puedes registrar una sesion para una cita futura.');
+    const error = new Error('No puedes registrar una nota clinica para una cita futura.');
     error.status = 409;
     throw error;
   }
@@ -747,7 +751,7 @@ const createPatientChecklistItem = async (patientId, payload, actor, kind) => {
   let session = null;
 
   if (kind === 'task') {
-    session = await ensureSessionBelongsToPatient(Number(payload.sessionId), patientId);
+    session = await ensureClinicalNoteBelongsToPatient(Number(payload.clinicalNoteId ?? payload.sessionId), patientId);
   }
 
   const result = await db.query(
@@ -760,15 +764,15 @@ const createPatientChecklistItem = async (patientId, payload, actor, kind) => {
         completed
       )
       VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, text, completed, session_id AS "sessionId"
+      RETURNING id, text, completed, session_id AS "clinicalNoteId"
     `,
     [patientId, session ? Number(session.id) : null, kind, payload.text.trim(), false],
   );
 
   return mapTaskRow({
     ...result.rows[0],
-    sessionDate: session?.session_date || null,
-    sessionObjective: session?.session_objective || '',
+    clinicalNoteDate: session?.session_date || null,
+    clinicalNoteObjective: session?.session_objective || '',
   });
 };
 
@@ -812,21 +816,21 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
         completed = $5,
         updated_at = NOW()
       WHERE patient_id = $1 AND id = $2 AND kind = $3
-      RETURNING id, text, completed, session_id AS "sessionId"
+      RETURNING id, text, completed, session_id AS "clinicalNoteId"
     `,
     [patientId, taskId, kind, nextText, nextCompleted],
   );
 
   let session = null;
 
-  if (kind === 'task' && result.rows[0]?.sessionId) {
-    session = await ensureSessionBelongsToPatient(Number(result.rows[0].sessionId), patientId);
+  if (kind === 'task' && result.rows[0]?.clinicalNoteId) {
+    session = await ensureClinicalNoteBelongsToPatient(Number(result.rows[0].clinicalNoteId), patientId);
   }
 
   return mapTaskRow({
     ...result.rows[0],
-    sessionDate: session?.session_date || null,
-    sessionObjective: session?.session_objective || '',
+    clinicalNoteDate: session?.session_date || null,
+    clinicalNoteObjective: session?.session_objective || '',
   });
 };
 
@@ -857,7 +861,7 @@ export const createPatientObjective = async (patientId, payload, actor) => creat
 export const updatePatientObjective = async (patientId, objectiveId, payload, actor) => updatePatientChecklistItem(patientId, objectiveId, payload, actor, 'objective');
 export const deletePatientObjective = async (patientId, objectiveId, actor) => deletePatientChecklistItem(patientId, objectiveId, actor, 'objective');
 
-export const createPatientSession = async (patientId, payload, actor) => {
+export const createPatientClinicalNote = async (patientId, payload, actor) => {
   ensurePsychologist(actor);
 
   const patient = await getPatientById(patientId, actor);
@@ -867,8 +871,8 @@ export const createPatientSession = async (patientId, payload, actor) => {
   }
 
   const appointment = await ensureAppointmentBelongsToPatient(payload.appointmentId ? Number(payload.appointmentId) : null, patientId);
-  ensureAppointmentEligibleForSession(appointment);
-  await ensureAppointmentSessionUniqueness(Number(appointment.id));
+  ensureAppointmentEligibleForClinicalNote(appointment);
+  await ensureAppointmentClinicalNoteUniqueness(Number(appointment.id));
   const client = await db.getClient();
 
   try {
@@ -891,9 +895,9 @@ export const createPatientSession = async (patientId, payload, actor) => {
         RETURNING
           id,
           appointment_id AS "appointmentId",
-          session_date AS "sessionDate",
+          session_date AS "clinicalNoteDate",
           note_format AS "noteFormat",
-          session_objective AS "sessionObjective",
+          session_objective AS "clinicalNoteObjective",
           clinical_observations AS "clinicalObservations",
           next_steps AS "nextSteps",
           content,
@@ -913,8 +917,8 @@ export const createPatientSession = async (patientId, payload, actor) => {
       ],
     );
 
-    const createdSession = result.rows[0];
-    await syncSessionTasks(client, patientId, Number(createdSession.id), payload.tasks);
+    const createdClinicalNote = result.rows[0];
+    await syncClinicalNoteTasks(client, patientId, Number(createdClinicalNote.id), payload.tasks);
 
     await client.query(
       `
@@ -944,7 +948,7 @@ export const createPatientSession = async (patientId, payload, actor) => {
     );
 
     await client.query('COMMIT');
-    return mapSessionRow(createdSession);
+    return mapClinicalNoteRow(createdClinicalNote);
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -953,7 +957,7 @@ export const createPatientSession = async (patientId, payload, actor) => {
   }
 };
 
-export const updatePatientSession = async (patientId, sessionId, payload, actor) => {
+export const updatePatientClinicalNote = async (patientId, clinicalNoteId, payload, actor) => {
   ensurePsychologist(actor);
 
   const patient = await getPatientById(patientId, actor);
@@ -979,7 +983,7 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
       WHERE patient_id = $1 AND id = $2
       LIMIT 1
     `,
-    [patientId, sessionId],
+    [patientId, clinicalNoteId],
   );
 
   if (!currentSessionResult.rows[0]) {
@@ -1003,8 +1007,8 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
     : currentSession.appointmentId;
 
   const appointment = await ensureAppointmentBelongsToPatient(nextAppointmentId, patientId);
-  ensureAppointmentEligibleForSession(appointment);
-  await ensureAppointmentSessionUniqueness(Number(appointment.id), Number(sessionId));
+  ensureAppointmentEligibleForClinicalNote(appointment);
+  await ensureAppointmentClinicalNoteUniqueness(Number(appointment.id), Number(clinicalNoteId));
 
   const client = await db.getClient();
 
@@ -1027,9 +1031,9 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
         RETURNING
           id,
           appointment_id AS "appointmentId",
-          session_date AS "sessionDate",
+          session_date AS "clinicalNoteDate",
           note_format AS "noteFormat",
-          session_objective AS "sessionObjective",
+          session_objective AS "clinicalNoteObjective",
           clinical_observations AS "clinicalObservations",
           next_steps AS "nextSteps",
           content,
@@ -1038,7 +1042,7 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
       `,
       [
         patientId,
-        sessionId,
+        clinicalNoteId,
         Number(appointment.id),
         normalizeDateValue(appointment.scheduled_date),
         nextNoteFormat,
@@ -1049,7 +1053,7 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
       ],
     );
 
-    await syncSessionTasks(client, patientId, Number(sessionId), payload.tasks);
+    await syncClinicalNoteTasks(client, patientId, Number(clinicalNoteId), payload.tasks);
 
     await client.query(
       `
@@ -1079,7 +1083,7 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
     );
 
     await client.query('COMMIT');
-    return mapSessionRow(result.rows[0]);
+    return mapClinicalNoteRow(result.rows[0]);
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -1088,7 +1092,7 @@ export const updatePatientSession = async (patientId, sessionId, payload, actor)
   }
 };
 
-export const deletePatientSession = async (patientId, sessionId, actor) => {
+export const deletePatientClinicalNote = async (patientId, clinicalNoteId, actor) => {
   ensurePsychologist(actor);
 
   const patient = await getPatientById(patientId, actor);
@@ -1102,7 +1106,7 @@ export const deletePatientSession = async (patientId, sessionId, actor) => {
       DELETE FROM patient_sessions
       WHERE patient_id = $1 AND id = $2
     `,
-    [patientId, sessionId],
+    [patientId, clinicalNoteId],
   );
 
   if (result.rowCount > 0) {

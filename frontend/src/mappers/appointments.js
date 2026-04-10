@@ -94,7 +94,7 @@ export const mapBackendAppointmentToUiAppointment = (appointment) => ({
   hora24: toInputTime(appointment.scheduledTime),
   estado: backendToUiStatusMap[appointment.status] || 'pendiente',
   notas: appointment.notes || '',
-  sesionRegistrada: Boolean(appointment.hasLinkedSession),
+  sesionRegistrada: Boolean(appointment.hasLinkedClinicalNote ?? appointment.hasLinkedSession),
   waitlistCount: Number(appointment.waitlistCount || 0),
 });
 

@@ -47,9 +47,9 @@ export const mapBackendTaskToUiTask = (task) => ({
   id: String(task.id),
   texto: task.text || '',
   completada: Boolean(task.completed),
-  sesionId: task.sessionId ? String(task.sessionId) : null,
-  fechaSesion: task.sessionDate || null,
-  objetivoSesion: task.sessionObjective || '',
+  sesionId: task.clinicalNoteId ? String(task.clinicalNoteId) : task.sessionId ? String(task.sessionId) : null,
+  fechaSesion: task.clinicalNoteDate || task.sessionDate || null,
+  objetivoSesion: task.clinicalNoteObjective || task.sessionObjective || '',
 });
 
 export const mapBackendObjectiveToUiObjective = (objective) => ({
@@ -61,9 +61,9 @@ export const mapBackendObjectiveToUiObjective = (objective) => ({
 export const mapBackendSessionToUiSession = (session) => ({
   id: String(session.id),
   citaId: session.appointmentId ? String(session.appointmentId) : null,
-  fecha: session.sessionDate || null,
+  fecha: session.clinicalNoteDate || session.sessionDate || null,
   formato: session.noteFormat || 'simple',
-  objetivo: session.sessionObjective || '',
+  objetivo: session.clinicalNoteObjective || session.sessionObjective || '',
   observaciones: session.clinicalObservations || '',
   proximoPaso: session.nextSteps || '',
   contenido: session.content || '',
@@ -118,7 +118,9 @@ export const mapBackendPatientToUiPatient = (patient) => {
     notas: patient.notes || '',
     tareas: Array.isArray(patient.tasks) ? patient.tasks.map(mapBackendTaskToUiTask) : [],
     objetivos: Array.isArray(patient.objectives) ? patient.objectives.map(mapBackendObjectiveToUiObjective) : [],
-    sesiones: Array.isArray(patient.sessions) ? patient.sessions.map(mapBackendSessionToUiSession) : [],
+    sesiones: Array.isArray(patient.clinicalNotes || patient.sessions)
+      ? (patient.clinicalNotes || patient.sessions).map(mapBackendSessionToUiSession)
+      : [],
     entrevistaCompleta: Boolean(patient.interviewCompleted),
     entrevista: mapBackendInterviewToUiInterview(patient.interview),
     email: patient.email || '',

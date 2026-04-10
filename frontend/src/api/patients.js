@@ -89,8 +89,8 @@ export const deletePatientObjective = async (patientId, objectiveId) => {
   return response.data;
 };
 
-export const createPatientSession = async (patientId, payload) => {
-  const response = await apiRequest(`/patients/${patientId}/sessions`, {
+export const createPatientClinicalNote = async (patientId, payload) => {
+  const response = await apiRequest(`/patients/${patientId}/clinical-notes`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -98,8 +98,8 @@ export const createPatientSession = async (patientId, payload) => {
   return response.data;
 };
 
-export const updatePatientSession = async (patientId, sessionId, payload) => {
-  const response = await apiRequest(`/patients/${patientId}/sessions/${sessionId}`, {
+export const updatePatientClinicalNote = async (patientId, clinicalNoteId, payload) => {
+  const response = await apiRequest(`/patients/${patientId}/clinical-notes/${clinicalNoteId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -107,8 +107,8 @@ export const updatePatientSession = async (patientId, sessionId, payload) => {
   return response.data;
 };
 
-export const deletePatientSession = async (patientId, sessionId) => {
-  const response = await apiRequest(`/patients/${patientId}/sessions/${sessionId}`, {
+export const deletePatientClinicalNote = async (patientId, clinicalNoteId) => {
+  const response = await apiRequest(`/patients/${patientId}/clinical-notes/${clinicalNoteId}`, {
     method: 'DELETE',
   });
 

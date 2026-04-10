@@ -91,7 +91,7 @@ const mapTaskReminderForPsychologist = (taskSummary) => ({
   type: 'task',
   priority: taskSummary.risk_level === 'high' || Number(taskSummary.pending_count) >= 3 ? 'high' : 'medium',
   title: `${taskSummary.patient_name} tiene ${taskSummary.pending_count} tarea${Number(taskSummary.pending_count) === 1 ? '' : 's'} pendiente${Number(taskSummary.pending_count) === 1 ? '' : 's'}`,
-  description: 'Conviene revisarlas en la proxima sesion para mantener el seguimiento activo.',
+  description: 'Conviene revisarlas en la proxima nota clinica para mantener el seguimiento activo.',
   date: null,
   time: null,
   patientId: String(taskSummary.patient_id),

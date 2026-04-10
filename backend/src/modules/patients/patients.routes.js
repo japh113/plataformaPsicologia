@@ -12,9 +12,9 @@ import {
   createPatientObjectiveHandler,
   updatePatientObjectiveHandler,
   deletePatientObjectiveHandler,
-  createPatientSessionHandler,
-  updatePatientSessionHandler,
-  deletePatientSessionHandler,
+  createPatientClinicalNoteHandler,
+  updatePatientClinicalNoteHandler,
+  deletePatientClinicalNoteHandler,
 } from './patients.controller.js';
 
 const router = Router();
@@ -32,8 +32,8 @@ router.delete('/:id/tasks/:taskId', deletePatientTaskHandler);
 router.post('/:id/objectives', createPatientObjectiveHandler);
 router.patch('/:id/objectives/:objectiveId', updatePatientObjectiveHandler);
 router.delete('/:id/objectives/:objectiveId', deletePatientObjectiveHandler);
-router.post('/:id/sessions', createPatientSessionHandler);
-router.patch('/:id/sessions/:sessionId', updatePatientSessionHandler);
-router.delete('/:id/sessions/:sessionId', deletePatientSessionHandler);
+router.post('/:id/clinical-notes', createPatientClinicalNoteHandler);
+router.patch('/:id/clinical-notes/:clinicalNoteId', updatePatientClinicalNoteHandler);
+router.delete('/:id/clinical-notes/:clinicalNoteId', deletePatientClinicalNoteHandler);
 
 export default router;

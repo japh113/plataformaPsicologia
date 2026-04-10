@@ -29,16 +29,16 @@ const getTodayDateString = () => {
 };
 
 const mapAppointmentRow = (row) => {
-  const hasLinkedSession = Boolean(row.has_linked_session);
+  const hasLinkedClinicalNote = Boolean(row.has_linked_clinical_note ?? row.has_linked_session);
 
   return {
     id: String(row.id),
     patientId: String(row.patient_id),
     scheduledDate: normalizeDateValue(row.scheduled_date),
     scheduledTime: row.scheduled_time,
-    status: hasLinkedSession ? 'completed' : row.status,
+    status: hasLinkedClinicalNote ? 'completed' : row.status,
     notes: row.notes,
-    hasLinkedSession,
+    hasLinkedClinicalNote,
     waitlistCount: Number(row.waitlist_count || 0),
   };
 };
@@ -107,7 +107,7 @@ const getAppointmentSelectColumns = (waitlistParamIndex = null) => `
     SELECT 1
     FROM patient_sessions ps
     WHERE ps.appointment_id = a.id
-  ) AS has_linked_session,
+  ) AS has_linked_clinical_note,
   ${waitlistParamIndex
     ? `COALESCE((
         SELECT COUNT(*)
@@ -414,20 +414,20 @@ export const updateAppointment = async (id, payload, actor) => {
   const nextScheduledTime = normalizeScheduledTime(payload.scheduledTime || currentAppointment.scheduledTime);
   const nextStatus = payload.status || currentAppointment.status;
   const isChangingLinkedAppointmentSchedule =
-    currentAppointment.hasLinkedSession && (
+    currentAppointment.hasLinkedClinicalNote && (
       nextPatientId !== currentAppointment.patientId
       || nextScheduledDate !== currentAppointment.scheduledDate
       || nextScheduledTime !== normalizeScheduledTime(currentAppointment.scheduledTime)
     );
 
-  if (currentAppointment.hasLinkedSession && nextStatus !== 'completed') {
-    const error = new Error('No puedes marcar como pendiente o cancelada una cita que ya tiene sesion registrada.');
+  if (currentAppointment.hasLinkedClinicalNote && nextStatus !== 'completed') {
+    const error = new Error('No puedes marcar como pendiente o cancelada una cita que ya tiene una nota clinica registrada.');
     error.status = 409;
     throw error;
   }
 
   if (isChangingLinkedAppointmentSchedule) {
-    const error = new Error('No puedes reprogramar una cita que ya tiene sesion registrada.');
+    const error = new Error('No puedes reprogramar una cita que ya tiene una nota clinica registrada.');
     error.status = 409;
     throw error;
   }

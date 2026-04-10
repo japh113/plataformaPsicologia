@@ -12,9 +12,9 @@ import {
   updatePatientObjective,
   deletePatientObjective,
   upsertPatientInterview,
-  createPatientSession,
-  updatePatientSession,
-  deletePatientSession,
+  createPatientClinicalNote,
+  updatePatientClinicalNote,
+  deletePatientClinicalNote,
 } from './patients.service.js';
 import { validateCreatePatient, validatePatientPayload } from './patients.validators.js';
 import {
@@ -23,7 +23,7 @@ import {
   validateUpdateTaskPayload,
 } from './patients.tasks.validators.js';
 import { validatePatientInterviewPayload } from './patients.intake.validators.js';
-import { validateCreateSessionPayload, validateUpdateSessionPayload } from './patients.sessions.validators.js';
+import { validateCreateClinicalNotePayload, validateUpdateClinicalNotePayload } from './patients.clinical-notes.validators.js';
 import { createForbiddenError, ensurePsychologist, isPatient } from '../auth/auth.permissions.js';
 
 export const listPatients = async (req, res, next) => {
@@ -128,7 +128,7 @@ export const createPatientTaskHandler = async (req, res, next) => {
   try {
     ensurePsychologist(req.user);
 
-    const errors = validateCreateObjectivePayload(req.body);
+    const errors = validateCreateTaskPayload(req.body);
 
     if (errors.length > 0) {
       return errorResponse(res, 'Validation error', 400, errors);
@@ -195,7 +195,7 @@ export const createPatientObjectiveHandler = async (req, res, next) => {
   try {
     ensurePsychologist(req.user);
 
-    const errors = validateCreateTaskPayload(req.body);
+    const errors = validateCreateObjectivePayload(req.body);
 
     if (errors.length > 0) {
       return errorResponse(res, 'Validation error', 400, errors);
@@ -258,61 +258,61 @@ export const deletePatientObjectiveHandler = async (req, res, next) => {
   }
 };
 
-export const createPatientSessionHandler = async (req, res, next) => {
+export const createPatientClinicalNoteHandler = async (req, res, next) => {
   try {
     ensurePsychologist(req.user);
 
-    const errors = validateCreateSessionPayload(req.body);
+    const errors = validateCreateClinicalNotePayload(req.body);
 
     if (errors.length > 0) {
       return errorResponse(res, 'Validation error', 400, errors);
     }
 
-    const session = await createPatientSession(req.params.id, req.body, req.user);
+    const clinicalNote = await createPatientClinicalNote(req.params.id, req.body, req.user);
 
-    if (!session) {
+    if (!clinicalNote) {
       return errorResponse(res, 'Patient not found', 404);
     }
 
-    return successResponse(res, session, 'Session created successfully', 201);
+    return successResponse(res, clinicalNote, 'Clinical note created successfully', 201);
   } catch (error) {
     return next(error);
   }
 };
 
-export const updatePatientSessionHandler = async (req, res, next) => {
+export const updatePatientClinicalNoteHandler = async (req, res, next) => {
   try {
     ensurePsychologist(req.user);
 
-    const errors = validateUpdateSessionPayload(req.body);
+    const errors = validateUpdateClinicalNotePayload(req.body);
 
     if (errors.length > 0) {
       return errorResponse(res, 'Validation error', 400, errors);
     }
 
-    const session = await updatePatientSession(req.params.id, req.params.sessionId, req.body, req.user);
+    const clinicalNote = await updatePatientClinicalNote(req.params.id, req.params.clinicalNoteId, req.body, req.user);
 
-    if (!session) {
-      return errorResponse(res, 'Session not found', 404);
+    if (!clinicalNote) {
+      return errorResponse(res, 'Clinical note not found', 404);
     }
 
-    return successResponse(res, session, 'Session updated successfully');
+    return successResponse(res, clinicalNote, 'Clinical note updated successfully');
   } catch (error) {
     return next(error);
   }
 };
 
-export const deletePatientSessionHandler = async (req, res, next) => {
+export const deletePatientClinicalNoteHandler = async (req, res, next) => {
   try {
     ensurePsychologist(req.user);
 
-    const deleted = await deletePatientSession(req.params.id, req.params.sessionId, req.user);
+    const deleted = await deletePatientClinicalNote(req.params.id, req.params.clinicalNoteId, req.user);
 
     if (!deleted) {
-      return errorResponse(res, 'Session not found', 404);
+      return errorResponse(res, 'Clinical note not found', 404);
     }
 
-    return successResponse(res, null, 'Session deleted successfully');
+    return successResponse(res, null, 'Clinical note deleted successfully');
   } catch (error) {
     return next(error);
   }

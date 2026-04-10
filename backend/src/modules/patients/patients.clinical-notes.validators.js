@@ -1,5 +1,6 @@
 const allowedFormats = new Set(['simple', 'soap']);
 const structuredFieldKeys = ['sessionObjective', 'clinicalObservations', 'nextSteps'];
+
 const validateTasksField = (payload, errors) => {
   if (!Object.prototype.hasOwnProperty.call(payload || {}, 'tasks')) {
     return;
@@ -39,7 +40,7 @@ const validateOptionalTextField = (payload, key, errors) => {
   }
 };
 
-export const validateCreateSessionPayload = (payload) => {
+export const validateCreateClinicalNotePayload = (payload) => {
   const errors = [];
 
   if (typeof payload?.appointmentId === 'undefined' || payload?.appointmentId === null || !String(payload.appointmentId).trim()) {
@@ -60,7 +61,7 @@ export const validateCreateSessionPayload = (payload) => {
   return errors;
 };
 
-export const validateUpdateSessionPayload = (payload) => {
+export const validateUpdateClinicalNotePayload = (payload) => {
   const errors = [];
   const hasAnyField = ['noteFormat', 'content', 'appointmentId', 'tasks', ...structuredFieldKeys].some((key) => Object.prototype.hasOwnProperty.call(payload || {}, key));
 

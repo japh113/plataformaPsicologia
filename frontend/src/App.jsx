@@ -22,16 +22,16 @@ import {
 import {
   createPatient,
   createPatientObjective,
-  createPatientSession,
+  createPatientClinicalNote,
   deletePatientObjective,
-  deletePatientSession,
+  deletePatientClinicalNote,
   deletePatientTask,
   getPatient,
   getPatients,
   upsertPatientInterview,
   updatePatient,
   updatePatientObjective,
-  updatePatientSession,
+  updatePatientClinicalNote,
   updatePatientTask,
 } from './api/patients';
 import {
@@ -630,7 +630,7 @@ export default function App() {
     setGuardandoSesion(true);
 
     try {
-      await createPatientSession(pacienteSeleccionado.id, payload);
+      await createPatientClinicalNote(pacienteSeleccionado.id, payload);
       await refreshSelectedPatient(pacienteSeleccionado.id);
       return true;
     } catch (error) {
@@ -651,7 +651,7 @@ export default function App() {
     setProcesandoSesionId(sessionId);
 
     try {
-      await updatePatientSession(pacienteSeleccionado.id, sessionId, payload);
+      await updatePatientClinicalNote(pacienteSeleccionado.id, sessionId, payload);
       await refreshSelectedPatient(pacienteSeleccionado.id);
       return true;
     } catch (error) {
@@ -672,7 +672,7 @@ export default function App() {
     setProcesandoSesionId(sessionId);
 
     try {
-      await deletePatientSession(pacienteSeleccionado.id, sessionId);
+      await deletePatientClinicalNote(pacienteSeleccionado.id, sessionId);
       await refreshSelectedPatient(pacienteSeleccionado.id);
       return true;
     } catch (error) {
