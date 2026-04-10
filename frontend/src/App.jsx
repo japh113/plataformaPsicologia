@@ -635,7 +635,7 @@ export default function App() {
       return true;
     } catch (error) {
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
-      window.alert((error.message || 'No se pudo crear la sesion.') + details);
+      window.alert((error.message || 'No se pudo crear la nota clinica.') + details);
       return false;
     } finally {
       setGuardandoSesion(false);
@@ -656,7 +656,7 @@ export default function App() {
       return true;
     } catch (error) {
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
-      window.alert((error.message || 'No se pudo actualizar la sesion.') + details);
+      window.alert((error.message || 'No se pudo actualizar la nota clinica.') + details);
       return false;
     } finally {
       setGuardandoSesion(false);
@@ -676,7 +676,7 @@ export default function App() {
       await refreshSelectedPatient(pacienteSeleccionado.id);
       return true;
     } catch (error) {
-      window.alert(error.message || 'No se pudo eliminar la sesion.');
+      window.alert(error.message || 'No se pudo eliminar la nota clinica.');
       return false;
     } finally {
       setProcesandoSesionId(null);

@@ -380,7 +380,7 @@ export default function NotesScreen({
       { id: 'resumen', label: 'Resumen' },
       { id: 'entrevista', label: 'Entrevista' },
       { id: 'agenda', label: 'Agenda' },
-      { id: 'sesiones', label: 'Sesiones' },
+      { id: 'sesiones', label: 'Notas clinicas' },
       { id: 'objetivos', label: 'Objetivos' },
       { id: 'nota-general', label: 'Nota general' },
     ]
@@ -388,7 +388,7 @@ export default function NotesScreen({
       { id: 'resumen', label: 'Resumen' },
       { id: 'entrevista', label: 'Entrevista' },
       { id: 'agenda', label: 'Agenda' },
-      { id: 'sesiones', label: 'Sesiones' },
+      { id: 'sesiones', label: 'Notas clinicas' },
       { id: 'objetivos', label: 'Objetivos' },
     ];
 
@@ -590,7 +590,7 @@ export default function NotesScreen({
   };
 
   const handleDeleteCurrentSession = async (sessionId) => {
-    if (!window.confirm('Se eliminara esta nota de sesion. Deseas continuar?')) {
+    if (!window.confirm('Se eliminara esta nota clinica. Deseas continuar?')) {
       return;
     }
 
@@ -636,7 +636,7 @@ export default function NotesScreen({
             onClick={() => handleEditSession(linkedSession)}
             className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100"
           >
-            Ver sesion
+            Ver nota clinica
           </button>
         ) : appointment.estado !== 'cancelada' ? (
           <button
@@ -644,7 +644,7 @@ export default function NotesScreen({
             onClick={() => handleOpenSessionFromRecord(appointment)}
             className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
           >
-            {appointment.estado === 'completada' ? 'Registrar sesion' : 'Completar y registrar'}
+            {appointment.estado === 'completada' ? 'Registrar nota clinica' : 'Completar y registrar'}
           </button>
         ) : null}
         {canCancel && (
@@ -678,7 +678,7 @@ export default function NotesScreen({
             </span>
             {appointment.estado === 'completada' && (
               <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${getSessionCoverageClasses(Boolean(linkedSession))}`}>
-                {linkedSession ? 'Sesion registrada' : 'Falta sesion'}
+                {linkedSession ? 'Nota clinica registrada' : 'Falta nota clinica'}
               </span>
             )}
           </div>
@@ -715,7 +715,7 @@ export default function NotesScreen({
               {patientAppointments.length} cita(s)
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-              {sessions.length} sesion(es)
+              {sessions.length} nota(s) clinica(s)
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
               {patient.tareas?.length || 0} tarea(s) total
@@ -739,9 +739,9 @@ export default function NotesScreen({
               </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultima sesion</p>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultima nota clinica</p>
               <p className="mt-2 text-sm font-semibold text-slate-900">
-                {latestSession ? formatSessionDate(latestSession.fecha) : 'Sin sesiones registradas'}
+                {latestSession ? formatSessionDate(latestSession.fecha) : 'Sin notas clinicas registradas'}
               </p>
               {latestSession && (
                 <p className="mt-1 text-xs text-slate-500">{getRelativeLastSessionLabel(latestSession.fecha, todayDate)}</p>
@@ -750,7 +750,7 @@ export default function NotesScreen({
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Pendiente clinico</p>
               <p className="mt-2 text-sm font-semibold text-slate-900">
-                {completedAppointmentsWithoutSession.length ? `${completedAppointmentsWithoutSession.length} cita(s) sin sesion` : 'Sin pendientes de documentacion'}
+                {completedAppointmentsWithoutSession.length ? `${completedAppointmentsWithoutSession.length} cita(s) sin nota clinica` : 'Sin pendientes de documentacion'}
               </p>
             </div>
           </div>
@@ -885,15 +885,15 @@ export default function NotesScreen({
 
   const renderSessionsTab = () => (
     <SectionCard
-      title="Sesiones"
-      description={isPsychologist ? 'Historial clinico y tareas asignadas por sesion.' : 'Seguimiento de tus sesiones y tareas entre consultas.'}
+      title="Notas clinicas"
+      description={isPsychologist ? 'Historial clinico y tareas asignadas por nota clinica.' : 'Seguimiento de tus notas clinicas y tareas entre consultas.'}
       action={isPsychologist ? (
         <button
           type="button"
           onClick={() => openNewSessionModal()}
           className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
         >
-          Nueva sesion
+          Nueva nota clinica
         </button>
       ) : null}
     >
@@ -952,7 +952,7 @@ export default function NotesScreen({
                       </div>
                     )) : (
                       <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-500">
-                        {isPsychologist ? 'Esta sesion no tiene tareas asignadas todavia.' : 'No se asignaron tareas en esta sesion.'}
+                        {isPsychologist ? 'Esta nota clinica no tiene tareas asignadas todavia.' : 'No se asignaron tareas en esta nota clinica.'}
                       </div>
                     )}
                   </div>
@@ -963,7 +963,7 @@ export default function NotesScreen({
                     onClick={() => handleEditSession(session)}
                     className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                   >
-                    Abrir sesion
+                    Abrir nota clinica
                   </button>
                 )}
               </div>
@@ -971,14 +971,14 @@ export default function NotesScreen({
           );
         }) : (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-sm text-slate-500">
-            Todavia no hay sesiones registradas para este paciente.
+            Todavia no hay notas clinicas registradas para este paciente.
           </div>
         )}
 
         {orphanTasks.length > 0 && (
           <div className="rounded-[24px] border border-slate-200 bg-white p-4">
             <div className="border-b border-slate-200 pb-3">
-              <p className="text-sm font-semibold text-slate-900">Tareas sin sesion visible</p>
+              <p className="text-sm font-semibold text-slate-900">Tareas sin nota clinica visible</p>
               <p className="mt-1 text-xs text-slate-500">Se conservan aqui para no perder seguimiento de datos anteriores.</p>
             </div>
             <div className="mt-4 space-y-3">
@@ -1327,7 +1327,7 @@ export default function NotesScreen({
                   onClick={() => openNewSessionModal()}
                   className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
                 >
-                    Nueva sesion
+                    Nueva nota clinica
                 </button>
               )}
             </div>
@@ -1403,8 +1403,8 @@ export default function NotesScreen({
 
       {showSessionModal && isPsychologist && (
         <ModalShell
-          title={selectedSession ? 'Editar sesion' : 'Registrar sesion'}
-          description="La nota queda ligada a una cita completada para mantener trazabilidad clinica."
+          title={selectedSession ? 'Editar nota clinica' : 'Registrar nota clinica'}
+          description="La nota clinica queda ligada a una cita completada para mantener trazabilidad clinica."
           onClose={closeSessionModal}
         >
           <div className="space-y-4">
@@ -1426,7 +1426,7 @@ export default function NotesScreen({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-slate-700">Objetivo de la sesion</label>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700">Objetivo de la nota clinica</label>
               <textarea
                 value={sessionForm.objetivo}
                 onChange={(event) => setSessionForm((current) => ({ ...current, objetivo: event.target.value }))}
@@ -1511,7 +1511,7 @@ export default function NotesScreen({
                   ))
                 ) : (
                   <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-500">
-                    Todavia no hay tareas en esta sesion.
+                    Todavia no hay tareas en esta nota clinica.
                   </div>
                 )}
 
@@ -1552,7 +1552,7 @@ export default function NotesScreen({
 
             {eligibleSessionAppointments.length === 0 && !selectedSession && (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                Primero debes completar una cita de hoy o anterior para poder registrar una sesion clinica.
+                Primero debes completar una cita de hoy o anterior para poder registrar una nota clinica.
               </div>
             )}
 
@@ -1564,7 +1564,7 @@ export default function NotesScreen({
                   disabled={processingSessionId === selectedSession.id}
                   className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {processingSessionId === selectedSession.id ? 'Eliminando...' : 'Eliminar sesion'}
+                  {processingSessionId === selectedSession.id ? 'Eliminando...' : 'Eliminar nota clinica'}
                 </button>
               )}
               <button
@@ -1574,7 +1574,7 @@ export default function NotesScreen({
                 className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Save size={16} className="mr-2" />
-                {isSavingSession ? 'Guardando...' : selectedSession ? 'Guardar cambios' : 'Guardar sesion'}
+                {isSavingSession ? 'Guardando...' : selectedSession ? 'Guardar cambios' : 'Guardar nota clinica'}
               </button>
             </div>
           </div>

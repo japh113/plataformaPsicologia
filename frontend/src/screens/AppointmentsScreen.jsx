@@ -109,7 +109,7 @@ const getAppointmentSessionState = (appointment, hasLinkedSession) => {
   return hasLinkedSession ? 'registered' : 'missing';
 };
 const getAppointmentSessionLabel = (sessionState) => (
-  sessionState === 'registered' ? 'Sesion registrada' : sessionState === 'missing' ? 'Falta sesion' : ''
+  sessionState === 'registered' ? 'Nota clinica registrada' : sessionState === 'missing' ? 'Falta nota clinica' : ''
 );
 const calendarStatusPriority = {
   cancelada: 0,
@@ -893,7 +893,7 @@ export default function AppointmentsScreen({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-gray-800">{isPsychologist ? 'Agenda de Citas' : 'Mis Citas'}</h2>
-          <p className="text-sm md:text-base text-gray-500">{isPsychologist ? 'Gestiona citas, reprograma sesiones y da seguimiento al calendario clinico.' : 'Consulta tus proximas sesiones y el estado de cada cita.'}</p>
+          <p className="text-sm md:text-base text-gray-500">{isPsychologist ? 'Gestiona citas, registra notas clinicas y da seguimiento al calendario clinico.' : 'Consulta tus proximas citas y el estado de cada una.'}</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <input type="date" value={selectedDate} onChange={(event) => handleSelectDate(event.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
@@ -905,9 +905,9 @@ export default function AppointmentsScreen({
             <option value="cancelada">Canceladas</option>
           </select>
           {isPsychologist && <select value={sessionCoverageFilter} onChange={(event) => setSessionCoverageFilter(event.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-            <option value="todos">Todas las sesiones</option>
-            <option value="missing">Completadas sin sesion</option>
-            <option value="registered">Completadas con sesion</option>
+            <option value="todos">Todas las notas clinicas</option>
+            <option value="missing">Completadas sin nota clinica</option>
+            <option value="registered">Completadas con nota clinica</option>
           </select>}
           {isPsychologist && hasActiveFilters && <button type="button" onClick={handleClearFilters} className="px-3 py-2.5 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Limpiar filtros</button>}
         </div>
@@ -918,12 +918,12 @@ export default function AppointmentsScreen({
           <button type="button" onClick={() => handleSummaryFilter('missing')} className={`rounded-2xl border p-4 text-left transition ${activeSummaryFilter === 'missing' ? 'border-sky-400 bg-sky-100 ring-2 ring-sky-200' : 'border-sky-200 bg-sky-50 hover:bg-sky-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700">Pendiente clinico</p>
             <p className="mt-2 text-3xl font-black text-sky-900">{clinicalSummary.completedWithoutSession}</p>
-            <p className="mt-1 text-sm text-sky-800">Citas completadas sin sesion registrada.</p>
+            <p className="mt-1 text-sm text-sky-800">Citas completadas sin nota clinica registrada.</p>
           </button>
           <button type="button" onClick={() => handleSummaryFilter('registered')} className={`rounded-2xl border p-4 text-left transition ${activeSummaryFilter === 'registered' ? 'border-emerald-400 bg-emerald-100 ring-2 ring-emerald-200' : 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Cierre clinico</p>
             <p className="mt-2 text-3xl font-black text-emerald-900">{clinicalSummary.completedWithSession}</p>
-            <p className="mt-1 text-sm text-emerald-800">Citas completadas con sesion registrada.</p>
+            <p className="mt-1 text-sm text-emerald-800">Citas completadas con nota clinica registrada.</p>
           </button>
           <button type="button" onClick={() => handleSummaryFilter('pending')} className={`rounded-2xl border p-4 text-left transition ${activeSummaryFilter === 'pending' ? 'border-indigo-400 bg-indigo-100 ring-2 ring-indigo-200' : 'border-indigo-200 bg-indigo-50 hover:bg-indigo-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Agenda activa</p>
@@ -968,11 +968,11 @@ export default function AppointmentsScreen({
             </>}
             <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getSessionBadgeClasses('registered')}`}>
               <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses('registered')}`} />
-              Sesion registrada
+              Nota clinica registrada
             </span>
             <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getSessionBadgeClasses('missing')}`}>
               <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses('missing')}`} />
-              Falta sesion
+              Falta nota clinica
             </span>
             <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getWaitlistBadgeClasses()}`}>
               <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />
@@ -1157,7 +1157,7 @@ export default function AppointmentsScreen({
                           disabled={isProcessingThisAppointment}
                           className="px-3 py-2 bg-white text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          {linkedSession ? 'Ver sesion' : appointment.estado === 'completada' ? 'Registrar sesion' : isProcessingThisAppointment ? 'Completando...' : 'Completar y registrar'}
+                          {linkedSession ? 'Ver nota clinica' : appointment.estado === 'completada' ? 'Registrar nota clinica' : isProcessingThisAppointment ? 'Completando...' : 'Completar y registrar'}
                         </button>
                       )}
                       {isPsychologist && isOverduePendingAppointment && !linkedSession && (
@@ -1233,7 +1233,7 @@ export default function AppointmentsScreen({
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Notas</label>
-                <textarea name="notas" value={form.notas} onChange={handleChange} disabled={isSavingAppointment} rows="4" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none" placeholder="Detalles logisticos, contexto o recordatorios de la sesion..." />
+                <textarea name="notas" value={form.notas} onChange={handleChange} disabled={isSavingAppointment} rows="4" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none" placeholder="Detalles logisticos, contexto o recordatorios de la cita..." />
               </div>
               <button type="submit" disabled={isSavingAppointment || patients.length === 0 || hasSameDayPatientConflict} className="w-full px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium disabled:opacity-60 disabled:cursor-not-allowed">{isSavingAppointment ? 'Guardando...' : editingAppointmentId ? 'Guardar cambios' : 'Crear cita'}</button>
             </form>
@@ -1686,7 +1686,7 @@ export default function AppointmentsScreen({
       {isPsychologist && isAppointmentModalOpen && (
         <ModalShell
           title={editingAppointmentId ? 'Editar cita' : 'Nueva cita'}
-          description="Agenda sesiones, ajusta el estado y deja notas logisticas sin salir del calendario."
+          description="Agenda citas, ajusta el estado y deja notas logisticas sin salir del calendario."
           onClose={closeAppointmentModal}
         >
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -1738,7 +1738,7 @@ export default function AppointmentsScreen({
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Notas</label>
-              <textarea name="notas" value={form.notas} onChange={handleChange} disabled={isSavingAppointment} rows="4" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none" placeholder="Detalles logisticos, contexto o recordatorios de la sesion..." />
+              <textarea name="notas" value={form.notas} onChange={handleChange} disabled={isSavingAppointment} rows="4" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none" placeholder="Detalles logisticos, contexto o recordatorios de la cita..." />
             </div>
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button type="button" onClick={closeAppointmentModal} className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Cancelar</button>

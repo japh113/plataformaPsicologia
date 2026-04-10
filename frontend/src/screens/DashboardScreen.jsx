@@ -232,7 +232,7 @@ export default function DashboardScreen({ currentUser, patients, appointments, r
         <div className="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-wider text-indigo-500 font-bold mb-2">Proxima sesion</p>
+              <p className="text-xs uppercase tracking-wider text-indigo-500 font-bold mb-2">Proxima cita</p>
               <h3 className="text-xl font-bold text-gray-900">{nextPatient.nombre}</h3>
               <p className="text-sm text-gray-500 mt-1">
                 {nextAppointment.hora} - {nextPatient.motivo || 'Motivo no registrado'}

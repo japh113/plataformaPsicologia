@@ -96,7 +96,7 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
           <button type="button" onClick={() => handleSummaryFilter('without_sessions')} className={`rounded-2xl border p-4 text-left transition ${summaryFilter === 'without_sessions' ? 'border-amber-400 bg-amber-100 ring-2 ring-amber-200' : 'border-amber-200 bg-amber-50 hover:bg-amber-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Por documentar</p>
             <p className="mt-2 text-3xl font-black text-amber-900">{patientSummary.withoutSessions}</p>
-            <p className="mt-1 text-sm text-amber-800">Pacientes sin sesiones registradas.</p>
+            <p className="mt-1 text-sm text-amber-800">Pacientes sin notas clinicas registradas.</p>
           </button>
           <button type="button" onClick={() => handleSummaryFilter('pending_interview')} className={`rounded-2xl border p-4 text-left transition ${summaryFilter === 'pending_interview' ? 'border-violet-400 bg-violet-100 ring-2 ring-violet-200' : 'border-violet-200 bg-violet-50 hover:bg-violet-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700">Entrevista pendiente</p>
@@ -168,7 +168,7 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
                     )}
                     {!patient.ultimaSesion && (
                       <span className="px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border border-amber-200 bg-amber-50 text-amber-700">
-                        Sin sesiones
+                        Sin notas clinicas
                       </span>
                     )}
                     {!patient.entrevistaCompleta && (
@@ -178,7 +178,7 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
                     )}
                   </div>
                   <p className="text-sm text-gray-500 mt-1">{getPatientSubtitle(patient)}</p>
-                  <p className="text-xs text-gray-400 mt-2">Ultima sesion: {patient.ultimaSesion || 'Sin sesiones registradas'}</p>
+                  <p className="text-xs text-gray-400 mt-2">Ultima nota clinica: {patient.ultimaSesion || 'Sin notas clinicas registradas'}</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2 w-full md:w-auto">
@@ -192,7 +192,7 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
                     onClick={() => onOpenPatient(patient)}
                     className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm font-medium inline-flex items-center justify-center"
                   >
-                    <CalendarDays size={16} className="mr-2" /> Sesion
+                    <CalendarDays size={16} className="mr-2" /> Nota clinica
                   </button>
                   <button
                     onClick={() => onOpenPatient(patient)}
