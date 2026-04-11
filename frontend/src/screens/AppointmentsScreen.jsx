@@ -76,6 +76,24 @@ const buildRecurringEndDateOptions = (startDate, weeks = 52) => {
   });
 };
 
+const getRecurringOccurrencesCount = (startDate, endDate) => {
+  if (!startDate || !endDate || endDate <= startDate) {
+    return 0;
+  }
+
+  const [startYear = '0', startMonth = '1', startDay = '1'] = String(startDate).split('-');
+  const [endYear = '0', endMonth = '1', endDay = '1'] = String(endDate).split('-');
+  const start = new Date(Number(startYear), Number(startMonth) - 1, Number(startDay));
+  const end = new Date(Number(endYear), Number(endMonth) - 1, Number(endDay));
+  const diffDays = Math.floor((end.getTime() - start.getTime()) / 86400000);
+
+  if (!Number.isFinite(diffDays) || diffDays < 7 || diffDays % 7 !== 0) {
+    return 0;
+  }
+
+  return diffDays / 7;
+};
+
 const buildBlockedRanges = (exceptions) => {
   const unavailableDates = [...(exceptions || [])]
     .filter((exception) => exception.isUnavailable)
@@ -305,6 +323,10 @@ export default function AppointmentsScreen({
   );
   const isEditingRecurringAppointment = Boolean(editingAppointment?.recurrenciaGrupoId);
   const recurrenceEndDateOptions = useMemo(() => buildRecurringEndDateOptions(selectedFormDate), [selectedFormDate]);
+  const recurrenceOccurrencesCount = useMemo(
+    () => getRecurringOccurrencesCount(selectedFormDate, form.recurrenciaHasta),
+    [form.recurrenciaHasta, selectedFormDate],
+  );
   const selectedWaitlistDate = waitlistForm.fecha || selectedDate || todayDate;
 
   const selectedDayAvailability = useMemo(() => {
@@ -1882,6 +1904,11 @@ export default function AppointmentsScreen({
                     ))}
                   </select>
                   <p className="mt-1 text-xs text-slate-500">Solo se muestran {weekdayLabels[selectedFormWeekday].toLowerCase()} futuros para mantener la recurrencia semanal consistente.</p>
+                  {recurrenceOccurrencesCount > 0 && (
+                    <p className="mt-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700">
+                      Se crearan {recurrenceOccurrencesCount} cita(s) futura(s), para un total de {recurrenceOccurrencesCount + 1} cita(s) contando la inicial.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
