@@ -74,6 +74,11 @@ const addDaysToDateString = (dateString, amount) => {
   return date.toISOString().slice(0, 10);
 };
 
+const getWeekdayFromDateString = (dateString) => {
+  const [year = '0', month = '1', day = '1'] = String(dateString).split('-');
+  return new Date(Number(year), Number(month) - 1, Number(day)).getDay();
+};
+
 const buildRecurringDates = (startDate, endDate) => {
   const dates = [];
   let currentDate = addDaysToDateString(startDate, 7);
@@ -207,6 +212,10 @@ const normalizeRecurrencePayload = (recurrence, scheduledDate, status) => {
 
   if (recurrence.endDate <= scheduledDate) {
     throw createValidationError('La fecha fin de recurrencia debe ser posterior a la cita inicial.');
+  }
+
+  if (getWeekdayFromDateString(recurrence.endDate) !== getWeekdayFromDateString(scheduledDate)) {
+    throw createValidationError('La fecha fin de recurrencia debe caer en el mismo dia de la semana que la cita inicial.');
   }
 
   const recurringDates = buildRecurringDates(scheduledDate, recurrence.endDate);

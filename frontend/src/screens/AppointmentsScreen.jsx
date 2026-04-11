@@ -1,11 +1,12 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Calendar, CalendarPlus, ChevronLeft, ChevronRight, Clock3, Pencil, Plus, Save, Trash2, Users, X } from 'lucide-react';
+import { Calendar, CalendarPlus, ChevronLeft, ChevronRight, Clock3, Pencil, Plus, Repeat2, Save, Trash2, Users, X } from 'lucide-react';
 import { formatAppointmentDisplayHour, getAppointmentDisplayStatus, getAppointmentHourOptions, getMonthDates, getMonthLabel, getMonthWeekdayHeaders, getWeekDates, getWeekRangeLabel, isAppointmentOverdue, shiftDateByDays, shiftDateByMonths } from '../mappers/appointments';
 
 const emptyForm = { pacienteId: '', fecha: '', hora24: '', estado: 'pendiente', notas: '', recurrenciaActiva: false, recurrenciaHasta: '' };
 const emptyWaitlistForm = { pacienteId: '', fecha: '', hora24: '', notas: '' };
 const weekdayLabels = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
 const exceptionDateFormatter = new Intl.DateTimeFormat('es-MX', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+const recurrenceDateFormatter = new Intl.DateTimeFormat('es-MX', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const getStatusBadge = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : estado === 'por cerrar' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
 const getMiniAppointmentChip = (estado) => (estado === 'completada' ? 'bg-green-100 text-green-700 border-green-200' : estado === 'cancelada' ? 'bg-red-100 text-red-700 border-red-200' : estado === 'por cerrar' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-indigo-100 text-indigo-700 border-indigo-200');
 const getAppointmentAccent = (estado) => (estado === 'completada' ? 'border-l-green-500 bg-green-50/40' : estado === 'cancelada' ? 'border-l-red-500 bg-red-50/40' : estado === 'por cerrar' ? 'border-l-amber-500 bg-amber-50/40' : 'border-l-indigo-500 bg-indigo-50/40');
@@ -54,6 +55,25 @@ const addDaysToDateString = (dateString, amount) => {
   const date = new Date(Number(year), Number(month) - 1, Number(day));
   date.setDate(date.getDate() + amount);
   return date.toISOString().slice(0, 10);
+};
+
+const formatRecurrenceDateLabel = (date) => {
+  const [year = '0', month = '1', day = '1'] = String(date).split('-');
+  return recurrenceDateFormatter.format(new Date(Number(year), Number(month) - 1, Number(day)));
+};
+
+const buildRecurringEndDateOptions = (startDate, weeks = 52) => {
+  if (!startDate) {
+    return [];
+  }
+
+  return Array.from({ length: weeks }, (_, index) => {
+    const value = addDaysToDateString(startDate, (index + 1) * 7);
+    return {
+      value,
+      label: formatRecurrenceDateLabel(value),
+    };
+  });
 };
 
 const buildBlockedRanges = (exceptions) => {
@@ -284,7 +304,7 @@ export default function AppointmentsScreen({
     [appointments, editingAppointmentId],
   );
   const isEditingRecurringAppointment = Boolean(editingAppointment?.recurrenciaGrupoId);
-  const recurrenceMinDate = addDaysToDateString(selectedFormDate, 7);
+  const recurrenceEndDateOptions = useMemo(() => buildRecurringEndDateOptions(selectedFormDate), [selectedFormDate]);
   const selectedWaitlistDate = waitlistForm.fecha || selectedDate || todayDate;
 
   const selectedDayAvailability = useMemo(() => {
@@ -1048,6 +1068,10 @@ export default function AppointmentsScreen({
               <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />
               Lista de espera
             </span>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+              <Repeat2 size={12} className="mr-1.5" />
+              Recurrente
+            </span>
           </div>
         )}
 
@@ -1076,6 +1100,11 @@ export default function AppointmentsScreen({
                           <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
                             <p className="truncate">{appointment.hora}</p>
                             <div className="flex items-center gap-1.5">
+                              {appointment.recurrenciaGrupoId && (
+                                <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-500" title="Cita recurrente">
+                                  <Repeat2 size={10} />
+                                </span>
+                              )}
                               {showWaitlistIndicator && (
                                 <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${getWaitlistBadgeClasses()}`} title={`${appointment.waitlistCount} en lista de espera`}>
                                   {appointment.waitlistCount}
@@ -1126,6 +1155,11 @@ export default function AppointmentsScreen({
                             <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
                               <div className="truncate">{appointment.hora}</div>
                               <div className="flex items-center gap-1">
+                                {appointment.recurrenciaGrupoId && (
+                                  <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-500" title="Cita recurrente">
+                                    <Repeat2 size={8} />
+                                  </span>
+                                )}
                                 {showWaitlistIndicator && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getWaitlistCountDotClasses()}`} title={`${appointment.waitlistCount} en lista de espera`} />}
                                 {sessionState !== 'none' && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
                               </div>
@@ -1200,7 +1234,7 @@ export default function AppointmentsScreen({
                 <div key={appointment.id} tabIndex={0} onMouseEnter={() => setHoveredDate(appointment.fecha)} onMouseLeave={() => setHoveredDate('')} onFocus={() => setHoveredDate(appointment.fecha)} onBlur={() => setHoveredDate('')} className={`rounded-xl border border-gray-200 border-l-4 p-4 transition outline-none focus-visible:ring-2 focus-visible:ring-indigo-200 ${getAppointmentAccent(displayStatus)} ${isLinkedToSelectedDate ? 'ring-2 ring-indigo-100 shadow-sm' : isLinkedToHoveredDate ? 'ring-2 ring-slate-200' : ''}`}>
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{patient?.nombre || 'Paciente no disponible'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(displayStatus)}`}>{displayStatus}</span>{sessionState !== 'none' && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}{showWaitlistIndicator && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getWaitlistBadgeClasses()}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />Espera {appointment.waitlistCount}</span>}</div>
+                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{patient?.nombre || 'Paciente no disponible'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(displayStatus)}`}>{displayStatus}</span>{appointment.recurrenciaGrupoId && <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] md:text-xs font-bold text-slate-600"><Repeat2 size={12} className="mr-1.5" />Recurrente</span>}{sessionState !== 'none' && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}{showWaitlistIndicator && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getWaitlistBadgeClasses()}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />Espera {appointment.waitlistCount}</span>}</div>
                       <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500"><span className="inline-flex items-center"><Calendar size={14} className="mr-1.5" /> {appointment.fecha}</span><span className="inline-flex items-center"><Clock3 size={14} className="mr-1.5" /> {appointment.hora}</span></div>
                       {isOverduePendingAppointment && (
                         <p className="mt-2 text-sm font-medium text-amber-700">La hora de esta cita ya paso y todavia necesita cierre operativo.</p>
@@ -1833,16 +1867,21 @@ export default function AppointmentsScreen({
               {form.recurrenciaActiva && !isEditingRecurringAppointment && form.estado === 'pendiente' && (
                 <div className="mt-4">
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Repetir hasta</label>
-                  <input
-                    type="date"
+                  <select
                     name="recurrenciaHasta"
                     value={form.recurrenciaHasta}
-                    min={recurrenceMinDate}
                     onChange={handleChange}
                     disabled={isSavingAppointment}
                     className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  />
-                  <p className="mt-1 text-xs text-slate-500">Se crearan citas semanales futuras con la misma hora, sujetas a disponibilidad y conflictos.</p>
+                  >
+                    <option value="">Selecciona un {weekdayLabels[selectedFormWeekday].toLowerCase()} futuro</option>
+                    {recurrenceEndDateOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500">Solo se muestran {weekdayLabels[selectedFormWeekday].toLowerCase()} futuros para mantener la recurrencia semanal consistente.</p>
                 </div>
               )}
             </div>
