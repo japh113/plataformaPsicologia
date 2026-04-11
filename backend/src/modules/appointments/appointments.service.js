@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import db from '../../config/db.js';
 import { buildPatientAccessScope, ensurePsychologist, isPsychologist } from '../auth/auth.permissions.js';
 import { getEffectiveAvailabilityForDate } from '../availability/availability.service.js';
@@ -36,6 +37,7 @@ const mapAppointmentRow = (row) => {
     patientId: String(row.patient_id),
     scheduledDate: normalizeDateValue(row.scheduled_date),
     scheduledTime: row.scheduled_time,
+    recurrenceGroupId: row.recurrence_group_id || null,
     status: hasLinkedClinicalNote ? 'completed' : row.status,
     notes: row.notes,
     hasLinkedClinicalNote,
@@ -126,6 +128,7 @@ const getAppointmentSelectColumns = (waitlistParamIndex = null) => `
   a.patient_id,
   a.scheduled_date,
   a.scheduled_time,
+  a.recurrence_group_id,
   a.status,
   a.notes,
   EXISTS (
@@ -193,29 +196,9 @@ const ensurePatientAccess = async (psychologistUserId, patientId) => {
   return accessCheck.rowCount > 0;
 };
 
-const getPatientRecurringSettings = async (patientId) => {
-  const result = await db.query(
-    `
-      SELECT allows_recurring_appointments
-      FROM patients
-      WHERE id = $1
-      LIMIT 1
-    `,
-    [patientId],
-  );
-
-  return {
-    allowsRecurringAppointments: Boolean(result.rows[0]?.allows_recurring_appointments),
-  };
-};
-
-const normalizeRecurrencePayload = (recurrence, scheduledDate, status, allowsRecurringAppointments) => {
+const normalizeRecurrencePayload = (recurrence, scheduledDate, status) => {
   if (!recurrence) {
     return null;
-  }
-
-  if (!allowsRecurringAppointments) {
-    throw createScheduleConflictError('Este paciente no tiene habilitadas las citas recurrentes.');
   }
 
   if (status !== 'pending') {
@@ -397,20 +380,21 @@ export const getAppointmentById = async (id, actor) => {
   return result.rows[0] ? mapAppointmentRow(result.rows[0]) : null;
 };
 
-const insertAppointmentRow = async (client, { patientId, scheduledDate, scheduledTime, status, notes }) => {
+const insertAppointmentRow = async (client, { patientId, scheduledDate, scheduledTime, recurrenceGroupId = null, status, notes }) => {
   const result = await client.query(
     `
       INSERT INTO appointments (
         patient_id,
         scheduled_date,
         scheduled_time,
+        recurrence_group_id,
         status,
         notes
       )
-      VALUES ($1, $2, $3, $4, $5)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id
     `,
-    [patientId, scheduledDate, scheduledTime, status, notes || ''],
+    [patientId, scheduledDate, scheduledTime, recurrenceGroupId, status, notes || ''],
   );
 
   return result.rows[0]?.id;
@@ -428,12 +412,10 @@ export const createAppointment = async (payload, actor) => {
     return null;
   }
 
-  const patientSettings = await getPatientRecurringSettings(patientId);
   const recurrence = normalizeRecurrencePayload(
     payload.recurrence || null,
     payload.scheduledDate,
     nextStatus,
-    patientSettings.allowsRecurringAppointments,
   );
 
   ensureAppointmentCompletionIsAllowed({
@@ -477,11 +459,13 @@ export const createAppointment = async (payload, actor) => {
 
   try {
     await client.query('BEGIN');
+    const recurrenceGroupId = recurrence ? randomUUID() : null;
 
     const createdAppointmentId = await insertAppointmentRow(client, {
       patientId,
       scheduledDate: payload.scheduledDate,
       scheduledTime,
+      recurrenceGroupId,
       status: nextStatus,
       notes: payload.notes || '',
     });
@@ -492,6 +476,7 @@ export const createAppointment = async (payload, actor) => {
           patientId,
           scheduledDate: recurringDate,
           scheduledTime,
+          recurrenceGroupId,
           status: 'pending',
           notes: payload.notes || '',
         });
@@ -538,12 +523,10 @@ export const updateAppointment = async (id, payload, actor) => {
   const nextScheduledDate = payload.scheduledDate || currentAppointment.scheduledDate;
   const nextScheduledTime = normalizeScheduledTime(payload.scheduledTime || currentAppointment.scheduledTime);
   const nextStatus = payload.status || currentAppointment.status;
-  const patientSettings = await getPatientRecurringSettings(nextPatientId);
   const recurrence = normalizeRecurrencePayload(
     payload.recurrence || null,
     nextScheduledDate,
     nextStatus,
-    patientSettings.allowsRecurringAppointments,
   );
   const isChangingLinkedAppointmentSchedule =
     currentAppointment.hasLinkedClinicalNote && (
@@ -571,11 +554,16 @@ export const updateAppointment = async (id, payload, actor) => {
       || nextScheduledDate !== currentAppointment.scheduledDate
       || nextScheduledTime !== normalizeScheduledTime(currentAppointment.scheduledTime)
     );
+  const isExistingRecurringAppointment = Boolean(currentAppointment.recurrenceGroupId);
 
   ensureAppointmentCompletionIsAllowed({
     scheduledDate: nextScheduledDate,
     status: nextStatus,
   });
+
+  if (isExistingRecurringAppointment && recurrence) {
+    throw createValidationError('Para esta cita ya recurrente, usa la opcion de eliminar futuras si quieres cortar la serie.');
+  }
 
   if (shouldValidateScheduleAvailability) {
     await ensureAppointmentAvailability({
@@ -616,6 +604,9 @@ export const updateAppointment = async (id, payload, actor) => {
 
   try {
     await client.query('BEGIN');
+    const nextRecurrenceGroupId = recurrence
+      ? randomUUID()
+      : currentAppointment.recurrenceGroupId;
 
     const result = await client.query(
       `
@@ -624,8 +615,9 @@ export const updateAppointment = async (id, payload, actor) => {
           patient_id = $2,
           scheduled_date = $3,
           scheduled_time = $4,
-          status = $5,
-          notes = $6,
+          recurrence_group_id = $5,
+          status = $6,
+          notes = $7,
           updated_at = NOW()
         WHERE id = $1
         RETURNING
@@ -633,6 +625,7 @@ export const updateAppointment = async (id, payload, actor) => {
           patient_id,
           scheduled_date,
           scheduled_time,
+          recurrence_group_id,
           status,
           notes
       `,
@@ -641,6 +634,7 @@ export const updateAppointment = async (id, payload, actor) => {
         nextPatientId,
         nextScheduledDate,
         nextScheduledTime,
+        nextRecurrenceGroupId,
         nextStatus,
         payload.notes ?? currentAppointment.notes,
       ],
@@ -652,6 +646,7 @@ export const updateAppointment = async (id, payload, actor) => {
           patientId: nextPatientId,
           scheduledDate: recurringDate,
           scheduledTime: nextScheduledTime,
+          recurrenceGroupId: nextRecurrenceGroupId,
           status: 'pending',
           notes: payload.notes ?? currentAppointment.notes,
         });
@@ -692,6 +687,56 @@ export const deleteAppointment = async (id, actor) => {
 
   const result = await db.query('DELETE FROM appointments WHERE id = $1', [id]);
   return result.rowCount > 0;
+};
+
+export const deleteFutureRecurringAppointments = async (id, actor) => {
+  ensurePsychologist(actor);
+
+  const appointment = await getAppointmentById(id, actor);
+
+  if (!appointment) {
+    return null;
+  }
+
+  if (!appointment.recurrenceGroupId) {
+    throw createValidationError('Esta cita no forma parte de una recurrencia.');
+  }
+
+  const linkedFutureClinicalNotes = await db.query(
+    `
+      SELECT a.id
+      FROM appointments a
+      INNER JOIN patient_clinical_notes pcn
+        ON pcn.appointment_id = a.id
+      WHERE a.recurrence_group_id = $1
+        AND (
+          a.scheduled_date > $2
+          OR (a.scheduled_date = $2 AND a.id = $3)
+        )
+      LIMIT 1
+    `,
+    [appointment.recurrenceGroupId, appointment.scheduledDate, id],
+  );
+
+  if (linkedFutureClinicalNotes.rowCount > 0) {
+    throw createScheduleConflictError('No puedes eliminar futuras citas de esta recurrencia porque al menos una ya tiene nota clinica registrada.');
+  }
+
+  const result = await db.query(
+    `
+      DELETE FROM appointments
+      WHERE recurrence_group_id = $1
+        AND (
+          scheduled_date > $2
+          OR (scheduled_date = $2 AND id = $3)
+        )
+    `,
+    [appointment.recurrenceGroupId, appointment.scheduledDate, id],
+  );
+
+  return {
+    deletedCount: result.rowCount,
+  };
 };
 
 export const listWaitlistEntries = async ({ date = null, actor }) => {

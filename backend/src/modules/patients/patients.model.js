@@ -39,7 +39,6 @@ export const buildPatientEntity = (payload, id) => {
     notes: payload.notes || '',
     age: normalizeAge(payload.age),
     reasonForConsultation: payload.reasonForConsultation?.trim() || '',
-    allowsRecurringAppointments: Boolean(payload.allowsRecurringAppointments),
   };
 };
 

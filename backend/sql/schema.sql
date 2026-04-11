@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS patients (
   notes TEXT NOT NULL DEFAULT '',
   age INTEGER CHECK (age IS NULL OR age >= 0),
   reason_for_consultation TEXT NOT NULL DEFAULT '',
-  allows_recurring_appointments BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -142,6 +141,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
   scheduled_date DATE NOT NULL,
   scheduled_time TIME NOT NULL,
+  recurrence_group_id TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'cancelled')),
   notes TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -264,7 +264,10 @@ ALTER TABLE patient_clinical_notes
   ADD COLUMN IF NOT EXISTS next_steps TEXT NOT NULL DEFAULT '';
 
 ALTER TABLE patients
-  ADD COLUMN IF NOT EXISTS allows_recurring_appointments BOOLEAN NOT NULL DEFAULT FALSE;
+  DROP COLUMN IF EXISTS allows_recurring_appointments;
+
+ALTER TABLE appointments
+  ADD COLUMN IF NOT EXISTS recurrence_group_id TEXT;
 
 ALTER TABLE patients
   DROP CONSTRAINT IF EXISTS patients_risk_level_check;

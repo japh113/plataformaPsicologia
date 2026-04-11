@@ -2,6 +2,7 @@ import { errorResponse, successResponse } from '../../utils/response.js';
 import {
   createAppointment,
   createWaitlistEntry,
+  deleteFutureRecurringAppointments,
   deleteAppointment,
   deleteWaitlistEntry,
   getAppointmentById,
@@ -144,6 +145,22 @@ export const deleteAppointmentHandler = async (req, res, next) => {
     }
 
     return successResponse(res, null, 'Appointment deleted successfully');
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const deleteFutureRecurringAppointmentsHandler = async (req, res, next) => {
+  try {
+    ensurePsychologist(req.user);
+
+    const deleted = await deleteFutureRecurringAppointments(req.params.id, req.user);
+
+    if (!deleted) {
+      return errorResponse(res, 'Appointment not found', 404);
+    }
+
+    return successResponse(res, deleted, 'Future recurring appointments deleted successfully');
   } catch (error) {
     return next(error);
   }

@@ -200,7 +200,7 @@ function ModalShell({ title, description, onClose, children }) {
 
 export default function AppointmentsScreen({
   viewContext,
-  currentUser, patients, appointments, waitlistEntries = [], availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onCreateAppointmentWaitlist, onDeleteAppointmentWaitlist, onReorderAppointmentWaitlist, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
+  currentUser, patients, appointments, waitlistEntries = [], availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onDeleteFutureRecurringAppointments, onCreateAppointmentWaitlist, onDeleteAppointmentWaitlist, onReorderAppointmentWaitlist, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
   isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingWaitlist = false, processingWaitlistId = null, waitlistActionError = '', onDismissWaitlistError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
@@ -279,11 +279,11 @@ export default function AppointmentsScreen({
   const monthLabel = useMemo(() => getMonthLabel(calendarAnchorDate), [calendarAnchorDate]);
   const monthWeekdayHeaders = useMemo(() => getMonthWeekdayHeaders(), []);
   const selectedFormDate = form.fecha || todayDate;
-  const selectedPatientProfile = useMemo(
-    () => patients.find((patient) => patient.id === (form.pacienteId || patients[0]?.id || '')) || null,
-    [form.pacienteId, patients],
+  const editingAppointment = useMemo(
+    () => appointments.find((appointment) => appointment.id === editingAppointmentId) || null,
+    [appointments, editingAppointmentId],
   );
-  const allowsRecurringAppointments = Boolean(selectedPatientProfile?.permiteCitasRecurrentes);
+  const isEditingRecurringAppointment = Boolean(editingAppointment?.recurrenciaGrupoId);
   const recurrenceMinDate = addDaysToDateString(selectedFormDate, 7);
   const selectedWaitlistDate = waitlistForm.fecha || selectedDate || todayDate;
 
@@ -610,26 +610,24 @@ export default function AppointmentsScreen({
   };
   const handleChange = (event) => {
     onDismissAppointmentError?.();
-    const { name, type, checked, value } = event.target;
-    const nextValue = type === 'checkbox' ? checked : value;
+      const { name, type, checked, value } = event.target;
+      const nextValue = type === 'checkbox' ? checked : value;
 
-    setForm((current) => {
-      const nextForm = { ...current, [name]: nextValue };
+      setForm((current) => {
+        const nextForm = { ...current, [name]: nextValue };
 
-      if (name === 'pacienteId' || name === 'estado') {
-        const nextPatient = patients.find((patient) => patient.id === (name === 'pacienteId' ? nextValue : current.pacienteId)) || null;
-        const nextAllowsRecurring = Boolean(nextPatient?.permiteCitasRecurrentes);
-        const nextStatus = name === 'estado' ? nextValue : current.estado;
+        if (name === 'estado') {
+          const nextStatus = name === 'estado' ? nextValue : current.estado;
 
-        if (!nextAllowsRecurring || nextStatus !== 'pendiente') {
-          nextForm.recurrenciaActiva = false;
+          if (nextStatus !== 'pendiente') {
+            nextForm.recurrenciaActiva = false;
+            nextForm.recurrenciaHasta = '';
+          }
+        }
+
+        if (name === 'fecha' && current.recurrenciaHasta && current.recurrenciaHasta <= nextValue) {
           nextForm.recurrenciaHasta = '';
         }
-      }
-
-      if (name === 'fecha' && current.recurrenciaHasta && current.recurrenciaHasta <= nextValue) {
-        nextForm.recurrenciaHasta = '';
-      }
 
       if (name === 'fecha' && current.recurrenciaHasta && current.recurrenciaHasta < addDaysToDateString(nextValue, 7)) {
         nextForm.recurrenciaHasta = '';
@@ -687,6 +685,21 @@ export default function AppointmentsScreen({
     }
   };
   const handleDelete = async (appointmentId) => { if (window.confirm('Se eliminara esta cita. Deseas continuar?')) await onDeleteAppointment(appointmentId); };
+  const handleDeleteFutureRecurrence = async (appointment) => {
+    if (!appointment?.recurrenciaGrupoId) {
+      return;
+    }
+
+    if (!window.confirm('Se eliminaran esta cita y todas las futuras de la misma recurrencia. Deseas continuar?')) {
+      return;
+    }
+
+    const wasDeleted = await onDeleteFutureRecurringAppointments?.(appointment.id);
+
+    if (wasDeleted) {
+      closeAppointmentModal();
+    }
+  };
   const handleDeleteWaitlistEntry = async (waitlistEntryId) => {
     if (!window.confirm('Se eliminara esta solicitud de lista de espera. Deseas continuar?')) {
       return;
@@ -1800,7 +1813,7 @@ export default function AppointmentsScreen({
                   name="recurrenciaActiva"
                   checked={Boolean(form.recurrenciaActiva)}
                   onChange={handleChange}
-                  disabled={isSavingAppointment || !allowsRecurringAppointments || form.estado !== 'pendiente'}
+                  disabled={isSavingAppointment || isEditingRecurringAppointment || form.estado !== 'pendiente'}
                   className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
                 />
                 <div className="flex-1">
@@ -1808,16 +1821,16 @@ export default function AppointmentsScreen({
                   <p className="mt-1 text-xs leading-5 text-slate-500">
                     Genera automaticamente este mismo horario cada semana hasta la fecha que elijas.
                   </p>
-                  {!allowsRecurringAppointments && (
-                    <p className="mt-2 text-xs text-amber-700">Este paciente no tiene habilitadas las citas recurrentes en su ficha.</p>
+                  {isEditingRecurringAppointment && (
+                    <p className="mt-2 text-xs text-slate-500">Esta cita ya forma parte de una recurrencia. Puedes cortarla con la opcion de eliminar esta y futuras.</p>
                   )}
-                  {allowsRecurringAppointments && form.estado !== 'pendiente' && (
+                  {!isEditingRecurringAppointment && form.estado !== 'pendiente' && (
                     <p className="mt-2 text-xs text-slate-500">La recurrencia solo se puede usar con citas en estado pendiente.</p>
                   )}
                 </div>
               </div>
 
-              {form.recurrenciaActiva && allowsRecurringAppointments && form.estado === 'pendiente' && (
+              {form.recurrenciaActiva && !isEditingRecurringAppointment && form.estado === 'pendiente' && (
                 <div className="mt-4">
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Repetir hasta</label>
                   <input
@@ -1838,6 +1851,11 @@ export default function AppointmentsScreen({
               <textarea name="notas" value={form.notas} onChange={handleChange} disabled={isSavingAppointment} rows="4" className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none" placeholder="Detalles logisticos, contexto o recordatorios de la cita..." />
             </div>
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              {editingAppointment && editingAppointment.recurrenciaGrupoId && (
+                <button type="button" onClick={() => handleDeleteFutureRecurrence(editingAppointment)} disabled={isSavingAppointment || processingAppointmentId === editingAppointment.id} className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
+                  {processingAppointmentId === editingAppointment.id ? 'Eliminando...' : 'Eliminar esta y futuras'}
+                </button>
+              )}
               <button type="button" onClick={closeAppointmentModal} className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Cancelar</button>
               <button type="submit" disabled={isSavingAppointment || patients.length === 0 || hasSameDayPatientConflict || (form.recurrenciaActiva && !form.recurrenciaHasta)} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed">{isSavingAppointment ? 'Guardando...' : editingAppointmentId ? 'Guardar cambios' : 'Crear cita'}</button>
             </div>

@@ -75,3 +75,11 @@ export const deleteAppointment = async (id) => {
 
   return response.data;
 };
+
+export const deleteFutureRecurringAppointments = async (id) => {
+  const response = await apiRequest(`/appointments/${id}/recurrence`, {
+    method: 'DELETE',
+  });
+
+  return response.data;
+};

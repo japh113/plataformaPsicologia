@@ -126,7 +126,6 @@ export const mapBackendPatientToUiPatient = (patient) => {
     email: patient.email || '',
     telefono: patient.phone || '',
     estado: backendToUiStatusMap[patient.status] || 'activo',
-    permiteCitasRecurrentes: Boolean(patient.allowsRecurringAppointments),
   };
 };
 
@@ -166,7 +165,6 @@ export const mapUiPatientToBackendPatient = (patient) => {
     notes: patient.notas || '',
     age: normalizeNullableAge(patient.edad),
     reasonForConsultation: patient.motivo || '',
-    allowsRecurringAppointments: Boolean(patient.permiteCitasRecurrentes),
   };
 };
 

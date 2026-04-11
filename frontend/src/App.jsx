@@ -37,6 +37,7 @@ import {
 import {
   createAppointment,
   createAppointmentWaitlistEntry,
+  deleteFutureRecurringAppointments,
   deleteAppointment,
   deleteAppointmentWaitlistEntry,
   getAppointments,
@@ -104,7 +105,7 @@ export default function App() {
   const [availabilityExceptions, setAvailabilityExceptions] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [mostrarModalNuevoPaciente, setMostrarModalNuevoPaciente] = useState(false);
-  const [nuevoPacienteForm, setNuevoPacienteForm] = useState({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo', permiteCitasRecurrentes: false });
+  const [nuevoPacienteForm, setNuevoPacienteForm] = useState({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
   const [notasTemp, setNotasTemp] = useState('');
   const [cargandoDatos, setCargandoDatos] = useState(false);
   const [errorCarga, setErrorCarga] = useState('');
@@ -163,7 +164,7 @@ export default function App() {
     setGuardandoEntrevista(false);
     setProcesandoSesionId(null);
     setMostrarModalNuevoPaciente(false);
-    setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo', permiteCitasRecurrentes: false });
+    setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
   };
 
   const cargarDatos = useCallback(async () => {
@@ -369,7 +370,7 @@ export default function App() {
       );
 
       setPacientes((currentPatients) => [...currentPatients, mapBackendPatientToUiPatient(createdPatient)]);
-      setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo', permiteCitasRecurrentes: false });
+      setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
       setMostrarModalNuevoPaciente(false);
     } catch (error) {
       window.alert(error.message || 'No se pudo crear el paciente.');
@@ -756,6 +757,27 @@ export default function App() {
     }
   };
 
+  const handleDeleteFutureRecurringAppointments = async (appointmentId) => {
+    if (!isPsychologist || procesandoCitaId) {
+      return false;
+    }
+
+    setProcesandoCitaId(appointmentId);
+    setAppointmentActionError('');
+
+    try {
+      await deleteFutureRecurringAppointments(appointmentId);
+      await refreshAppointmentsAndWaitlist();
+      await refreshReminders();
+      return true;
+    } catch (error) {
+      setAppointmentActionError(error.message || 'No se pudieron eliminar las citas futuras de la recurrencia.');
+      return false;
+    } finally {
+      setProcesandoCitaId(null);
+    }
+  };
+
   const handleUpdateAppointmentStatus = async (appointment, nextStatus) => {
     if (!appointment) {
       return false;
@@ -1052,6 +1074,7 @@ export default function App() {
           onCreateAppointment={handleCreateAppointment}
           onUpdateAppointment={handleUpdateAppointment}
           onDeleteAppointment={handleDeleteAppointment}
+          onDeleteFutureRecurringAppointments={handleDeleteFutureRecurringAppointments}
           onCreateAppointmentWaitlist={handleCreateAppointmentWaitlist}
           onDeleteAppointmentWaitlist={handleDeleteAppointmentWaitlist}
           onReorderAppointmentWaitlist={handleReorderAppointmentWaitlist}

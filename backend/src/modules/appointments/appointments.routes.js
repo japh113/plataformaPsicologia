@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   createAppointmentHandler,
   createWaitlistEntryHandler,
+  deleteFutureRecurringAppointmentsHandler,
   deleteAppointmentHandler,
   deleteWaitlistEntryHandler,
   getAppointmentHandler,
@@ -21,6 +22,7 @@ router.delete('/waitlist/:id', deleteWaitlistEntryHandler);
 router.get('/:id', getAppointmentHandler);
 router.post('/', createAppointmentHandler);
 router.patch('/:id', updateAppointmentHandler);
+router.delete('/:id/recurrence', deleteFutureRecurringAppointmentsHandler);
 router.delete('/:id', deleteAppointmentHandler);
 
 export default router;

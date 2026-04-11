@@ -175,7 +175,6 @@ const buildProfileForm = (patient) => ({
   riesgo: patient?.riesgo || 'sin riesgo',
   estado: patient?.estado || 'activo',
   motivo: patient?.motivo || '',
-  permiteCitasRecurrentes: Boolean(patient?.permiteCitasRecurrentes),
 });
 
 function ModalShell({ title, description, onClose, children }) {
@@ -493,7 +492,6 @@ export default function NotesScreen({
       riesgo: profileForm.riesgo,
       estado: profileForm.estado,
       motivo: profileForm.motivo.trim(),
-      permiteCitasRecurrentes: Boolean(profileForm.permiteCitasRecurrentes),
     });
     if (wasUpdated) {
       setShowProfileModal(false);
@@ -1661,20 +1659,6 @@ export default function NotesScreen({
                 className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
             </div>
-
-            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-              <input
-                type="checkbox"
-                checked={Boolean(profileForm.permiteCitasRecurrentes)}
-                onChange={(event) => setProfileForm((current) => ({ ...current, permiteCitasRecurrentes: event.target.checked }))}
-                disabled={isSavingPatientProfile}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <div>
-                <p className="text-sm font-semibold text-slate-800">Permitir citas recurrentes</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">Cuando esta opcion esta activa, el psicologo puede generar citas semanales futuras para este paciente desde el modal de agenda.</p>
-              </div>
-            </label>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button

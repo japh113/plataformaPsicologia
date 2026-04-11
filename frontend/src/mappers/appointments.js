@@ -92,6 +92,7 @@ export const mapBackendAppointmentToUiAppointment = (appointment) => ({
   fecha: appointment.scheduledDate,
   hora: toDisplayHour(appointment.scheduledTime),
   hora24: toInputTime(appointment.scheduledTime),
+  recurrenciaGrupoId: appointment.recurrenceGroupId || null,
   estado: backendToUiStatusMap[appointment.status] || 'pendiente',
   notas: appointment.notes || '',
   sesionRegistrada: Boolean(appointment.hasLinkedClinicalNote ?? appointment.hasLinkedSession),
