@@ -72,6 +72,21 @@ export default function NewPatientModal({ isOpen, onClose, form, onChange, onSub
             />
           </div>
 
+          <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <input
+              type="checkbox"
+              name="permiteCitasRecurrentes"
+              checked={Boolean(form.permiteCitasRecurrentes)}
+              onChange={onChange}
+              disabled={isSubmitting}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Permitir citas recurrentes</p>
+              <p className="mt-1 text-xs text-gray-500">Habilita que este paciente pueda agendar el mismo horario semanal por un periodo.</p>
+            </div>
+          </label>
+
           <div className="flex space-x-3 pt-2">
             <button
               type="button"

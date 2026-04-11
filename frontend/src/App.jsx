@@ -104,7 +104,7 @@ export default function App() {
   const [availabilityExceptions, setAvailabilityExceptions] = useState([]);
   const [reminders, setReminders] = useState([]);
   const [mostrarModalNuevoPaciente, setMostrarModalNuevoPaciente] = useState(false);
-  const [nuevoPacienteForm, setNuevoPacienteForm] = useState({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
+  const [nuevoPacienteForm, setNuevoPacienteForm] = useState({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo', permiteCitasRecurrentes: false });
   const [notasTemp, setNotasTemp] = useState('');
   const [cargandoDatos, setCargandoDatos] = useState(false);
   const [errorCarga, setErrorCarga] = useState('');
@@ -163,7 +163,7 @@ export default function App() {
     setGuardandoEntrevista(false);
     setProcesandoSesionId(null);
     setMostrarModalNuevoPaciente(false);
-    setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
+    setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo', permiteCitasRecurrentes: false });
   };
 
   const cargarDatos = useCallback(async () => {
@@ -345,7 +345,8 @@ export default function App() {
   };
 
   const handleInputChange = (e) => {
-    setNuevoPacienteForm({ ...nuevoPacienteForm, [e.target.name]: e.target.value });
+    const { name, type, checked, value } = e.target;
+    setNuevoPacienteForm({ ...nuevoPacienteForm, [name]: type === 'checkbox' ? checked : value });
   };
 
   const guardarNuevoPaciente = async (e) => {
@@ -368,7 +369,7 @@ export default function App() {
       );
 
       setPacientes((currentPatients) => [...currentPatients, mapBackendPatientToUiPatient(createdPatient)]);
-      setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
+      setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo', permiteCitasRecurrentes: false });
       setMostrarModalNuevoPaciente(false);
     } catch (error) {
       window.alert(error.message || 'No se pudo crear el paciente.');

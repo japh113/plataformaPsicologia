@@ -28,6 +28,13 @@ export const validatePatientPayload = (payload, { requireFirstName = false } = {
     errors.push('reasonForConsultation must be a string');
   }
 
+  if (
+    hasOwnProperty(payload, 'allowsRecurringAppointments')
+    && typeof payload.allowsRecurringAppointments !== 'boolean'
+  ) {
+    errors.push('allowsRecurringAppointments must be a boolean');
+  }
+
   if (payload.riskLevel && !['none', 'low', 'medium', 'high'].includes(payload.riskLevel)) {
     errors.push('riskLevel must be none, low, medium, or high');
   }

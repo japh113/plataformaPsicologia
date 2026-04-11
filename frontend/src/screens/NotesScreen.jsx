@@ -175,6 +175,7 @@ const buildProfileForm = (patient) => ({
   riesgo: patient?.riesgo || 'sin riesgo',
   estado: patient?.estado || 'activo',
   motivo: patient?.motivo || '',
+  permiteCitasRecurrentes: Boolean(patient?.permiteCitasRecurrentes),
 });
 
 function ModalShell({ title, description, onClose, children }) {
@@ -492,6 +493,7 @@ export default function NotesScreen({
       riesgo: profileForm.riesgo,
       estado: profileForm.estado,
       motivo: profileForm.motivo.trim(),
+      permiteCitasRecurrentes: Boolean(profileForm.permiteCitasRecurrentes),
     });
     if (wasUpdated) {
       setShowProfileModal(false);
@@ -716,23 +718,38 @@ export default function NotesScreen({
         ) : null}
       >
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              title="Ir al historial de agenda del paciente"
+              aria-label="Ir al historial de agenda del paciente"
+              onClick={() => {
+                setAgendaFilter('historial');
+                setActiveSection('agenda');
+              }}
+              className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-300 bg-slate-50 px-2 py-1 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-100 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-200"
+            >
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
                 {patientAppointments.length} cita(s)
               </span>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
                 {sessions.length} nota(s) clinica(s)
               </span>
-            </div>
-            <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2 py-1">
+            </button>
+            <button
+              type="button"
+              title="Ir a notas clinicas del paciente"
+              aria-label="Ir a notas clinicas del paciente"
+              onClick={() => setActiveSection('sesiones')}
+              className="inline-flex flex-wrap items-center gap-2 rounded-full border border-slate-300 bg-slate-50 px-2 py-1 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-400 hover:bg-slate-100 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-slate-200"
+            >
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
                 {patient.tareas?.length || 0} tarea(s) asignada(s)
               </span>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
                 {pendingTasks.length} por completar
               </span>
-            </div>
+            </button>
             <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${getRiskColor(patientRisk)}`}>
               Riesgo {patientRiskLabel}
             </span>
@@ -1644,6 +1661,20 @@ export default function NotesScreen({
                 className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm leading-6 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
             </div>
+
+            <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <input
+                type="checkbox"
+                checked={Boolean(profileForm.permiteCitasRecurrentes)}
+                onChange={(event) => setProfileForm((current) => ({ ...current, permiteCitasRecurrentes: event.target.checked }))}
+                disabled={isSavingPatientProfile}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Permitir citas recurrentes</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">Cuando esta opcion esta activa, el psicologo puede generar citas semanales futuras para este paciente desde el modal de agenda.</p>
+              </div>
+            </label>
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button

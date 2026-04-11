@@ -65,9 +65,34 @@ const parseTimeToMinutes = (value) => {
   return Number(hours) * 60 + Number(minutes);
 };
 
+const addDaysToDateString = (dateString, amount) => {
+  const [year = '0', month = '1', day = '1'] = String(dateString).split('-');
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  date.setDate(date.getDate() + amount);
+  return date.toISOString().slice(0, 10);
+};
+
+const buildRecurringDates = (startDate, endDate) => {
+  const dates = [];
+  let currentDate = addDaysToDateString(startDate, 7);
+
+  while (currentDate <= endDate) {
+    dates.push(currentDate);
+    currentDate = addDaysToDateString(currentDate, 7);
+  }
+
+  return dates;
+};
+
 const createScheduleConflictError = (message) => {
   const error = new Error(message);
   error.status = 409;
+  return error;
+};
+
+const createValidationError = (message) => {
+  const error = new Error(message);
+  error.status = 400;
   return error;
 };
 
@@ -166,6 +191,51 @@ const ensurePatientAccess = async (psychologistUserId, patientId) => {
   );
 
   return accessCheck.rowCount > 0;
+};
+
+const getPatientRecurringSettings = async (patientId) => {
+  const result = await db.query(
+    `
+      SELECT allows_recurring_appointments
+      FROM patients
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [patientId],
+  );
+
+  return {
+    allowsRecurringAppointments: Boolean(result.rows[0]?.allows_recurring_appointments),
+  };
+};
+
+const normalizeRecurrencePayload = (recurrence, scheduledDate, status, allowsRecurringAppointments) => {
+  if (!recurrence) {
+    return null;
+  }
+
+  if (!allowsRecurringAppointments) {
+    throw createScheduleConflictError('Este paciente no tiene habilitadas las citas recurrentes.');
+  }
+
+  if (status !== 'pending') {
+    throw createValidationError('Las citas recurrentes solo pueden generarse con estado pendiente.');
+  }
+
+  if (recurrence.endDate <= scheduledDate) {
+    throw createValidationError('La fecha fin de recurrencia debe ser posterior a la cita inicial.');
+  }
+
+  const recurringDates = buildRecurringDates(scheduledDate, recurrence.endDate);
+
+  if (recurringDates.length === 0) {
+    throw createValidationError('La recurrencia semanal necesita al menos una fecha futura dentro del rango.');
+  }
+
+  return {
+    endDate: recurrence.endDate,
+    dates: recurringDates,
+  };
 };
 
 const ensureAppointmentAvailability = async ({
@@ -327,6 +397,25 @@ export const getAppointmentById = async (id, actor) => {
   return result.rows[0] ? mapAppointmentRow(result.rows[0]) : null;
 };
 
+const insertAppointmentRow = async (client, { patientId, scheduledDate, scheduledTime, status, notes }) => {
+  const result = await client.query(
+    `
+      INSERT INTO appointments (
+        patient_id,
+        scheduled_date,
+        scheduled_time,
+        status,
+        notes
+      )
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id
+    `,
+    [patientId, scheduledDate, scheduledTime, status, notes || ''],
+  );
+
+  return result.rows[0]?.id;
+};
+
 export const createAppointment = async (payload, actor) => {
   ensurePsychologist(actor);
 
@@ -338,6 +427,14 @@ export const createAppointment = async (payload, actor) => {
   if (!hasPatientAccess) {
     return null;
   }
+
+  const patientSettings = await getPatientRecurringSettings(patientId);
+  const recurrence = normalizeRecurrencePayload(
+    payload.recurrence || null,
+    payload.scheduledDate,
+    nextStatus,
+    patientSettings.allowsRecurringAppointments,
+  );
 
   ensureAppointmentCompletionIsAllowed({
     scheduledDate: payload.scheduledDate,
@@ -358,40 +455,68 @@ export const createAppointment = async (payload, actor) => {
     status: nextStatus,
   });
 
-  const result = await db.query(
-    `
-      INSERT INTO appointments (
-        patient_id,
-        scheduled_date,
-        scheduled_time,
-        status,
-        notes
-      )
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING
-        id,
-        patient_id,
-        scheduled_date,
-        scheduled_time,
-        status,
-        notes
-    `,
-    [
+  if (recurrence) {
+    for (const recurringDate of recurrence.dates) {
+      await ensureAppointmentAvailability({
+        actor,
+        patientId,
+        scheduledDate: recurringDate,
+        scheduledTime,
+        status: nextStatus,
+      });
+      await ensureInsidePsychologistAvailability({
+        actor,
+        scheduledDate: recurringDate,
+        scheduledTime,
+        status: nextStatus,
+      });
+    }
+  }
+
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    const createdAppointmentId = await insertAppointmentRow(client, {
       patientId,
-      payload.scheduledDate,
+      scheduledDate: payload.scheduledDate,
       scheduledTime,
-      nextStatus,
-      payload.notes || '',
-    ],
-  );
+      status: nextStatus,
+      notes: payload.notes || '',
+    });
 
-  await fulfillWaitlistEntriesForAppointment({
-    patientId,
-    scheduledDate: payload.scheduledDate,
-    scheduledTime,
-  });
+    if (recurrence) {
+      for (const recurringDate of recurrence.dates) {
+        await insertAppointmentRow(client, {
+          patientId,
+          scheduledDate: recurringDate,
+          scheduledTime,
+          status: 'pending',
+          notes: payload.notes || '',
+        });
+      }
+    }
 
-  return getAppointmentById(result.rows[0].id, actor);
+    await client.query('COMMIT');
+
+    const fulfilledDates = [payload.scheduledDate, ...(recurrence?.dates || [])];
+
+    for (const scheduledDate of fulfilledDates) {
+      await fulfillWaitlistEntriesForAppointment({
+        patientId,
+        scheduledDate,
+        scheduledTime,
+      });
+    }
+
+    return getAppointmentById(createdAppointmentId, actor);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const updateAppointment = async (id, payload, actor) => {
@@ -413,6 +538,13 @@ export const updateAppointment = async (id, payload, actor) => {
   const nextScheduledDate = payload.scheduledDate || currentAppointment.scheduledDate;
   const nextScheduledTime = normalizeScheduledTime(payload.scheduledTime || currentAppointment.scheduledTime);
   const nextStatus = payload.status || currentAppointment.status;
+  const patientSettings = await getPatientRecurringSettings(nextPatientId);
+  const recurrence = normalizeRecurrencePayload(
+    payload.recurrence || null,
+    nextScheduledDate,
+    nextStatus,
+    patientSettings.allowsRecurringAppointments,
+  );
   const isChangingLinkedAppointmentSchedule =
     currentAppointment.hasLinkedClinicalNote && (
       nextPatientId !== currentAppointment.patientId
@@ -462,44 +594,91 @@ export const updateAppointment = async (id, payload, actor) => {
     });
   }
 
-  const result = await db.query(
-    `
-      UPDATE appointments
-      SET
-        patient_id = $2,
-        scheduled_date = $3,
-        scheduled_time = $4,
-        status = $5,
-        notes = $6,
-        updated_at = NOW()
-      WHERE id = $1
-      RETURNING
-        id,
-        patient_id,
-        scheduled_date,
-        scheduled_time,
-        status,
-        notes
-    `,
-    [
-      id,
-      nextPatientId,
-      nextScheduledDate,
-      nextScheduledTime,
-      nextStatus,
-      payload.notes ?? currentAppointment.notes,
-    ],
-  );
-
-  if (nextStatus !== 'cancelled') {
-    await fulfillWaitlistEntriesForAppointment({
-      patientId: nextPatientId,
-      scheduledDate: nextScheduledDate,
-      scheduledTime: nextScheduledTime,
-    });
+  if (recurrence) {
+    for (const recurringDate of recurrence.dates) {
+      await ensureAppointmentAvailability({
+        actor,
+        patientId: nextPatientId,
+        scheduledDate: recurringDate,
+        scheduledTime: nextScheduledTime,
+        status: nextStatus,
+      });
+      await ensureInsidePsychologistAvailability({
+        actor,
+        scheduledDate: recurringDate,
+        scheduledTime: nextScheduledTime,
+        status: nextStatus,
+      });
+    }
   }
 
-  return getAppointmentById(result.rows[0].id, actor);
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `
+        UPDATE appointments
+        SET
+          patient_id = $2,
+          scheduled_date = $3,
+          scheduled_time = $4,
+          status = $5,
+          notes = $6,
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING
+          id,
+          patient_id,
+          scheduled_date,
+          scheduled_time,
+          status,
+          notes
+      `,
+      [
+        id,
+        nextPatientId,
+        nextScheduledDate,
+        nextScheduledTime,
+        nextStatus,
+        payload.notes ?? currentAppointment.notes,
+      ],
+    );
+
+    if (recurrence) {
+      for (const recurringDate of recurrence.dates) {
+        await insertAppointmentRow(client, {
+          patientId: nextPatientId,
+          scheduledDate: recurringDate,
+          scheduledTime: nextScheduledTime,
+          status: 'pending',
+          notes: payload.notes ?? currentAppointment.notes,
+        });
+      }
+    }
+
+    await client.query('COMMIT');
+
+    if (nextStatus !== 'cancelled') {
+      const fulfilledDates = [nextScheduledDate, ...(recurrence?.dates || [])];
+
+      for (const scheduledDate of fulfilledDates) {
+        await fulfillWaitlistEntriesForAppointment({
+          patientId: nextPatientId,
+          scheduledDate,
+          scheduledTime: nextScheduledTime,
+        });
+      }
+    }
+
+    return getAppointmentById(result.rows[0].id, actor);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const deleteAppointment = async (id, actor) => {

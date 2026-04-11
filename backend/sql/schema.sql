@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS patients (
   notes TEXT NOT NULL DEFAULT '',
   age INTEGER CHECK (age IS NULL OR age >= 0),
   reason_for_consultation TEXT NOT NULL DEFAULT '',
+  allows_recurring_appointments BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -261,6 +262,9 @@ ALTER TABLE patient_clinical_notes
 
 ALTER TABLE patient_clinical_notes
   ADD COLUMN IF NOT EXISTS next_steps TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE patients
+  ADD COLUMN IF NOT EXISTS allows_recurring_appointments BOOLEAN NOT NULL DEFAULT FALSE;
 
 ALTER TABLE patients
   DROP CONSTRAINT IF EXISTS patients_risk_level_check;

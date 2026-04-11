@@ -47,6 +47,7 @@ const patientSelectColumns = `
   p.notes,
   p.age,
   p.reason_for_consultation,
+  p.allows_recurring_appointments,
   EXISTS (
     SELECT 1
     FROM patient_intakes pi
@@ -218,6 +219,7 @@ const mapPatientRow = (row) => ({
   notes: row.notes,
   age: row.age,
   reasonForConsultation: row.reason_for_consultation,
+  allowsRecurringAppointments: Boolean(row.allows_recurring_appointments),
   interviewCompleted: Boolean(row.interview_completed),
   interview: mapInterviewRow(row.interview),
   tasks: Array.isArray(row.tasks) ? row.tasks.map(mapTaskRow) : [],
@@ -532,9 +534,10 @@ export const createPatient = async (payload, actor) => {
           last_clinical_note_date,
           notes,
           age,
-          reason_for_consultation
+          reason_for_consultation,
+          allows_recurring_appointments
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       `,
       [
         patient.id,
@@ -549,6 +552,7 @@ export const createPatient = async (payload, actor) => {
         patient.notes,
         patient.age,
         patient.reasonForConsultation,
+        patient.allowsRecurringAppointments,
       ],
     );
 
@@ -601,6 +605,7 @@ export const updatePatient = async (id, payload, actor) => {
         notes = $10,
         age = $11,
         reason_for_consultation = $12,
+        allows_recurring_appointments = $13,
         updated_at = NOW()
       WHERE id = $1
     `,
@@ -617,6 +622,7 @@ export const updatePatient = async (id, payload, actor) => {
       updatedPatient.notes,
       updatedPatient.age,
       updatedPatient.reasonForConsultation,
+      updatedPatient.allowsRecurringAppointments,
     ],
   );
 

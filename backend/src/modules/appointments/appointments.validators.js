@@ -4,6 +4,17 @@ const isIsoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 const isTimeValue = (value) => /^\d{2}:\d{2}(:\d{2})?$/.test(value);
 const isHourSlotValue = (value) => /^\d{2}:00(:00)?$/.test(value);
 
+const validateRecurrencePayload = (recurrence, errors) => {
+  if (!recurrence || typeof recurrence !== 'object' || Array.isArray(recurrence)) {
+    errors.push('recurrence must be an object');
+    return;
+  }
+
+  if (!recurrence.endDate || !isIsoDate(recurrence.endDate)) {
+    errors.push('recurrence.endDate must be in YYYY-MM-DD format');
+  }
+};
+
 export const validateCreateAppointmentPayload = (payload) => {
   const errors = [];
 
@@ -21,6 +32,10 @@ export const validateCreateAppointmentPayload = (payload) => {
 
   if (payload.status && !validStatuses.includes(payload.status)) {
     errors.push('status must be pending, completed, or cancelled');
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'recurrence')) {
+    validateRecurrencePayload(payload.recurrence, errors);
   }
 
   return errors;
@@ -47,6 +62,10 @@ export const validateUpdateAppointmentPayload = (payload) => {
 
   if (Object.prototype.hasOwnProperty.call(payload, 'notes') && typeof payload.notes !== 'string') {
     errors.push('notes must be a string');
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'recurrence')) {
+    validateRecurrencePayload(payload.recurrence, errors);
   }
 
   return errors;

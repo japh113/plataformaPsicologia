@@ -10,7 +10,8 @@ INSERT INTO patients (
   last_clinical_note_date,
   notes,
   age,
-  reason_for_consultation
+  reason_for_consultation,
+  allows_recurring_appointments
 )
 VALUES
   (
@@ -25,7 +26,8 @@ VALUES
     '2026-04-05',
     'Paciente con seguimiento constante por ansiedad.',
     29,
-    'Ansiedad'
+    'Ansiedad',
+    TRUE
   ),
   (
     '2',
@@ -39,7 +41,8 @@ VALUES
     '2026-04-04',
     'Trabajando habitos de sueno y regulacion emocional.',
     34,
-    'Habitos de sueno'
+    'Habitos de sueno',
+    TRUE
   ),
   (
     '3',
@@ -53,7 +56,8 @@ VALUES
     NULL,
     'Seguimiento por manejo de estres laboral.',
     27,
-    'Estres laboral'
+    'Estres laboral',
+    TRUE
   ),
   (
     '4',
@@ -67,7 +71,8 @@ VALUES
     NULL,
     'Primer contacto para trabajar organizacion y procrastinacion.',
     31,
-    'Organizacion personal'
+    'Organizacion personal',
+    FALSE
   ),
   (
     '5',
@@ -81,9 +86,22 @@ VALUES
     NULL,
     'Caso nuevo con antecedente de crisis recientes.',
     24,
-    'Crisis de ansiedad'
-)
+    'Crisis de ansiedad',
+    FALSE
+  )
 ON CONFLICT (id) DO NOTHING;
+
+UPDATE patients
+SET allows_recurring_appointments = updates.allows_recurring_appointments
+FROM (
+  VALUES
+    ('1', TRUE),
+    ('2', TRUE),
+    ('3', TRUE),
+    ('4', FALSE),
+    ('5', FALSE)
+) AS updates(patient_id, allows_recurring_appointments)
+WHERE patients.id = updates.patient_id;
 
 INSERT INTO users (
   id,
