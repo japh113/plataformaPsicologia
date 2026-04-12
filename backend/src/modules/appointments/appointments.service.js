@@ -187,6 +187,16 @@ const ensureAppointmentCompletionIsAllowed = ({ scheduledDate, status }) => {
   }
 };
 
+const ensureRecurringDeletionIsAllowed = ({ recurrenceGroupId, linkedFutureClinicalNotesCount }) => {
+  if (!recurrenceGroupId) {
+    throw createValidationError('Esta cita no forma parte de una recurrencia.');
+  }
+
+  if (linkedFutureClinicalNotesCount > 0) {
+    throw createScheduleConflictError('No puedes eliminar futuras citas de esta recurrencia porque al menos una ya tiene nota clinica registrada.');
+  }
+};
+
 const ensureLinkedClinicalNoteUpdateIsAllowed = ({
   currentAppointment,
   nextPatientId,
@@ -271,6 +281,62 @@ const normalizeRecurrencePayload = (recurrence, scheduledDate, status) => {
     endDate: recurrence.endDate,
     dates: recurringDates,
   };
+};
+
+const ensureSlotFitsAvailability = ({ availability, scheduledTime, status }) => {
+  if (status === 'cancelled') {
+    return;
+  }
+
+  if (availability.source === 'exception' && availability.isUnavailable) {
+    const error = new Error('Ese dia esta marcado como no disponible en tu calendario.');
+    error.status = 409;
+    throw error;
+  }
+
+  if (availability.blocks.length === 0) {
+    const error = new Error(
+      availability.source === 'exception'
+        ? 'Ese dia tiene una excepcion sin horarios disponibles.'
+        : 'No tienes disponibilidad configurada para ese dia.',
+    );
+    error.status = 409;
+    throw error;
+  }
+
+  const startMinutes = parseTimeToMinutes(scheduledTime);
+  const endMinutes = startMinutes + 60;
+  const fitsInsideAnyBlock = availability.blocks.some((availabilityBlock) => {
+    const availabilityStart = parseTimeToMinutes(availabilityBlock.startTime);
+    const availabilityEnd = parseTimeToMinutes(availabilityBlock.endTime);
+    return startMinutes >= availabilityStart && endMinutes <= availabilityEnd;
+  });
+
+  if (!fitsInsideAnyBlock) {
+    const error = new Error('Ese horario queda fuera de tu disponibilidad configurada.');
+    error.status = 409;
+    throw error;
+  }
+};
+
+const ensureWaitlistCreationIsAllowed = ({
+  hasPatientSameDayConflict,
+  hasDuplicatedWaitlistEntry,
+  isOccupiedSlot,
+}) => {
+  if (hasPatientSameDayConflict) {
+    throw createScheduleConflictError(
+      'Este paciente ya tiene una cita activa ese dia. Cancela o reprograma esa cita antes de sumarlo a lista de espera.',
+    );
+  }
+
+  if (hasDuplicatedWaitlistEntry) {
+    throw createScheduleConflictError('Este paciente ya esta en lista de espera para ese horario.');
+  }
+
+  if (!isOccupiedSlot) {
+    throw createScheduleConflictError('Solo puedes agregar lista de espera sobre un horario que ya esta ocupado.');
+  }
 };
 
 const ensureAppointmentAvailability = async ({
@@ -361,36 +427,7 @@ const ensureInsidePsychologistAvailability = async ({ actor, scheduledDate, sche
     psychologistUserId: actor.id,
     date: scheduledDate,
   });
-
-  if (availability.source === 'exception' && availability.isUnavailable) {
-    const error = new Error('Ese dia esta marcado como no disponible en tu calendario.');
-    error.status = 409;
-    throw error;
-  }
-
-  if (availability.blocks.length === 0) {
-    const error = new Error(
-      availability.source === 'exception'
-        ? 'Ese dia tiene una excepcion sin horarios disponibles.'
-        : 'No tienes disponibilidad configurada para ese dia.',
-    );
-    error.status = 409;
-    throw error;
-  }
-
-  const startMinutes = parseTimeToMinutes(scheduledTime);
-  const endMinutes = startMinutes + 60;
-  const fitsInsideAnyBlock = availability.blocks.some((availabilityBlock) => {
-    const availabilityStart = parseTimeToMinutes(availabilityBlock.startTime);
-    const availabilityEnd = parseTimeToMinutes(availabilityBlock.endTime);
-    return startMinutes >= availabilityStart && endMinutes <= availabilityEnd;
-  });
-
-  if (!fitsInsideAnyBlock) {
-    const error = new Error('Ese horario queda fuera de tu disponibilidad configurada.');
-    error.status = 409;
-    throw error;
-  }
+  ensureSlotFitsAvailability({ availability, scheduledTime, status });
 };
 
 export const listAppointments = async ({ date = null, actor }) => {
@@ -739,10 +776,6 @@ export const deleteFutureRecurringAppointments = async (id, actor) => {
     return null;
   }
 
-  if (!appointment.recurrenceGroupId) {
-    throw createValidationError('Esta cita no forma parte de una recurrencia.');
-  }
-
   const linkedFutureClinicalNotes = await db.query(
     `
       SELECT a.id
@@ -759,9 +792,10 @@ export const deleteFutureRecurringAppointments = async (id, actor) => {
     [appointment.recurrenceGroupId, appointment.scheduledDate, id],
   );
 
-  if (linkedFutureClinicalNotes.rowCount > 0) {
-    throw createScheduleConflictError('No puedes eliminar futuras citas de esta recurrencia porque al menos una ya tiene nota clinica registrada.');
-  }
+  ensureRecurringDeletionIsAllowed({
+    recurrenceGroupId: appointment.recurrenceGroupId,
+    linkedFutureClinicalNotesCount: linkedFutureClinicalNotes.rowCount,
+  });
 
   const result = await db.query(
     `
@@ -833,12 +867,6 @@ export const createWaitlistEntry = async (payload, actor) => {
     [patientId, payload.scheduledDate],
   );
 
-  if (patientSameDayConflict.rowCount > 0) {
-    throw createScheduleConflictError(
-      'Este paciente ya tiene una cita activa ese dia. Cancela o reprograma esa cita antes de sumarlo a lista de espera.',
-    );
-  }
-
   const duplicatedWaitlistEntry = await db.query(
     `
       SELECT 1
@@ -851,10 +879,6 @@ export const createWaitlistEntry = async (payload, actor) => {
     `,
     [patientId, payload.scheduledDate, scheduledTime],
   );
-
-  if (duplicatedWaitlistEntry.rowCount > 0) {
-    throw createScheduleConflictError('Este paciente ya esta en lista de espera para ese horario.');
-  }
 
   const occupiedSlot = await db.query(
     `
@@ -870,10 +894,11 @@ export const createWaitlistEntry = async (payload, actor) => {
     `,
     [actor.id, payload.scheduledDate, scheduledTime],
   );
-
-  if (occupiedSlot.rowCount === 0) {
-    throw createScheduleConflictError('Solo puedes agregar lista de espera sobre un horario que ya esta ocupado.');
-  }
+  ensureWaitlistCreationIsAllowed({
+    hasPatientSameDayConflict: patientSameDayConflict.rowCount > 0,
+    hasDuplicatedWaitlistEntry: duplicatedWaitlistEntry.rowCount > 0,
+    isOccupiedSlot: occupiedSlot.rowCount > 0,
+  });
 
   const result = await db.query(
     `
@@ -1055,6 +1080,9 @@ export const __testables = {
   buildRecurringDates,
   ensureAppointmentCompletionIsAllowed,
   ensureLinkedClinicalNoteUpdateIsAllowed,
+  ensureRecurringDeletionIsAllowed,
+  ensureSlotFitsAvailability,
+  ensureWaitlistCreationIsAllowed,
   getTodayDateString,
   getWeekdayFromDateString,
   mapAppointmentRow,

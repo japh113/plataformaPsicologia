@@ -234,3 +234,150 @@ test('shouldValidateScheduleAvailability is true when changing a scheduled slot'
 
   assert.equal(result, true);
 });
+
+test('ensureRecurringDeletionIsAllowed rejects deleting future appointments outside a recurrence', () => {
+  assert.throws(
+    () => __testables.ensureRecurringDeletionIsAllowed({
+      recurrenceGroupId: null,
+      linkedFutureClinicalNotesCount: 0,
+    }),
+    {
+      message: 'Esta cita no forma parte de una recurrencia.',
+    },
+  );
+});
+
+test('ensureRecurringDeletionIsAllowed rejects deleting future appointments with linked clinical notes', () => {
+  assert.throws(
+    () => __testables.ensureRecurringDeletionIsAllowed({
+      recurrenceGroupId: 'series-1',
+      linkedFutureClinicalNotesCount: 1,
+    }),
+    {
+      message: 'No puedes eliminar futuras citas de esta recurrencia porque al menos una ya tiene nota clinica registrada.',
+    },
+  );
+});
+
+test('ensureRecurringDeletionIsAllowed allows deleting future appointments when the series is clean', () => {
+  assert.doesNotThrow(() =>
+    __testables.ensureRecurringDeletionIsAllowed({
+      recurrenceGroupId: 'series-1',
+      linkedFutureClinicalNotesCount: 0,
+    }),
+  );
+});
+
+test('ensureSlotFitsAvailability rejects dates explicitly blocked by exception', () => {
+  assert.throws(
+    () => __testables.ensureSlotFitsAvailability({
+      availability: {
+        source: 'exception',
+        isUnavailable: true,
+        blocks: [],
+      },
+      scheduledTime: '10:00:00',
+      status: 'pending',
+    }),
+    {
+      message: 'Ese dia esta marcado como no disponible en tu calendario.',
+    },
+  );
+});
+
+test('ensureSlotFitsAvailability rejects missing configured blocks on regular schedule', () => {
+  assert.throws(
+    () => __testables.ensureSlotFitsAvailability({
+      availability: {
+        source: 'weekly',
+        isUnavailable: false,
+        blocks: [],
+      },
+      scheduledTime: '10:00:00',
+      status: 'pending',
+    }),
+    {
+      message: 'No tienes disponibilidad configurada para ese dia.',
+    },
+  );
+});
+
+test('ensureSlotFitsAvailability rejects hour slots outside configured blocks', () => {
+  assert.throws(
+    () => __testables.ensureSlotFitsAvailability({
+      availability: {
+        source: 'weekly',
+        isUnavailable: false,
+        blocks: [{ startTime: '09:00:00', endTime: '12:00:00' }],
+      },
+      scheduledTime: '12:00:00',
+      status: 'pending',
+    }),
+    {
+      message: 'Ese horario queda fuera de tu disponibilidad configurada.',
+    },
+  );
+});
+
+test('ensureSlotFitsAvailability allows hour slots fully contained inside a configured block', () => {
+  assert.doesNotThrow(() =>
+    __testables.ensureSlotFitsAvailability({
+      availability: {
+        source: 'weekly',
+        isUnavailable: false,
+        blocks: [{ startTime: '09:00:00', endTime: '12:00:00' }],
+      },
+      scheduledTime: '11:00:00',
+      status: 'pending',
+    }),
+  );
+});
+
+test('ensureWaitlistCreationIsAllowed rejects patients with another active appointment that day', () => {
+  assert.throws(
+    () => __testables.ensureWaitlistCreationIsAllowed({
+      hasPatientSameDayConflict: true,
+      hasDuplicatedWaitlistEntry: false,
+      isOccupiedSlot: true,
+    }),
+    {
+      message: 'Este paciente ya tiene una cita activa ese dia. Cancela o reprograma esa cita antes de sumarlo a lista de espera.',
+    },
+  );
+});
+
+test('ensureWaitlistCreationIsAllowed rejects duplicate waitlist entries for the same slot', () => {
+  assert.throws(
+    () => __testables.ensureWaitlistCreationIsAllowed({
+      hasPatientSameDayConflict: false,
+      hasDuplicatedWaitlistEntry: true,
+      isOccupiedSlot: true,
+    }),
+    {
+      message: 'Este paciente ya esta en lista de espera para ese horario.',
+    },
+  );
+});
+
+test('ensureWaitlistCreationIsAllowed rejects waitlist entries on free slots', () => {
+  assert.throws(
+    () => __testables.ensureWaitlistCreationIsAllowed({
+      hasPatientSameDayConflict: false,
+      hasDuplicatedWaitlistEntry: false,
+      isOccupiedSlot: false,
+    }),
+    {
+      message: 'Solo puedes agregar lista de espera sobre un horario que ya esta ocupado.',
+    },
+  );
+});
+
+test('ensureWaitlistCreationIsAllowed accepts a clean occupied slot', () => {
+  assert.doesNotThrow(() =>
+    __testables.ensureWaitlistCreationIsAllowed({
+      hasPatientSameDayConflict: false,
+      hasDuplicatedWaitlistEntry: false,
+      isOccupiedSlot: true,
+    }),
+  );
+});
