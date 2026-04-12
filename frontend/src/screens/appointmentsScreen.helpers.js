@@ -26,7 +26,7 @@ export {
   shiftDateByMonths,
 };
 
-export const emptyForm = { pacienteId: '', fecha: '', hora24: '', estado: 'pendiente', notas: '', recurrenciaActiva: false, recurrenciaHasta: '' };
+export const emptyForm = { pacienteId: '', fecha: '', hora24: '', estado: 'pendiente', notas: '', recurrenciaActiva: false, recurrenciaHasta: '', recurrenceEditScope: 'single' };
 export const emptyWaitlistForm = { pacienteId: '', fecha: '', hora24: '', notas: '' };
 export const weekdayLabels = ['Domingo', 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado'];
 export const exceptionDateFormatter = new Intl.DateTimeFormat('es-MX', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });

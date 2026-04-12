@@ -350,10 +350,20 @@ const ensureAppointmentAvailability = async ({
   scheduledTime,
   status,
   excludeAppointmentId = null,
+  excludeAppointmentIds = [],
 }) => {
   if (['cancelled', 'no_show'].includes(status)) {
     return;
   }
+
+  const excludedIds = [
+    ...new Set(
+      [
+        ...excludeAppointmentIds.map((appointmentId) => Number(appointmentId)).filter((appointmentId) => Number.isFinite(appointmentId)),
+        ...(excludeAppointmentId ? [Number(excludeAppointmentId)] : []),
+      ],
+    ),
+  ];
 
   const patientSameDayConflict = await db.query(
     `
@@ -362,11 +372,11 @@ const ensureAppointmentAvailability = async ({
       WHERE patient_id = $1
         AND scheduled_date = $2
         AND status IN ('pending', 'completed')
-        AND ($3::bigint IS NULL OR id <> $3)
+        AND ($3::bigint[] IS NULL OR NOT (id = ANY($3)))
       ORDER BY scheduled_time ASC
       LIMIT 1
     `,
-    [patientId, scheduledDate, excludeAppointmentId],
+    [patientId, scheduledDate, excludedIds.length > 0 ? excludedIds : null],
   );
 
   if (patientSameDayConflict.rowCount > 0) {
@@ -387,10 +397,10 @@ const ensureAppointmentAvailability = async ({
           OVERLAPS
           ($2::date + $3::time, $2::date + $3::time + INTERVAL '1 hour')
         )
-        AND ($4::bigint IS NULL OR id <> $4)
+        AND ($4::bigint[] IS NULL OR NOT (id = ANY($4)))
       LIMIT 1
     `,
-    [patientId, scheduledDate, scheduledTime, excludeAppointmentId],
+    [patientId, scheduledDate, scheduledTime, excludedIds.length > 0 ? excludedIds : null],
   );
 
   if (patientConflict.rowCount > 0) {
@@ -411,10 +421,10 @@ const ensureAppointmentAvailability = async ({
           OVERLAPS
           ($2::date + $3::time, $2::date + $3::time + INTERVAL '1 hour')
         )
-        AND ($4::bigint IS NULL OR a.id <> $4)
+        AND ($4::bigint[] IS NULL OR NOT (a.id = ANY($4)))
       LIMIT 1
     `,
-    [actor.id, scheduledDate, scheduledTime, excludeAppointmentId],
+    [actor.id, scheduledDate, scheduledTime, excludedIds.length > 0 ? excludedIds : null],
   );
 
   if (psychologistConflict.rowCount > 0) {
@@ -491,6 +501,188 @@ const insertAppointmentRow = async (client, { patientId, scheduledDate, schedule
   );
 
   return result.rows[0]?.id;
+};
+
+const listRecurringAppointmentsFromCurrent = async ({ recurrenceGroupId, scheduledDate, appointmentId, actor }) => {
+  const result = await db.query(
+    `
+      SELECT
+        a.id,
+        a.patient_id,
+        a.scheduled_date,
+        a.scheduled_time,
+        a.recurrence_group_id,
+        a.status,
+        a.notes,
+        EXISTS (
+          SELECT 1
+          FROM patient_clinical_notes pcn
+          WHERE pcn.appointment_id = a.id
+        ) AS has_linked_clinical_note
+      FROM appointments a
+      INNER JOIN psychologist_patient_access spa
+        ON spa.patient_id = a.patient_id
+      WHERE spa.psychologist_user_id = $1
+        AND a.recurrence_group_id = $2
+        AND (
+          a.scheduled_date > $3
+          OR (a.scheduled_date = $3 AND a.id >= $4)
+        )
+      ORDER BY a.scheduled_date ASC, a.id ASC
+    `,
+    [actor.id, recurrenceGroupId, scheduledDate, appointmentId],
+  );
+
+  return result.rows.map(mapAppointmentRow);
+};
+
+const buildRecurringAppointmentFutureTargets = ({
+  recurringAppointments,
+  payload,
+}) => {
+  const anchorAppointment = recurringAppointments[0];
+  const anchorScheduledDate = payload.scheduledDate || anchorAppointment.scheduledDate;
+  const nextPatientId = payload.patientId?.trim() || anchorAppointment.patientId;
+
+  return recurringAppointments.map((appointment, index) => ({
+    currentAppointment: appointment,
+    nextPatientId,
+    nextScheduledDate: Object.prototype.hasOwnProperty.call(payload, 'scheduledDate')
+      ? addDaysToDateString(anchorScheduledDate, index * 7)
+      : appointment.scheduledDate,
+    nextScheduledTime: normalizeScheduledTime(payload.scheduledTime || appointment.scheduledTime),
+    nextStatus: payload.status || appointment.status,
+    nextNotes: payload.notes ?? appointment.notes,
+  }));
+};
+
+const updateFutureRecurringAppointments = async (id, payload, actor) => {
+  ensurePsychologist(actor);
+
+  const currentAppointment = await getAppointmentById(id, actor);
+
+  if (!currentAppointment) {
+    return null;
+  }
+
+  if (!currentAppointment.recurrenceGroupId) {
+    throw createValidationError('Esta cita no forma parte de una recurrencia.');
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'patientId') && payload.patientId?.trim() && payload.patientId.trim() !== currentAppointment.patientId) {
+    throw createValidationError('No puedes cambiar el paciente en esta y futuras. Edita solo esta cita si necesitas hacerlo.');
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'recurrence') && payload.recurrence) {
+    throw createValidationError('No puedes redefinir la recurrencia desde esta y futuras.');
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'scheduledDate') && payload.scheduledDate < currentAppointment.scheduledDate) {
+    throw createValidationError('La nueva fecha de esta y futuras no puede ser anterior a la cita actual.');
+  }
+
+  const recurringAppointments = await listRecurringAppointmentsFromCurrent({
+    recurrenceGroupId: currentAppointment.recurrenceGroupId,
+    scheduledDate: currentAppointment.scheduledDate,
+    appointmentId: Number(id),
+    actor,
+  });
+
+  const targets = buildRecurringAppointmentFutureTargets({
+    recurringAppointments,
+    payload,
+  });
+
+  const affectedAppointmentIds = targets.map(({ currentAppointment: appointment }) => Number(appointment.id));
+
+  for (const target of targets) {
+    ensureLinkedClinicalNoteUpdateIsAllowed({
+      currentAppointment: target.currentAppointment,
+      nextPatientId: target.nextPatientId,
+      nextScheduledDate: target.nextScheduledDate,
+      nextScheduledTime: target.nextScheduledTime,
+      nextStatus: target.nextStatus,
+    });
+
+    ensureAppointmentCompletionIsAllowed({
+      scheduledDate: target.nextScheduledDate,
+      status: target.nextStatus,
+    });
+
+    const shouldValidateAvailability = shouldValidateScheduleAvailability({
+      currentAppointment: target.currentAppointment,
+      nextPatientId: target.nextPatientId,
+      nextScheduledDate: target.nextScheduledDate,
+      nextScheduledTime: target.nextScheduledTime,
+      nextStatus: target.nextStatus,
+    });
+
+    if (shouldValidateAvailability) {
+      await ensureAppointmentAvailability({
+        actor,
+        patientId: target.nextPatientId,
+        scheduledDate: target.nextScheduledDate,
+        scheduledTime: target.nextScheduledTime,
+        status: target.nextStatus,
+        excludeAppointmentIds: affectedAppointmentIds,
+      });
+      await ensureInsidePsychologistAvailability({
+        actor,
+        scheduledDate: target.nextScheduledDate,
+        scheduledTime: target.nextScheduledTime,
+        status: target.nextStatus,
+      });
+    }
+  }
+
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    for (const target of targets) {
+      await client.query(
+        `
+          UPDATE appointments
+          SET
+            patient_id = $2,
+            scheduled_date = $3,
+            scheduled_time = $4,
+            status = $5,
+            notes = $6,
+            updated_at = NOW()
+          WHERE id = $1
+        `,
+        [
+          target.currentAppointment.id,
+          target.nextPatientId,
+          target.nextScheduledDate,
+          target.nextScheduledTime,
+          target.nextStatus,
+          target.nextNotes,
+        ],
+      );
+    }
+
+    await client.query('COMMIT');
+
+    if (targets.some((target) => target.nextStatus !== 'cancelled' && target.nextStatus !== 'no_show')) {
+      for (const target of targets.filter((entry) => entry.nextStatus !== 'cancelled' && entry.nextStatus !== 'no_show')) {
+        await fulfillWaitlistEntriesForAppointment({
+          patientId: target.nextPatientId,
+          scheduledDate: target.nextScheduledDate,
+          scheduledTime: target.nextScheduledTime,
+        });
+      }
+    }
+
+    return getAppointmentById(id, actor);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const createAppointment = async (payload, actor) => {
@@ -611,6 +803,10 @@ export const updateAppointment = async (id, payload, actor) => {
 
   if (!hasPatientAccess) {
     return null;
+  }
+
+  if (payload.recurrenceEditScope === 'future') {
+    return updateFutureRecurringAppointments(id, payload, actor);
   }
 
   const nextScheduledDate = payload.scheduledDate || currentAppointment.scheduledDate;
@@ -1081,6 +1277,7 @@ export const reorderWaitlistEntries = async (payload, actor) => {
 
 export const __testables = {
   addDaysToDateString,
+  buildRecurringAppointmentFutureTargets,
   buildRecurringDates,
   ensureAppointmentCompletionIsAllowed,
   ensureLinkedClinicalNoteUpdateIsAllowed,

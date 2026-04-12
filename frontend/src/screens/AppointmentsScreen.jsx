@@ -469,6 +469,7 @@ export default function AppointmentsScreen({
       notas: '',
       recurrenciaActiva: false,
       recurrenciaHasta: '',
+      recurrenceEditScope: 'single',
     });
     setIsAppointmentModalOpen(true);
   };
@@ -483,6 +484,7 @@ export default function AppointmentsScreen({
       notas: appointment.notas || '',
       recurrenciaActiva: false,
       recurrenciaHasta: '',
+      recurrenceEditScope: 'single',
     });
     setSelectedDate(appointment.fecha);
     setCalendarAnchorDate(appointment.fecha);
@@ -538,6 +540,7 @@ export default function AppointmentsScreen({
       notas: form.notas,
       recurrenciaActiva: form.recurrenciaActiva,
       recurrenciaHasta: form.recurrenciaHasta,
+      recurrenceEditScope: form.recurrenceEditScope || 'single',
     };
     const wasSaved = editingAppointmentId ? await onUpdateAppointment(editingAppointmentId, payload) : await onCreateAppointment(payload);
     if (wasSaved) {
@@ -1731,7 +1734,30 @@ export default function AppointmentsScreen({
                     Genera automaticamente este mismo horario cada semana hasta la fecha que elijas.
                   </p>
                   {isEditingRecurringAppointment && (
-                    <p className="mt-2 text-xs text-slate-500">Esta cita ya forma parte de una recurrencia. Puedes cortarla con la opcion de eliminar esta y futuras.</p>
+                    <>
+                      <p className="mt-2 text-xs text-slate-500">Esta cita ya forma parte de una recurrencia. Elige si quieres aplicar los cambios solo aqui o desde esta cita hacia adelante.</p>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() => setForm((current) => ({ ...current, recurrenceEditScope: 'single' }))}
+                          className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${form.recurrenceEditScope !== 'future' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                        >
+                          Solo esta cita
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setForm((current) => ({ ...current, recurrenceEditScope: 'future' }))}
+                          className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${form.recurrenceEditScope === 'future' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}
+                        >
+                          Esta y futuras
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {form.recurrenceEditScope === 'future'
+                          ? 'Los cambios se aplicaran desde esta cita hacia adelante dentro de la misma serie.'
+                          : 'Los cambios se aplicaran solo a esta cita y la serie seguira igual.'}
+                      </p>
+                    </>
                   )}
                   {!isEditingRecurringAppointment && form.estado !== 'pendiente' && (
                     <p className="mt-2 text-xs text-slate-500">La recurrencia solo se puede usar con citas en estado pendiente.</p>
@@ -1771,9 +1797,14 @@ export default function AppointmentsScreen({
             </div>
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               {editingAppointment && editingAppointment.recurrenciaGrupoId && (
-                <button type="button" onClick={() => handleDeleteFutureRecurrence(editingAppointment)} disabled={isSavingAppointment || processingAppointmentId === editingAppointment.id} className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
-                  {processingAppointmentId === editingAppointment.id ? 'Eliminando...' : 'Eliminar esta y futuras'}
-                </button>
+                <>
+                  <button type="button" onClick={() => handleDelete(editingAppointment.id)} disabled={isSavingAppointment || processingAppointmentId === editingAppointment.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed">
+                    {processingAppointmentId === editingAppointment.id ? 'Eliminando...' : 'Eliminar solo esta'}
+                  </button>
+                  <button type="button" onClick={() => handleDeleteFutureRecurrence(editingAppointment)} disabled={isSavingAppointment || processingAppointmentId === editingAppointment.id} className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
+                    {processingAppointmentId === editingAppointment.id ? 'Eliminando...' : 'Eliminar esta y futuras'}
+                  </button>
+                </>
               )}
               <button type="button" onClick={closeAppointmentModal} className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50">Cancelar</button>
               <button type="submit" disabled={isSavingAppointment || patients.length === 0 || hasSameDayPatientConflict || (form.recurrenciaActiva && !form.recurrenciaHasta)} className="rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed">{isSavingAppointment ? 'Guardando...' : editingAppointmentId ? 'Guardar cambios' : 'Crear cita'}</button>

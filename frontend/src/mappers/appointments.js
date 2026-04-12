@@ -107,6 +107,7 @@ export const mapUiAppointmentToBackendAppointment = (appointment) => ({
   scheduledTime: appointment.hora24,
   status: uiToBackendStatusMap[appointment.estado] || 'pending',
   notes: appointment.notas || '',
+  recurrenceEditScope: appointment.recurrenceEditScope || 'single',
   recurrence: appointment.recurrenciaActiva && appointment.recurrenciaHasta
     ? {
       endDate: appointment.recurrenciaHasta,

@@ -1,4 +1,5 @@
 const validStatuses = ['pending', 'completed', 'cancelled', 'no_show'];
+const validRecurrenceEditScopes = ['single', 'future'];
 
 const isIsoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 const isTimeValue = (value) => /^\d{2}:\d{2}(:\d{2})?$/.test(value);
@@ -43,6 +44,10 @@ export const validateCreateAppointmentPayload = (payload) => {
 
 export const validateUpdateAppointmentPayload = (payload) => {
   const errors = [];
+
+  if (Object.prototype.hasOwnProperty.call(payload || {}, 'recurrenceEditScope') && !validRecurrenceEditScopes.includes(payload.recurrenceEditScope)) {
+    errors.push('recurrenceEditScope must be single or future');
+  }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'patientId') && !payload.patientId?.trim()) {
     errors.push('patientId must be a non-empty string');

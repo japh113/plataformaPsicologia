@@ -110,6 +110,14 @@ test('validateUpdateAppointmentPayload accepts no_show as an appointment status'
   assert.deepEqual(errors, []);
 });
 
+test('validateUpdateAppointmentPayload validates recurrence edit scope', () => {
+  const errors = validateUpdateAppointmentPayload({
+    recurrenceEditScope: 'all',
+  });
+
+  assert.deepEqual(errors, ['recurrenceEditScope must be single or future']);
+});
+
 test('validateReorderWaitlistEntriesPayload requires a non-empty list of ids', () => {
   const errors = validateReorderWaitlistEntriesPayload({
     scheduledDate: '2026-04-15',
@@ -284,6 +292,37 @@ test('ensureRecurringDeletionIsAllowed allows deleting future appointments when 
       recurrenceGroupId: 'series-1',
       linkedFutureClinicalNotesCount: 0,
     }),
+  );
+});
+
+test('buildRecurringAppointmentFutureTargets shifts future series from the edited anchor date', () => {
+  const targets = __testables.buildRecurringAppointmentFutureTargets({
+    recurringAppointments: [
+      { id: '1', patientId: 'p1', scheduledDate: '2026-04-16', scheduledTime: '10:00:00', status: 'pending', notes: '' },
+      { id: '2', patientId: 'p1', scheduledDate: '2026-04-23', scheduledTime: '10:00:00', status: 'pending', notes: '' },
+      { id: '3', patientId: 'p1', scheduledDate: '2026-04-30', scheduledTime: '10:00:00', status: 'pending', notes: '' },
+    ],
+    payload: {
+      scheduledDate: '2026-04-17',
+      scheduledTime: '11:00',
+      status: 'pending',
+      notes: 'Nuevo horario',
+    },
+  });
+
+  assert.deepEqual(
+    targets.map((target) => ({
+      id: target.currentAppointment.id,
+      nextScheduledDate: target.nextScheduledDate,
+      nextScheduledTime: target.nextScheduledTime,
+      nextStatus: target.nextStatus,
+      nextNotes: target.nextNotes,
+    })),
+    [
+      { id: '1', nextScheduledDate: '2026-04-17', nextScheduledTime: '11:00:00', nextStatus: 'pending', nextNotes: 'Nuevo horario' },
+      { id: '2', nextScheduledDate: '2026-04-24', nextScheduledTime: '11:00:00', nextStatus: 'pending', nextNotes: 'Nuevo horario' },
+      { id: '3', nextScheduledDate: '2026-05-01', nextScheduledTime: '11:00:00', nextStatus: 'pending', nextNotes: 'Nuevo horario' },
+    ],
   );
 });
 
