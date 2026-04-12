@@ -100,3 +100,137 @@ test('validateReorderWaitlistEntriesPayload requires a non-empty list of ids', (
 
   assert.deepEqual(errors, ['entryIds must be a non-empty array']);
 });
+
+test('mapAppointmentRow forces completed status when a linked clinical note exists', () => {
+  const appointment = __testables.mapAppointmentRow({
+    id: 12,
+    patient_id: 4,
+    scheduled_date: '2026-04-15',
+    scheduled_time: '10:00:00',
+    recurrence_group_id: 'series-1',
+    status: 'pending',
+    notes: '',
+    has_linked_clinical_note: true,
+    waitlist_count: 2,
+  });
+
+  assert.deepEqual(appointment, {
+    id: '12',
+    patientId: '4',
+    scheduledDate: '2026-04-15',
+    scheduledTime: '10:00:00',
+    recurrenceGroupId: 'series-1',
+    status: 'completed',
+    notes: '',
+    hasLinkedClinicalNote: true,
+    waitlistCount: 2,
+  });
+});
+
+test('ensureLinkedClinicalNoteUpdateIsAllowed rejects downgrading a linked appointment status', () => {
+  assert.throws(
+    () => __testables.ensureLinkedClinicalNoteUpdateIsAllowed({
+      currentAppointment: {
+        patientId: '5',
+        scheduledDate: '2026-04-15',
+        scheduledTime: '10:00:00',
+        hasLinkedClinicalNote: true,
+      },
+      nextPatientId: '5',
+      nextScheduledDate: '2026-04-15',
+      nextScheduledTime: '10:00:00',
+      nextStatus: 'cancelled',
+    }),
+    {
+      message: 'No puedes marcar como pendiente o cancelada una cita que ya tiene una nota clinica registrada.',
+    },
+  );
+});
+
+test('ensureLinkedClinicalNoteUpdateIsAllowed rejects rescheduling a linked appointment', () => {
+  assert.throws(
+    () => __testables.ensureLinkedClinicalNoteUpdateIsAllowed({
+      currentAppointment: {
+        patientId: '5',
+        scheduledDate: '2026-04-15',
+        scheduledTime: '10:00:00',
+        hasLinkedClinicalNote: true,
+      },
+      nextPatientId: '5',
+      nextScheduledDate: '2026-04-22',
+      nextScheduledTime: '10:00:00',
+      nextStatus: 'completed',
+    }),
+    {
+      message: 'No puedes reprogramar una cita que ya tiene una nota clinica registrada.',
+    },
+  );
+});
+
+test('ensureLinkedClinicalNoteUpdateIsAllowed allows keeping a linked appointment intact', () => {
+  assert.doesNotThrow(() =>
+    __testables.ensureLinkedClinicalNoteUpdateIsAllowed({
+      currentAppointment: {
+        patientId: '5',
+        scheduledDate: '2026-04-15',
+        scheduledTime: '10:00:00',
+        hasLinkedClinicalNote: true,
+      },
+      nextPatientId: '5',
+      nextScheduledDate: '2026-04-15',
+      nextScheduledTime: '10:00:00',
+      nextStatus: 'completed',
+    }),
+  );
+});
+
+test('shouldValidateScheduleAvailability is false for status-only updates on active appointments', () => {
+  const result = __testables.shouldValidateScheduleAvailability({
+    currentAppointment: {
+      patientId: '5',
+      scheduledDate: '2026-04-15',
+      scheduledTime: '10:00:00',
+      status: 'pending',
+    },
+    nextPatientId: '5',
+    nextScheduledDate: '2026-04-15',
+    nextScheduledTime: '10:00:00',
+    nextStatus: 'completed',
+  });
+
+  assert.equal(result, false);
+});
+
+test('shouldValidateScheduleAvailability is true when reactivating a cancelled appointment', () => {
+  const result = __testables.shouldValidateScheduleAvailability({
+    currentAppointment: {
+      patientId: '5',
+      scheduledDate: '2026-04-15',
+      scheduledTime: '10:00:00',
+      status: 'cancelled',
+    },
+    nextPatientId: '5',
+    nextScheduledDate: '2026-04-15',
+    nextScheduledTime: '10:00:00',
+    nextStatus: 'pending',
+  });
+
+  assert.equal(result, true);
+});
+
+test('shouldValidateScheduleAvailability is true when changing a scheduled slot', () => {
+  const result = __testables.shouldValidateScheduleAvailability({
+    currentAppointment: {
+      patientId: '5',
+      scheduledDate: '2026-04-15',
+      scheduledTime: '10:00:00',
+      status: 'pending',
+    },
+    nextPatientId: '5',
+    nextScheduledDate: '2026-04-22',
+    nextScheduledTime: '10:00:00',
+    nextStatus: 'pending',
+  });
+
+  assert.equal(result, true);
+});

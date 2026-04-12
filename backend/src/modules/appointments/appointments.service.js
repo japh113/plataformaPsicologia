@@ -187,6 +187,49 @@ const ensureAppointmentCompletionIsAllowed = ({ scheduledDate, status }) => {
   }
 };
 
+const ensureLinkedClinicalNoteUpdateIsAllowed = ({
+  currentAppointment,
+  nextPatientId,
+  nextScheduledDate,
+  nextScheduledTime,
+  nextStatus,
+}) => {
+  const normalizedCurrentTime = normalizeScheduledTime(currentAppointment.scheduledTime);
+  const isChangingLinkedAppointmentSchedule =
+    currentAppointment.hasLinkedClinicalNote && (
+      nextPatientId !== currentAppointment.patientId
+      || nextScheduledDate !== currentAppointment.scheduledDate
+      || nextScheduledTime !== normalizedCurrentTime
+    );
+
+  if (currentAppointment.hasLinkedClinicalNote && nextStatus !== 'completed') {
+    const error = new Error('No puedes marcar como pendiente o cancelada una cita que ya tiene una nota clinica registrada.');
+    error.status = 409;
+    throw error;
+  }
+
+  if (isChangingLinkedAppointmentSchedule) {
+    const error = new Error('No puedes reprogramar una cita que ya tiene una nota clinica registrada.');
+    error.status = 409;
+    throw error;
+  }
+};
+
+const shouldValidateScheduleAvailability = ({
+  currentAppointment,
+  nextPatientId,
+  nextScheduledDate,
+  nextScheduledTime,
+  nextStatus,
+}) => (
+  nextStatus !== 'cancelled' && (
+    currentAppointment.status === 'cancelled'
+    || nextPatientId !== currentAppointment.patientId
+    || nextScheduledDate !== currentAppointment.scheduledDate
+    || nextScheduledTime !== normalizeScheduledTime(currentAppointment.scheduledTime)
+  )
+);
+
 const ensurePatientAccess = async (psychologistUserId, patientId) => {
   const accessCheck = await db.query(
     `
@@ -537,32 +580,21 @@ export const updateAppointment = async (id, payload, actor) => {
     nextScheduledDate,
     nextStatus,
   );
-  const isChangingLinkedAppointmentSchedule =
-    currentAppointment.hasLinkedClinicalNote && (
-      nextPatientId !== currentAppointment.patientId
-      || nextScheduledDate !== currentAppointment.scheduledDate
-      || nextScheduledTime !== normalizeScheduledTime(currentAppointment.scheduledTime)
-    );
+  ensureLinkedClinicalNoteUpdateIsAllowed({
+    currentAppointment,
+    nextPatientId,
+    nextScheduledDate,
+    nextScheduledTime,
+    nextStatus,
+  });
 
-  if (currentAppointment.hasLinkedClinicalNote && nextStatus !== 'completed') {
-    const error = new Error('No puedes marcar como pendiente o cancelada una cita que ya tiene una nota clinica registrada.');
-    error.status = 409;
-    throw error;
-  }
-
-  if (isChangingLinkedAppointmentSchedule) {
-    const error = new Error('No puedes reprogramar una cita que ya tiene una nota clinica registrada.');
-    error.status = 409;
-    throw error;
-  }
-
-  const shouldValidateScheduleAvailability =
-    nextStatus !== 'cancelled' && (
-      currentAppointment.status === 'cancelled'
-      || nextPatientId !== currentAppointment.patientId
-      || nextScheduledDate !== currentAppointment.scheduledDate
-      || nextScheduledTime !== normalizeScheduledTime(currentAppointment.scheduledTime)
-    );
+  const shouldValidateAvailability = shouldValidateScheduleAvailability({
+    currentAppointment,
+    nextPatientId,
+    nextScheduledDate,
+    nextScheduledTime,
+    nextStatus,
+  });
   const isExistingRecurringAppointment = Boolean(currentAppointment.recurrenceGroupId);
 
   ensureAppointmentCompletionIsAllowed({
@@ -574,7 +606,7 @@ export const updateAppointment = async (id, payload, actor) => {
     throw createValidationError('Para esta cita ya recurrente, usa la opcion de eliminar futuras si quieres cortar la serie.');
   }
 
-  if (shouldValidateScheduleAvailability) {
+  if (shouldValidateAvailability) {
     await ensureAppointmentAvailability({
       actor,
       patientId: nextPatientId,
@@ -1022,9 +1054,12 @@ export const __testables = {
   addDaysToDateString,
   buildRecurringDates,
   ensureAppointmentCompletionIsAllowed,
+  ensureLinkedClinicalNoteUpdateIsAllowed,
   getTodayDateString,
   getWeekdayFromDateString,
+  mapAppointmentRow,
   normalizeRecurrencePayload,
   normalizeScheduledTime,
   parseTimeToMinutes,
+  shouldValidateScheduleAvailability,
 };
