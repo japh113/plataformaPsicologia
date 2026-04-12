@@ -509,6 +509,14 @@ const ensureAppointmentEligibleForClinicalNote = (appointment) => {
   }
 };
 
+export const __testables = {
+  ensureAppointmentEligibleForClinicalNote,
+  getTodayDateString,
+  mapClinicalNoteRow,
+  mapTaskRow,
+  normalizeClinicalNoteTaskPayloads,
+};
+
 export const createPatient = async (payload, actor) => {
   ensurePsychologist(actor);
 

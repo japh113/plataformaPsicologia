@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "node test/appointments.logic.test.js",
+    "test": "node test/appointments.logic.test.js && node test/clinical-notes.logic.test.js",
     "db:schema": "node scripts/run-sql-file.js sql/schema.sql",
     "db:seed": "node scripts/run-sql-file.js sql/seed.sql",
     "db:init": "npm run db:schema && npm run db:seed",
