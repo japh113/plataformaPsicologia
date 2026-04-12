@@ -509,9 +509,17 @@ const ensureAppointmentEligibleForClinicalNote = (appointment) => {
   }
 };
 
+const ensurePatientInterviewWriteIsAllowed = ({ actor, currentInterview }) => {
+  if (isPatient(actor) && currentInterview) {
+    throw createForbiddenError('La entrevista ya fue completada y no puede ser editada por el paciente.');
+  }
+};
+
 export const __testables = {
   ensureAppointmentEligibleForClinicalNote,
+  ensurePatientInterviewWriteIsAllowed,
   getTodayDateString,
+  mapInterviewRow,
   mapClinicalNoteRow,
   mapTaskRow,
   normalizeClinicalNoteTaskPayloads,
@@ -652,10 +660,7 @@ export const upsertPatientInterview = async (patientId, payload, actor) => {
   }
 
   const currentInterview = await getPatientInterviewById(patientId);
-
-  if (isPatient(actor) && currentInterview) {
-    throw createForbiddenError('La entrevista ya fue completada y no puede ser editada por el paciente.');
-  }
+  ensurePatientInterviewWriteIsAllowed({ actor, currentInterview });
 
   const interview = buildPatientInterviewEntity(payload);
 
