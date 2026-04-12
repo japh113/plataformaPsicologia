@@ -1017,3 +1017,14 @@ export const reorderWaitlistEntries = async (payload, actor) => {
     client.release();
   }
 };
+
+export const __testables = {
+  addDaysToDateString,
+  buildRecurringDates,
+  ensureAppointmentCompletionIsAllowed,
+  getTodayDateString,
+  getWeekdayFromDateString,
+  normalizeRecurrencePayload,
+  normalizeScheduledTime,
+  parseTimeToMinutes,
+};
