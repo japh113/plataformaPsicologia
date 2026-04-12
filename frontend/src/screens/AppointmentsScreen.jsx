@@ -13,6 +13,7 @@ import {
   formatBlockedRangeLabel,
   formatExceptionDate,
   getAppointmentAccent,
+  getAppointmentDateTime,
   getAppointmentDisplayStatus,
   getAppointmentHourOptions,
   getAppointmentSessionLabel,
@@ -74,9 +75,11 @@ export default function AppointmentsScreen({
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
   const initialFocusedDate = viewContext?.date || todayDate;
-  const [selectedDate, setSelectedDate] = useState(() => viewContext?.date || initialFocusedDate);
+  const initialSelectedDate = typeof viewContext?.date !== 'undefined' ? viewContext.date : (isPsychologist ? todayDate : '');
+  const [selectedDate, setSelectedDate] = useState(() => initialSelectedDate);
   const [statusFilter, setStatusFilter] = useState('todos');
   const [sessionCoverageFilter, setSessionCoverageFilter] = useState('todos');
+  const [patientTimelineFilter, setPatientTimelineFilter] = useState('todos');
   const [editingAppointmentId, setEditingAppointmentId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [calendarAnchorDate, setCalendarAnchorDate] = useState(initialFocusedDate);
@@ -118,6 +121,27 @@ export default function AppointmentsScreen({
     const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
     return sessionCoverageFilter === sessionState;
   }, [appointmentSessionIds, sessionCoverageFilter]);
+  const matchesPatientTimelineFilter = useCallback((appointment) => {
+    if (isPsychologist || patientTimelineFilter === 'todos') {
+      return true;
+    }
+
+    const appointmentDateTime = getAppointmentDateTime(appointment);
+
+    if (patientTimelineFilter === 'proximas') {
+      return appointmentDateTime >= new Date() && !['cancelada', 'no asistio'].includes(appointment.estado);
+    }
+
+    if (patientTimelineFilter === 'historial') {
+      return appointmentDateTime < new Date() || ['completada', 'cancelada', 'no asistio'].includes(appointment.estado);
+    }
+
+    if (patientTimelineFilter === 'cambios') {
+      return ['cancelada', 'no asistio'].includes(appointment.estado);
+    }
+
+    return true;
+  }, [isPsychologist, patientTimelineFilter]);
   const appointmentsForCalendar = useMemo(
     () =>
       appointments.filter((appointment) => {
@@ -126,9 +150,9 @@ export default function AppointmentsScreen({
           : statusFilter === 'pendiente'
             ? ['pendiente', 'por cerrar'].includes(getAppointmentDisplayStatus(appointment))
             : appointment.estado === statusFilter;
-        return matchesStatus && matchesSessionCoverageFilter(appointment);
+        return matchesStatus && matchesSessionCoverageFilter(appointment) && matchesPatientTimelineFilter(appointment);
       }),
-    [appointments, matchesSessionCoverageFilter, statusFilter],
+    [appointments, matchesPatientTimelineFilter, matchesSessionCoverageFilter, statusFilter],
   );
   const activeSummaryFilter = useMemo(() => {
     if (statusFilter === 'completada' && sessionCoverageFilter === 'missing') {
@@ -145,7 +169,7 @@ export default function AppointmentsScreen({
 
     return 'none';
   }, [sessionCoverageFilter, statusFilter]);
-  const hasActiveFilters = selectedDate || statusFilter !== 'todos' || sessionCoverageFilter !== 'todos';
+  const hasActiveFilters = Boolean(selectedDate) || statusFilter !== 'todos' || sessionCoverageFilter !== 'todos' || patientTimelineFilter !== 'todos';
   const weekDates = useMemo(() => getWeekDates(calendarAnchorDate), [calendarAnchorDate]);
   const weekRangeLabel = useMemo(() => getWeekRangeLabel(calendarAnchorDate), [calendarAnchorDate]);
   const monthDates = useMemo(() => getMonthDates(calendarAnchorDate), [calendarAnchorDate]);
@@ -259,8 +283,8 @@ export default function AppointmentsScreen({
       : statusFilter === 'pendiente'
         ? ['pendiente', 'por cerrar'].includes(getAppointmentDisplayStatus(appointment))
         : appointment.estado === statusFilter;
-    return matchesDate && matchesStatus && matchesSessionCoverageFilter(appointment);
-  }), [appointments, matchesSessionCoverageFilter, selectedDate, statusFilter]);
+    return matchesDate && matchesStatus && matchesSessionCoverageFilter(appointment) && matchesPatientTimelineFilter(appointment);
+  }), [appointments, matchesPatientTimelineFilter, matchesSessionCoverageFilter, selectedDate, statusFilter]);
   const waitlistEntriesBySlot = useMemo(() => {
     const nextMap = new Map();
 
@@ -333,6 +357,25 @@ export default function AppointmentsScreen({
 
     return nextMap;
   }, [waitlistEntries]);
+  const patientTimelineSummary = useMemo(() => {
+    const upcoming = appointments.filter((appointment) => {
+      const appointmentDateTime = getAppointmentDateTime(appointment);
+      return appointmentDateTime >= new Date() && !['cancelada', 'no asistio'].includes(appointment.estado);
+    }).length;
+
+    const history = appointments.filter((appointment) => {
+      const appointmentDateTime = getAppointmentDateTime(appointment);
+      return appointmentDateTime < new Date() || ['completada', 'cancelada', 'no asistio'].includes(appointment.estado);
+    }).length;
+
+    const changed = appointments.filter((appointment) => ['cancelada', 'no asistio'].includes(appointment.estado)).length;
+
+    return {
+      upcoming,
+      history,
+      changed,
+    };
+  }, [appointments]);
   const occupiedSlotOptions = useMemo(() => {
     const groupedBySlot = new Map();
 
@@ -655,11 +698,12 @@ export default function AppointmentsScreen({
   };
   const handleSelectDate = (date) => { setSelectedDate(date); if (!date) return; setCalendarAnchorDate(date); onDismissAppointmentError?.(); };
   const handleMoveCalendar = (direction) => setCalendarAnchorDate((currentDate) => calendarView === 'month' ? shiftDateByMonths(currentDate, direction) : shiftDateByDays(currentDate, direction * 7));
-  const handleResetCalendar = () => { setCalendarAnchorDate(todayDate); if (selectedDate) setSelectedDate(todayDate); };
+  const handleResetCalendar = () => { setCalendarAnchorDate(todayDate); if (selectedDate) setSelectedDate(isPsychologist ? todayDate : ''); };
   const handleClearFilters = () => {
     setSelectedDate('');
     setStatusFilter('todos');
     setSessionCoverageFilter('todos');
+    setPatientTimelineFilter('todos');
   };
   const handleSummaryFilter = (summaryKey) => {
     if (activeSummaryFilter === summaryKey) {
@@ -791,8 +835,16 @@ export default function AppointmentsScreen({
     }
   };
 
-  const calendarTitle = calendarView === 'month' ? 'Vista Mensual' : 'Vista Semanal';
-  const calendarSubtitle = calendarView === 'month' ? 'Explora el mes completo con una cuadricula de calendario y toca un dia para enfocar el listado.' : 'Explora la semana y selecciona un dia para enfocar el listado.';
+  const calendarTitle = isPsychologist
+    ? (calendarView === 'month' ? 'Vista Mensual' : 'Vista Semanal')
+    : (calendarView === 'month' ? 'Tu calendario mensual' : 'Tu calendario semanal');
+  const calendarSubtitle = isPsychologist
+    ? (calendarView === 'month'
+      ? 'Explora el mes completo con una cuadricula de calendario y toca un dia para enfocar el listado.'
+      : 'Explora la semana y selecciona un dia para enfocar el listado.')
+    : (calendarView === 'month'
+      ? 'Revisa tus citas del mes y toca un dia para ver mejor tu seguimiento.'
+      : 'Revisa tu semana clinica y toca un dia para enfocar tu historial.');
   const calendarRangeLabel = calendarView === 'month' ? monthLabel : weekRangeLabel;
   const blockSummary = selectedDayAvailability.isUnavailable
     ? 'Excepcion: dia no disponible'
@@ -854,11 +906,11 @@ export default function AppointmentsScreen({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-gray-800">{isPsychologist ? 'Agenda de Citas' : 'Mis Citas'}</h2>
-          <p className="text-sm md:text-base text-gray-500">{isPsychologist ? 'Gestiona citas, registra notas clinicas y da seguimiento al calendario clinico.' : 'Consulta tus proximas citas y el estado de cada una.'}</p>
+          <p className="text-sm md:text-base text-gray-500">{isPsychologist ? 'Gestiona citas, registra notas clinicas y da seguimiento al calendario clinico.' : 'Consulta tu agenda personal, tus cambios recientes y el estado de cada cita.'}</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <input type="date" value={selectedDate} onChange={(event) => handleSelectDate(event.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
-          {isPsychologist && <button type="button" onClick={() => handleSelectDate('')} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 transition">Ver todas</button>}
+          <button type="button" onClick={() => handleSelectDate('')} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-600 hover:bg-gray-50 transition">{isPsychologist ? 'Ver todas' : 'Quitar fecha'}</button>
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
             <option value="todos">Todos los estados</option>
             <option value="pendiente">Pendientes y por cerrar</option>
@@ -871,9 +923,50 @@ export default function AppointmentsScreen({
             <option value="missing">Completadas sin nota clinica</option>
             <option value="registered">Completadas con nota clinica</option>
           </select>}
-          {isPsychologist && hasActiveFilters && <button type="button" onClick={handleClearFilters} className="px-3 py-2.5 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Limpiar filtros</button>}
+          {hasActiveFilters && <button type="button" onClick={handleClearFilters} className="px-3 py-2.5 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 transition">Limpiar filtros</button>}
         </div>
       </div>
+
+      {!isPsychologist && (
+        <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDate('');
+              setPatientTimelineFilter((current) => (current === 'proximas' ? 'todos' : 'proximas'));
+            }}
+            className={`rounded-2xl border p-4 text-left transition ${patientTimelineFilter === 'proximas' ? 'border-indigo-400 bg-indigo-100 ring-2 ring-indigo-200' : 'border-indigo-200 bg-indigo-50 hover:bg-indigo-100/70'}`}
+          >
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Proximas</p>
+            <p className="mt-2 text-3xl font-black text-indigo-900">{patientTimelineSummary.upcoming}</p>
+            <p className="mt-1 text-sm text-indigo-800">Tus citas futuras activas.</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDate('');
+              setPatientTimelineFilter((current) => (current === 'historial' ? 'todos' : 'historial'));
+            }}
+            className={`rounded-2xl border p-4 text-left transition ${patientTimelineFilter === 'historial' ? 'border-slate-400 bg-slate-100 ring-2 ring-slate-200' : 'border-slate-200 bg-slate-50 hover:bg-slate-100/70'}`}
+          >
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700">Historial</p>
+            <p className="mt-2 text-3xl font-black text-slate-900">{patientTimelineSummary.history}</p>
+            <p className="mt-1 text-sm text-slate-700">Citas ya transcurridas o cerradas.</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedDate('');
+              setPatientTimelineFilter((current) => (current === 'cambios' ? 'todos' : 'cambios'));
+            }}
+            className={`rounded-2xl border p-4 text-left transition ${patientTimelineFilter === 'cambios' ? 'border-amber-400 bg-amber-100 ring-2 ring-amber-200' : 'border-amber-200 bg-amber-50 hover:bg-amber-100/70'}`}
+          >
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Cambios</p>
+            <p className="mt-2 text-3xl font-black text-amber-900">{patientTimelineSummary.changed}</p>
+            <p className="mt-1 text-sm text-amber-800">Canceladas o marcadas como no asistio.</p>
+          </button>
+        </section>
+      )}
 
       {isPsychologist && (
         <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -968,6 +1061,7 @@ export default function AppointmentsScreen({
                         const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
                         const displayStatus = getAppointmentDisplayStatus(appointment);
                         const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
+                        const showSessionIndicator = isPsychologist ? sessionState !== 'none' : sessionState === 'registered';
                         return (
                           <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
                             <p className="truncate">{appointment.hora}</p>
@@ -982,7 +1076,7 @@ export default function AppointmentsScreen({
                                   {appointment.waitlistCount}
                                 </span>
                               )}
-                              {sessionState !== 'none' && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
+                              {showSessionIndicator && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
                             </div>
                           </div>
                         );
@@ -1023,6 +1117,7 @@ export default function AppointmentsScreen({
                           const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
                           const displayStatus = getAppointmentDisplayStatus(appointment);
                           const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
+                          const showSessionIndicator = isPsychologist ? sessionState !== 'none' : sessionState === 'registered';
                           return (
                             <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
                               <div className="truncate">{appointment.hora}</div>
@@ -1033,7 +1128,7 @@ export default function AppointmentsScreen({
                                   </span>
                                 )}
                                 {showWaitlistIndicator && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getWaitlistCountDotClasses()}`} title={`${appointment.waitlistCount} en lista de espera`} />}
-                                {sessionState !== 'none' && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
+                                {showSessionIndicator && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
                               </div>
                             </div>
                           );
@@ -1089,6 +1184,7 @@ export default function AppointmentsScreen({
               const linkedSession = patient?.sesiones?.find((session) => session.citaId === appointment.id) || null;
               const sessionState = getAppointmentSessionState(appointment, Boolean(linkedSession));
               const sessionLabel = getAppointmentSessionLabel(sessionState);
+              const shouldShowSessionBadge = isPsychologist ? sessionState !== 'none' : sessionState === 'registered';
               const displayStatus = getAppointmentDisplayStatus(appointment);
               const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
               const topWaitlistEntry = showWaitlistIndicator ? waitlistTopPriorityBySlot.get(buildAppointmentSlotKey(appointment.fecha, appointment.hora24)) || null : null;
@@ -1106,10 +1202,10 @@ export default function AppointmentsScreen({
                 <div key={appointment.id} tabIndex={0} onMouseEnter={() => setHoveredDate(appointment.fecha)} onMouseLeave={() => setHoveredDate('')} onFocus={() => setHoveredDate(appointment.fecha)} onBlur={() => setHoveredDate('')} className={`rounded-xl border border-gray-200 border-l-4 p-4 transition outline-none focus-visible:ring-2 focus-visible:ring-indigo-200 ${getAppointmentAccent(displayStatus)} ${isLinkedToSelectedDate ? 'ring-2 ring-indigo-100 shadow-sm' : isLinkedToHoveredDate ? 'ring-2 ring-slate-200' : ''}`}>
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{patient?.nombre || 'Paciente no disponible'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(displayStatus)}`}>{displayStatus}</span>{appointment.recurrenciaGrupoId && <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] md:text-xs font-bold text-slate-600"><Repeat2 size={12} className="mr-1.5" />Recurrente</span>}{sessionState !== 'none' && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}{showWaitlistIndicator && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getWaitlistBadgeClasses()}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />Espera {appointment.waitlistCount}</span>}</div>
+                      <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{isPsychologist ? patient?.nombre || 'Paciente no disponible' : 'Tu cita'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(displayStatus)}`}>{displayStatus}</span>{appointment.recurrenciaGrupoId && <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] md:text-xs font-bold text-slate-600"><Repeat2 size={12} className="mr-1.5" />Recurrente</span>}{shouldShowSessionBadge && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}{showWaitlistIndicator && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getWaitlistBadgeClasses()}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />Espera {appointment.waitlistCount}</span>}</div>
                       <div className="mt-2 flex flex-wrap gap-3 text-sm text-gray-500"><span className="inline-flex items-center"><Calendar size={14} className="mr-1.5" /> {appointment.fecha}</span><span className="inline-flex items-center"><Clock3 size={14} className="mr-1.5" /> {appointment.hora}</span></div>
                       {isOverduePendingAppointment && (
-                        <p className="mt-2 text-sm font-medium text-amber-700">La hora de esta cita ya paso y todavia necesita cierre operativo.</p>
+                        <p className="mt-2 text-sm font-medium text-amber-700">{isPsychologist ? 'La hora de esta cita ya paso y todavia necesita cierre operativo.' : 'Esta cita ya paso y sigue pendiente de confirmacion administrativa.'}</p>
                       )}
                       {topWaitlistEntry && (
                         <p className="mt-2 text-sm text-violet-700">
@@ -1119,7 +1215,7 @@ export default function AppointmentsScreen({
                       {appointment.notas && <p className="mt-3 text-sm text-gray-600">{appointment.notas}</p>}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {patient && <button onClick={() => onOpenPatient(patient)} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition text-sm font-medium">Ver expediente</button>}
+                      {patient && <button onClick={() => onOpenPatient(patient)} className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition text-sm font-medium">{isPsychologist ? 'Ver expediente' : 'Abrir expediente'}</button>}
                       {canOpenSessionFlow && (
                         <button
                           onClick={() => {

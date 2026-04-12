@@ -45,6 +45,24 @@ export const getWaitlistCountDotClasses = () => 'bg-violet-500 ring-violet-100';
 export const getWeekdayFromDateString = (value) => { const [y = '0', m = '1', d = '1'] = String(value).split('-'); return new Date(Number(y), Number(m) - 1, Number(d)).getDay(); };
 export const createTempId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 export const buildAppointmentSlotKey = (date, hour24) => `${date}::${hour24}`;
+export const getAppointmentDateTime = (appointment) => {
+  if (!appointment?.fecha) {
+    return new Date(0);
+  }
+
+  const [year = '0', month = '1', day = '1'] = String(appointment.fecha).split('-');
+  const [hours = '0', minutes = '0'] = String(appointment.hora24 || '00:00').split(':');
+
+  return new Date(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hours),
+    Number(minutes),
+    0,
+    0,
+  );
+};
 export const normalizeBlocks = (blocks, prefix) => (blocks || []).map((block, index) => ({ id: block.id || `${prefix}-${index}`, startTime: String(block.startTime || '').slice(0, 5), endTime: String(block.endTime || '').slice(0, 5) }));
 export const normalizeDraftEntries = (entries) => (entries || []).map((entry) => ({ weekday: entry.weekday, blocks: normalizeBlocks(entry.blocks, `tmp-${entry.weekday}`) }));
 export const createDefaultExceptionBlock = () => ({ id: createTempId('exception-block'), startTime: '09:00', endTime: '10:00' });
