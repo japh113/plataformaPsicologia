@@ -1047,11 +1047,13 @@ export default function App() {
         <DashboardScreen
           currentUser={currentUser}
           patients={pacientes}
-          appointments={todayAppointments}
+          appointments={isPsychologist ? todayAppointments : appointments}
           reminders={reminders}
           onOpenPatient={abrirNotas}
           onNewPatient={() => setMostrarModalNuevoPaciente(true)}
-          onViewAppointments={() => abrirAgenda(todayDate)}
+          onViewAppointments={() => abrirAgenda(isPsychologist ? todayDate : '')}
+          onToggleTask={toggleTask}
+          processingTaskId={procesandoTareaId}
         />
       );
     }
