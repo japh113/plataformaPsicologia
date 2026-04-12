@@ -1,4 +1,4 @@
-const validStatuses = ['pending', 'completed', 'cancelled'];
+const validStatuses = ['pending', 'completed', 'cancelled', 'no_show'];
 
 const isIsoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 const isTimeValue = (value) => /^\d{2}:\d{2}(:\d{2})?$/.test(value);
@@ -31,7 +31,7 @@ export const validateCreateAppointmentPayload = (payload) => {
   }
 
   if (payload.status && !validStatuses.includes(payload.status)) {
-    errors.push('status must be pending, completed, or cancelled');
+    errors.push('status must be pending, completed, cancelled, or no_show');
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'recurrence')) {
@@ -57,7 +57,7 @@ export const validateUpdateAppointmentPayload = (payload) => {
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'status') && !validStatuses.includes(payload.status)) {
-    errors.push('status must be pending, completed, or cancelled');
+    errors.push('status must be pending, completed, cancelled, or no_show');
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'notes') && typeof payload.notes !== 'string') {

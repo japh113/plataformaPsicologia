@@ -174,14 +174,18 @@ const fulfillWaitlistEntriesForAppointment = async ({ patientId, scheduledDate, 
 };
 
 const ensureAppointmentCompletionIsAllowed = ({ scheduledDate, status }) => {
-  if (status !== 'completed') {
+  if (!['completed', 'no_show'].includes(status)) {
     return;
   }
 
   const appointmentDate = normalizeDateValue(scheduledDate);
 
   if (appointmentDate > getTodayDateString()) {
-    const error = new Error('No puedes marcar como completada una cita futura.');
+    const error = new Error(
+      status === 'no_show'
+        ? 'No puedes marcar como no asistio una cita futura.'
+        : 'No puedes marcar como completada una cita futura.',
+    );
     error.status = 409;
     throw error;
   }
@@ -213,7 +217,7 @@ const ensureLinkedClinicalNoteUpdateIsAllowed = ({
     );
 
   if (currentAppointment.hasLinkedClinicalNote && nextStatus !== 'completed') {
-    const error = new Error('No puedes marcar como pendiente o cancelada una cita que ya tiene una nota clinica registrada.');
+    const error = new Error('No puedes marcar como pendiente, cancelada o no asistio una cita que ya tiene una nota clinica registrada.');
     error.status = 409;
     throw error;
   }
@@ -284,7 +288,7 @@ const normalizeRecurrencePayload = (recurrence, scheduledDate, status) => {
 };
 
 const ensureSlotFitsAvailability = ({ availability, scheduledTime, status }) => {
-  if (status === 'cancelled') {
+  if (['cancelled', 'no_show'].includes(status)) {
     return;
   }
 
@@ -347,7 +351,7 @@ const ensureAppointmentAvailability = async ({
   status,
   excludeAppointmentId = null,
 }) => {
-  if (status === 'cancelled') {
+  if (['cancelled', 'no_show'].includes(status)) {
     return;
   }
 
@@ -357,7 +361,7 @@ const ensureAppointmentAvailability = async ({
       FROM appointments
       WHERE patient_id = $1
         AND scheduled_date = $2
-        AND status <> 'cancelled'
+        AND status IN ('pending', 'completed')
         AND ($3::bigint IS NULL OR id <> $3)
       ORDER BY scheduled_time ASC
       LIMIT 1
@@ -377,7 +381,7 @@ const ensureAppointmentAvailability = async ({
       FROM appointments
       WHERE patient_id = $1
         AND scheduled_date = $2
-        AND status <> 'cancelled'
+        AND status IN ('pending', 'completed')
         AND (
           (scheduled_date + scheduled_time, scheduled_date + scheduled_time + INTERVAL '1 hour')
           OVERLAPS
@@ -401,7 +405,7 @@ const ensureAppointmentAvailability = async ({
         ON spa.patient_id = a.patient_id
       WHERE spa.psychologist_user_id = $1
         AND a.scheduled_date = $2
-        AND a.status <> 'cancelled'
+        AND a.status IN ('pending', 'completed')
         AND (
           (a.scheduled_date + a.scheduled_time, a.scheduled_date + a.scheduled_time + INTERVAL '1 hour')
           OVERLAPS
@@ -419,7 +423,7 @@ const ensureAppointmentAvailability = async ({
 };
 
 const ensureInsidePsychologistAvailability = async ({ actor, scheduledDate, scheduledTime, status }) => {
-  if (status === 'cancelled') {
+  if (['cancelled', 'no_show'].includes(status)) {
     return;
   }
 
@@ -861,7 +865,7 @@ export const createWaitlistEntry = async (payload, actor) => {
       FROM appointments
       WHERE patient_id = $1
         AND scheduled_date = $2
-        AND status <> 'cancelled'
+        AND status IN ('pending', 'completed')
       LIMIT 1
     `,
     [patientId, payload.scheduledDate],
@@ -889,7 +893,7 @@ export const createWaitlistEntry = async (payload, actor) => {
       WHERE spa.psychologist_user_id = $1
         AND a.scheduled_date = $2
         AND a.scheduled_time = $3
-        AND a.status <> 'cancelled'
+        AND a.status IN ('pending', 'completed')
       LIMIT 1
     `,
     [actor.id, payload.scheduledDate, scheduledTime],

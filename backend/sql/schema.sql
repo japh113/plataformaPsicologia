@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   scheduled_date DATE NOT NULL,
   scheduled_time TIME NOT NULL,
   recurrence_group_id TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'cancelled')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'cancelled', 'no_show')),
   notes TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -159,6 +159,22 @@ CREATE TABLE IF NOT EXISTS appointment_waitlist_entries (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.table_constraints
+    WHERE table_name = 'appointments'
+      AND constraint_name = 'appointments_status_check'
+  ) THEN
+    ALTER TABLE appointments DROP CONSTRAINT appointments_status_check;
+  END IF;
+END $$;
+
+ALTER TABLE appointments
+  ADD CONSTRAINT appointments_status_check
+  CHECK (status IN ('pending', 'completed', 'cancelled', 'no_show'));
 
 ALTER TABLE appointment_waitlist_entries
   ADD COLUMN IF NOT EXISTS priority_position INTEGER NOT NULL DEFAULT 1;

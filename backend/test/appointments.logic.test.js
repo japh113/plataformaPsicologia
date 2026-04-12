@@ -59,6 +59,17 @@ test('ensureAppointmentCompletionIsAllowed rejects future appointments', () => {
   );
 });
 
+test('ensureAppointmentCompletionIsAllowed rejects future no-show appointments', () => {
+  const tomorrow = __testables.addDaysToDateString(__testables.getTodayDateString(), 1);
+
+  assert.throws(
+    () => __testables.ensureAppointmentCompletionIsAllowed({ scheduledDate: tomorrow, status: 'no_show' }),
+    {
+      message: 'No puedes marcar como no asistio una cita futura.',
+    },
+  );
+});
+
 test('ensureAppointmentCompletionIsAllowed allows pending future appointments and completed past appointments', () => {
   const yesterday = __testables.addDaysToDateString(__testables.getTodayDateString(), -1);
   const tomorrow = __testables.addDaysToDateString(__testables.getTodayDateString(), 1);
@@ -86,6 +97,14 @@ test('validateUpdateAppointmentPayload accepts standard update fields and option
     scheduledTime: '10:30',
     notes: 'Reagendar si cancela otro paciente.',
     recurrence: { endDate: '2026-05-13' },
+  });
+
+  assert.deepEqual(errors, []);
+});
+
+test('validateUpdateAppointmentPayload accepts no_show as an appointment status', () => {
+  const errors = validateUpdateAppointmentPayload({
+    status: 'no_show',
   });
 
   assert.deepEqual(errors, []);
@@ -142,7 +161,7 @@ test('ensureLinkedClinicalNoteUpdateIsAllowed rejects downgrading a linked appoi
       nextStatus: 'cancelled',
     }),
     {
-      message: 'No puedes marcar como pendiente o cancelada una cita que ya tiene una nota clinica registrada.',
+      message: 'No puedes marcar como pendiente, cancelada o no asistio una cita que ya tiene una nota clinica registrada.',
     },
   );
 });
@@ -329,6 +348,20 @@ test('ensureSlotFitsAvailability allows hour slots fully contained inside a conf
       },
       scheduledTime: '11:00:00',
       status: 'pending',
+    }),
+  );
+});
+
+test('ensureSlotFitsAvailability skips availability checks for no-show closures', () => {
+  assert.doesNotThrow(() =>
+    __testables.ensureSlotFitsAvailability({
+      availability: {
+        source: 'exception',
+        isUnavailable: true,
+        blocks: [],
+      },
+      scheduledTime: '11:00:00',
+      status: 'no_show',
     }),
   );
 });

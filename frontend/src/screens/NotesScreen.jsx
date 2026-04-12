@@ -201,7 +201,7 @@ export default function NotesScreen({
   const upcomingAppointments = useMemo(
     () =>
       sortAppointmentsAsc(
-        patientAppointments.filter((appointment) => appointment.fecha >= todayDate && appointment.estado !== 'cancelada'),
+        patientAppointments.filter((appointment) => appointment.fecha >= todayDate && ['pendiente', 'completada'].includes(appointment.estado)),
       ),
     [patientAppointments, todayDate],
   );
@@ -217,7 +217,7 @@ export default function NotesScreen({
   const recentAppointments = useMemo(
     () =>
       sortAppointmentsDesc(
-        patientAppointments.filter((appointment) => appointment.fecha < todayDate || appointment.estado === 'cancelada'),
+        patientAppointments.filter((appointment) => appointment.fecha < todayDate || ['cancelada', 'no asistio'].includes(appointment.estado)),
       ),
     [patientAppointments, todayDate],
   );

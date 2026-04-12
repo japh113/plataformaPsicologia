@@ -121,7 +121,11 @@ export default function AppointmentsScreen({
   const appointmentsForCalendar = useMemo(
     () =>
       appointments.filter((appointment) => {
-        const matchesStatus = statusFilter === 'todos' ? true : appointment.estado === statusFilter;
+        const matchesStatus = statusFilter === 'todos'
+          ? true
+          : statusFilter === 'pendiente'
+            ? ['pendiente', 'por cerrar'].includes(getAppointmentDisplayStatus(appointment))
+            : appointment.estado === statusFilter;
         return matchesStatus && matchesSessionCoverageFilter(appointment);
       }),
     [appointments, matchesSessionCoverageFilter, statusFilter],
@@ -181,7 +185,7 @@ export default function AppointmentsScreen({
   }, [availabilityExceptionsMap, availabilityMap, selectedFormDate]);
   const selectedFormWeekday = getWeekdayFromDateString(selectedFormDate);
   const selectedDayBlocks = selectedDayAvailability.blocks;
-  const requiresActiveSlotChecks = form.estado !== 'cancelada';
+  const requiresActiveSlotChecks = ['pendiente', 'completada'].includes(form.estado);
   const sameDayPatientAppointment = useMemo(
     () =>
       requiresActiveSlotChecks
@@ -189,7 +193,7 @@ export default function AppointmentsScreen({
           (appointment) =>
             appointment.pacienteId === form.pacienteId &&
             appointment.fecha === selectedFormDate &&
-            appointment.estado !== 'cancelada' &&
+            ['pendiente', 'completada'].includes(appointment.estado) &&
             appointment.id !== editingAppointmentId,
         ) || null
         : null,
@@ -204,7 +208,7 @@ export default function AppointmentsScreen({
             (appointment) =>
               requiresActiveSlotChecks &&
               appointment.fecha === selectedFormDate &&
-              appointment.estado !== 'cancelada' &&
+              ['pendiente', 'completada'].includes(appointment.estado) &&
               appointment.id !== editingAppointmentId,
           )
           .map((appointment) => appointment.hora24),
@@ -250,7 +254,11 @@ export default function AppointmentsScreen({
 
   const filteredAppointments = useMemo(() => appointments.filter((appointment) => {
     const matchesDate = selectedDate ? appointment.fecha === selectedDate : true;
-    const matchesStatus = statusFilter === 'todos' ? true : appointment.estado === statusFilter;
+    const matchesStatus = statusFilter === 'todos'
+      ? true
+      : statusFilter === 'pendiente'
+        ? ['pendiente', 'por cerrar'].includes(getAppointmentDisplayStatus(appointment))
+        : appointment.estado === statusFilter;
     return matchesDate && matchesStatus && matchesSessionCoverageFilter(appointment);
   }), [appointments, matchesSessionCoverageFilter, selectedDate, statusFilter]);
   const waitlistEntriesBySlot = useMemo(() => {
@@ -293,7 +301,7 @@ export default function AppointmentsScreen({
           (appointment) =>
             appointment.fecha === selectedWaitlistDate &&
             appointment.hora24 === hour24 &&
-            appointment.estado !== 'cancelada',
+            ['pendiente', 'completada'].includes(appointment.estado),
         );
 
         return {
@@ -329,7 +337,7 @@ export default function AppointmentsScreen({
     const groupedBySlot = new Map();
 
     appointments
-      .filter((appointment) => appointment.fecha === selectedWaitlistDate && appointment.estado !== 'cancelada')
+      .filter((appointment) => appointment.fecha === selectedWaitlistDate && ['pendiente', 'completada'].includes(appointment.estado))
       .forEach((appointment) => {
         const currentAppointments = groupedBySlot.get(appointment.hora24) || [];
         groupedBySlot.set(appointment.hora24, [...currentAppointments, appointment]);
@@ -356,7 +364,7 @@ export default function AppointmentsScreen({
         (appointment) =>
           appointment.pacienteId === waitlistForm.pacienteId &&
           appointment.fecha === selectedWaitlistDate &&
-          appointment.estado !== 'cancelada',
+          ['pendiente', 'completada'].includes(appointment.estado),
       ) || null,
     [appointments, selectedWaitlistDate, waitlistForm.pacienteId],
   );
@@ -369,7 +377,7 @@ export default function AppointmentsScreen({
       .filter(
         (appointment) =>
           appointment.fecha === selectedFormDate &&
-          appointment.estado !== 'cancelada' &&
+          ['pendiente', 'completada'].includes(appointment.estado) &&
           appointment.id !== editingAppointmentId,
       )
       .forEach((appointment) => {
@@ -635,6 +643,13 @@ export default function AppointmentsScreen({
 
     return wasCancelled;
   };
+  const handleMarkNoShow = async (appointment) => {
+    if (!window.confirm('La cita se marcara como no asistio. Deseas continuar?')) {
+      return false;
+    }
+
+    return handleUpdateAppointmentStatus(appointment, 'no asistio');
+  };
   const handleSelectDate = (date) => { setSelectedDate(date); if (!date) return; setCalendarAnchorDate(date); onDismissAppointmentError?.(); };
   const handleMoveCalendar = (direction) => setCalendarAnchorDate((currentDate) => calendarView === 'month' ? shiftDateByMonths(currentDate, direction) : shiftDateByDays(currentDate, direction * 7));
   const handleResetCalendar = () => { setCalendarAnchorDate(todayDate); if (selectedDate) setSelectedDate(todayDate); };
@@ -845,6 +860,7 @@ export default function AppointmentsScreen({
             <option value="todos">Todos los estados</option>
             <option value="pendiente">Pendientes y por cerrar</option>
             <option value="completada">Completadas</option>
+            <option value="no asistio">No asistio</option>
             <option value="cancelada">Canceladas</option>
           </select>
           {isPsychologist && <select value={sessionCoverageFilter} onChange={(event) => setSessionCoverageFilter(event.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
@@ -1078,7 +1094,7 @@ export default function AppointmentsScreen({
               const canOpenSessionFlow =
                 isPsychologist &&
                 patient &&
-                appointment.estado !== 'cancelada' &&
+                !['cancelada', 'no asistio'].includes(appointment.estado) &&
                 (Boolean(linkedSession) || !isFutureAppointment);
               const isProcessingThisAppointment = processingAppointmentId === appointment.id;
               const isLinkedToHoveredDate = hoveredDate === appointment.fecha;
@@ -1118,9 +1134,14 @@ export default function AppointmentsScreen({
                         </button>
                       )}
                       {isPsychologist && isOverduePendingAppointment && !linkedSession && (
-                        <button onClick={() => handleCancelAppointment(appointment)} disabled={isProcessingThisAppointment} className="px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed">
-                          Cancelar
-                        </button>
+                        <>
+                          <button onClick={() => handleMarkNoShow(appointment)} disabled={isProcessingThisAppointment} className="px-3 py-2 bg-slate-50 text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-100 transition text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed">
+                            No asistio
+                          </button>
+                          <button onClick={() => handleCancelAppointment(appointment)} disabled={isProcessingThisAppointment} className="px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed">
+                            Cancelar
+                          </button>
+                        </>
                       )}
                       {isPsychologist && showWaitlistIndicator && (
                         <button
@@ -1185,7 +1206,7 @@ export default function AppointmentsScreen({
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Estado</label>
                 <select name="estado" value={form.estado} onChange={handleChange} disabled={isSavingAppointment} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                  <option value="pendiente">Pendiente</option><option value="completada">Completada</option><option value="cancelada">Cancelada</option>
+                  <option value="pendiente">Pendiente</option><option value="completada">Completada</option><option value="no asistio">No asistio</option><option value="cancelada">Cancelada</option>
                 </select>
               </div>
               <div>
@@ -1690,6 +1711,7 @@ export default function AppointmentsScreen({
               <select name="estado" value={form.estado} onChange={handleChange} disabled={isSavingAppointment} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                 <option value="pendiente">Pendiente</option>
                 <option value="completada">Completada</option>
+                <option value="no asistio">No asistio</option>
                 <option value="cancelada">Cancelada</option>
               </select>
             </div>

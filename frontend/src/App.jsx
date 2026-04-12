@@ -863,7 +863,7 @@ export default function App() {
       return false;
     }
 
-    if (appointment.estado === 'cancelada') {
+    if (['cancelada', 'no asistio'].includes(appointment.estado)) {
       return false;
     }
 

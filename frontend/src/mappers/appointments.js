@@ -2,12 +2,14 @@ const backendToUiStatusMap = {
   pending: 'pendiente',
   completed: 'completada',
   cancelled: 'cancelada',
+  no_show: 'no asistio',
 };
 
 const uiToBackendStatusMap = {
   pendiente: 'pending',
   completada: 'completed',
   cancelada: 'cancelled',
+  'no asistio': 'no_show',
 };
 
 const weekdayFormatter = new Intl.DateTimeFormat('es-MX', { weekday: 'short' });
