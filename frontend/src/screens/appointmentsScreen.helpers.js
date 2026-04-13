@@ -259,3 +259,104 @@ export const getCalendarGroupContainerClasses = (groupLength, size) => {
     ? 'mx-auto flex max-w-full items-center justify-center gap-1'
     : 'mx-auto flex max-w-full items-center justify-center gap-1.5';
 };
+
+const includesAny = (message, fragments) => fragments.some((fragment) => message.includes(fragment));
+
+export const getAppointmentErrorMeta = (rawMessage = '') => {
+  const message = String(rawMessage || '').toLowerCase();
+
+  if (includesAny(message, ['ya tiene una cita agendada en este dia', 'paciente ya agendado este dia'])) {
+    return {
+      title: 'Ese paciente ya tiene una cita activa ese dia',
+      hint: 'Elige otra fecha o libera primero la cita existente antes de intentar guardar una nueva.',
+    };
+  }
+
+  if (includesAny(message, ['otra cita agendada en ese horario', 'mismo horario', 'solap'])) {
+    return {
+      title: 'Ese horario ya no esta disponible',
+      hint: 'Prueba otro bloque libre o usa la lista de espera si quieres apartar ese mismo horario ocupado.',
+    };
+  }
+
+  if (includesAny(message, ['fuera de tu disponibilidad', 'sin disponibilidad', 'dia no disponible'])) {
+    return {
+      title: 'La cita queda fuera de la disponibilidad actual',
+      hint: 'Ajusta la hora o revisa primero la disponibilidad y las excepciones para esa fecha.',
+    };
+  }
+
+  if (includesAny(message, ['no puedes completar y registrar una cita futura', 'cita futura'])) {
+    return {
+      title: 'Las citas futuras no se pueden cerrar todavia',
+      hint: 'Espera a que llegue el dia de la cita para marcarla como completada y registrar la nota clinica.',
+    };
+  }
+
+  if (includesAny(message, ['nota clinica'])) {
+    return {
+      title: 'Esta cita ya tiene seguimiento clinico asociado',
+      hint: 'Cuando una cita ya tiene nota clinica, el sistema protege su trazabilidad y restringe ciertos cambios.',
+    };
+  }
+
+  return {
+    title: 'No pudimos guardar la cita',
+    hint: 'Revisa fecha, hora, disponibilidad y estado antes de volver a intentarlo.',
+  };
+};
+
+export const getWaitlistErrorMeta = (rawMessage = '') => {
+  const message = String(rawMessage || '').toLowerCase();
+
+  if (includesAny(message, ['ya agendado ese dia', 'ya tiene una cita agendada en este dia'])) {
+    return {
+      title: 'Ese paciente ya tiene una cita activa ese dia',
+      hint: 'La lista de espera solo tiene sentido si el paciente no esta ya agendado en otra hora de esa misma fecha.',
+    };
+  }
+
+  if (includesAny(message, ['duplic', 'ya existe', 'lista de espera'])) {
+    return {
+      title: 'La solicitud de espera ya existe o no es valida',
+      hint: 'Evita duplicar al mismo paciente en el mismo horario y asegúrate de elegir un slot ocupado.',
+    };
+  }
+
+  return {
+    title: 'No pudimos actualizar la lista de espera',
+    hint: 'Comprueba que el horario este ocupado y que el paciente no tenga otra cita activa ese mismo dia.',
+  };
+};
+
+export const getAvailabilityErrorMeta = (rawMessage = '') => {
+  const message = String(rawMessage || '').toLowerCase();
+
+  if (includesAny(message, ['citas agendadas fuera del nuevo horario', 'no puedes reducir la disponibilidad'])) {
+    return {
+      title: 'La nueva disponibilidad deja citas sin cobertura',
+      hint: 'Primero reprograma o cancela las citas futuras afectadas antes de reducir bloques u horarios.',
+    };
+  }
+
+  return {
+    title: 'No pudimos guardar la disponibilidad semanal',
+    hint: 'Revisa que los bloques no se pisen y que los horarios mantengan cobertura para las citas futuras.',
+  };
+};
+
+export const getAvailabilityExceptionErrorMeta = (rawMessage = '') => {
+  const message = String(rawMessage || '').toLowerCase();
+
+  if (includesAny(message, ['cita', 'citas futuras', 'fuera de cobertura'])) {
+    return {
+      title: 'Ese cambio afecta citas ya registradas',
+      hint: 'Antes de guardar la excepcion, reprograma o cancela las citas que quedarian fuera del nuevo horario.',
+    };
+  }
+
+  return {
+    title: 'No pudimos guardar esta excepcion',
+    hint: 'Verifica la fecha, los bloques y que el cambio no choque con vacaciones, bloqueos o citas futuras.',
+  };
+};

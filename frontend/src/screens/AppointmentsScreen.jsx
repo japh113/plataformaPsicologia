@@ -15,9 +15,12 @@ import {
   getAppointmentAccent,
   getAppointmentDateTime,
   getAppointmentDisplayStatus,
+  getAppointmentErrorMeta,
   getAppointmentHourOptions,
   getAppointmentSessionLabel,
   getAppointmentSessionState,
+  getAvailabilityErrorMeta,
+  getAvailabilityExceptionErrorMeta,
   getCalendarGroupContainerClasses,
   getDayNumberBadge,
   getExceptionCellAccent,
@@ -35,6 +38,7 @@ import {
   getVisibleCalendarAppointments,
   getWaitlistBadgeClasses,
   getWaitlistCountDotClasses,
+  getWaitlistErrorMeta,
   getWeekDates,
   getWeekdayFromDateString,
   getWeekRangeLabel,
@@ -48,6 +52,7 @@ import {
   sortCalendarDayAppointments,
   weekdayLabels,
 } from './appointmentsScreen.helpers';
+import InlineNotice from '../components/shared/InlineNotice';
 
 function ModalShell({ title, description, onClose, children }) {
   return (
@@ -266,6 +271,13 @@ export default function AppointmentsScreen({
     [form.recurrenciaHasta, selectedFormDate],
   );
   const selectedWaitlistDate = waitlistForm.fecha || selectedDate || todayDate;
+  const appointmentErrorMeta = useMemo(() => getAppointmentErrorMeta(appointmentActionError), [appointmentActionError]);
+  const waitlistErrorMeta = useMemo(() => getWaitlistErrorMeta(waitlistActionError), [waitlistActionError]);
+  const availabilityErrorMeta = useMemo(() => getAvailabilityErrorMeta(availabilityActionError), [availabilityActionError]);
+  const availabilityExceptionErrorMeta = useMemo(
+    () => getAvailabilityExceptionErrorMeta(availabilityExceptionActionError),
+    [availabilityExceptionActionError],
+  );
 
   const selectedDayAvailability = useMemo(() => {
     const exception = availabilityExceptionsMap.get(selectedFormDate);
@@ -1422,7 +1434,15 @@ export default function AppointmentsScreen({
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
             <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-bold text-gray-800 flex items-center"><CalendarPlus className="mr-2 text-indigo-500" size={20} /> {editingAppointmentId ? 'Editar cita' : 'Nueva cita'}</h3>{editingAppointmentId && <button onClick={resetForm} className="text-sm font-medium text-gray-500 hover:text-gray-800 transition">Limpiar</button>}</div>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {appointmentActionError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{appointmentActionError}</div>}
+              {appointmentActionError && (
+                <InlineNotice
+                  tone="error"
+                  title={appointmentErrorMeta.title}
+                  message={appointmentActionError}
+                  hint={appointmentErrorMeta.hint}
+                  onDismiss={onDismissAppointmentError}
+                />
+              )}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Paciente</label>
                 <select name="pacienteId" value={form.pacienteId || patients[0]?.id || ''} onChange={handleChange} disabled={isSavingAppointment} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
@@ -1465,7 +1485,16 @@ export default function AppointmentsScreen({
               <div><h3 className="text-lg font-bold text-gray-800">Disponibilidad semanal</h3><p className="text-sm text-gray-500 mt-1">Agrega uno o varios bloques por dia para cubrir manana, tarde o turnos partidos.</p></div>
               <button type="button" onClick={handleSaveAvailability} disabled={isSavingAvailability} className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition disabled:opacity-60 disabled:cursor-not-allowed"><Save size={16} className="mr-2" /> {isSavingAvailability ? 'Guardando...' : 'Guardar'}</button>
             </div>
-            {availabilityActionError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{availabilityActionError}</div>}
+            {availabilityActionError && (
+              <InlineNotice
+                className="mb-4"
+                tone="error"
+                title={availabilityErrorMeta.title}
+                message={availabilityActionError}
+                hint={availabilityErrorMeta.hint}
+                onDismiss={onDismissAvailabilityError}
+              />
+            )}
             <div className="space-y-3">
               {normalizedAvailabilityDraft.map((entry) => <div key={entry.weekday} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
                 <div className="flex flex-col gap-3">
@@ -1502,7 +1531,16 @@ export default function AppointmentsScreen({
               <button type="button" onClick={resetExceptionForm} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">Nueva excepcion</button>
             </div>
 
-            {availabilityExceptionActionError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{availabilityExceptionActionError}</div>}
+            {availabilityExceptionActionError && (
+              <InlineNotice
+                className="mb-4"
+                tone="error"
+                title={availabilityExceptionErrorMeta.title}
+                message={availabilityExceptionActionError}
+                hint={availabilityExceptionErrorMeta.hint}
+                onDismiss={onDismissAvailabilityExceptionError}
+              />
+            )}
 
             <form onSubmit={handleSaveExceptionRange} className="mb-4 space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div>
@@ -1638,7 +1676,15 @@ export default function AppointmentsScreen({
         >
           <div className="space-y-5">
             <form onSubmit={handleSubmitWaitlist} className="space-y-4 rounded-2xl border border-violet-200 bg-violet-50/60 p-4">
-              {waitlistActionError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{waitlistActionError}</div>}
+              {waitlistActionError && (
+                <InlineNotice
+                  tone="error"
+                  title={waitlistErrorMeta.title}
+                  message={waitlistActionError}
+                  hint={waitlistErrorMeta.hint}
+                  onDismiss={onDismissWaitlistError}
+                />
+              )}
               <div>
                 <h4 className="font-semibold text-slate-900">Agregar paciente a espera</h4>
                 <p className="mt-1 text-xs text-slate-600">Solo puedes anotar al paciente sobre horarios actualmente ocupados. Si ese espacio se libera, la solicitud queda visible para seguimiento.</p>
@@ -1773,7 +1819,16 @@ export default function AppointmentsScreen({
           description="Agrega uno o varios bloques por dia para cubrir manana, tarde o turnos partidos."
           onClose={closeAvailabilityModal}
         >
-          {availabilityActionError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{availabilityActionError}</div>}
+          {availabilityActionError && (
+            <InlineNotice
+              className="mb-4"
+              tone="error"
+              title={availabilityErrorMeta.title}
+              message={availabilityActionError}
+              hint={availabilityErrorMeta.hint}
+              onDismiss={onDismissAvailabilityError}
+            />
+          )}
           <div className="space-y-3">
             {normalizedAvailabilityDraft.map((entry) => <div key={entry.weekday} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
               <div className="flex flex-col gap-3">
@@ -1812,7 +1867,16 @@ export default function AppointmentsScreen({
           description="Bloquea un dia completo, crea horarios especiales o marca vacaciones de varios dias."
           onClose={closeExceptionsModal}
         >
-          {availabilityExceptionActionError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{availabilityExceptionActionError}</div>}
+          {availabilityExceptionActionError && (
+            <InlineNotice
+              className="mb-4"
+              tone="error"
+              title={availabilityExceptionErrorMeta.title}
+              message={availabilityExceptionActionError}
+              hint={availabilityExceptionErrorMeta.hint}
+              onDismiss={onDismissAvailabilityExceptionError}
+            />
+          )}
           <form onSubmit={handleSaveExceptionRange} className="mb-4 space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -1941,7 +2005,15 @@ export default function AppointmentsScreen({
           onClose={closeAppointmentModal}
         >
           <form onSubmit={handleSubmit} className="space-y-4">
-            {appointmentActionError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{appointmentActionError}</div>}
+            {appointmentActionError && (
+              <InlineNotice
+                tone="error"
+                title={appointmentErrorMeta.title}
+                message={appointmentActionError}
+                hint={appointmentErrorMeta.hint}
+                onDismiss={onDismissAppointmentError}
+              />
+            )}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Paciente</label>
               <select name="pacienteId" value={form.pacienteId || patients[0]?.id || ''} onChange={handleChange} disabled={isSavingAppointment} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">

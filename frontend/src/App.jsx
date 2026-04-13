@@ -113,6 +113,7 @@ export default function App() {
   const [guardandoNotas, setGuardandoNotas] = useState(false);
   const [guardandoPerfilPaciente, setGuardandoPerfilPaciente] = useState(false);
   const [guardandoSesion, setGuardandoSesion] = useState(false);
+  const [sessionActionError, setSessionActionError] = useState('');
   const [guardandoEntrevista, setGuardandoEntrevista] = useState(false);
   const [procesandoTareaId, setProcesandoTareaId] = useState(null);
   const [creandoObjetivo, setCreandoObjetivo] = useState(false);
@@ -184,6 +185,7 @@ export default function App() {
     setWaitlistActionError('');
     setAvailabilityActionError('');
     setAvailabilityExceptionActionError('');
+    setSessionActionError('');
     setGuardandoSesion(false);
     setGuardandoEntrevista(false);
     setProcesandoSesionId(null);
@@ -360,6 +362,7 @@ export default function App() {
     const pacienteActualizado = pacientes.find((currentPatient) => currentPatient.id === paciente.id) || paciente;
     setPacienteSeleccionado(pacienteActualizado);
     setSessionDraftAppointmentId(options.appointmentId || null);
+    setSessionActionError('');
     setNotasTemp(pacienteActualizado.notas || '');
     setVistaActiva('notas');
   };
@@ -659,15 +662,17 @@ export default function App() {
     }
 
     setGuardandoSesion(true);
+    setSessionActionError('');
 
     try {
       await createPatientClinicalNote(pacienteSeleccionado.id, payload);
       await refreshSelectedPatient(pacienteSeleccionado.id);
+      setSessionActionError('');
       showSuccessFeedback('Nota clinica creada correctamente.');
       return true;
     } catch (error) {
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
-      showErrorFeedback((error.message || 'No se pudo crear la nota clinica.') + details);
+      setSessionActionError((error.message || 'No se pudo crear la nota clinica.') + details);
       return false;
     } finally {
       setGuardandoSesion(false);
@@ -681,15 +686,17 @@ export default function App() {
 
     setGuardandoSesion(true);
     setProcesandoSesionId(sessionId);
+    setSessionActionError('');
 
     try {
       await updatePatientClinicalNote(pacienteSeleccionado.id, sessionId, payload);
       await refreshSelectedPatient(pacienteSeleccionado.id);
+      setSessionActionError('');
       showSuccessFeedback('Nota clinica actualizada correctamente.');
       return true;
     } catch (error) {
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
-      showErrorFeedback((error.message || 'No se pudo actualizar la nota clinica.') + details);
+      setSessionActionError((error.message || 'No se pudo actualizar la nota clinica.') + details);
       return false;
     } finally {
       setGuardandoSesion(false);
@@ -703,14 +710,16 @@ export default function App() {
     }
 
     setProcesandoSesionId(sessionId);
+    setSessionActionError('');
 
     try {
       await deletePatientClinicalNote(pacienteSeleccionado.id, sessionId);
       await refreshSelectedPatient(pacienteSeleccionado.id);
+      setSessionActionError('');
       showSuccessFeedback('Nota clinica eliminada.');
       return true;
     } catch (error) {
-      showErrorFeedback(error.message || 'No se pudo eliminar la nota clinica.');
+      setSessionActionError(error.message || 'No se pudo eliminar la nota clinica.');
       return false;
     } finally {
       setProcesandoSesionId(null);
@@ -1171,6 +1180,8 @@ export default function App() {
           onUpdateSession={updateSession}
           onDeleteSession={removeSession}
           onSaveInterview={saveInterview}
+          sessionActionError={sessionActionError}
+          onDismissSessionActionError={() => setSessionActionError('')}
           isSavingNotes={guardandoNotas}
           isSavingPatientProfile={guardandoPerfilPaciente}
           isSavingSession={guardandoSesion}

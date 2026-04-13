@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { getRiskColor } from '../utils/risk';
 import FutureFeatureCard from '../components/shared/FutureFeatureCard';
+import InlineNotice from '../components/shared/InlineNotice';
 import PatientInterviewModal from '../modals/PatientInterviewModal';
 import {
   buildInterviewForm,
@@ -129,6 +130,36 @@ const getClinicalNotesEmptyStateCopy = (isPsychologist) => (
     }
 );
 
+const getClinicalNoteErrorMeta = (rawMessage = '') => {
+  const message = String(rawMessage || '').toLowerCase();
+
+  if (message.includes('cita futura')) {
+    return {
+      title: 'No puedes registrar una nota clinica para una cita futura',
+      hint: 'Espera a que llegue la fecha de la cita y luego cierrala como completada para documentarla.',
+    };
+  }
+
+  if (message.includes('appointmentid') || message.includes('cita') || message.includes('completada')) {
+    return {
+      title: 'La nota clinica necesita una cita completada',
+      hint: 'Selecciona una cita ya realizada y completada para mantener la trazabilidad del expediente.',
+    };
+  }
+
+  if (message.includes('validation')) {
+    return {
+      title: 'Faltan datos para guardar la nota clinica',
+      hint: 'Revisa la cita vinculada, el contenido principal y las tareas antes de volver a guardar.',
+    };
+  }
+
+  return {
+    title: 'No pudimos guardar la nota clinica',
+    hint: 'Verifica la cita vinculada y el contenido del seguimiento antes de intentarlo de nuevo.',
+  };
+};
+
 export default function NotesScreen({
   currentUser,
   patient,
@@ -152,6 +183,8 @@ export default function NotesScreen({
   onUpdateSession,
   onDeleteSession,
   onSaveInterview,
+  sessionActionError = '',
+  onDismissSessionActionError,
   isSavingNotes = false,
   isSavingPatientProfile = false,
   isSavingSession = false,
@@ -322,6 +355,7 @@ export default function NotesScreen({
 
   const closeSessionModal = () => {
     setShowSessionModal(false);
+    onDismissSessionActionError?.();
     resetSessionForm();
   };
   const closeConfirmationModal = () => setConfirmationModal(null);
@@ -348,6 +382,7 @@ export default function NotesScreen({
   };
 
   const openNewSessionModal = (appointmentId = prefilledAppointmentId || '') => {
+    onDismissSessionActionError?.();
     setSelectedSessionId(null);
     setSessionTaskText('');
     setSessionForm({
@@ -415,6 +450,7 @@ export default function NotesScreen({
   };
 
   const handleEditSession = (session) => {
+    onDismissSessionActionError?.();
     setSelectedSessionId(session.id);
     setSessionTaskText('');
     setSessionForm({
@@ -796,6 +832,7 @@ export default function NotesScreen({
 
   const agendaEmptyState = getAgendaEmptyStateCopy(agendaFilter, isPsychologist);
   const clinicalNotesEmptyState = getClinicalNotesEmptyStateCopy(isPsychologist);
+  const clinicalNoteErrorMeta = getClinicalNoteErrorMeta(sessionActionError);
 
   const handleInterviewFieldChange = (field, value) => {
     setInterviewForm((currentForm) => ({
@@ -1482,6 +1519,15 @@ export default function NotesScreen({
           onClose={closeSessionModal}
         >
           <div className="space-y-4">
+            {sessionActionError && (
+              <InlineNotice
+                tone="error"
+                title={clinicalNoteErrorMeta.title}
+                message={sessionActionError}
+                hint={clinicalNoteErrorMeta.hint}
+                onDismiss={onDismissSessionActionError}
+              />
+            )}
             <div>
               <label className="mb-1.5 block text-sm font-semibold text-slate-700">Cita vinculada</label>
               <select

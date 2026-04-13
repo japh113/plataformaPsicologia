@@ -1,10 +1,27 @@
 import React, { useState } from 'react';
 import { LockKeyhole, Sparkles } from 'lucide-react';
+import InlineNotice from '../components/shared/InlineNotice';
 
 const demoAccounts = [
   { role: 'Psicologo', email: 'doctor@psicopanel.com', password: 'Demo12345!' },
   { role: 'Paciente', email: 'juan@example.com', password: 'Demo12345!' },
 ];
+
+const getLoginErrorMeta = (rawMessage = '') => {
+  const message = String(rawMessage || '').toLowerCase();
+
+  if (message.includes('credenciales') || message.includes('correo') || message.includes('password')) {
+    return {
+      title: 'No pudimos validar ese acceso',
+      hint: 'Si estas probando el flujo demo, puedes usar una de las cuentas sugeridas arriba para entrar mas rapido.',
+    };
+  }
+
+  return {
+    title: 'No pudimos iniciar sesion',
+    hint: 'Revisa el correo, la contrasena y tu conexion antes de volver a intentarlo.',
+  };
+};
 
 export default function LoginScreen({ onLogin, isSubmitting = false, error = '' }) {
   const [form, setForm] = useState({
@@ -30,6 +47,8 @@ export default function LoginScreen({ onLogin, isSubmitting = false, error = '' 
     event.preventDefault();
     onLogin(form);
   };
+
+  const loginErrorMeta = getLoginErrorMeta(error);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.18),_transparent_35%),linear-gradient(135deg,_#f8fafc,_#eef2ff_45%,_#f8fafc)] flex items-center justify-center px-4 py-8">
@@ -108,7 +127,14 @@ export default function LoginScreen({ onLogin, isSubmitting = false, error = '' 
                 />
               </div>
 
-              {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+              {error && (
+                <InlineNotice
+                  tone="error"
+                  title={loginErrorMeta.title}
+                  message={error}
+                  hint={loginErrorMeta.hint}
+                />
+              )}
 
               <button
                 type="submit"
