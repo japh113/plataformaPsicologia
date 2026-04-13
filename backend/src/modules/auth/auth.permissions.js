@@ -1,6 +1,11 @@
 export const isPsychologist = (actor) => actor?.role === 'psychologist';
 export const isPatient = (actor) => actor?.role === 'patient';
 export const isAdmin = (actor) => actor?.role === 'admin';
+export const isSupport = (actor) => actor?.role === 'support';
+export const isSuperadmin = (actor) => actor?.role === 'superadmin';
+export const canViewBackoffice = (actor) => isAdmin(actor) || isSupport(actor) || isSuperadmin(actor);
+export const canManageBackoffice = (actor) => isAdmin(actor) || isSuperadmin(actor);
+export const canAccessAllClinicalData = (actor) => isSuperadmin(actor);
 
 export const createForbiddenError = (message = 'Forbidden') => {
   const error = new Error(message);
@@ -36,10 +41,26 @@ export const ensureAdmin = (actor) => {
   }
 };
 
+export const ensureBackofficeViewer = (actor) => {
+  ensureAuthenticated(actor);
+
+  if (!canViewBackoffice(actor)) {
+    throw createForbiddenError();
+  }
+};
+
+export const ensureBackofficeManager = (actor) => {
+  ensureAuthenticated(actor);
+
+  if (!canManageBackoffice(actor)) {
+    throw createForbiddenError();
+  }
+};
+
 export const buildPatientAccessScope = (actor, patientColumnReference, paramIndex = 1) => {
   ensureAuthenticated(actor);
 
-  if (isAdmin(actor)) {
+  if (canAccessAllClinicalData(actor)) {
     return {
       clause: 'TRUE',
       params: [],

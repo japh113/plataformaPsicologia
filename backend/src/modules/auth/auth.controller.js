@@ -1,6 +1,7 @@
 import { errorResponse, successResponse } from '../../utils/response.js';
-import { ensureAdmin } from './auth.permissions.js';
+import { ensureBackofficeManager, ensureBackofficeViewer } from './auth.permissions.js';
 import {
+  listBackofficeUsers,
   listPendingPsychologistUsers,
   loginUser,
   registerPatientUser,
@@ -83,7 +84,7 @@ export const registerPsychologistHandler = async (req, res, next) => {
 
 export const listPendingPsychologistsHandler = async (req, res, next) => {
   try {
-    ensureAdmin(req.user);
+    ensureBackofficeViewer(req.user);
     const pendingPsychologists = await listPendingPsychologistUsers();
     return successResponse(res, pendingPsychologists, 'Pending psychologists fetched successfully');
   } catch (error) {
@@ -97,7 +98,7 @@ export const listPendingPsychologistsHandler = async (req, res, next) => {
 
 export const reviewPsychologistHandler = async (req, res, next) => {
   try {
-    ensureAdmin(req.user);
+    ensureBackofficeManager(req.user);
 
     const errors = validatePsychologistReviewPayload(req.body);
 
@@ -113,6 +114,20 @@ export const reviewPsychologistHandler = async (req, res, next) => {
     });
 
     return successResponse(res, reviewedUser, 'Psychologist review updated successfully');
+  } catch (error) {
+    if (error.status) {
+      return errorResponse(res, error.message, error.status);
+    }
+
+    return next(error);
+  }
+};
+
+export const listBackofficeUsersHandler = async (req, res, next) => {
+  try {
+    ensureBackofficeViewer(req.user);
+    const users = await listBackofficeUsers();
+    return successResponse(res, users, 'Backoffice users fetched successfully');
   } catch (error) {
     if (error.status) {
       return errorResponse(res, error.message, error.status);

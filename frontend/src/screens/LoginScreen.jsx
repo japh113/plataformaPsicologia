@@ -5,6 +5,9 @@ import InlineNotice from '../components/shared/InlineNotice';
 const demoAccounts = [
   { role: 'Psicologo', email: 'doctor@psicopanel.com', password: 'Demo12345!' },
   { role: 'Paciente', email: 'juan@example.com', password: 'Demo12345!' },
+  { role: 'Admin', email: 'admin@psicopanel.com', password: 'Demo12345!' },
+  { role: 'Soporte', email: 'support@psicopanel.com', password: 'Demo12345!' },
+  { role: 'Superadmin', email: 'root@psicopanel.com', password: 'Demo12345!' },
 ];
 
 const getLoginErrorMeta = (rawMessage = '') => {
@@ -60,7 +63,7 @@ export default function LoginScreen({ onLogin, isSubmitting = false, error = '' 
             </div>
             <h1 className="mt-8 text-5xl font-black leading-tight">Acceso seguro para consulta y seguimiento.</h1>
             <p className="mt-5 max-w-xl text-base text-slate-300">
-              Inicia sesion como psicologo para gestionar pacientes o como paciente para revisar tareas y agenda personal.
+              Inicia sesion como psicologo, paciente o backoffice para entrar al flujo que corresponde a tu rol.
             </p>
           </div>
 
@@ -85,7 +88,7 @@ export default function LoginScreen({ onLogin, isSubmitting = false, error = '' 
               <LockKeyhole size={26} />
             </div>
             <h2 className="mt-6 text-3xl font-black text-slate-900">Iniciar sesion</h2>
-            <p className="mt-2 text-sm text-slate-500">Usa una cuenta demo para entrar como psicologo o paciente.</p>
+            <p className="mt-2 text-sm text-slate-500">Usa una cuenta demo para entrar como psicologo, paciente o backoffice.</p>
 
             <div className="mt-6 grid gap-3 lg:hidden">
               {demoAccounts.map((account) => (

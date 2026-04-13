@@ -12,6 +12,8 @@ PsicoPanel es una plataforma clinica para psicologos y pacientes con foco en:
 - disponibilidad
 - lista de espera
 
+Tambien existe ahora una capa de backoffice separada del flujo clinico diario.
+
 Importante:
 - hoy el producto activo en este repo es una `web-app`
 - la direccion futura es una app movil
@@ -47,6 +49,18 @@ Significa:
 - cuando haya riesgo operativo, priorizar flujo manual asistido sobre automatizacion total
 
 ## Reglas funcionales importantes
+
+### Roles
+- `patient`: experiencia del paciente
+- `psychologist`: operacion clinica
+- `support`: backoffice de solo lectura operativa
+- `admin`: backoffice con capacidad de aprobar psicologos y gestionar usuarios
+- `superadmin`: acceso maestro; debe tratarse como rol excepcional y no mezclarse con la UI clinica normal
+
+Importante:
+- `admin` y `support` no deben asumir acceso clinico global por defecto
+- la UI de backoffice debe mantenerse separada de la UI clinica
+- si se plantea acceso clinico total, debe pensarse como flujo excepcional tipo break-glass/auditable
 
 ### Citas
 - duran 60 minutos

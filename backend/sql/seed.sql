@@ -105,10 +105,37 @@ VALUES
     NULL
   ),
   (
+    'u_support_1',
+    'Soporte',
+    'PsicoPanel',
+    'support@psicopanel.com',
+    '$2b$10$vquYfF/cmj1ZWF9Lo7muB.RwNgmXuauLcQoZB53oPlACki6C8kkX.',
+    'support',
+    NULL
+  ),
+  (
+    'u_superadmin_1',
+    'Superadmin',
+    'PsicoPanel',
+    'root@psicopanel.com',
+    '$2b$10$vquYfF/cmj1ZWF9Lo7muB.RwNgmXuauLcQoZB53oPlACki6C8kkX.',
+    'superadmin',
+    NULL
+  ),
+  (
     'u_psy_1',
     'Lucia',
     'Morales',
     'doctor@psicopanel.com',
+    '$2b$10$vquYfF/cmj1ZWF9Lo7muB.RwNgmXuauLcQoZB53oPlACki6C8kkX.',
+    'psychologist',
+    NULL
+  ),
+  (
+    'u_psy_pending_1',
+    'Ana',
+    'Herrera',
+    'ana.herrera@psicopanel.com',
     '$2b$10$vquYfF/cmj1ZWF9Lo7muB.RwNgmXuauLcQoZB53oPlACki6C8kkX.',
     'psychologist',
     NULL
@@ -153,6 +180,16 @@ VALUES
     NOW(),
     NOW(),
     'u_admin_1'
+  ),
+  (
+    'u_psy_pending_1',
+    'Psicologa clinica infantil',
+    'LIC-PSI-019',
+    'pending_review',
+    'Solicitud demo pendiente para probar backoffice.',
+    NULL,
+    NULL,
+    NULL
   )
 ON CONFLICT (user_id) DO UPDATE
 SET

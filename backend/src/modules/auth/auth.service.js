@@ -18,6 +18,9 @@ const mapUserRow = (row) => ({
   email: row.email,
   role: row.role,
   patientId: row.patient_id ? String(row.patient_id) : null,
+  patientName: row.patient_full_name || null,
+  isActive: row.is_active !== false,
+  createdAt: row.created_at || null,
   psychologistStatus: row.psychologist_approval_status || null,
   psychologistProfile: row.role === 'psychologist'
     ? {
@@ -49,11 +52,16 @@ const baseUserSelect = `
     u.email,
     u.role,
     u.patient_id,
+    u.is_active,
+    u.created_at,
+    p.full_name AS patient_full_name,
     pp.professional_title,
     pp.license_number,
     pp.approval_status AS psychologist_approval_status,
     pp.review_notes
   FROM users u
+  LEFT JOIN patients p
+    ON p.id = u.patient_id
   LEFT JOIN psychologist_profiles pp
     ON pp.user_id = u.id
 `;
@@ -322,6 +330,27 @@ export const listPendingPsychologistUsers = async () => {
       WHERE u.role = 'psychologist'
         AND COALESCE(pp.approval_status, 'pending_review') = 'pending_review'
       ORDER BY u.created_at ASC
+    `,
+    [],
+  );
+
+  return result.rows.map(mapUserRow);
+};
+
+export const listBackofficeUsers = async () => {
+  const result = await db.query(
+    `
+      ${baseUserSelect}
+      ORDER BY
+        CASE u.role
+          WHEN 'superadmin' THEN 1
+          WHEN 'admin' THEN 2
+          WHEN 'support' THEN 3
+          WHEN 'psychologist' THEN 4
+          WHEN 'patient' THEN 5
+          ELSE 6
+        END,
+        u.created_at DESC
     `,
     [],
   );

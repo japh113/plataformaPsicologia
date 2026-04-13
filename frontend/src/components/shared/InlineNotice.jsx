@@ -20,12 +20,19 @@ const toneClasses = {
     hint: 'text-sky-700/90',
     button: 'border-sky-200/70 text-sky-700 hover:bg-sky-100',
   },
+  warning: {
+    wrapper: 'border-amber-200 bg-amber-50 text-amber-900',
+    icon: 'text-amber-600',
+    hint: 'text-amber-700/90',
+    button: 'border-amber-200/70 text-amber-700 hover:bg-amber-100',
+  },
 };
 
 const iconByTone = {
   error: AlertCircle,
   success: CheckCircle2,
   info: Info,
+  warning: Info,
 };
 
 export default function InlineNotice({

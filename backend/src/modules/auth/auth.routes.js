@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  listBackofficeUsersHandler,
   listPendingPsychologistsHandler,
   loginHandler,
   meHandler,
@@ -15,6 +16,7 @@ router.post('/login', loginHandler);
 router.post('/register/patient', registerPatientHandler);
 router.post('/register/psychologist', registerPsychologistHandler);
 router.get('/me', authenticate, meHandler);
+router.get('/users', authenticate, listBackofficeUsersHandler);
 router.get('/psychologists/pending', authenticate, listPendingPsychologistsHandler);
 router.patch('/psychologists/:userId/review', authenticate, reviewPsychologistHandler);
 

@@ -9,6 +9,7 @@ import PatientsScreen from './screens/PatientsScreen';
 import NotesScreen from './screens/NotesScreen';
 import LoginScreen from './screens/LoginScreen';
 import AppointmentsScreen from './screens/AppointmentsScreen';
+import BackofficeScreen from './screens/BackofficeScreen';
 import {
   createMyUnavailableAvailabilityRange,
   deleteMyUnavailableAvailabilityRange,
@@ -46,7 +47,7 @@ import {
   updateAppointment,
 } from './api/appointments';
 import { getAuthToken } from './api/client';
-import { getCurrentUser, login, logout } from './api/auth';
+import { getBackofficeUsers, getCurrentUser, getPendingPsychologists, login, logout, reviewPsychologist } from './api/auth';
 import { getMyReminders } from './api/reminders';
 import {
   mapBackendPatientToUiPatient,
@@ -104,6 +105,8 @@ export default function App() {
   const [availabilityDraft, setAvailabilityDraft] = useState([]);
   const [availabilityExceptions, setAvailabilityExceptions] = useState([]);
   const [reminders, setReminders] = useState([]);
+  const [backofficeUsers, setBackofficeUsers] = useState([]);
+  const [pendingPsychologists, setPendingPsychologists] = useState([]);
   const [mostrarModalNuevoPaciente, setMostrarModalNuevoPaciente] = useState(false);
   const [nuevoPacienteForm, setNuevoPacienteForm] = useState({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
   const [notasTemp, setNotasTemp] = useState('');
@@ -133,11 +136,13 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
+  const [reviewingPsychologistId, setReviewingPsychologistId] = useState(null);
+  const [backofficeActionError, setBackofficeActionError] = useState('');
   const [patientInterviewForm, setPatientInterviewForm] = useState(buildInterviewDraftForm(null, ''));
   const [uiFeedback, setUiFeedback] = useState(null);
 
   const isPsychologist = currentUser?.role === 'psychologist';
-  const isAdmin = currentUser?.role === 'admin';
+  const isBackoffice = ['admin', 'support', 'superadmin'].includes(currentUser?.role || '');
   const todayDate = getTodayDateString();
   const todayAppointments = useMemo(() => filterAppointmentsByDate(appointments, todayDate), [appointments, todayDate]);
   const patientProfile = useMemo(
@@ -180,6 +185,8 @@ export default function App() {
     setAvailabilityDraft([]);
     setAvailabilityExceptions([]);
     setReminders([]);
+    setBackofficeUsers([]);
+    setPendingPsychologists([]);
     setNotasTemp('');
     setErrorCarga('');
     setAppointmentActionError('');
@@ -190,9 +197,17 @@ export default function App() {
     setGuardandoSesion(false);
     setGuardandoEntrevista(false);
     setProcesandoSesionId(null);
+    setReviewingPsychologistId(null);
+    setBackofficeActionError('');
     setMostrarModalNuevoPaciente(false);
     setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
   };
+
+  const refreshBackofficeData = useCallback(async () => {
+    const [users, pending] = await Promise.all([getBackofficeUsers(), getPendingPsychologists()]);
+    setBackofficeUsers(users);
+    setPendingPsychologists(pending);
+  }, []);
 
   const cargarDatos = useCallback(async () => {
     if (!currentUser) {
@@ -203,6 +218,18 @@ export default function App() {
     setErrorCarga('');
 
     try {
+      if (['admin', 'support', 'superadmin'].includes(currentUser.role)) {
+        await refreshBackofficeData();
+        setPacientes([]);
+        setAppointments([]);
+        setAppointmentWaitlist([]);
+        setAvailability([]);
+        setAvailabilityDraft([]);
+        setAvailabilityExceptions([]);
+        setReminders([]);
+        return;
+      }
+
       const requests = [getPatients(), getAppointments(), getMyReminders()];
 
       if (currentUser.role === 'psychologist') {
@@ -239,7 +266,7 @@ export default function App() {
     } finally {
       setCargandoDatos(false);
     }
-  }, [currentUser]);
+  }, [currentUser, refreshBackofficeData]);
 
   useEffect(() => {
     const bootstrapSession = async () => {
@@ -305,6 +332,27 @@ export default function App() {
     resetSessionState();
   };
 
+  const handleReviewPsychologist = async (userId, payload) => {
+    if (!isBackoffice || reviewingPsychologistId) {
+      return false;
+    }
+
+    setReviewingPsychologistId(userId);
+    setBackofficeActionError('');
+
+    try {
+      const reviewedUser = await reviewPsychologist(userId, payload);
+      syncBackofficeUserState(reviewedUser);
+      showSuccessFeedback('Solicitud de psicologo actualizada correctamente.');
+      return true;
+    } catch (error) {
+      setBackofficeActionError(error.message || 'No se pudo actualizar la revision del psicologo.');
+      return false;
+    } finally {
+      setReviewingPsychologistId(null);
+    }
+  };
+
   const syncPatientState = (nextPatient) => {
     setPacientes((currentPatients) => syncPatientInCollection(currentPatients, nextPatient));
     setPacienteSeleccionado((currentPatient) => (currentPatient?.id === nextPatient.id ? nextPatient : currentPatient));
@@ -312,6 +360,19 @@ export default function App() {
 
   const syncAppointmentsState = (updater) => {
     setAppointments((currentAppointments) => sortAppointments(typeof updater === 'function' ? updater(currentAppointments) : updater));
+  };
+
+  const syncBackofficeUserState = (nextUser) => {
+    setBackofficeUsers((currentUsers) => {
+      const existingUserIndex = currentUsers.findIndex((user) => user.id === nextUser.id);
+
+      if (existingUserIndex === -1) {
+        return [nextUser, ...currentUsers];
+      }
+
+      return currentUsers.map((user) => (user.id === nextUser.id ? nextUser : user));
+    });
+    setPendingPsychologists((currentPendingUsers) => currentPendingUsers.filter((user) => user.id !== nextUser.id));
   };
 
   const refreshSelectedPatient = async (patientId) => {
@@ -1089,29 +1150,18 @@ export default function App() {
     }
 
     if (vistaActiva === 'dashboard') {
-      if (isAdmin) {
+      if (isBackoffice) {
         return (
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-            <h2 className="text-2xl font-black text-slate-900">Panel admin en preparacion</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              La base backend para aprobar psicologos, registrar pacientes y modelar relaciones ya quedo iniciada.
-              La siguiente fase sera construir la experiencia administrativa real sobre esta misma cuenta.
-            </p>
-            <div className="mt-6 grid gap-3 md:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Rol actual</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">Admin</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Fase lista</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">Backend de aprobacion</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Siguiente paso</p>
-                <p className="mt-2 text-sm font-semibold text-slate-900">UI de revision y soporte</p>
-              </div>
-            </div>
-          </div>
+          <BackofficeScreen
+            section="overview"
+            currentUser={currentUser}
+            users={backofficeUsers}
+            pendingPsychologists={pendingPsychologists}
+            onReviewPsychologist={handleReviewPsychologist}
+            reviewingPsychologistId={reviewingPsychologistId}
+            actionError={backofficeActionError}
+            onDismissActionError={() => setBackofficeActionError('')}
+          />
         );
       }
 
@@ -1131,15 +1181,18 @@ export default function App() {
     }
 
     if (vistaActiva === 'appointments') {
-      if (isAdmin) {
+      if (isBackoffice) {
         return (
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-            <h2 className="text-2xl font-black text-slate-900">Agenda admin no disponible aun</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Este rol no entra todavia a la agenda clinica. La siguiente fase sera una consola admin para revisar psicologos,
-              solicitudes y relaciones activas sin mezclarse con el trabajo operativo del terapeuta.
-            </p>
-          </div>
+          <BackofficeScreen
+            section="pending"
+            currentUser={currentUser}
+            users={backofficeUsers}
+            pendingPsychologists={pendingPsychologists}
+            onReviewPsychologist={handleReviewPsychologist}
+            reviewingPsychologistId={reviewingPsychologistId}
+            actionError={backofficeActionError}
+            onDismissActionError={() => setBackofficeActionError('')}
+          />
         );
       }
 
@@ -1190,14 +1243,18 @@ export default function App() {
     }
 
     if (vistaActiva === 'patients') {
-      if (isAdmin) {
+      if (isBackoffice) {
         return (
-          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-            <h2 className="text-2xl font-black text-slate-900">Gestion admin pendiente</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Aqui vivira la administracion de psicologos, aprobaciones y relaciones paciente-terapeuta. Por ahora el modelo ya existe en backend.
-            </p>
-          </div>
+          <BackofficeScreen
+            section="users"
+            currentUser={currentUser}
+            users={backofficeUsers}
+            pendingPsychologists={pendingPsychologists}
+            onReviewPsychologist={handleReviewPsychologist}
+            reviewingPsychologistId={reviewingPsychologistId}
+            actionError={backofficeActionError}
+            onDismissActionError={() => setBackofficeActionError('')}
+          />
         );
       }
 

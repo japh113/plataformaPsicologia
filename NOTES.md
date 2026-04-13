@@ -1,7 +1,7 @@
 # Notes
 
 ## Fecha de referencia
-Contexto actualizado al `2026-04-09`.
+Contexto actualizado al `2026-04-13`.
 
 ## Recordatorio de producto
 - hoy se esta construyendo y operando como `web-app`
@@ -30,6 +30,8 @@ Esto debe mantenerse en mente en futuros chats, aunque el trabajo inmediato siga
 - historial clinico por notas clinicas
 - expediente del paciente
 - lista de espera por slot con prioridad y drag & drop
+- base de backoffice con roles `support`, `admin` y `superadmin`
+- consola inicial para aprobacion de psicologos y revision de usuarios
 
 ## Decisiones de producto importantes
 
@@ -59,6 +61,11 @@ Preferencias marcadas:
 - semanal y mensual consistentes
 - estados por color claros
 
+### 5. Backoffice separado de lo clinico
+- `support` y `admin` no deben asumir acceso clinico total por defecto
+- `superadmin` se trata como rol maestro excepcional
+- la UI de backoffice debe mantenerse separada de la UI clinica normal
+
 ## Pendientes funcionales razonables
 
 ### Muy probables
@@ -78,8 +85,12 @@ Preferencias marcadas:
 
 ## Datos demo actuales
 - credenciales demo:
+  - admin: `admin@psicopanel.com` / `Demo12345!`
+  - soporte: `support@psicopanel.com` / `Demo12345!`
+  - superadmin: `root@psicopanel.com` / `Demo12345!`
   - psicologo: `doctor@psicopanel.com` / `Demo12345!`
   - paciente: `juan@example.com` / `Demo12345!`
+  - psicologo pendiente: `ana.herrera@psicopanel.com` / `Demo12345!`
 - pacientes demo extra ya sembrados:
   - Sofia Ramirez
   - Carlos Mendez

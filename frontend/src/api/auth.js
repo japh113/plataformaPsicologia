@@ -16,6 +16,25 @@ export const getCurrentUser = async () => {
   return response.data;
 };
 
+export const getBackofficeUsers = async () => {
+  const response = await apiRequest('/auth/users');
+  return response.data;
+};
+
+export const getPendingPsychologists = async () => {
+  const response = await apiRequest('/auth/psychologists/pending');
+  return response.data;
+};
+
+export const reviewPsychologist = async (userId, payload) => {
+  const response = await apiRequest(`/auth/psychologists/${userId}/review`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
 export const logout = () => {
   clearAuthToken();
 };

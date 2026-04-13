@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS users (
   last_name TEXT NOT NULL DEFAULT '',
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'psychologist', 'patient')),
+  role TEXT NOT NULL CHECK (role IN ('admin', 'support', 'superadmin', 'psychologist', 'patient')),
   patient_id TEXT UNIQUE REFERENCES patients(id) ON DELETE SET NULL,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -61,7 +61,7 @@ ALTER TABLE users
 
 ALTER TABLE users
   ADD CONSTRAINT users_role_check
-  CHECK (role IN ('admin', 'psychologist', 'patient'));
+  CHECK (role IN ('admin', 'support', 'superadmin', 'psychologist', 'patient'));
 
 CREATE TABLE IF NOT EXISTS psychologist_profiles (
   user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS care_relationships (
   patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
   psychologist_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'ended', 'rejected')),
-  requested_by_role TEXT NOT NULL DEFAULT 'psychologist' CHECK (requested_by_role IN ('admin', 'psychologist', 'patient')),
+  requested_by_role TEXT NOT NULL DEFAULT 'psychologist' CHECK (requested_by_role IN ('admin', 'support', 'superadmin', 'psychologist', 'patient')),
   created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   approved_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   notes TEXT NOT NULL DEFAULT '',
