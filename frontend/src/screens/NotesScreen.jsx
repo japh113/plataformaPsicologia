@@ -122,6 +122,7 @@ export default function NotesScreen({
   const [showSessionModal, setShowSessionModal] = useState(Boolean(initialMatchedSession || prefilledAppointmentId));
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showInterviewModal, setShowInterviewModal] = useState(false);
+  const [confirmationModal, setConfirmationModal] = useState(null);
   const [agendaFilter, setAgendaFilter] = useState('proximas');
   const [profileForm, setProfileForm] = useState(buildProfileForm(patient));
   const [interviewForm, setInterviewForm] = useState(buildInterviewForm(patient, todayDate));
@@ -275,6 +276,8 @@ export default function NotesScreen({
     setShowSessionModal(false);
     resetSessionForm();
   };
+  const closeConfirmationModal = () => setConfirmationModal(null);
+  const openConfirmationModal = (config) => setConfirmationModal(config);
 
   const openProfileModal = () => {
     setProfileForm(buildProfileForm(patient));
@@ -412,11 +415,16 @@ export default function NotesScreen({
       return;
     }
 
-    if (!window.confirm('La cita se marcara como cancelada. Deseas continuar?')) {
-      return;
-    }
-
-    await onUpdateAppointmentStatus?.(appointment, 'cancelada');
+    openConfirmationModal({
+      title: 'Cancelar cita',
+      description: 'La cita quedara marcada como cancelada dentro del expediente del paciente.',
+      confirmLabel: 'Cancelar cita',
+      tone: 'warning',
+      onConfirm: async () => {
+        await onUpdateAppointmentStatus?.(appointment, 'cancelada');
+        closeConfirmationModal();
+      },
+    });
   };
 
   const handleSaveSession = async () => {
@@ -460,15 +468,20 @@ export default function NotesScreen({
   };
 
   const handleDeleteCurrentSession = async (sessionId) => {
-    if (!window.confirm('Se eliminara esta nota clinica. Deseas continuar?')) {
-      return;
-    }
+    openConfirmationModal({
+      title: 'Eliminar nota clinica',
+      description: 'Esta accion quitara la nota clinica del expediente. Las tareas ligadas a esa nota tambien dejaran de verse en ese contexto.',
+      confirmLabel: 'Eliminar nota clinica',
+      tone: 'danger',
+      onConfirm: async () => {
+        const wasDeleted = await onDeleteSession(sessionId);
 
-    const wasDeleted = await onDeleteSession(sessionId);
-
-    if (wasDeleted) {
-      closeSessionModal();
-    }
+        if (wasDeleted) {
+          closeSessionModal();
+          closeConfirmationModal();
+        }
+      },
+    });
   };
 
   const getAgendaEntries = () => {
@@ -1371,6 +1384,35 @@ export default function NotesScreen({
           </div>
         </div>
       </div>
+
+      {confirmationModal && (
+        <ModalShell
+          title={confirmationModal.title}
+          description={confirmationModal.description}
+          onClose={closeConfirmationModal}
+        >
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={closeConfirmationModal}
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+            >
+              Volver
+            </button>
+            <button
+              type="button"
+              onClick={confirmationModal.onConfirm}
+              className={`rounded-2xl px-4 py-3 text-sm font-medium text-white transition ${
+                confirmationModal.tone === 'warning'
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-red-600 hover:bg-red-700'
+              }`}
+            >
+              {confirmationModal.confirmLabel}
+            </button>
+          </div>
+        </ModalShell>
+      )}
 
       {showSessionModal && isPsychologist && (
         <ModalShell

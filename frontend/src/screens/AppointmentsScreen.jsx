@@ -93,6 +93,7 @@ export default function AppointmentsScreen({
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
   const [isExceptionsModalOpen, setIsExceptionsModalOpen] = useState(false);
+  const [confirmationModal, setConfirmationModal] = useState(null);
   const [waitlistForm, setWaitlistForm] = useState(emptyWaitlistForm);
   const [draggedWaitlistEntryId, setDraggedWaitlistEntryId] = useState(null);
   const [waitlistSchedulingEntry, setWaitlistSchedulingEntry] = useState(null);
@@ -442,6 +443,8 @@ export default function AppointmentsScreen({
   }, [appointments, editingAppointmentId, patients, selectedFormDate, waitlistEntriesBySlot]);
 
   const resetForm = () => { setEditingAppointmentId(null); setForm(emptyForm); setWaitlistSchedulingEntry(null); onDismissAppointmentError?.(); };
+  const closeConfirmationModal = () => setConfirmationModal(null);
+  const openConfirmationModal = (config) => setConfirmationModal(config);
   const resetWaitlistForm = (date = selectedDate || todayDate) => {
     setWaitlistForm({
       ...emptyWaitlistForm,
@@ -611,28 +614,49 @@ export default function AppointmentsScreen({
       resetWaitlistForm(waitlistForm.fecha);
     }
   };
-  const handleDelete = async (appointmentId) => { if (window.confirm('Se eliminara esta cita. Deseas continuar?')) await onDeleteAppointment(appointmentId); };
+  const handleDelete = async (appointmentId) => {
+    openConfirmationModal({
+      title: 'Eliminar cita',
+      description: 'Esta accion quitara la cita del calendario. Si quieres conservar el registro, conviene cancelarla en lugar de eliminarla.',
+      confirmLabel: 'Eliminar cita',
+      tone: 'danger',
+      onConfirm: async () => {
+        await onDeleteAppointment(appointmentId);
+        closeConfirmationModal();
+      },
+    });
+  };
   const handleDeleteFutureRecurrence = async (appointment) => {
     if (!appointment?.recurrenciaGrupoId) {
       return;
     }
 
-    if (!window.confirm('Se eliminaran esta cita y todas las futuras de la misma recurrencia. Deseas continuar?')) {
-      return;
-    }
+    openConfirmationModal({
+      title: 'Eliminar recurrencia futura',
+      description: 'Se eliminaran esta cita y todas las futuras de la misma serie. Las citas anteriores se conservaran.',
+      confirmLabel: 'Eliminar esta y futuras',
+      tone: 'danger',
+      onConfirm: async () => {
+        const wasDeleted = await onDeleteFutureRecurringAppointments?.(appointment.id);
 
-    const wasDeleted = await onDeleteFutureRecurringAppointments?.(appointment.id);
-
-    if (wasDeleted) {
-      closeAppointmentModal();
-    }
+        if (wasDeleted) {
+          closeAppointmentModal();
+          closeConfirmationModal();
+        }
+      },
+    });
   };
   const handleDeleteWaitlistEntry = async (waitlistEntryId) => {
-    if (!window.confirm('Se eliminara esta solicitud de lista de espera. Deseas continuar?')) {
-      return;
-    }
-
-    await onDeleteAppointmentWaitlist?.(waitlistEntryId);
+    openConfirmationModal({
+      title: 'Eliminar de lista de espera',
+      description: 'La solicitud se quitara de la lista de espera para este horario.',
+      confirmLabel: 'Eliminar solicitud',
+      tone: 'danger',
+      onConfirm: async () => {
+        await onDeleteAppointmentWaitlist?.(waitlistEntryId);
+        closeConfirmationModal();
+      },
+    });
   };
   const handleReorderWaitlistEntries = async (slot, draggedEntryId, targetEntryId) => {
     if (!slot || !draggedEntryId || !targetEntryId || draggedEntryId === targetEntryId || isSavingWaitlist) {
@@ -668,33 +692,50 @@ export default function AppointmentsScreen({
     });
   };
   const handleCancelAppointment = async (appointment) => {
-    if (!window.confirm('La cita se marcara como cancelada. Deseas continuar?')) {
-      return false;
-    }
+    openConfirmationModal({
+      title: 'Cancelar cita',
+      description: 'La cita quedara como cancelada y el horario podra reutilizarse. Si hay lista de espera, podras revisarla despues.',
+      confirmLabel: 'Cancelar cita',
+      tone: 'warning',
+      onConfirm: async () => {
+        const wasCancelled = await handleUpdateAppointmentStatus(appointment, 'cancelada');
 
-    const wasCancelled = await handleUpdateAppointmentStatus(appointment, 'cancelada');
+        if (wasCancelled && appointment.waitlistCount > 0) {
+          setSelectedDate(appointment.fecha);
+          setCalendarAnchorDate(appointment.fecha);
+          setWaitlistForm({
+            pacienteId: '',
+            fecha: appointment.fecha,
+            hora24: appointment.hora24,
+            notas: '',
+          });
+          setIsWaitlistModalOpen(true);
+          onDismissWaitlistError?.();
+        }
 
-    if (wasCancelled && appointment.waitlistCount > 0) {
-      setSelectedDate(appointment.fecha);
-      setCalendarAnchorDate(appointment.fecha);
-      setWaitlistForm({
-        pacienteId: '',
-        fecha: appointment.fecha,
-        hora24: appointment.hora24,
-        notas: '',
-      });
-      setIsWaitlistModalOpen(true);
-      onDismissWaitlistError?.();
-    }
+        if (wasCancelled) {
+          closeConfirmationModal();
+        }
+      },
+    });
 
-    return wasCancelled;
+    return true;
   };
   const handleMarkNoShow = async (appointment) => {
-    if (!window.confirm('La cita se marcara como no asistio. Deseas continuar?')) {
-      return false;
-    }
+    openConfirmationModal({
+      title: 'Marcar como no asistio',
+      description: 'Usa esta opcion cuando la cita no ocurrio porque el paciente no se presento.',
+      confirmLabel: 'Marcar no asistio',
+      tone: 'warning',
+      onConfirm: async () => {
+        const wasUpdated = await handleUpdateAppointmentStatus(appointment, 'no asistio');
+        if (wasUpdated) {
+          closeConfirmationModal();
+        }
+      },
+    });
 
-    return handleUpdateAppointmentStatus(appointment, 'no asistio');
+    return true;
   };
   const handleSelectDate = (date) => { setSelectedDate(date); if (!date) return; setCalendarAnchorDate(date); onDismissAppointmentError?.(); };
   const handleMoveCalendar = (direction) => setCalendarAnchorDate((currentDate) => calendarView === 'month' ? shiftDateByMonths(currentDate, direction) : shiftDateByDays(currentDate, direction * 7));
@@ -796,11 +837,21 @@ export default function AppointmentsScreen({
     }
   };
   const handleDeleteException = async (date) => {
-    if (!window.confirm('Se eliminara esta excepcion y el dia volvera a usar la disponibilidad semanal. Deseas continuar?')) return;
-    const wasDeleted = await onDeleteAvailabilityException(date);
-    if (wasDeleted && editingExceptionDate === date) {
-      resetExceptionForm();
-    }
+    openConfirmationModal({
+      title: 'Eliminar horario especial',
+      description: 'Ese dia volvera a usar la disponibilidad semanal base.',
+      confirmLabel: 'Eliminar excepcion',
+      tone: 'danger',
+      onConfirm: async () => {
+        const wasDeleted = await onDeleteAvailabilityException(date);
+        if (wasDeleted && editingExceptionDate === date) {
+          resetExceptionForm();
+        }
+        if (wasDeleted) {
+          closeConfirmationModal();
+        }
+      },
+    });
   };
   const handleExceptionRangeFieldChange = (field, value) => {
     onDismissAvailabilityExceptionError?.();
@@ -825,14 +876,24 @@ export default function AppointmentsScreen({
     }
   };
   const handleDeleteExceptionRange = async (range) => {
-    if (!window.confirm('Se desbloqueara este periodo completo. Deseas continuar?')) return;
-    const wasDeleted = await onDeleteAvailabilityExceptionRange({
-      startDate: range.startDate,
-      endDate: range.endDate,
+    openConfirmationModal({
+      title: 'Desbloquear periodo',
+      description: 'Se quitara el bloqueo completo y esos dias volveran a usar la disponibilidad habitual.',
+      confirmLabel: 'Desbloquear periodo',
+      tone: 'warning',
+      onConfirm: async () => {
+        const wasDeleted = await onDeleteAvailabilityExceptionRange({
+          startDate: range.startDate,
+          endDate: range.endDate,
+        });
+        if (wasDeleted && editingExceptionRange?.startDate === range.startDate && editingExceptionRange?.endDate === range.endDate) {
+          resetExceptionRangeForm(selectedDate || todayDate);
+        }
+        if (wasDeleted) {
+          closeConfirmationModal();
+        }
+      },
     });
-    if (wasDeleted && editingExceptionRange?.startDate === range.startDate && editingExceptionRange?.endDate === range.endDate) {
-      resetExceptionRangeForm(selectedDate || todayDate);
-    }
   };
 
   const calendarTitle = isPsychologist
@@ -1456,6 +1517,35 @@ export default function AppointmentsScreen({
           </div>
         </div>}
       </div>
+
+      {confirmationModal && (
+        <ModalShell
+          title={confirmationModal.title}
+          description={confirmationModal.description}
+          onClose={closeConfirmationModal}
+        >
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={closeConfirmationModal}
+              className="rounded-xl border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              Volver
+            </button>
+            <button
+              type="button"
+              onClick={confirmationModal.onConfirm}
+              className={`rounded-xl px-4 py-3 text-sm font-medium text-white transition ${
+                confirmationModal.tone === 'warning'
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-red-600 hover:bg-red-700'
+              }`}
+            >
+              {confirmationModal.confirmLabel}
+            </button>
+          </div>
+        </ModalShell>
+      )}
 
       {isPsychologist && isWaitlistModalOpen && (
         <ModalShell
