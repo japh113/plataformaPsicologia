@@ -1058,18 +1058,19 @@ export default function App() {
   const renderMainContent = () => {
     if (cargandoDatos) {
       return (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 text-center">
-          <h2 className="text-xl font-bold text-gray-800">Cargando tablero</h2>
-          <p className="text-sm text-gray-500 mt-2">Consultando la API para sincronizar el tablero.</p>
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">
+          <h2 className="text-xl font-bold text-gray-800">Sincronizando tu espacio de trabajo</h2>
+          <p className="mt-2 text-sm text-gray-500">Estamos consultando pacientes, agenda y recordatorios para dejar el tablero al dia.</p>
         </div>
       );
     }
 
     if (errorCarga) {
       return (
-        <div className="bg-white rounded-xl border border-red-200 shadow-sm p-8 text-center">
-          <h2 className="text-xl font-bold text-gray-800">No pudimos cargar la informacion</h2>
-          <p className="text-sm text-gray-500 mt-2">{errorCarga}</p>
+        <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-8 text-center">
+          <h2 className="text-xl font-bold text-gray-800">No pudimos sincronizar la informacion</h2>
+          <p className="mt-2 text-sm text-gray-500">{errorCarga}</p>
+          <p className="mt-1 text-sm text-gray-500">Puedes reintentar sin perder tu sesion actual.</p>
           <button onClick={cargarDatos} className="mt-4 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium">
             Reintentar
           </button>

@@ -124,7 +124,21 @@ const getAppointmentStatusBadge = (appointment) => {
   return 'border-indigo-200 bg-indigo-50 text-indigo-700';
 };
 
+const getRemindersEmptyCopy = (isPsychologist) => (
+  isPsychologist
+    ? {
+      title: 'Sin alertas operativas por ahora',
+      description: 'Cuando haya citas proximas, tareas pendientes o cierres clinicos, apareceran aqui para ayudarte a priorizar.',
+    }
+    : {
+      title: 'Tu panel esta tranquilo por ahora',
+      description: 'Cuando haya algo que atender en tu agenda o en tu seguimiento, lo veras aqui primero.',
+    }
+);
+
 function RemindersPanel({ reminders, patients, isPsychologist, onOpenPatient, onViewAppointments }) {
+  const emptyCopy = getRemindersEmptyCopy(isPsychologist);
+
   return (
     <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
       <div className="flex items-center justify-between gap-3 mb-4">
@@ -175,8 +189,9 @@ function RemindersPanel({ reminders, patients, isPsychologist, onOpenPatient, on
             </div>
           );
         }) : (
-          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
-            No hay recordatorios activos por ahora.
+          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+            <p className="text-sm font-semibold text-slate-700">{emptyCopy.title}</p>
+            <p className="mt-2 text-sm text-gray-500">{emptyCopy.description}</p>
           </div>
         )}
       </div>
@@ -392,8 +407,9 @@ export default function DashboardScreen({
                   );
                 })
               ) : (
-                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
-                  No tienes tareas registradas por ahora.
+                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+                  <p className="text-sm font-semibold text-slate-700">No tienes tareas activas entre seguimientos</p>
+                  <p className="mt-2 text-sm text-gray-500">Cuando tu psicologo te deje ejercicios o practicas para trabajar antes de la siguiente cita, apareceran agrupados aqui.</p>
                 </div>
               )}
             </div>
@@ -442,8 +458,9 @@ export default function DashboardScreen({
                       </div>
                     ))}
                     {patientUpcomingAppointments.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-500">
-                        No tienes citas futuras registradas por ahora.
+                      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-center">
+                        <p className="text-sm font-semibold text-slate-700">Todavia no tienes una proxima cita registrada</p>
+                        <p className="mt-2 text-sm text-gray-500">Cuando se agende un nuevo espacio, lo veras aqui junto con su estado y seguimiento asociado.</p>
                       </div>
                     )}
                   </div>
@@ -464,8 +481,9 @@ export default function DashboardScreen({
                       </div>
                     ))}
                     {patientRecentAppointments.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-500">
-                        Todavia no hay historial de citas para mostrar.
+                      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-center">
+                        <p className="text-sm font-semibold text-slate-700">Aun no hay historial reciente para mostrar</p>
+                        <p className="mt-2 text-sm text-gray-500">Tus citas anteriores iran apareciendo aqui conforme avance tu proceso.</p>
                       </div>
                     )}
                   </div>
@@ -539,7 +557,7 @@ export default function DashboardScreen({
             <Activity className="mr-2 text-indigo-500" /> Semaforo de Riesgo
           </h2>
           <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-            {sortPatientsByRisk(patients).map((patient) => (
+            {patients.length > 0 ? sortPatientsByRisk(patients).map((patient) => (
               <div key={patient.id} onClick={() => onOpenPatient(patient)} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition">
                 <div className="truncate pr-2">
                   <p className="font-semibold text-gray-800 text-sm md:text-base truncate">{patient.nombre}</p>
@@ -549,7 +567,12 @@ export default function DashboardScreen({
                   Riesgo {patient.riesgo}
                 </span>
               </div>
-            ))}
+            )) : (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+                <p className="text-sm font-semibold text-slate-700">Aun no hay pacientes para priorizar</p>
+                <p className="mt-2 text-sm text-gray-500">Cuando registres pacientes, este semaforo te ayudara a detectar rapido los casos con mayor atencion clinica.</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -583,8 +606,9 @@ export default function DashboardScreen({
                 );
               })}
               {appointments.length === 0 && (
-                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
-                  No hay citas registradas para hoy.
+                <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+                  <p className="text-sm font-semibold text-slate-700">Hoy no tienes citas registradas</p>
+                  <p className="mt-2 text-sm text-gray-500">Puedes aprovechar para revisar la agenda completa, ajustar disponibilidad o ponerte al dia con expedientes pendientes.</p>
                 </div>
               )}
             </div>

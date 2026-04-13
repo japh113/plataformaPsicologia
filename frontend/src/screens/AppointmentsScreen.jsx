@@ -68,6 +68,73 @@ function ModalShell({ title, description, onClose, children }) {
   );
 }
 
+const getAppointmentsEmptyStateCopy = ({
+  isPsychologist,
+  hasActiveFilters,
+  patientTimelineFilter,
+  sessionCoverageFilter,
+  statusFilter,
+}) => {
+  if (hasActiveFilters) {
+    if (!isPsychologist && patientTimelineFilter === 'proximas') {
+      return {
+        title: 'No hay citas en tus proximas fechas',
+        description: 'Cuando tengas una nueva cita agendada, aparecera aqui junto con su estado.',
+      };
+    }
+
+    if (!isPsychologist && patientTimelineFilter === 'historial') {
+      return {
+        title: 'Todavia no hay historial para mostrar',
+        description: 'Tus citas anteriores apareceran aqui conforme avance tu seguimiento.',
+      };
+    }
+
+    if (!isPsychologist && patientTimelineFilter === 'cambios') {
+      return {
+        title: 'No hay cambios recientes en tu agenda',
+        description: 'Si una cita se cancela o se marca como no asistida, la veras en esta vista.',
+      };
+    }
+
+    if (sessionCoverageFilter === 'missing') {
+      return {
+        title: 'No hay citas completadas sin nota clinica',
+        description: 'Tu pendiente de documentacion esta al dia para los filtros actuales.',
+      };
+    }
+
+    if (sessionCoverageFilter === 'registered') {
+      return {
+        title: 'No hay citas completadas con nota clinica aqui',
+        description: 'Prueba cambiar fecha o filtros para revisar el historial documentado.',
+      };
+    }
+
+    if (statusFilter === 'pendiente') {
+      return {
+        title: 'No hay citas pendientes ni por cerrar',
+        description: 'La agenda visible no tiene atenciones activas bajo los filtros actuales.',
+      };
+    }
+
+    return {
+      title: 'No hay citas para los filtros seleccionados',
+      description: 'Prueba limpiar fecha, estado o cobertura clinica para volver a ampliar la agenda.',
+    };
+  }
+
+  return isPsychologist
+    ? {
+      title: 'Tu agenda esta despejada en esta vista',
+      description: 'Cuando registres nuevas citas o navegues a otra fecha, apareceran aqui en orden cronologico.',
+    }
+    : {
+      title: 'Tu agenda todavia no tiene citas visibles',
+      description: 'Cuando tu psicologo registre nuevas fechas o exista historial, lo veras aqui.',
+    };
+};
+
 export default function AppointmentsScreen({
   viewContext,
   currentUser, patients, appointments, waitlistEntries = [], availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onDeleteFutureRecurringAppointments, onCreateAppointmentWaitlist, onDeleteAppointmentWaitlist, onReorderAppointmentWaitlist, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
@@ -171,6 +238,17 @@ export default function AppointmentsScreen({
     return 'none';
   }, [sessionCoverageFilter, statusFilter]);
   const hasActiveFilters = Boolean(selectedDate) || statusFilter !== 'todos' || sessionCoverageFilter !== 'todos' || patientTimelineFilter !== 'todos';
+  const appointmentsEmptyState = useMemo(
+    () =>
+      getAppointmentsEmptyStateCopy({
+        isPsychologist,
+        hasActiveFilters,
+        patientTimelineFilter,
+        sessionCoverageFilter,
+        statusFilter,
+      }),
+    [hasActiveFilters, isPsychologist, patientTimelineFilter, sessionCoverageFilter, statusFilter],
+  );
   const weekDates = useMemo(() => getWeekDates(calendarAnchorDate), [calendarAnchorDate]);
   const weekRangeLabel = useMemo(() => getWeekRangeLabel(calendarAnchorDate), [calendarAnchorDate]);
   const monthDates = useMemo(() => getMonthDates(calendarAnchorDate), [calendarAnchorDate]);
@@ -1149,7 +1227,7 @@ export default function AppointmentsScreen({
                         </div>
                       );
                     })}
-                    {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-400">{dayException?.isUnavailable ? 'Dia bloqueado' : 'Sin citas'}</div>}
+                    {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-400">{dayException?.isUnavailable ? 'Dia bloqueado' : 'Libre'}</div>}
                     {dayAppointments.length > visibleDayAppointments.length && <p className="text-[11px] font-medium text-indigo-600">+{dayAppointments.length - visibleDayAppointments.length} mas</p>}
                   </div>
                 </button>
@@ -1331,7 +1409,12 @@ export default function AppointmentsScreen({
                 </div>
               );
             })}
-            {filteredAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center"><p className="text-sm font-medium text-gray-600">No hay citas para los filtros seleccionados.</p></div>}
+            {filteredAppointments.length === 0 && (
+              <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
+                <p className="text-sm font-semibold text-slate-700">{appointmentsEmptyState.title}</p>
+                <p className="mt-2 text-sm text-slate-500">{appointmentsEmptyState.description}</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1673,8 +1756,9 @@ export default function AppointmentsScreen({
                   </div>
                 ))}
                 {waitlistGroupsForSelectedDate.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                    No hay pacientes en lista de espera para esta fecha.
+                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center">
+                    <p className="text-sm font-semibold text-slate-700">No hay pacientes en lista de espera para esta fecha</p>
+                    <p className="mt-2 text-sm text-slate-500">Si un horario ocupado recibe solicitudes de espera, podras priorizarlas aqui por franja horaria.</p>
                   </div>
                 )}
               </div>
@@ -1777,7 +1861,7 @@ export default function AppointmentsScreen({
                   </div>
                 </div>
               </div>
-            )) : <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Todavia no hay periodos bloqueados.</div>}
+            )) : <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center"><p className="text-sm font-semibold text-slate-700">Todavia no hay periodos bloqueados</p><p className="mt-2 text-sm text-slate-500">Usa esta seccion para vacaciones, ausencias o semanas fuera de consulta.</p></div>}
           </div>
 
           <form onSubmit={handleSaveException} className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
@@ -1845,7 +1929,7 @@ export default function AppointmentsScreen({
                   </div>
                 </div>
               </div>
-            )) : <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-500">Todavia no hay horarios especiales configurados.</div>}
+            )) : <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-center"><p className="text-sm font-semibold text-slate-700">Todavia no hay horarios especiales configurados</p><p className="mt-2 text-sm text-slate-500">Cuando un dia necesite una disponibilidad distinta a la semanal, aparecera aqui como excepcion.</p></div>}
           </div>
         </ModalShell>
       )}

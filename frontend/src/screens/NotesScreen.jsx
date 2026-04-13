@@ -81,6 +81,54 @@ function SectionCard({ title, description, action, children }) {
   );
 }
 
+const getAgendaEmptyStateCopy = (filterId, isPsychologist) => {
+  if (filterId === 'por-cerrar') {
+    return isPsychologist
+      ? {
+        title: 'No hay citas por cerrar en este expediente',
+        description: 'Cuando una cita ya haya pasado y siga pendiente, aparecera aqui para ayudarte a cerrarla clinicamente.',
+      }
+      : {
+        title: 'No tienes citas pendientes de confirmacion',
+        description: 'Si alguna cita pasada requiere cierre administrativo, la veras en esta seccion.',
+      };
+  }
+
+  if (filterId === 'historial') {
+    return isPsychologist
+      ? {
+        title: 'Aun no hay historial visible para este paciente',
+        description: 'Las citas completadas, canceladas o no asistidas se iran acumulando aqui con el paso del proceso.',
+      }
+      : {
+        title: 'Todavia no hay historial para mostrar',
+        description: 'Tus citas anteriores apareceran aqui conforme se vaya registrando tu seguimiento.',
+      };
+  }
+
+  return isPsychologist
+    ? {
+      title: 'No hay citas proximas visibles en este expediente',
+      description: 'Cuando el paciente tenga una nueva cita agendada, podras verla aqui y saltar directo a la agenda.',
+    }
+    : {
+      title: 'No tienes citas proximas registradas',
+      description: 'Cuando tu psicologo agende una nueva fecha, la veras aqui junto con su estado.',
+    };
+};
+
+const getClinicalNotesEmptyStateCopy = (isPsychologist) => (
+  isPsychologist
+    ? {
+      title: 'Todavia no hay notas clinicas en este expediente',
+      description: 'Despues de completar una cita podras registrar la primera nota clinica y dejar tareas entre consultas.',
+    }
+    : {
+      title: 'Aun no hay seguimiento clinico visible',
+      description: 'Cuando se registre una nota clinica asociada a tus citas, veras aqui las fechas y tareas de seguimiento.',
+    }
+);
+
 export default function NotesScreen({
   currentUser,
   patient,
@@ -735,8 +783,9 @@ export default function NotesScreen({
 
           <div className="space-y-3">
             {entries.length > 0 ? entries.slice(0, 8).map((appointment) => renderAppointmentRow(appointment)) : (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-sm text-slate-500">
-                No hay elementos para esta vista de agenda.
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center">
+                <p className="text-sm font-semibold text-slate-700">{agendaEmptyState.title}</p>
+                <p className="mt-2 text-sm text-slate-500">{agendaEmptyState.description}</p>
               </div>
             )}
           </div>
@@ -744,6 +793,9 @@ export default function NotesScreen({
       </SectionCard>
     );
   };
+
+  const agendaEmptyState = getAgendaEmptyStateCopy(agendaFilter, isPsychologist);
+  const clinicalNotesEmptyState = getClinicalNotesEmptyStateCopy(isPsychologist);
 
   const handleInterviewFieldChange = (field, value) => {
     setInterviewForm((currentForm) => ({
@@ -889,8 +941,9 @@ export default function NotesScreen({
             </div>
           );
         }) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-sm text-slate-500">
-            Todavia no hay notas clinicas registradas para este paciente.
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center">
+            <p className="text-sm font-semibold text-slate-700">{clinicalNotesEmptyState.title}</p>
+            <p className="mt-2 text-sm text-slate-500">{clinicalNotesEmptyState.description}</p>
           </div>
         )}
 
@@ -958,8 +1011,15 @@ export default function NotesScreen({
         )}
 
         {!patient.objetivos || patient.objetivos.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-sm text-slate-500">
-            {isPsychologist ? 'No hay objetivos registrados para este paciente.' : 'Todavia no hay objetivos registrados para tu proceso.'}
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center">
+            <p className="text-sm font-semibold text-slate-700">
+              {isPsychologist ? 'No hay objetivos registrados para este paciente' : 'Todavia no hay objetivos visibles para tu proceso'}
+            </p>
+            <p className="mt-2 text-sm text-slate-500">
+              {isPsychologist
+                ? 'Cuando definas focos de trabajo clinico, se ordenaran aqui con su progreso.'
+                : 'Cuando tu psicologo defina objetivos de trabajo, apareceran aqui con su estado.'}
+            </p>
           </div>
         ) : (
           sortedObjectives.map((objective) => (
@@ -1371,8 +1431,9 @@ export default function NotesScreen({
                     </div>
                   ))
                 ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-                    No hay objetivos registrados.
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
+                    <p className="text-sm font-semibold text-slate-700">Todavia no hay objetivos para mostrar</p>
+                    <p className="mt-2 text-sm text-slate-500">Cuando se definan objetivos clinicos, apareceran aqui con su avance.</p>
                   </div>
                 )}
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">

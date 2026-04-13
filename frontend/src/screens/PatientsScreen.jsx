@@ -18,6 +18,32 @@ const getPatientSubtitle = (patient) => {
   return `${reason} - ${age}`;
 };
 
+const getPatientsEmptyStateCopy = ({ isPsychologist, hasPatients, hasActiveFilters }) => {
+  if (hasActiveFilters) {
+    return {
+      title: 'No encontramos pacientes para estos filtros',
+      description: 'Prueba limpiar la busqueda o ajustar riesgo, estado o tarjetas resumen para volver a ver expedientes.',
+    };
+  }
+
+  if (hasPatients) {
+    return {
+      title: 'No hay pacientes visibles en este momento',
+      description: 'Revisa si el resumen activo esta ocultando parte de tu panel.',
+    };
+  }
+
+  return isPsychologist
+    ? {
+      title: 'Aun no tienes pacientes registrados',
+      description: 'Cuando abras el primer expediente desde el flujo de alta, apareceran aqui con sus indicadores clinicos y administrativos.',
+    }
+    : {
+      title: 'Tu seguimiento todavia no esta disponible aqui',
+      description: 'Cuando tu expediente quede vinculado o se sincronice la informacion clinica, lo veras en esta vista.',
+    };
+};
+
 export default function PatientsScreen({ currentUser, patients, onOpenPatient }) {
   const [query, setQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState('todos');
@@ -38,6 +64,11 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
     };
   }, [patients]);
   const hasActiveFilters = query.trim() || riskFilter !== 'todos' || statusFilter !== 'todos' || summaryFilter !== 'todos';
+  const emptyState = getPatientsEmptyStateCopy({
+    isPsychologist,
+    hasPatients: patients.length > 0,
+    hasActiveFilters: Boolean(hasActiveFilters),
+  });
 
   const filteredPatients = useMemo(() => {
     return patients.filter((patient) => {
@@ -206,8 +237,9 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
           ))}
 
           {filteredPatients.length === 0 && (
-            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-sm text-gray-500">
-              No hay pacientes que coincidan con la busqueda actual.
+            <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+              <p className="text-sm font-semibold text-slate-700">{emptyState.title}</p>
+              <p className="mt-2 text-sm text-gray-500">{emptyState.description}</p>
             </div>
           )}
         </div>
