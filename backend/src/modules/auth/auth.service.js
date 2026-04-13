@@ -10,6 +10,8 @@ const createAuthError = (message, status = 400) => {
   return error;
 };
 
+const normalizeRelationshipStatus = (status) => String(status || 'active').trim().toLowerCase();
+
 const mapUserRow = (row) => ({
   id: String(row.id),
   firstName: row.first_name,
@@ -30,6 +32,27 @@ const mapUserRow = (row) => ({
         reviewNotes: row.review_notes || '',
       }
     : null,
+});
+
+const mapCareRelationshipRow = (row) => ({
+  id: String(row.id),
+  status: row.status,
+  notes: row.notes || '',
+  requestedByRole: row.requested_by_role,
+  createdAt: row.created_at || null,
+  approvedAt: row.approved_at || null,
+  patient: {
+    id: String(row.patient_id),
+    fullName: row.patient_full_name,
+    email: row.patient_email || '',
+  },
+  psychologist: {
+    id: String(row.psychologist_user_id),
+    fullName: row.psychologist_full_name,
+    email: row.psychologist_email,
+    professionalTitle: row.professional_title || '',
+    approvalStatus: row.psychologist_approval_status || 'pending_review',
+  },
 });
 
 const signAuthToken = (user) =>
@@ -356,6 +379,271 @@ export const listBackofficeUsers = async () => {
   );
 
   return result.rows.map(mapUserRow);
+};
+
+export const listCareRelationships = async () => {
+  const result = await db.query(
+    `
+      SELECT
+        cr.id,
+        cr.patient_id,
+        cr.psychologist_user_id,
+        cr.status,
+        cr.notes,
+        cr.requested_by_role,
+        cr.created_at,
+        cr.approved_at,
+        p.full_name AS patient_full_name,
+        p.email AS patient_email,
+        u.first_name AS psychologist_first_name,
+        u.last_name AS psychologist_last_name,
+        u.email AS psychologist_email,
+        pp.professional_title,
+        pp.approval_status AS psychologist_approval_status
+      FROM care_relationships cr
+      INNER JOIN patients p
+        ON p.id = cr.patient_id
+      INNER JOIN users u
+        ON u.id = cr.psychologist_user_id
+      LEFT JOIN psychologist_profiles pp
+        ON pp.user_id = u.id
+      ORDER BY
+        CASE cr.status
+          WHEN 'active' THEN 1
+          WHEN 'pending' THEN 2
+          WHEN 'ended' THEN 3
+          WHEN 'rejected' THEN 4
+          ELSE 5
+        END,
+        cr.created_at DESC
+    `,
+    [],
+  );
+
+  return result.rows.map((row) =>
+    mapCareRelationshipRow({
+      ...row,
+      psychologist_full_name: `${row.psychologist_first_name} ${row.psychologist_last_name}`.trim(),
+    }),
+  );
+};
+
+const ensurePatientExists = async (client, patientId) => {
+  const result = await client.query(
+    `
+      SELECT id
+      FROM patients
+      WHERE id = $1
+      LIMIT 1
+    `,
+    [patientId],
+  );
+
+  if (!result.rows[0]) {
+    throw createAuthError('Patient not found', 404);
+  }
+};
+
+const ensurePsychologistCanBeLinked = async (client, psychologistUserId) => {
+  const result = await client.query(
+    `
+      SELECT
+        u.id,
+        COALESCE(pp.approval_status, 'pending_review') AS approval_status
+      FROM users u
+      LEFT JOIN psychologist_profiles pp
+        ON pp.user_id = u.id
+      WHERE u.id = $1
+        AND u.role = 'psychologist'
+        AND u.is_active = TRUE
+      LIMIT 1
+    `,
+    [psychologistUserId],
+  );
+
+  const psychologist = result.rows[0];
+
+  if (!psychologist) {
+    throw createAuthError('Psychologist user not found', 404);
+  }
+
+  if (psychologist.approval_status !== 'active') {
+    throw createAuthError('Only active psychologists can be linked to patients', 409);
+  }
+};
+
+const syncLegacyRelationshipAccess = async (client, patientId, psychologistUserId, status) => {
+  if (status === 'active') {
+    await client.query(
+      `
+        INSERT INTO psychologist_patient_access (
+          psychologist_user_id,
+          patient_id
+        )
+        VALUES ($1, $2)
+        ON CONFLICT (psychologist_user_id, patient_id) DO NOTHING
+      `,
+      [psychologistUserId, patientId],
+    );
+    return;
+  }
+
+  await client.query(
+    `
+      DELETE FROM psychologist_patient_access
+      WHERE psychologist_user_id = $1
+        AND patient_id = $2
+    `,
+    [psychologistUserId, patientId],
+  );
+};
+
+export const createCareRelationship = async ({
+  actor,
+  patientId,
+  psychologistUserId,
+  status = 'active',
+  notes = '',
+}) => {
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    await ensurePatientExists(client, patientId);
+    await ensurePsychologistCanBeLinked(client, psychologistUserId);
+
+    const normalizedStatus = normalizeRelationshipStatus(status);
+    const existingResult = await client.query(
+      `
+        SELECT id, status
+        FROM care_relationships
+        WHERE patient_id = $1
+          AND psychologist_user_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      [patientId, psychologistUserId],
+    );
+
+    let relationshipId = null;
+
+    if (existingResult.rows[0]) {
+      relationshipId = existingResult.rows[0].id;
+
+      await client.query(
+        `
+          UPDATE care_relationships
+          SET
+            status = $2,
+            notes = $3,
+            requested_by_role = $4,
+            created_by_user_id = $5,
+            approved_by_user_id = CASE WHEN $2 = 'active' THEN $5 ELSE approved_by_user_id END,
+            approved_at = CASE WHEN $2 = 'active' THEN NOW() ELSE NULL END,
+            updated_at = NOW()
+          WHERE id = $1
+        `,
+        [relationshipId, normalizedStatus, notes.trim(), actor.role, actor.id],
+      );
+    } else {
+      const insertResult = await client.query(
+        `
+          INSERT INTO care_relationships (
+            patient_id,
+            psychologist_user_id,
+            status,
+            requested_by_role,
+            created_by_user_id,
+            approved_by_user_id,
+            approved_at,
+            notes
+          )
+          VALUES ($1, $2, $3, $4, $5, CASE WHEN $3 = 'active' THEN $5 ELSE NULL END, CASE WHEN $3 = 'active' THEN NOW() ELSE NULL END, $6)
+          RETURNING id
+        `,
+        [patientId, psychologistUserId, normalizedStatus, actor.role, actor.id, notes.trim()],
+      );
+      relationshipId = insertResult.rows[0].id;
+    }
+
+    await syncLegacyRelationshipAccess(client, patientId, psychologistUserId, normalizedStatus);
+
+    await client.query('COMMIT');
+
+    const relationships = await listCareRelationships();
+    return relationships.find((relationship) => relationship.id === String(relationshipId)) || null;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const updateCareRelationship = async ({
+  actor,
+  relationshipId,
+  status,
+  notes = '',
+}) => {
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    const currentResult = await client.query(
+      `
+        SELECT
+          id,
+          patient_id,
+          psychologist_user_id
+        FROM care_relationships
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [relationshipId],
+    );
+
+    const currentRelationship = currentResult.rows[0];
+
+    if (!currentRelationship) {
+      throw createAuthError('Care relationship not found', 404);
+    }
+
+    const normalizedStatus = normalizeRelationshipStatus(status);
+
+    await client.query(
+      `
+        UPDATE care_relationships
+        SET
+          status = $2,
+          notes = $3,
+          approved_by_user_id = CASE WHEN $2 = 'active' THEN $4 ELSE approved_by_user_id END,
+          approved_at = CASE WHEN $2 = 'active' THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
+          updated_at = NOW()
+        WHERE id = $1
+      `,
+      [relationshipId, normalizedStatus, notes.trim(), actor.id],
+    );
+
+    await syncLegacyRelationshipAccess(
+      client,
+      currentRelationship.patient_id,
+      currentRelationship.psychologist_user_id,
+      normalizedStatus,
+    );
+
+    await client.query('COMMIT');
+
+    const relationships = await listCareRelationships();
+    return relationships.find((relationship) => relationship.id === String(relationshipId)) || null;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const reviewPsychologistUser = async ({

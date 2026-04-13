@@ -92,3 +92,39 @@ export const validatePsychologistReviewPayload = (payload = {}) => {
 
   return errors;
 };
+
+export const validateCreateCareRelationshipPayload = (payload = {}) => {
+  const errors = [];
+  const patientId = normalizeString(payload.patientId);
+  const psychologistUserId = normalizeString(payload.psychologistUserId);
+  const status = normalizeString(payload.status || 'active');
+  const allowedStatuses = ['pending', 'active'];
+
+  if (!patientId) {
+    errors.push('patientId is required');
+  }
+
+  if (!psychologistUserId) {
+    errors.push('psychologistUserId is required');
+  }
+
+  if (!allowedStatuses.includes(status)) {
+    errors.push('status must be pending or active');
+  }
+
+  return errors;
+};
+
+export const validateUpdateCareRelationshipPayload = (payload = {}) => {
+  const errors = [];
+  const status = normalizeString(payload.status);
+  const allowedStatuses = ['pending', 'active', 'ended', 'rejected'];
+
+  if (!status) {
+    errors.push('status is required');
+  } else if (!allowedStatuses.includes(status)) {
+    errors.push('status must be pending, active, ended or rejected');
+  }
+
+  return errors;
+};

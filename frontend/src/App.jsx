@@ -47,7 +47,17 @@ import {
   updateAppointment,
 } from './api/appointments';
 import { getAuthToken } from './api/client';
-import { getBackofficeUsers, getCurrentUser, getPendingPsychologists, login, logout, reviewPsychologist } from './api/auth';
+import {
+  createCareRelationship,
+  getBackofficeUsers,
+  getCareRelationships,
+  getCurrentUser,
+  getPendingPsychologists,
+  login,
+  logout,
+  reviewPsychologist,
+  updateCareRelationship,
+} from './api/auth';
 import { getMyReminders } from './api/reminders';
 import {
   mapBackendPatientToUiPatient,
@@ -107,6 +117,7 @@ export default function App() {
   const [reminders, setReminders] = useState([]);
   const [backofficeUsers, setBackofficeUsers] = useState([]);
   const [pendingPsychologists, setPendingPsychologists] = useState([]);
+  const [careRelationships, setCareRelationships] = useState([]);
   const [mostrarModalNuevoPaciente, setMostrarModalNuevoPaciente] = useState(false);
   const [nuevoPacienteForm, setNuevoPacienteForm] = useState({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
   const [notasTemp, setNotasTemp] = useState('');
@@ -137,6 +148,7 @@ export default function App() {
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
   const [reviewingPsychologistId, setReviewingPsychologistId] = useState(null);
+  const [processingRelationshipId, setProcessingRelationshipId] = useState(null);
   const [backofficeActionError, setBackofficeActionError] = useState('');
   const [patientInterviewForm, setPatientInterviewForm] = useState(buildInterviewDraftForm(null, ''));
   const [uiFeedback, setUiFeedback] = useState(null);
@@ -187,6 +199,7 @@ export default function App() {
     setReminders([]);
     setBackofficeUsers([]);
     setPendingPsychologists([]);
+    setCareRelationships([]);
     setNotasTemp('');
     setErrorCarga('');
     setAppointmentActionError('');
@@ -198,15 +211,17 @@ export default function App() {
     setGuardandoEntrevista(false);
     setProcesandoSesionId(null);
     setReviewingPsychologistId(null);
+    setProcessingRelationshipId(null);
     setBackofficeActionError('');
     setMostrarModalNuevoPaciente(false);
     setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
   };
 
   const refreshBackofficeData = useCallback(async () => {
-    const [users, pending] = await Promise.all([getBackofficeUsers(), getPendingPsychologists()]);
+    const [users, pending, relationships] = await Promise.all([getBackofficeUsers(), getPendingPsychologists(), getCareRelationships()]);
     setBackofficeUsers(users);
     setPendingPsychologists(pending);
+    setCareRelationships(relationships);
   }, []);
 
   const cargarDatos = useCallback(async () => {
@@ -350,6 +365,60 @@ export default function App() {
       return false;
     } finally {
       setReviewingPsychologistId(null);
+    }
+  };
+
+  const syncCareRelationshipState = (nextRelationship) => {
+    setCareRelationships((currentRelationships) => {
+      const existingRelationshipIndex = currentRelationships.findIndex((relationship) => relationship.id === nextRelationship.id);
+
+      if (existingRelationshipIndex === -1) {
+        return [nextRelationship, ...currentRelationships];
+      }
+
+      return currentRelationships.map((relationship) => (relationship.id === nextRelationship.id ? nextRelationship : relationship));
+    });
+  };
+
+  const handleCreateCareRelationship = async (payload) => {
+    if (!isBackoffice || processingRelationshipId) {
+      return false;
+    }
+
+    setProcessingRelationshipId('new');
+    setBackofficeActionError('');
+
+    try {
+      const relationship = await createCareRelationship(payload);
+      syncCareRelationshipState(relationship);
+      showSuccessFeedback('Relacion paciente-psicologo creada correctamente.');
+      return true;
+    } catch (error) {
+      setBackofficeActionError(error.message || 'No se pudo crear la relacion paciente-psicologo.');
+      return false;
+    } finally {
+      setProcessingRelationshipId(null);
+    }
+  };
+
+  const handleUpdateCareRelationship = async (relationshipId, payload) => {
+    if (!isBackoffice || processingRelationshipId) {
+      return false;
+    }
+
+    setProcessingRelationshipId(relationshipId);
+    setBackofficeActionError('');
+
+    try {
+      const relationship = await updateCareRelationship(relationshipId, payload);
+      syncCareRelationshipState(relationship);
+      showSuccessFeedback('Relacion paciente-psicologo actualizada correctamente.');
+      return true;
+    } catch (error) {
+      setBackofficeActionError(error.message || 'No se pudo actualizar la relacion paciente-psicologo.');
+      return false;
+    } finally {
+      setProcessingRelationshipId(null);
     }
   };
 
@@ -1157,8 +1226,12 @@ export default function App() {
             currentUser={currentUser}
             users={backofficeUsers}
             pendingPsychologists={pendingPsychologists}
+            relationships={careRelationships}
             onReviewPsychologist={handleReviewPsychologist}
+            onCreateCareRelationship={handleCreateCareRelationship}
+            onUpdateCareRelationship={handleUpdateCareRelationship}
             reviewingPsychologistId={reviewingPsychologistId}
+            processingRelationshipId={processingRelationshipId}
             actionError={backofficeActionError}
             onDismissActionError={() => setBackofficeActionError('')}
           />
@@ -1188,8 +1261,12 @@ export default function App() {
             currentUser={currentUser}
             users={backofficeUsers}
             pendingPsychologists={pendingPsychologists}
+            relationships={careRelationships}
             onReviewPsychologist={handleReviewPsychologist}
+            onCreateCareRelationship={handleCreateCareRelationship}
+            onUpdateCareRelationship={handleUpdateCareRelationship}
             reviewingPsychologistId={reviewingPsychologistId}
+            processingRelationshipId={processingRelationshipId}
             actionError={backofficeActionError}
             onDismissActionError={() => setBackofficeActionError('')}
           />
@@ -1250,8 +1327,12 @@ export default function App() {
             currentUser={currentUser}
             users={backofficeUsers}
             pendingPsychologists={pendingPsychologists}
+            relationships={careRelationships}
             onReviewPsychologist={handleReviewPsychologist}
+            onCreateCareRelationship={handleCreateCareRelationship}
+            onUpdateCareRelationship={handleUpdateCareRelationship}
             reviewingPsychologistId={reviewingPsychologistId}
+            processingRelationshipId={processingRelationshipId}
             actionError={backofficeActionError}
             onDismissActionError={() => setBackofficeActionError('')}
           />

@@ -6,6 +6,10 @@ import {
   ensureBackofficeManager,
   ensureBackofficeViewer,
 } from '../src/modules/auth/auth.permissions.js';
+import {
+  validateCreateCareRelationshipPayload,
+  validateUpdateCareRelationshipPayload,
+} from '../src/modules/auth/auth.validators.js';
 
 test('ensureBackofficeViewer allows support, admin and superadmin roles', () => {
   assert.doesNotThrow(() => ensureBackofficeViewer({ role: 'support' }));
@@ -29,3 +33,15 @@ test('buildPatientAccessScope only grants full clinical access to superadmin', (
   assert.throws(() => buildPatientAccessScope({ role: 'support' }, 'p.id'), { status: 403 });
 });
 
+test('validateCreateCareRelationshipPayload enforces patient and psychologist ids', () => {
+  assert.deepEqual(validateCreateCareRelationshipPayload({}), [
+    'patientId is required',
+    'psychologistUserId is required',
+  ]);
+});
+
+test('validateUpdateCareRelationshipPayload enforces supported statuses', () => {
+  assert.deepEqual(validateUpdateCareRelationshipPayload({ status: 'archived' }), [
+    'status must be pending, active, ended or rejected',
+  ]);
+});

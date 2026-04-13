@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import {
+  createCareRelationshipHandler,
   listBackofficeUsersHandler,
+  listCareRelationshipsHandler,
   listPendingPsychologistsHandler,
   loginHandler,
   meHandler,
   registerPatientHandler,
   registerPsychologistHandler,
   reviewPsychologistHandler,
+  updateCareRelationshipHandler,
 } from './auth.controller.js';
 import { authenticate } from '../../middlewares/authMiddleware.js';
 
@@ -17,6 +20,9 @@ router.post('/register/patient', registerPatientHandler);
 router.post('/register/psychologist', registerPsychologistHandler);
 router.get('/me', authenticate, meHandler);
 router.get('/users', authenticate, listBackofficeUsersHandler);
+router.get('/care-relationships', authenticate, listCareRelationshipsHandler);
+router.post('/care-relationships', authenticate, createCareRelationshipHandler);
+router.patch('/care-relationships/:relationshipId', authenticate, updateCareRelationshipHandler);
 router.get('/psychologists/pending', authenticate, listPendingPsychologistsHandler);
 router.patch('/psychologists/:userId/review', authenticate, reviewPsychologistHandler);
 

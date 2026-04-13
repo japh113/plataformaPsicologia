@@ -26,6 +26,29 @@ export const getPendingPsychologists = async () => {
   return response.data;
 };
 
+export const getCareRelationships = async () => {
+  const response = await apiRequest('/auth/care-relationships');
+  return response.data;
+};
+
+export const createCareRelationship = async (payload) => {
+  const response = await apiRequest('/auth/care-relationships', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
+export const updateCareRelationship = async (relationshipId, payload) => {
+  const response = await apiRequest(`/auth/care-relationships/${relationshipId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
 export const reviewPsychologist = async (userId, payload) => {
   const response = await apiRequest(`/auth/psychologists/${userId}/review`, {
     method: 'PATCH',
