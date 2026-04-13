@@ -133,6 +133,7 @@ export default function App() {
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
   const [patientInterviewForm, setPatientInterviewForm] = useState(buildInterviewDraftForm(null, ''));
+  const [uiFeedback, setUiFeedback] = useState(null);
 
   const isPsychologist = currentUser?.role === 'psychologist';
   const todayDate = getTodayDateString();
@@ -141,6 +142,29 @@ export default function App() {
     () => (currentUser?.role === 'patient' ? pacientes.find((patient) => patient.id === currentUser.patientId) || null : null),
     [currentUser, pacientes],
   );
+
+  useEffect(() => {
+    if (!uiFeedback) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setUiFeedback(null);
+    }, 4500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [uiFeedback]);
+
+  const showUiFeedback = (type, message) => {
+    setUiFeedback({
+      id: Date.now(),
+      type,
+      message,
+    });
+  };
+
+  const showSuccessFeedback = (message) => showUiFeedback('success', message);
+  const showErrorFeedback = (message) => showUiFeedback('error', message);
 
   const resetSessionState = () => {
     setVistaActiva('dashboard');
@@ -372,8 +396,9 @@ export default function App() {
       setPacientes((currentPatients) => [...currentPatients, mapBackendPatientToUiPatient(createdPatient)]);
       setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
       setMostrarModalNuevoPaciente(false);
+      showSuccessFeedback('Paciente creado correctamente.');
     } catch (error) {
-      window.alert(error.message || 'No se pudo crear el paciente.');
+      showErrorFeedback(error.message || 'No se pudo crear el paciente.');
     } finally {
       setGuardandoPaciente(false);
     }
@@ -400,9 +425,9 @@ export default function App() {
       const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
       syncPatientState(updatedPatient);
       setNotasTemp(updatedApiPatient.notes || '');
-      window.alert('Expediente actualizado correctamente.');
+      showSuccessFeedback('Expediente actualizado correctamente.');
     } catch (error) {
-      window.alert(error.message || 'No se pudieron guardar las notas.');
+      showErrorFeedback(error.message || 'No se pudieron guardar las notas.');
     } finally {
       setGuardandoNotas(false);
     }
@@ -427,9 +452,10 @@ export default function App() {
 
       const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
       syncPatientState(updatedPatient);
+      showSuccessFeedback('Ficha del paciente actualizada.');
       return true;
     } catch (error) {
-      window.alert(error.message || 'No se pudo actualizar la ficha del paciente.');
+      showErrorFeedback(error.message || 'No se pudo actualizar la ficha del paciente.');
       return false;
     } finally {
       setGuardandoPerfilPaciente(false);
@@ -469,10 +495,11 @@ export default function App() {
         setPatientInterviewForm(buildInterviewDraftForm(updatedPatient, todayDate));
       }
 
+      showSuccessFeedback('Entrevista guardada correctamente.');
       return true;
     } catch (error) {
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
-      window.alert((error.message || 'No se pudo guardar la entrevista.') + details);
+      showErrorFeedback((error.message || 'No se pudo guardar la entrevista.') + details);
       return false;
     } finally {
       setGuardandoEntrevista(false);
@@ -514,7 +541,7 @@ export default function App() {
       syncPatientState(nextPatient);
       await refreshReminders();
     } catch (error) {
-      window.alert(error.message || 'No se pudo actualizar la tarea.');
+      showErrorFeedback(error.message || 'No se pudo actualizar la tarea.');
     } finally {
       setProcesandoTareaId(null);
     }
@@ -538,7 +565,7 @@ export default function App() {
       syncPatientState(nextPatient);
       await refreshReminders();
     } catch (error) {
-      window.alert(error.message || 'No se pudo eliminar la tarea.');
+      showErrorFeedback(error.message || 'No se pudo eliminar la tarea.');
     } finally {
       setProcesandoTareaId(null);
     }
@@ -560,9 +587,10 @@ export default function App() {
       };
 
       syncPatientState(nextPatient);
+      showSuccessFeedback('Objetivo agregado correctamente.');
       return true;
     } catch (error) {
-      window.alert(error.message || 'No se pudo crear el objetivo.');
+      showErrorFeedback(error.message || 'No se pudo crear el objetivo.');
       return false;
     } finally {
       setCreandoObjetivo(false);
@@ -595,7 +623,7 @@ export default function App() {
 
       syncPatientState(nextPatient);
     } catch (error) {
-      window.alert(error.message || 'No se pudo actualizar el objetivo.');
+      showErrorFeedback(error.message || 'No se pudo actualizar el objetivo.');
     } finally {
       setProcesandoObjetivoId(null);
     }
@@ -617,8 +645,9 @@ export default function App() {
       };
 
       syncPatientState(nextPatient);
+      showSuccessFeedback('Objetivo eliminado.');
     } catch (error) {
-      window.alert(error.message || 'No se pudo eliminar el objetivo.');
+      showErrorFeedback(error.message || 'No se pudo eliminar el objetivo.');
     } finally {
       setProcesandoObjetivoId(null);
     }
@@ -634,10 +663,11 @@ export default function App() {
     try {
       await createPatientClinicalNote(pacienteSeleccionado.id, payload);
       await refreshSelectedPatient(pacienteSeleccionado.id);
+      showSuccessFeedback('Nota clinica creada correctamente.');
       return true;
     } catch (error) {
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
-      window.alert((error.message || 'No se pudo crear la nota clinica.') + details);
+      showErrorFeedback((error.message || 'No se pudo crear la nota clinica.') + details);
       return false;
     } finally {
       setGuardandoSesion(false);
@@ -655,10 +685,11 @@ export default function App() {
     try {
       await updatePatientClinicalNote(pacienteSeleccionado.id, sessionId, payload);
       await refreshSelectedPatient(pacienteSeleccionado.id);
+      showSuccessFeedback('Nota clinica actualizada correctamente.');
       return true;
     } catch (error) {
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
-      window.alert((error.message || 'No se pudo actualizar la nota clinica.') + details);
+      showErrorFeedback((error.message || 'No se pudo actualizar la nota clinica.') + details);
       return false;
     } finally {
       setGuardandoSesion(false);
@@ -676,9 +707,10 @@ export default function App() {
     try {
       await deletePatientClinicalNote(pacienteSeleccionado.id, sessionId);
       await refreshSelectedPatient(pacienteSeleccionado.id);
+      showSuccessFeedback('Nota clinica eliminada.');
       return true;
     } catch (error) {
-      window.alert(error.message || 'No se pudo eliminar la nota clinica.');
+      showErrorFeedback(error.message || 'No se pudo eliminar la nota clinica.');
       return false;
     } finally {
       setProcesandoSesionId(null);
@@ -699,6 +731,7 @@ export default function App() {
       syncAppointmentsState((currentAppointments) => [...currentAppointments, uiAppointment]);
       await refreshAppointmentsAndWaitlist();
       await refreshReminders();
+      showSuccessFeedback('Cita creada correctamente.');
       return true;
     } catch (error) {
       setAppointmentActionError(error.message || 'No se pudo crear la cita.');
@@ -725,6 +758,7 @@ export default function App() {
       );
       await refreshAppointmentsAndWaitlist();
       await refreshReminders();
+      showSuccessFeedback('Cita actualizada correctamente.');
       return true;
     } catch (error) {
       setAppointmentActionError(error.message || 'No se pudo actualizar la cita.');
@@ -748,9 +782,10 @@ export default function App() {
       syncAppointmentsState((currentAppointments) => currentAppointments.filter((appointment) => appointment.id !== appointmentId));
       await refreshAppointmentsAndWaitlist();
       await refreshReminders();
+      showSuccessFeedback('Cita eliminada correctamente.');
       return true;
     } catch (error) {
-      window.alert(error.message || 'No se pudo eliminar la cita.');
+      showErrorFeedback(error.message || 'No se pudo eliminar la cita.');
       return false;
     } finally {
       setProcesandoCitaId(null);
@@ -1167,6 +1202,27 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex font-sans text-gray-900 relative pb-20 md:pb-0">
+      {uiFeedback && (
+        <div className="pointer-events-none fixed inset-x-4 top-4 z-[70] flex justify-center md:justify-end">
+          <div className={`pointer-events-auto w-full max-w-md rounded-2xl border px-4 py-3 shadow-xl ${
+            uiFeedback.type === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-red-200 bg-red-50 text-red-900'
+          }`}>
+            <div className="flex items-start justify-between gap-3">
+              <p className="whitespace-pre-wrap text-sm leading-6">{uiFeedback.message}</p>
+              <button
+                type="button"
+                onClick={() => setUiFeedback(null)}
+                className="shrink-0 rounded-full border border-current/15 px-2 py-1 text-xs font-semibold transition hover:bg-white/50"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <NewPatientModal
         isOpen={mostrarModalNuevoPaciente && isPsychologist}
         onClose={() => setMostrarModalNuevoPaciente(false)}

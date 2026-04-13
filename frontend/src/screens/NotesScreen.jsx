@@ -919,7 +919,7 @@ export default function NotesScreen({
   const renderObjectivesTab = () => (
     <SectionCard
       title={isPsychologist ? 'Objetivos del proceso' : 'Mis objetivos'}
-      description={isPsychologist ? 'Seguimiento de objetivos clinicos y de proceso del paciente.' : 'Marca los objetivos conforme se vayan cumpliendo.'}
+      description={isPsychologist ? 'Seguimiento de objetivos clinicos y de proceso del paciente.' : 'Marca tus objetivos conforme avances para tener una lectura clara de lo que sigue en tu proceso.'}
       action={(
         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700">
           Avance {objectivesProgress}%
@@ -927,9 +927,26 @@ export default function NotesScreen({
       )}
     >
       <div className="space-y-3">
+        {!isPsychologist && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Objetivos activos</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{pendingObjectives.length}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Completados</p>
+              <p className="mt-2 text-sm font-semibold text-emerald-900">{completedObjectives.length}</p>
+            </div>
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">Siguiente foco</p>
+              <p className="mt-2 text-sm font-semibold text-sky-900">{pendingObjectives[0]?.texto || 'No hay objetivos en proceso'}</p>
+            </div>
+          </div>
+        )}
+
         {!patient.objetivos || patient.objetivos.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-sm text-slate-500">
-            No hay objetivos registrados para este paciente.
+            {isPsychologist ? 'No hay objetivos registrados para este paciente.' : 'Todavia no hay objetivos registrados para tu proceso.'}
           </div>
         ) : (
           sortedObjectives.map((objective) => (
@@ -963,6 +980,15 @@ export default function NotesScreen({
               )}
             </div>
           ))
+        )}
+
+        {!isPsychologist && patient.objetivos?.length > 0 && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Como usar esta vista</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Marca un objetivo cuando sientas que ya esta trabajado o cumplido. Esto ayuda a que tu seguimiento y el de tu psicologo se mantengan alineados.
+            </p>
+          </div>
         )}
 
         {isPsychologist && (
@@ -1338,7 +1364,7 @@ export default function NotesScreen({
                 )}
                 <div className="rounded-2xl border border-slate-200 bg-white p-3">
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Estado general</p>
-                  <p className="mt-2 text-slate-700">{completedObjectives.length} completado(s) Â· {pendingObjectives.length} en proceso</p>
+                  <p className="mt-2 text-slate-700">{completedObjectives.length} completado(s) | {pendingObjectives.length} en proceso</p>
                 </div>
               </div>
             </SectionCard>
