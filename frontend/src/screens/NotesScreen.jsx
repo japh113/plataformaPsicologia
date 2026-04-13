@@ -534,6 +534,7 @@ export default function NotesScreen({
     const linkedSession = appointmentSessionsMap.get(appointment.id);
     const displayStatus = getAppointmentDisplayStatus(appointment);
     const isOverduePendingAppointment = isAppointmentOverdue(appointment);
+    const shouldShowSessionCoverage = appointment.estado === 'completada' && (isPsychologist || Boolean(linkedSession));
 
     return (
       <div
@@ -546,9 +547,9 @@ export default function NotesScreen({
             <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${getAppointmentStatusClasses(displayStatus)}`}>
               {displayStatus}
             </span>
-            {appointment.estado === 'completada' && (
+            {shouldShowSessionCoverage && (
               <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${getSessionCoverageClasses(Boolean(linkedSession))}`}>
-                {linkedSession ? 'Nota clinica registrada' : 'Falta nota clinica'}
+                {linkedSession ? (isPsychologist ? 'Nota clinica registrada' : 'Seguimiento registrado') : 'Falta nota clinica'}
               </span>
             )}
           </div>
@@ -775,8 +776,8 @@ export default function NotesScreen({
 
   const renderSessionsTab = () => (
     <SectionCard
-      title="Notas clinicas"
-      description={isPsychologist ? 'Historial clinico y tareas asignadas por nota clinica.' : 'Seguimiento de tus notas clinicas y tareas entre consultas.'}
+      title={isPsychologist ? 'Notas clinicas' : 'Seguimiento entre consultas'}
+      description={isPsychologist ? 'Historial clinico y tareas asignadas por nota clinica.' : 'Aqui se organiza tu proceso por fecha de seguimiento, con las tareas que debes trabajar entre una cita y otra.'}
       action={isPsychologist ? (
         <button
           type="button"
@@ -788,6 +789,14 @@ export default function NotesScreen({
       ) : null}
     >
       <div className="space-y-3">
+        {!isPsychologist && (
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">Seguimiento visible para ti</p>
+            <p className="mt-2 text-sm leading-6 text-sky-900">
+              Aqui ves las fechas de tus seguimientos y las tareas asociadas a cada una. Las notas clinicas internas del terapeuta no se muestran en esta vista.
+            </p>
+          </div>
+        )}
         {sessions.length > 0 ? sessions.map((session) => {
           const linkedAppointment = patientAppointments.find((appointment) => appointment.id === session.citaId);
           const tasksForSession = (patient.tareas || []).filter((task) => task.sesionId === session.id);
@@ -798,23 +807,30 @@ export default function NotesScreen({
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-slate-900 capitalize">{formatSessionDate(session.fecha)}</p>
+                    <p className="font-semibold text-slate-900 capitalize">{isPsychologist ? formatSessionDate(session.fecha) : `Seguimiento del ${formatSessionDate(session.fecha)}`}</p>
                   </div>
                   <p className="mt-2 text-sm text-slate-500">
-                    {linkedAppointment ? `Cita vinculada: ${formatAppointmentDateTime(linkedAppointment)}` : 'Sin cita visible en agenda.'}
+                    {linkedAppointment
+                      ? `${isPsychologist ? 'Cita vinculada' : 'Cita registrada'}: ${formatAppointmentDateTime(linkedAppointment)}`
+                      : (isPsychologist ? 'Sin cita visible en agenda.' : 'No hay una cita visible asociada en la agenda.')}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                      {tasksForSession.length} tarea(s)
+                      {tasksForSession.length} tarea(s) asignada(s)
                     </span>
                     <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-                      {pendingTasksForSession.length} pendiente(s)
+                      {pendingTasksForSession.length} en proceso
                     </span>
                   </div>
                   {isPsychologist && (session.objetivo || session.proximoPaso) && (
                     <p className="mt-2 text-sm text-slate-700">
                       {session.objetivo || 'Sin objetivo documentado'}
                       {session.proximoPaso ? ` - ${session.proximoPaso}` : ''}
+                    </p>
+                  )}
+                  {!isPsychologist && tasksForSession.length === 0 && (
+                    <p className="mt-2 text-sm text-slate-500">
+                      En este seguimiento no quedaron tareas registradas para trabajar entre citas.
                     </p>
                   )}
 
@@ -842,7 +858,7 @@ export default function NotesScreen({
                       </div>
                     )) : (
                       <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-500">
-                        {isPsychologist ? 'Esta nota clinica no tiene tareas asignadas todavia.' : 'No se asignaron tareas en esta nota clinica.'}
+                        {isPsychologist ? 'Esta nota clinica no tiene tareas asignadas todavia.' : 'No se asignaron tareas en este seguimiento.'}
                       </div>
                     )}
                   </div>
@@ -1002,7 +1018,7 @@ export default function NotesScreen({
   const renderInterviewTab = () => (
     <SectionCard
       title="Entrevista inicial"
-      description="Registro base del paciente al inicio del proceso clinico."
+      description={isPsychologist ? 'Registro base del paciente al inicio del proceso clinico.' : 'Tu informacion de ingreso al proceso. Puedes revisarla cuando quieras; despues de completarla solo tu psicologo puede editarla.'}
       action={
         isPsychologist ? (
           <button
@@ -1017,6 +1033,15 @@ export default function NotesScreen({
     >
       {hasCompletedInterview ? (
         <div className="space-y-6">
+          {!isPsychologist && (
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-sky-700">Entrevista completada</p>
+              <p className="mt-2 text-sm leading-6 text-sky-900">
+                Esta es la informacion base con la que inicio tu proceso. Si necesitas corregir algo, tu psicologo puede ayudarte a actualizarla.
+              </p>
+            </div>
+          )}
+
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_180px]">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Nombre</p>
@@ -1032,30 +1057,33 @@ export default function NotesScreen({
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Fecha de nacimiento</p>
-              <p className="mt-2 text-sm text-slate-700">{formatInterviewDate(patientInterview.fechaNacimiento)}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Lugar de nacimiento</p>
-              <p className="mt-2 text-sm text-slate-700">{patientInterview.lugarNacimiento || 'No registrado'}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ocupacion</p>
-              <p className="mt-2 text-sm text-slate-700">{patientInterview.ocupacion || 'No registrado'}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Hobbies</p>
-              <p className="mt-2 text-sm text-slate-700">{patientInterview.hobbies || 'No registrado'}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Estado civil</p>
-              <p className="mt-2 text-sm text-slate-700">{patientInterview.estadoCivil || 'No registrado'}</p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Quienes conforman su familia</p>
-              <p className="mt-2 text-sm text-slate-700">{patientInterview.familia || 'No registrado'}</p>
+          <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+            <h4 className="text-base font-bold text-slate-900">Datos personales y contexto</h4>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Fecha de nacimiento</p>
+                <p className="mt-2 text-sm text-slate-700">{formatInterviewDate(patientInterview.fechaNacimiento)}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Lugar de nacimiento</p>
+                <p className="mt-2 text-sm text-slate-700">{patientInterview.lugarNacimiento || 'No registrado'}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ocupacion</p>
+                <p className="mt-2 text-sm text-slate-700">{patientInterview.ocupacion || 'No registrado'}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Hobbies</p>
+                <p className="mt-2 text-sm text-slate-700">{patientInterview.hobbies || 'No registrado'}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Estado civil</p>
+                <p className="mt-2 text-sm text-slate-700">{patientInterview.estadoCivil || 'No registrado'}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Quienes conforman su familia</p>
+                <p className="mt-2 text-sm text-slate-700">{patientInterview.familia || 'No registrado'}</p>
+              </div>
             </div>
           </div>
 
@@ -1071,7 +1099,12 @@ export default function NotesScreen({
           </div>
 
           <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-            <h4 className="text-lg font-black text-slate-900">Indicadores relevantes</h4>
+            <h4 className="text-lg font-black text-slate-900">{isPsychologist ? 'Indicadores relevantes' : 'Indicadores registrados'}</h4>
+            {!isPsychologist && (
+              <p className="mt-1 text-sm text-slate-500">
+                Estos indicadores forman parte de tu entrevista inicial y ayudan a dar contexto a tu proceso.
+              </p>
+            )}
             <div className="mt-4 grid gap-3">
               {interviewIndicatorGroups.map((group, index) => (
                 <div key={`interview-readonly-${index}`} className="grid gap-3 md:grid-cols-2">
@@ -1151,6 +1184,28 @@ export default function NotesScreen({
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Tareas pendientes</p>
             <p className="mt-2 text-sm font-semibold text-amber-900">{pendingTasks.length} de {patient.tareas?.length || 0}</p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className={`rounded-2xl border p-4 ${hasCompletedInterview ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+            <p className={`text-xs font-bold uppercase tracking-[0.16em] ${hasCompletedInterview ? 'text-emerald-700' : 'text-amber-700'}`}>Entrevista inicial</p>
+            <p className={`mt-2 text-sm font-semibold ${hasCompletedInterview ? 'text-emerald-900' : 'text-amber-900'}`}>
+              {hasCompletedInterview ? `Completada el ${formatInterviewDate(patientInterview?.fechaEntrevista)}` : 'Todavia pendiente'}
+            </p>
+            <p className={`mt-2 text-sm leading-6 ${hasCompletedInterview ? 'text-emerald-800' : 'text-amber-800'}`}>
+              {hasCompletedInterview ? 'Puedes revisarla en la pestaña de Entrevista cuando necesites recordar tu informacion de ingreso.' : 'Necesitas completarla para dejar tu expediente inicial listo.'}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultimo seguimiento</p>
+            <p className="mt-2 text-sm font-semibold text-slate-900">
+              {latestSession ? formatSessionDate(latestSession.fecha) : 'Sin seguimiento registrado'}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {latestSession ? 'Puedes revisar tus tareas y el historial de seguimientos en la pestaña de Notas clinicas.' : 'Todavia no hay seguimientos registrados en tu expediente.'}
+            </p>
           </div>
         </div>
 
