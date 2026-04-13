@@ -96,6 +96,15 @@ INSERT INTO users (
 )
 VALUES
   (
+    'u_admin_1',
+    'Admin',
+    'PsicoPanel',
+    'admin@psicopanel.com',
+    '$2b$10$vquYfF/cmj1ZWF9Lo7muB.RwNgmXuauLcQoZB53oPlACki6C8kkX.',
+    'admin',
+    NULL
+  ),
+  (
     'u_psy_1',
     'Lucia',
     'Morales',
@@ -123,6 +132,55 @@ VALUES
     '2'
   )
 ON CONFLICT (email) DO NOTHING;
+
+INSERT INTO psychologist_profiles (
+  user_id,
+  professional_title,
+  license_number,
+  approval_status,
+  review_notes,
+  approved_at,
+  reviewed_at,
+  reviewed_by_user_id
+)
+VALUES
+  (
+    'u_psy_1',
+    'Psicologa clinica',
+    'LIC-PSI-001',
+    'active',
+    'Cuenta demo aprobada para desarrollo.',
+    NOW(),
+    NOW(),
+    'u_admin_1'
+  )
+ON CONFLICT (user_id) DO UPDATE
+SET
+  professional_title = EXCLUDED.professional_title,
+  license_number = EXCLUDED.license_number,
+  approval_status = EXCLUDED.approval_status,
+  review_notes = EXCLUDED.review_notes,
+  approved_at = EXCLUDED.approved_at,
+  reviewed_at = EXCLUDED.reviewed_at,
+  reviewed_by_user_id = EXCLUDED.reviewed_by_user_id;
+
+INSERT INTO care_relationships (
+  patient_id,
+  psychologist_user_id,
+  status,
+  requested_by_role,
+  created_by_user_id,
+  approved_by_user_id,
+  approved_at,
+  notes
+)
+VALUES
+  ('1', 'u_psy_1', 'active', 'psychologist', 'u_psy_1', 'u_admin_1', NOW(), 'Relacion activa demo'),
+  ('2', 'u_psy_1', 'active', 'psychologist', 'u_psy_1', 'u_admin_1', NOW(), 'Relacion activa demo'),
+  ('3', 'u_psy_1', 'active', 'psychologist', 'u_psy_1', 'u_admin_1', NOW(), 'Relacion activa demo'),
+  ('4', 'u_psy_1', 'active', 'psychologist', 'u_psy_1', 'u_admin_1', NOW(), 'Relacion activa demo'),
+  ('5', 'u_psy_1', 'active', 'psychologist', 'u_psy_1', 'u_admin_1', NOW(), 'Relacion activa demo')
+ON CONFLICT DO NOTHING;
 
 INSERT INTO psychologist_patient_access (
   psychologist_user_id,

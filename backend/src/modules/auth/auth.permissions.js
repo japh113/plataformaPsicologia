@@ -1,5 +1,6 @@
 export const isPsychologist = (actor) => actor?.role === 'psychologist';
 export const isPatient = (actor) => actor?.role === 'patient';
+export const isAdmin = (actor) => actor?.role === 'admin';
 
 export const createForbiddenError = (message = 'Forbidden') => {
   const error = new Error(message);
@@ -27,16 +28,40 @@ export const ensurePsychologist = (actor) => {
   }
 };
 
+export const ensureAdmin = (actor) => {
+  ensureAuthenticated(actor);
+
+  if (!isAdmin(actor)) {
+    throw createForbiddenError();
+  }
+};
+
 export const buildPatientAccessScope = (actor, patientColumnReference, paramIndex = 1) => {
   ensureAuthenticated(actor);
 
+  if (isAdmin(actor)) {
+    return {
+      clause: 'TRUE',
+      params: [],
+    };
+  }
+
   if (isPsychologist(actor)) {
     return {
-      clause: `EXISTS (
-        SELECT 1
-        FROM psychologist_patient_access spa
-        WHERE spa.psychologist_user_id = $${paramIndex}
-          AND spa.patient_id = ${patientColumnReference}
+      clause: `(
+        EXISTS (
+          SELECT 1
+          FROM care_relationships cr
+          WHERE cr.psychologist_user_id = $${paramIndex}
+            AND cr.patient_id = ${patientColumnReference}
+            AND cr.status = 'active'
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM psychologist_patient_access spa
+          WHERE spa.psychologist_user_id = $${paramIndex}
+            AND spa.patient_id = ${patientColumnReference}
+        )
       )`,
       params: [actor.id],
     };

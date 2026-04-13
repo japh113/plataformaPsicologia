@@ -137,6 +137,7 @@ export default function App() {
   const [uiFeedback, setUiFeedback] = useState(null);
 
   const isPsychologist = currentUser?.role === 'psychologist';
+  const isAdmin = currentUser?.role === 'admin';
   const todayDate = getTodayDateString();
   const todayAppointments = useMemo(() => filterAppointmentsByDate(appointments, todayDate), [appointments, todayDate]);
   const patientProfile = useMemo(
@@ -1088,6 +1089,32 @@ export default function App() {
     }
 
     if (vistaActiva === 'dashboard') {
+      if (isAdmin) {
+        return (
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+            <h2 className="text-2xl font-black text-slate-900">Panel admin en preparacion</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+              La base backend para aprobar psicologos, registrar pacientes y modelar relaciones ya quedo iniciada.
+              La siguiente fase sera construir la experiencia administrativa real sobre esta misma cuenta.
+            </p>
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Rol actual</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">Admin</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Fase lista</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">Backend de aprobacion</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Siguiente paso</p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">UI de revision y soporte</p>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <DashboardScreen
           currentUser={currentUser}
@@ -1104,6 +1131,18 @@ export default function App() {
     }
 
     if (vistaActiva === 'appointments') {
+      if (isAdmin) {
+        return (
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+            <h2 className="text-2xl font-black text-slate-900">Agenda admin no disponible aun</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Este rol no entra todavia a la agenda clinica. La siguiente fase sera una consola admin para revisar psicologos,
+              solicitudes y relaciones activas sin mezclarse con el trabajo operativo del terapeuta.
+            </p>
+          </div>
+        );
+      }
+
       return (
         <AppointmentsScreen
           key={`appointments-${appointmentsViewContext.nonce || 'default'}-${currentUser?.id || 'anonymous'}`}
@@ -1151,6 +1190,17 @@ export default function App() {
     }
 
     if (vistaActiva === 'patients') {
+      if (isAdmin) {
+        return (
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+            <h2 className="text-2xl font-black text-slate-900">Gestion admin pendiente</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Aqui vivira la administracion de psicologos, aprobaciones y relaciones paciente-terapeuta. Por ahora el modelo ya existe en backend.
+            </p>
+          </div>
+        );
+      }
+
       return <PatientsScreen currentUser={currentUser} patients={pacientes} onOpenPatient={abrirNotas} />;
     }
 

@@ -17,9 +17,10 @@ function NavButton({ active, onClick, children, disabled = false }) {
 
 export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaActiva }) {
   const isPsychologist = currentUser?.role === 'psychologist';
+  const isAdmin = currentUser?.role === 'admin';
   const primaryNavLabel = 'Tablero';
-  const appointmentsLabel = isPsychologist ? 'Citas' : 'Mis Citas';
-  const secondaryNavLabel = isPsychologist ? 'Mis Pacientes' : 'Mi Seguimiento';
+  const appointmentsLabel = isAdmin ? 'Agenda' : isPsychologist ? 'Citas' : 'Mis Citas';
+  const secondaryNavLabel = isAdmin ? 'Usuarios' : isPsychologist ? 'Mis Pacientes' : 'Mi Seguimiento';
 
   return (
     <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col z-10 shadow-sm sticky top-0 h-screen">
@@ -38,7 +39,7 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
         <NavButton active={vistaActiva === 'appointments'} onClick={() => setVistaActiva('appointments')}>
           <CalendarRange className="mr-3" size={20} /> {appointmentsLabel}
         </NavButton>
-        <NavButton active={vistaActiva === 'patients'} onClick={() => setVistaActiva('patients')}>
+        <NavButton active={vistaActiva === 'patients'} onClick={() => setVistaActiva('patients')} disabled={isAdmin}>
           <User className="mr-3" size={20} /> {secondaryNavLabel}
         </NavButton>
 
@@ -67,7 +68,7 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
           </div>
           <div className="ml-3">
             <p className="text-sm font-bold text-gray-800">{currentUser?.fullName}</p>
-            <p className="text-xs text-gray-500">{isPsychologist ? 'Psicologo' : 'Paciente'}</p>
+            <p className="text-xs text-gray-500">{isAdmin ? 'Admin' : isPsychologist ? 'Psicologo' : 'Paciente'}</p>
           </div>
         </div>
 

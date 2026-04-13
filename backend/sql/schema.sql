@@ -49,12 +49,59 @@ CREATE TABLE IF NOT EXISTS users (
   last_name TEXT NOT NULL DEFAULT '',
   email TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('psychologist', 'patient')),
+  role TEXT NOT NULL CHECK (role IN ('admin', 'psychologist', 'patient')),
   patient_id TEXT UNIQUE REFERENCES patients(id) ON DELETE SET NULL,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE users
+  DROP CONSTRAINT IF EXISTS users_role_check;
+
+ALTER TABLE users
+  ADD CONSTRAINT users_role_check
+  CHECK (role IN ('admin', 'psychologist', 'patient'));
+
+CREATE TABLE IF NOT EXISTS psychologist_profiles (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  professional_title TEXT NOT NULL DEFAULT 'Psicologo',
+  license_number TEXT NOT NULL DEFAULT '',
+  approval_status TEXT NOT NULL DEFAULT 'pending_review' CHECK (approval_status IN ('pending_review', 'active', 'rejected', 'suspended')),
+  review_notes TEXT NOT NULL DEFAULT '',
+  approved_at TIMESTAMPTZ,
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS psychologist_profiles_approval_status_idx
+  ON psychologist_profiles (approval_status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS care_relationships (
+  id BIGSERIAL PRIMARY KEY,
+  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  psychologist_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'ended', 'rejected')),
+  requested_by_role TEXT NOT NULL DEFAULT 'psychologist' CHECK (requested_by_role IN ('admin', 'psychologist', 'patient')),
+  created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  approved_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  approved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS care_relationships_patient_psychologist_active_idx
+  ON care_relationships (patient_id, psychologist_user_id)
+  WHERE status = 'active';
+
+CREATE INDEX IF NOT EXISTS care_relationships_patient_status_idx
+  ON care_relationships (patient_id, status);
+
+CREATE INDEX IF NOT EXISTS care_relationships_psychologist_status_idx
+  ON care_relationships (psychologist_user_id, status);
 
 ALTER TABLE patient_intakes
   DROP CONSTRAINT IF EXISTS patient_intakes_completed_by_user_id_fkey;
@@ -340,6 +387,49 @@ ALTER TABLE patient_tasks
 ALTER TABLE patient_tasks
   ADD CONSTRAINT patient_tasks_kind_check
   CHECK (kind IN ('task', 'objective'));
+
+INSERT INTO psychologist_profiles (
+  user_id,
+  professional_title,
+  approval_status,
+  approved_at,
+  reviewed_at
+)
+SELECT
+  u.id,
+  'Psicologo',
+  'active',
+  NOW(),
+  NOW()
+FROM users u
+WHERE u.role = 'psychologist'
+ON CONFLICT (user_id) DO NOTHING;
+
+INSERT INTO care_relationships (
+  patient_id,
+  psychologist_user_id,
+  status,
+  requested_by_role,
+  created_by_user_id,
+  approved_by_user_id,
+  approved_at
+)
+SELECT
+  spa.patient_id,
+  spa.psychologist_user_id,
+  'active',
+  'psychologist',
+  spa.psychologist_user_id,
+  spa.psychologist_user_id,
+  spa.created_at
+FROM psychologist_patient_access spa
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM care_relationships cr
+  WHERE cr.patient_id = spa.patient_id
+    AND cr.psychologist_user_id = spa.psychologist_user_id
+    AND cr.status = 'active'
+);
 
 WITH ranked_waitlist_entries AS (
   SELECT
