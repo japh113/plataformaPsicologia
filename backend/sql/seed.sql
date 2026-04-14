@@ -267,6 +267,32 @@ VALUES
   ('5', 'u_psy_2', 'pending', 'patient', 'u_pat_5', NULL, NULL, 'Solicitud demo del paciente a otra psicologa')
 ON CONFLICT DO NOTHING;
 
+UPDATE care_relationships
+SET
+  status = 'pending',
+  requested_by_role = 'psychologist',
+  created_by_user_id = 'u_psy_2',
+  approved_by_user_id = NULL,
+  approved_at = NULL,
+  notes = 'Invitacion demo pendiente para paciente existente',
+  updated_at = NOW()
+WHERE patient_id = '4'
+  AND psychologist_user_id = 'u_psy_2'
+  AND status = 'pending';
+
+UPDATE care_relationships
+SET
+  status = 'pending',
+  requested_by_role = 'patient',
+  created_by_user_id = 'u_pat_5',
+  approved_by_user_id = NULL,
+  approved_at = NULL,
+  notes = 'Solicitud demo del paciente a otra psicologa',
+  updated_at = NOW()
+WHERE patient_id = '5'
+  AND psychologist_user_id = 'u_psy_2'
+  AND status = 'pending';
+
 INSERT INTO psychologist_patient_access (
   psychologist_user_id,
   patient_id

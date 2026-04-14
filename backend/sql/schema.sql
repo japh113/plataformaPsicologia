@@ -114,6 +114,27 @@ CREATE UNIQUE INDEX IF NOT EXISTS care_relationships_patient_psychologist_active
   ON care_relationships (patient_id, psychologist_user_id)
   WHERE status = 'active';
 
+WITH ranked_open_relationships AS (
+  SELECT
+    id,
+    ROW_NUMBER() OVER (
+      PARTITION BY patient_id, psychologist_user_id
+      ORDER BY created_at DESC, id DESC
+    ) AS relationship_rank
+  FROM care_relationships
+  WHERE status IN ('active', 'pending')
+)
+DELETE FROM care_relationships
+WHERE id IN (
+  SELECT id
+  FROM ranked_open_relationships
+  WHERE relationship_rank > 1
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS care_relationships_patient_psychologist_open_idx
+  ON care_relationships (patient_id, psychologist_user_id)
+  WHERE status IN ('active', 'pending');
+
 CREATE INDEX IF NOT EXISTS care_relationships_patient_status_idx
   ON care_relationships (patient_id, status);
 
