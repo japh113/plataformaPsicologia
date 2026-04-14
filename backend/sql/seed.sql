@@ -141,6 +141,15 @@ VALUES
     NULL
   ),
   (
+    'u_psy_2',
+    'Andrea',
+    'Ruiz',
+    'andrea@psicopanel.com',
+    '$2b$10$vquYfF/cmj1ZWF9Lo7muB.RwNgmXuauLcQoZB53oPlACki6C8kkX.',
+    'psychologist',
+    NULL
+  ),
+  (
     'u_pat_1',
     'Juan',
     'Perez',
@@ -157,6 +166,33 @@ VALUES
     '$2b$10$vquYfF/cmj1ZWF9Lo7muB.RwNgmXuauLcQoZB53oPlACki6C8kkX.',
     'patient',
     '2'
+  ),
+  (
+    'u_pat_3',
+    'Sofia',
+    'Ramirez',
+    'sofia@example.com',
+    '$2b$10$vquYfF/cmj1ZWF9Lo7muB.RwNgmXuauLcQoZB53oPlACki6C8kkX.',
+    'patient',
+    '3'
+  ),
+  (
+    'u_pat_4',
+    'Carlos',
+    'Mendez',
+    'carlos@example.com',
+    '$2b$10$vquYfF/cmj1ZWF9Lo7muB.RwNgmXuauLcQoZB53oPlACki6C8kkX.',
+    'patient',
+    '4'
+  ),
+  (
+    'u_pat_5',
+    'Valeria',
+    'Torres',
+    'valeria@example.com',
+    '$2b$10$vquYfF/cmj1ZWF9Lo7muB.RwNgmXuauLcQoZB53oPlACki6C8kkX.',
+    'patient',
+    '5'
   )
 ON CONFLICT (email) DO NOTHING;
 
@@ -190,6 +226,16 @@ VALUES
     NULL,
     NULL,
     NULL
+  ),
+  (
+    'u_psy_2',
+    'Psicoterapeuta cognitivo conductual',
+    'LIC-PSI-021',
+    'active',
+    'Cuenta demo aprobada para pruebas de vinculos.',
+    NOW(),
+    NOW(),
+    'u_admin_1'
   )
 ON CONFLICT (user_id) DO UPDATE
 SET
@@ -216,7 +262,9 @@ VALUES
   ('2', 'u_psy_1', 'active', 'psychologist', 'u_psy_1', 'u_admin_1', NOW(), 'Relacion activa demo'),
   ('3', 'u_psy_1', 'active', 'psychologist', 'u_psy_1', 'u_admin_1', NOW(), 'Relacion activa demo'),
   ('4', 'u_psy_1', 'active', 'psychologist', 'u_psy_1', 'u_admin_1', NOW(), 'Relacion activa demo'),
-  ('5', 'u_psy_1', 'active', 'psychologist', 'u_psy_1', 'u_admin_1', NOW(), 'Relacion activa demo')
+  ('5', 'u_psy_1', 'active', 'psychologist', 'u_psy_1', 'u_admin_1', NOW(), 'Relacion activa demo'),
+  ('4', 'u_psy_2', 'pending', 'psychologist', 'u_psy_2', NULL, NULL, 'Invitacion demo pendiente para paciente existente'),
+  ('5', 'u_psy_2', 'pending', 'patient', 'u_pat_5', NULL, NULL, 'Solicitud demo del paciente a otra psicologa')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO psychologist_patient_access (

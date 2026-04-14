@@ -8,6 +8,9 @@ import {
 } from '../src/modules/auth/auth.permissions.js';
 import {
   validateCreateCareRelationshipPayload,
+  validateInviteCareRelationshipPayload,
+  validateRequestCareRelationshipPayload,
+  validateRespondCareRelationshipPayload,
   validateUpdateCareRelationshipPayload,
 } from '../src/modules/auth/auth.validators.js';
 
@@ -43,5 +46,23 @@ test('validateCreateCareRelationshipPayload enforces patient and psychologist id
 test('validateUpdateCareRelationshipPayload enforces supported statuses', () => {
   assert.deepEqual(validateUpdateCareRelationshipPayload({ status: 'archived' }), [
     'status must be pending, active, ended or rejected',
+  ]);
+});
+
+test('validateRequestCareRelationshipPayload requires psychologist id', () => {
+  assert.deepEqual(validateRequestCareRelationshipPayload({}), [
+    'psychologistUserId is required',
+  ]);
+});
+
+test('validateInviteCareRelationshipPayload requires a valid patient email', () => {
+  assert.deepEqual(validateInviteCareRelationshipPayload({ patientEmail: 'invalid' }), [
+    'patientEmail must be valid',
+  ]);
+});
+
+test('validateRespondCareRelationshipPayload only allows active or rejected', () => {
+  assert.deepEqual(validateRespondCareRelationshipPayload({ status: 'ended' }), [
+    'status must be active or rejected',
   ]);
 });

@@ -5,6 +5,16 @@ import InlineNotice from '../components/shared/InlineNotice';
 const ROLE_LABELS = { admin: 'Admin', support: 'Soporte', superadmin: 'Superadmin', psychologist: 'Psicologo', patient: 'Paciente' };
 const APPROVAL_STATUS_LABELS = { pending_review: 'Pendiente', active: 'Aprobado', rejected: 'Rechazado', suspended: 'Suspendido' };
 const RELATIONSHIP_STATUS_LABELS = { pending: 'Pendiente', active: 'Activa', ended: 'Finalizada', rejected: 'Rechazada' };
+const AUDIT_ACTION_LABELS = {
+  psychologist_reviewed: 'Revision de psicologo',
+  care_relationship_created: 'Relacion creada desde backoffice',
+  care_relationship_updated: 'Relacion actualizada desde backoffice',
+  care_relationship_requested: 'Solicitud de vinculo del paciente',
+  care_relationship_invited: 'Invitacion enviada por psicologo',
+  care_relationship_responded: 'Respuesta a solicitud o invitacion',
+  password_reset_requested: 'Recuperacion de acceso solicitada',
+  password_reset_confirmed: 'Contrasena actualizada',
+};
 
 const buildRoleBadgeClassName = (role) => {
   if (role === 'superadmin') return 'border-rose-200 bg-rose-50 text-rose-700';
@@ -55,6 +65,44 @@ const buildUserStatusLabel = (user) => {
   return user.isActive ? 'Activo' : 'Inactivo';
 };
 
+const RecentAuditFeed = ({ auditLogs = [] }) => (
+  <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+    <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+      <div>
+        <h2 className="text-xl font-black text-slate-900">Auditoria reciente</h2>
+        <p className="mt-1 text-sm text-slate-500">Seguimiento base de revisiones, vinculos y cambios sensibles de acceso.</p>
+      </div>
+      <p className="text-sm font-semibold text-slate-500">{auditLogs.length} evento(s)</p>
+    </div>
+
+    <div className="mt-6 space-y-3">
+      {auditLogs.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
+          <p className="text-sm font-semibold text-slate-900">Todavia no hay eventos auditados para mostrar.</p>
+          <p className="mt-1 text-sm text-slate-500">Los cambios sensibles iran dejando rastro aqui conforme se use la consola y los nuevos flujos de acceso.</p>
+        </div>
+      ) : auditLogs.slice(0, 10).map((entry) => (
+        <article key={entry.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{AUDIT_ACTION_LABELS[entry.action] || entry.action}</p>
+              <p className="mt-1 text-sm text-slate-600">
+                {entry.actor?.fullName || 'Sistema'}
+                {entry.actor?.role ? ` (${ROLE_LABELS[entry.actor.role] || entry.actor.role})` : ''}
+                {entry.patient?.fullName ? ` · Paciente: ${entry.patient.fullName}` : ''}
+                {entry.targetUser?.fullName ? ` · Objetivo: ${entry.targetUser.fullName}` : ''}
+              </p>
+            </div>
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              {formatDateTime(entry.createdAt)}
+            </span>
+          </div>
+        </article>
+      ))}
+    </div>
+  </div>
+);
+
 export default function BackofficeScreen(props) {
   const {
     section = 'overview',
@@ -62,6 +110,7 @@ export default function BackofficeScreen(props) {
     users = [],
     pendingPsychologists = [],
     relationships = [],
+    auditLogs = [],
     onReviewPsychologist,
     onCreateCareRelationship,
     onUpdateCareRelationship,
@@ -275,6 +324,7 @@ export default function BackofficeScreen(props) {
       </div>
 
       <RelationshipList />
+      <RecentAuditFeed auditLogs={auditLogs} />
     </div>
   );
 

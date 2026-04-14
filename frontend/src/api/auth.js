@@ -59,8 +59,18 @@ export const getBackofficeUsers = async () => {
   return response.data;
 };
 
+export const getAvailablePsychologists = async () => {
+  const response = await apiRequest('/auth/psychologists/available');
+  return response.data;
+};
+
 export const getPendingPsychologists = async () => {
   const response = await apiRequest('/auth/psychologists/pending');
+  return response.data;
+};
+
+export const getAuditLogs = async () => {
+  const response = await apiRequest('/auth/audit-logs');
   return response.data;
 };
 
@@ -80,6 +90,33 @@ export const createCareRelationship = async (payload) => {
 
 export const updateCareRelationship = async (relationshipId, payload) => {
   const response = await apiRequest(`/auth/care-relationships/${relationshipId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
+export const requestCareRelationship = async (payload) => {
+  const response = await apiRequest('/auth/care-relationships/request', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
+export const inviteCareRelationship = async (payload) => {
+  const response = await apiRequest('/auth/care-relationships/invite', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
+export const respondToCareRelationship = async (relationshipId, payload) => {
+  const response = await apiRequest(`/auth/care-relationships/${relationshipId}/respond`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });

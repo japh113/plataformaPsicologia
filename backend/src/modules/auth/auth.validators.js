@@ -159,3 +159,41 @@ export const validateUpdateCareRelationshipPayload = (payload = {}) => {
 
   return errors;
 };
+
+export const validateRequestCareRelationshipPayload = (payload = {}) => {
+  const errors = [];
+  const psychologistUserId = normalizeString(payload.psychologistUserId);
+
+  if (!psychologistUserId) {
+    errors.push('psychologistUserId is required');
+  }
+
+  return errors;
+};
+
+export const validateInviteCareRelationshipPayload = (payload = {}) => {
+  const errors = [];
+  const patientEmail = normalizeString(payload.patientEmail);
+
+  if (!patientEmail) {
+    errors.push('patientEmail is required');
+  } else if (!isValidEmail(patientEmail)) {
+    errors.push('patientEmail must be valid');
+  }
+
+  return errors;
+};
+
+export const validateRespondCareRelationshipPayload = (payload = {}) => {
+  const errors = [];
+  const status = normalizeString(payload.status);
+  const allowedStatuses = ['active', 'rejected'];
+
+  if (!status) {
+    errors.push('status is required');
+  } else if (!allowedStatuses.includes(status)) {
+    errors.push('status must be active or rejected');
+  }
+
+  return errors;
+};

@@ -3,24 +3,32 @@ import { ensureBackofficeManager, ensureBackofficeViewer } from './auth.permissi
 import {
   confirmPasswordReset,
   createCareRelationship,
+  inviteCareRelationship,
+  listAuditLogs,
+  listAvailablePsychologists,
   listCareRelationships,
   listBackofficeUsers,
   listPendingPsychologistUsers,
   loginUser,
+  requestCareRelationship,
   requestPasswordReset,
   registerPatientUser,
   registerPsychologistUser,
+  respondToCareRelationship,
   reviewPsychologistUser,
   updateCareRelationship,
 } from './auth.service.js';
 import {
   validateCreateCareRelationshipPayload,
+  validateInviteCareRelationshipPayload,
   validateLoginPayload,
   validatePasswordResetConfirmPayload,
   validatePasswordResetRequestPayload,
   validatePatientRegistrationPayload,
   validatePsychologistRegistrationPayload,
   validatePsychologistReviewPayload,
+  validateRequestCareRelationshipPayload,
+  validateRespondCareRelationshipPayload,
   validateUpdateCareRelationshipPayload,
 } from './auth.validators.js';
 
@@ -155,6 +163,7 @@ export const reviewPsychologistHandler = async (req, res, next) => {
 
     const reviewedUser = await reviewPsychologistUser({
       reviewerUserId: req.user.id,
+      reviewerRole: req.user.role,
       psychologistUserId: req.params.userId,
       approvalStatus: req.body.approvalStatus,
       reviewNotes: req.body.reviewNotes || '',
@@ -186,8 +195,7 @@ export const listBackofficeUsersHandler = async (req, res, next) => {
 
 export const listCareRelationshipsHandler = async (req, res, next) => {
   try {
-    ensureBackofficeViewer(req.user);
-    const relationships = await listCareRelationships();
+    const relationships = await listCareRelationships(req.user);
     return successResponse(res, relationships, 'Care relationships fetched successfully');
   } catch (error) {
     if (error.status) {
@@ -244,6 +252,106 @@ export const updateCareRelationshipHandler = async (req, res, next) => {
     });
 
     return successResponse(res, relationship, 'Care relationship updated successfully');
+  } catch (error) {
+    if (error.status) {
+      return errorResponse(res, error.message, error.status);
+    }
+
+    return next(error);
+  }
+};
+
+export const listAvailablePsychologistsHandler = async (req, res, next) => {
+  try {
+    const psychologists = await listAvailablePsychologists();
+    return successResponse(res, psychologists, 'Available psychologists fetched successfully');
+  } catch (error) {
+    if (error.status) {
+      return errorResponse(res, error.message, error.status);
+    }
+
+    return next(error);
+  }
+};
+
+export const requestCareRelationshipHandler = async (req, res, next) => {
+  try {
+    const errors = validateRequestCareRelationshipPayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const relationship = await requestCareRelationship({
+      actor: req.user,
+      psychologistUserId: req.body.psychologistUserId,
+      notes: req.body.notes || '',
+    });
+
+    return successResponse(res, relationship, 'Care relationship request created successfully', 201);
+  } catch (error) {
+    if (error.status) {
+      return errorResponse(res, error.message, error.status);
+    }
+
+    return next(error);
+  }
+};
+
+export const inviteCareRelationshipHandler = async (req, res, next) => {
+  try {
+    const errors = validateInviteCareRelationshipPayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const relationship = await inviteCareRelationship({
+      actor: req.user,
+      patientEmail: req.body.patientEmail,
+      notes: req.body.notes || '',
+    });
+
+    return successResponse(res, relationship, 'Patient invitation created successfully', 201);
+  } catch (error) {
+    if (error.status) {
+      return errorResponse(res, error.message, error.status);
+    }
+
+    return next(error);
+  }
+};
+
+export const respondToCareRelationshipHandler = async (req, res, next) => {
+  try {
+    const errors = validateRespondCareRelationshipPayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const relationship = await respondToCareRelationship({
+      actor: req.user,
+      relationshipId: req.params.relationshipId,
+      status: req.body.status,
+      notes: req.body.notes || '',
+    });
+
+    return successResponse(res, relationship, 'Care relationship response saved successfully');
+  } catch (error) {
+    if (error.status) {
+      return errorResponse(res, error.message, error.status);
+    }
+
+    return next(error);
+  }
+};
+
+export const listAuditLogsHandler = async (req, res, next) => {
+  try {
+    ensureBackofficeViewer(req.user);
+    const auditLogs = await listAuditLogs();
+    return successResponse(res, auditLogs, 'Audit logs fetched successfully');
   } catch (error) {
     if (error.status) {
       return errorResponse(res, error.message, error.status);

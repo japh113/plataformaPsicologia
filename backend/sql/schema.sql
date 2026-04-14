@@ -118,6 +118,28 @@ CREATE INDEX IF NOT EXISTS care_relationships_patient_status_idx
 CREATE INDEX IF NOT EXISTS care_relationships_psychologist_status_idx
   ON care_relationships (psychologist_user_id, status);
 
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id BIGSERIAL PRIMARY KEY,
+  actor_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  actor_role TEXT NOT NULL DEFAULT '',
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL DEFAULT '',
+  target_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  patient_id TEXT REFERENCES patients(id) ON DELETE SET NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx
+  ON audit_logs (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS audit_logs_action_idx
+  ON audit_logs (action, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS audit_logs_actor_idx
+  ON audit_logs (actor_user_id, created_at DESC);
+
 ALTER TABLE patient_intakes
   DROP CONSTRAINT IF EXISTS patient_intakes_completed_by_user_id_fkey;
 
