@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  acceptCareRelationshipInviteHandler,
   confirmPasswordResetHandler,
   createCareRelationshipHandler,
   inviteCareRelationshipHandler,
@@ -35,6 +36,7 @@ router.get('/care-relationships', authenticate, listCareRelationshipsHandler);
 router.post('/care-relationships', authenticate, createCareRelationshipHandler);
 router.post('/care-relationships/request', authenticate, requestCareRelationshipHandler);
 router.post('/care-relationships/invite', authenticate, inviteCareRelationshipHandler);
+router.post('/care-relationships/accept-code', authenticate, acceptCareRelationshipInviteHandler);
 router.patch('/care-relationships/:relationshipId', authenticate, updateCareRelationshipHandler);
 router.patch('/care-relationships/:relationshipId/respond', authenticate, respondToCareRelationshipHandler);
 router.get('/psychologists/pending', authenticate, listPendingPsychologistsHandler);

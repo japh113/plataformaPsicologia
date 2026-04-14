@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import db from '../../config/db.js';
 import env from '../../config/env.js';
+import { buildRelationshipInvitePreview, logAuditEvent } from '../../utils/audit.js';
 
 const createAuthError = (message, status = 400) => {
   const error = new Error(message);
@@ -13,6 +14,7 @@ const createAuthError = (message, status = 400) => {
 const normalizeRelationshipStatus = (status) => String(status || 'active').trim().toLowerCase();
 const normalizeRelationshipResponseStatus = (status) => String(status || '').trim().toLowerCase();
 const addMinutesToDate = (date, minutes) => new Date(date.getTime() + minutes * 60 * 1000);
+const addDaysToDate = (date, days) => new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 const hashPasswordResetToken = (token) => createHash('sha256').update(String(token)).digest('hex');
 const buildPasswordResetPreview = ({ token, expiresAt, appBaseUrl = env.appBaseUrl }) => ({
   resetToken: token,
@@ -49,6 +51,9 @@ const mapCareRelationshipRow = (row) => ({
   requestedByRole: row.requested_by_role,
   createdAt: row.created_at || null,
   approvedAt: row.approved_at || null,
+  inviteCode: row.invite_code || null,
+  inviteExpiresAt: row.invite_expires_at || null,
+  invitePreview: row.invite_code ? buildRelationshipInvitePreview({ inviteCode: row.invite_code, expiresAt: row.invite_expires_at }) : null,
   patient: {
     id: String(row.patient_id),
     fullName: row.patient_full_name,
@@ -143,6 +148,8 @@ const relationshipBaseSelect = `
     cr.status,
     cr.notes,
     cr.requested_by_role,
+    cr.invite_code,
+    cr.invite_expires_at,
     cr.created_at,
     cr.approved_at,
     p.full_name AS patient_full_name,
@@ -165,6 +172,7 @@ const isBackofficeActor = (actor) => ['admin', 'support', 'superadmin'].includes
 const isBackofficeManagerActor = (actor) => ['admin', 'superadmin'].includes(actor?.role || '');
 const isPatientActor = (actor) => actor?.role === 'patient';
 const isPsychologistActor = (actor) => actor?.role === 'psychologist';
+const createInviteCode = () => randomBytes(4).toString('hex').toUpperCase();
 
 const ensurePsychologistCanAuthenticate = (userRow) => {
   if (userRow.role !== 'psychologist') {
@@ -220,46 +228,6 @@ const ensurePasswordResetRecordUsable = (record, now = new Date()) => {
   if (Number.isNaN(expiresAt.getTime()) || expiresAt <= now) {
     throw createAuthError('Password reset token is invalid or expired', 400);
   }
-};
-
-const writeAuditLog = async (
-  client,
-  {
-    actorUserId = null,
-    actorRole = '',
-    action,
-    entityType,
-    entityId = '',
-    targetUserId = null,
-    patientId = null,
-    metadata = {},
-  },
-) => {
-  await client.query(
-    `
-      INSERT INTO audit_logs (
-        actor_user_id,
-        actor_role,
-        action,
-        entity_type,
-        entity_id,
-        target_user_id,
-        patient_id,
-        metadata
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-    `,
-    [
-      actorUserId,
-      actorRole || '',
-      action,
-      entityType,
-      entityId ? String(entityId) : '',
-      targetUserId,
-      patientId,
-      JSON.stringify(metadata || {}),
-    ],
-  );
 };
 
 const buildRelationshipScope = (actor) => {
@@ -458,7 +426,7 @@ export const requestPasswordReset = async ({ email }) => {
       [user.id, tokenHash, expiresAt.toISOString()],
     );
 
-    await writeAuditLog(client, {
+    await logAuditEvent(client, {
       actorUserId: user.id,
       actorRole: user.role,
       action: 'password_reset_requested',
@@ -543,7 +511,7 @@ export const confirmPasswordReset = async ({ token, password }) => {
 
     const resetUser = userResult.rows[0];
 
-    await writeAuditLog(client, {
+    await logAuditEvent(client, {
       actorUserId: resetRecord.user_id,
       actorRole: resetUser?.role || '',
       action: 'password_reset_confirmed',
@@ -805,7 +773,36 @@ export const listCareRelationships = async (actor) => {
   );
 };
 
-export const listAuditLogs = async () => {
+export const listAuditLogs = async ({
+  action = '',
+  actorRole = '',
+  search = '',
+} = {}) => {
+  const params = [];
+  const filters = [];
+
+  if (action.trim()) {
+    params.push(action.trim());
+    filters.push(`al.action = $${params.length}`);
+  }
+
+  if (actorRole.trim()) {
+    params.push(actorRole.trim());
+    filters.push(`al.actor_role = $${params.length}`);
+  }
+
+  if (search.trim()) {
+    params.push(`%${search.trim().toLowerCase()}%`);
+    filters.push(`(
+      LOWER(COALESCE(actor.first_name, '') || ' ' || COALESCE(actor.last_name, '')) LIKE $${params.length}
+      OR LOWER(COALESCE(target.first_name, '') || ' ' || COALESCE(target.last_name, '')) LIKE $${params.length}
+      OR LOWER(COALESCE(p.full_name, '')) LIKE $${params.length}
+      OR LOWER(al.action) LIKE $${params.length}
+    )`);
+  }
+
+  const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+
   const result = await db.query(
     `
       SELECT
@@ -833,10 +830,11 @@ export const listAuditLogs = async () => {
         ON target.id = al.target_user_id
       LEFT JOIN patients p
         ON p.id = al.patient_id
+      ${whereClause}
       ORDER BY al.created_at DESC
       LIMIT 80
     `,
-    [],
+    params,
   );
 
   return result.rows.map(mapAuditLogRow);
@@ -977,6 +975,8 @@ export const createCareRelationship = async ({
             created_by_user_id = $5,
             approved_by_user_id = CASE WHEN $2 = 'active' THEN $5 ELSE approved_by_user_id END,
             approved_at = CASE WHEN $2 = 'active' THEN NOW() ELSE NULL END,
+            invite_code = NULL,
+            invite_expires_at = NULL,
             updated_at = NOW()
           WHERE id = $1
         `,
@@ -993,9 +993,11 @@ export const createCareRelationship = async ({
             created_by_user_id,
             approved_by_user_id,
             approved_at,
+            invite_code,
+            invite_expires_at,
             notes
           )
-          VALUES ($1, $2, $3, $4, $5, CASE WHEN $3 = 'active' THEN $5 ELSE NULL END, CASE WHEN $3 = 'active' THEN NOW() ELSE NULL END, $6)
+          VALUES ($1, $2, $3, $4, $5, CASE WHEN $3 = 'active' THEN $5 ELSE NULL END, CASE WHEN $3 = 'active' THEN NOW() ELSE NULL END, NULL, NULL, $6)
           RETURNING id
         `,
         [patientId, psychologistUserId, normalizedStatus, actor.role, actor.id, notes.trim()],
@@ -1005,7 +1007,7 @@ export const createCareRelationship = async ({
 
     await syncLegacyRelationshipAccess(client, patientId, psychologistUserId, normalizedStatus);
 
-    await writeAuditLog(client, {
+    await logAuditEvent(client, {
       actorUserId: actor.id,
       actorRole: actor.role,
       action: 'care_relationship_created',
@@ -1070,6 +1072,8 @@ export const updateCareRelationship = async ({
           notes = $3,
           approved_by_user_id = CASE WHEN $2 = 'active' THEN $4 ELSE approved_by_user_id END,
           approved_at = CASE WHEN $2 = 'active' THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
+          invite_code = CASE WHEN $2 = 'pending' THEN invite_code ELSE NULL END,
+          invite_expires_at = CASE WHEN $2 = 'pending' THEN invite_expires_at ELSE NULL END,
           updated_at = NOW()
         WHERE id = $1
       `,
@@ -1083,7 +1087,7 @@ export const updateCareRelationship = async ({
       normalizedStatus,
     );
 
-    await writeAuditLog(client, {
+    await logAuditEvent(client, {
       actorUserId: actor.id,
       actorRole: actor.role,
       action: 'care_relationship_updated',
@@ -1155,6 +1159,8 @@ export const requestCareRelationship = async ({
             created_by_user_id = $3,
             approved_by_user_id = NULL,
             approved_at = NULL,
+            invite_code = NULL,
+            invite_expires_at = NULL,
             updated_at = NOW()
           WHERE id = $1
         `,
@@ -1169,9 +1175,11 @@ export const requestCareRelationship = async ({
             status,
             requested_by_role,
             created_by_user_id,
+            invite_code,
+            invite_expires_at,
             notes
           )
-          VALUES ($1, $2, 'pending', 'patient', $3, $4)
+          VALUES ($1, $2, 'pending', 'patient', $3, NULL, NULL, $4)
           RETURNING id
         `,
         [actor.patientId, psychologistUserId, actor.id, notes.trim()],
@@ -1182,7 +1190,7 @@ export const requestCareRelationship = async ({
 
     await syncLegacyRelationshipAccess(client, actor.patientId, psychologistUserId, 'pending');
 
-    await writeAuditLog(client, {
+    await logAuditEvent(client, {
       actorUserId: actor.id,
       actorRole: actor.role,
       action: 'care_relationship_requested',
@@ -1221,6 +1229,8 @@ export const inviteCareRelationship = async ({
     await client.query('BEGIN');
 
     await ensurePsychologistCanBeLinked(client, actor.id);
+    const inviteCode = createInviteCode();
+    const inviteExpiresAt = addDaysToDate(new Date(), 14);
 
     const patientUser = await findPatientUserByEmail(client, patientEmail);
 
@@ -1259,10 +1269,12 @@ export const inviteCareRelationship = async ({
             created_by_user_id = $3,
             approved_by_user_id = NULL,
             approved_at = NULL,
+            invite_code = $4,
+            invite_expires_at = $5,
             updated_at = NOW()
           WHERE id = $1
         `,
-        [relationshipId, notes.trim(), actor.id],
+        [relationshipId, notes.trim(), actor.id, inviteCode, inviteExpiresAt.toISOString()],
       );
     } else {
       const insertResult = await client.query(
@@ -1273,12 +1285,14 @@ export const inviteCareRelationship = async ({
             status,
             requested_by_role,
             created_by_user_id,
+            invite_code,
+            invite_expires_at,
             notes
           )
-          VALUES ($1, $2, 'pending', 'psychologist', $3, $4)
+          VALUES ($1, $2, 'pending', 'psychologist', $3, $4, $5, $6)
           RETURNING id
         `,
-        [patientUser.patient_id, actor.id, actor.id, notes.trim()],
+        [patientUser.patient_id, actor.id, actor.id, inviteCode, inviteExpiresAt.toISOString(), notes.trim()],
       );
 
       relationshipId = insertResult.rows[0].id;
@@ -1286,7 +1300,7 @@ export const inviteCareRelationship = async ({
 
     await syncLegacyRelationshipAccess(client, patientUser.patient_id, actor.id, 'pending');
 
-    await writeAuditLog(client, {
+    await logAuditEvent(client, {
       actorUserId: actor.id,
       actorRole: actor.role,
       action: 'care_relationship_invited',
@@ -1297,6 +1311,7 @@ export const inviteCareRelationship = async ({
       metadata: {
         requestType: 'psychologist_invitation',
         patientEmail: patientUser.email,
+        inviteCode,
       },
     });
 
@@ -1338,6 +1353,8 @@ export const respondToCareRelationship = async ({
           notes = CASE WHEN $3 <> '' THEN $3 ELSE notes END,
           approved_by_user_id = CASE WHEN $2 = 'active' THEN $4 ELSE approved_by_user_id END,
           approved_at = CASE WHEN $2 = 'active' THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
+          invite_code = NULL,
+          invite_expires_at = NULL,
           updated_at = NOW()
         WHERE id = $1
       `,
@@ -1351,7 +1368,7 @@ export const respondToCareRelationship = async ({
       normalizedStatus,
     );
 
-    await writeAuditLog(client, {
+    await logAuditEvent(client, {
       actorUserId: actor.id,
       actorRole: actor.role,
       action: 'care_relationship_responded',
@@ -1362,6 +1379,87 @@ export const respondToCareRelationship = async ({
       metadata: {
         status: normalizedStatus,
         requestedByRole: currentRelationship.requestedByRole,
+      },
+    });
+
+    await client.query('COMMIT');
+
+    return getRelationshipById(db, relationshipId);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const acceptCareRelationshipInvite = async ({
+  actor,
+  inviteCode,
+}) => {
+  if (!isPatientActor(actor) || !actor.patientId) {
+    throw createAuthError('Only patients can accept invitation codes', 403);
+  }
+
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    const relationshipResult = await client.query(
+      `
+        SELECT id
+        FROM care_relationships
+        WHERE patient_id = $1
+          AND invite_code = $2
+          AND status = 'pending'
+          AND requested_by_role = 'psychologist'
+          AND (invite_expires_at IS NULL OR invite_expires_at > NOW())
+        LIMIT 1
+      `,
+      [actor.patientId, inviteCode.trim().toUpperCase()],
+    );
+
+    const relationshipId = relationshipResult.rows[0]?.id;
+
+    if (!relationshipId) {
+      throw createAuthError('Invitation code is invalid or expired', 404);
+    }
+
+    await client.query(
+      `
+        UPDATE care_relationships
+        SET
+          status = 'active',
+          approved_by_user_id = $2,
+          approved_at = NOW(),
+          invite_code = NULL,
+          invite_expires_at = NULL,
+          updated_at = NOW()
+        WHERE id = $1
+      `,
+      [relationshipId, actor.id],
+    );
+
+    const relationship = await getRelationshipById(client, relationshipId);
+
+    await syncLegacyRelationshipAccess(
+      client,
+      relationship.patient.id,
+      relationship.psychologist.id,
+      'active',
+    );
+
+    await logAuditEvent(client, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: 'care_relationship_accepted_by_code',
+      entityType: 'care_relationship',
+      entityId: relationshipId,
+      targetUserId: relationship.psychologist.id,
+      patientId: relationship.patient.id,
+      metadata: {
+        inviteCode: inviteCode.trim().toUpperCase(),
       },
     });
 
@@ -1411,7 +1509,7 @@ export const reviewPsychologistUser = async ({
       throw createAuthError('Psychologist profile not found', 404);
     }
 
-    await writeAuditLog(client, {
+    await logAuditEvent(client, {
       actorUserId: reviewerUserId,
       actorRole: reviewerRole,
       action: 'psychologist_reviewed',

@@ -69,8 +69,16 @@ export const getPendingPsychologists = async () => {
   return response.data;
 };
 
-export const getAuditLogs = async () => {
-  const response = await apiRequest('/auth/audit-logs');
+export const getAuditLogs = async (filters = {}) => {
+  const query = new URLSearchParams();
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) {
+      query.set(key, value);
+    }
+  });
+
+  const response = await apiRequest(`/auth/audit-logs${query.toString() ? `?${query.toString()}` : ''}`);
   return response.data;
 };
 
@@ -118,6 +126,15 @@ export const inviteCareRelationship = async (payload) => {
 export const respondToCareRelationship = async (relationshipId, payload) => {
   const response = await apiRequest(`/auth/care-relationships/${relationshipId}/respond`, {
     method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
+export const acceptCareRelationshipByCode = async (payload) => {
+  const response = await apiRequest('/auth/care-relationships/accept-code', {
+    method: 'POST',
     body: JSON.stringify(payload),
   });
 

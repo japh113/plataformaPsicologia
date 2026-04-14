@@ -1,6 +1,7 @@
 import { errorResponse, successResponse } from '../../utils/response.js';
 import { ensureBackofficeManager, ensureBackofficeViewer } from './auth.permissions.js';
 import {
+  acceptCareRelationshipInvite,
   confirmPasswordReset,
   createCareRelationship,
   inviteCareRelationship,
@@ -19,6 +20,7 @@ import {
   updateCareRelationship,
 } from './auth.service.js';
 import {
+  validateAcceptCareRelationshipInvitePayload,
   validateCreateCareRelationshipPayload,
   validateInviteCareRelationshipPayload,
   validateLoginPayload,
@@ -350,8 +352,35 @@ export const respondToCareRelationshipHandler = async (req, res, next) => {
 export const listAuditLogsHandler = async (req, res, next) => {
   try {
     ensureBackofficeViewer(req.user);
-    const auditLogs = await listAuditLogs();
+    const auditLogs = await listAuditLogs({
+      action: req.query.action || '',
+      actorRole: req.query.actorRole || '',
+      search: req.query.search || '',
+    });
     return successResponse(res, auditLogs, 'Audit logs fetched successfully');
+  } catch (error) {
+    if (error.status) {
+      return errorResponse(res, error.message, error.status);
+    }
+
+    return next(error);
+  }
+};
+
+export const acceptCareRelationshipInviteHandler = async (req, res, next) => {
+  try {
+    const errors = validateAcceptCareRelationshipInvitePayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const relationship = await acceptCareRelationshipInvite({
+      actor: req.user,
+      inviteCode: req.body.inviteCode,
+    });
+
+    return successResponse(res, relationship, 'Invitation accepted successfully');
   } catch (error) {
     if (error.status) {
       return errorResponse(res, error.message, error.status);

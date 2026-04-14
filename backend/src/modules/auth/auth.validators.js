@@ -197,3 +197,14 @@ export const validateRespondCareRelationshipPayload = (payload = {}) => {
 
   return errors;
 };
+
+export const validateAcceptCareRelationshipInvitePayload = (payload = {}) => {
+  const errors = [];
+  const inviteCode = normalizeString(payload.inviteCode);
+
+  if (!inviteCode) {
+    errors.push('inviteCode is required');
+  }
+
+  return errors;
+};

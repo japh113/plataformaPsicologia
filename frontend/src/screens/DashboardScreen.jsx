@@ -234,10 +234,14 @@ function PatientCareRelationshipPanel({
   availablePsychologists,
   onRequestCareRelationship,
   onRespondToCareRelationship,
+  onAcceptCareRelationshipByCode,
   processingRelationshipId,
   relationshipActionError,
   onDismissRelationshipError,
 }) {
+  const initialInviteCode = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('inviteCode') || ''
+    : '';
   const activeRelationships = relationships.filter((relationship) => relationship.status === 'active');
   const requestedPsychologistIds = new Set(
     relationships
@@ -249,6 +253,7 @@ function PatientCareRelationshipPanel({
     psychologistUserId: availablePsychologists[0]?.id || '',
     notes: '',
   });
+  const [inviteCode, setInviteCode] = React.useState(initialInviteCode);
 
   React.useEffect(() => {
     setForm((currentForm) => ({
@@ -269,6 +274,20 @@ function PatientCareRelationshipPanel({
         notes: '',
         psychologistUserId: requestablePsychologists[0]?.id || currentForm.psychologistUserId,
       }));
+    }
+  };
+
+  const handleAcceptCode = async (event) => {
+    event.preventDefault();
+    const wasAccepted = await onAcceptCareRelationshipByCode?.({ inviteCode });
+
+    if (wasAccepted) {
+      setInviteCode('');
+      if (typeof window !== 'undefined') {
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.delete('inviteCode');
+        window.history.replaceState({}, '', nextUrl.toString());
+      }
     }
   };
 
@@ -381,12 +400,34 @@ function PatientCareRelationshipPanel({
           </>
         )}
       </form>
+
+      <form onSubmit={handleAcceptCode} className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4">
+        <p className="text-sm font-semibold text-slate-900">Aceptar con codigo o enlace</p>
+        <p className="mt-1 text-sm text-slate-500">Si recibiste un enlace directo o un codigo compartido por tu psicologo, puedes activarlo aqui.</p>
+        <div className="mt-4 flex flex-col gap-3 md:flex-row">
+          <input
+            type="text"
+            value={inviteCode}
+            onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
+            placeholder="Ej. A1B2C3D4"
+            className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm uppercase tracking-[0.16em] text-slate-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+          />
+          <button
+            type="submit"
+            disabled={processingRelationshipId === 'accept-code' || !inviteCode.trim()}
+            className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {processingRelationshipId === 'accept-code' ? 'Activando...' : 'Aceptar codigo'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
 
 function PsychologistRelationshipPanel({
   relationships,
+  relationshipInvitePreview,
   onInviteCareRelationship,
   onRespondToCareRelationship,
   processingRelationshipId,
@@ -425,6 +466,15 @@ function PsychologistRelationshipPanel({
       {relationshipActionError ? (
         <div className="mt-4">
           <InlineNotice tone="error" title="No pudimos actualizar los vinculos" message={relationshipActionError} onDismiss={onDismissRelationshipError} />
+        </div>
+      ) : null}
+
+      {relationshipInvitePreview ? (
+        <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-700">Invitacion lista para compartir</p>
+          <p className="mt-2 text-sm text-slate-700">Codigo: <span className="font-bold tracking-[0.18em] text-violet-800">{relationshipInvitePreview.inviteCode}</span></p>
+          <p className="mt-2 break-all rounded-xl border border-violet-100 bg-white px-3 py-2 text-sm text-slate-600">{relationshipInvitePreview.inviteLink}</p>
+          <p className="mt-2 text-xs text-slate-500">Expira: {formatRelationshipDate(relationshipInvitePreview.expiresAt)}</p>
         </div>
       ) : null}
 
@@ -521,6 +571,7 @@ export default function DashboardScreen({
   reminders,
   careRelationships = [],
   availablePsychologists = [],
+  relationshipInvitePreview = null,
   onOpenPatient,
   onNewPatient,
   onViewAppointments,
@@ -528,6 +579,7 @@ export default function DashboardScreen({
   onRequestCareRelationship,
   onInviteCareRelationship,
   onRespondToCareRelationship,
+  onAcceptCareRelationshipByCode,
   processingTaskId = null,
   processingRelationshipId = null,
   relationshipActionError = '',
@@ -744,6 +796,7 @@ export default function DashboardScreen({
               availablePsychologists={availablePsychologists}
               onRequestCareRelationship={onRequestCareRelationship}
               onRespondToCareRelationship={onRespondToCareRelationship}
+              onAcceptCareRelationshipByCode={onAcceptCareRelationshipByCode}
               processingRelationshipId={processingRelationshipId}
               relationshipActionError={relationshipActionError}
               onDismissRelationshipError={onDismissRelationshipError}
@@ -951,6 +1004,7 @@ export default function DashboardScreen({
             <RemindersPanel reminders={reminders} patients={patients} isPsychologist={isPsychologist} onOpenPatient={onOpenPatient} onViewAppointments={onViewAppointments} />
             <PsychologistRelationshipPanel
               relationships={careRelationships}
+              relationshipInvitePreview={relationshipInvitePreview}
               onInviteCareRelationship={onInviteCareRelationship}
               onRespondToCareRelationship={onRespondToCareRelationship}
               processingRelationshipId={processingRelationshipId}

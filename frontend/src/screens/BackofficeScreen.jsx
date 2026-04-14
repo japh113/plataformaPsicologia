@@ -12,8 +12,18 @@ const AUDIT_ACTION_LABELS = {
   care_relationship_requested: 'Solicitud de vinculo del paciente',
   care_relationship_invited: 'Invitacion enviada por psicologo',
   care_relationship_responded: 'Respuesta a solicitud o invitacion',
+  care_relationship_accepted_by_code: 'Invitacion aceptada con codigo',
   password_reset_requested: 'Recuperacion de acceso solicitada',
   password_reset_confirmed: 'Contrasena actualizada',
+  patient_created: 'Paciente creado',
+  patient_updated: 'Paciente actualizado',
+  patient_intake_saved: 'Entrevista inicial actualizada',
+  clinical_note_created: 'Nota clinica creada',
+  clinical_note_updated: 'Nota clinica actualizada',
+  clinical_note_deleted: 'Nota clinica eliminada',
+  appointment_created: 'Cita creada',
+  appointment_updated: 'Cita actualizada',
+  appointment_deleted: 'Cita eliminada',
 };
 
 const buildRoleBadgeClassName = (role) => {
@@ -65,27 +75,89 @@ const buildUserStatusLabel = (user) => {
   return user.isActive ? 'Activo' : 'Inactivo';
 };
 
-const RecentAuditFeed = ({ auditLogs = [] }) => (
-  <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
-    <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-      <div>
-        <h2 className="text-xl font-black text-slate-900">Auditoria reciente</h2>
-        <p className="mt-1 text-sm text-slate-500">Seguimiento base de revisiones, vinculos y cambios sensibles de acceso.</p>
-      </div>
-      <p className="text-sm font-semibold text-slate-500">{auditLogs.length} evento(s)</p>
-    </div>
+const RecentAuditFeed = ({ auditLogs = [] }) => {
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditAction, setAuditAction] = useState('');
+  const [auditActorRole, setAuditActorRole] = useState('');
 
-    <div className="mt-6 space-y-3">
-      {auditLogs.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
-          <p className="text-sm font-semibold text-slate-900">Todavia no hay eventos auditados para mostrar.</p>
-          <p className="mt-1 text-sm text-slate-500">Los cambios sensibles iran dejando rastro aqui conforme se use la consola y los nuevos flujos de acceso.</p>
+  const filteredAuditLogs = useMemo(() => {
+    const normalizedSearch = auditSearch.trim().toLowerCase();
+
+    return auditLogs.filter((entry) => {
+      if (auditAction && entry.action !== auditAction) {
+        return false;
+      }
+
+      if (auditActorRole && entry.actor?.role !== auditActorRole) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      return [
+        AUDIT_ACTION_LABELS[entry.action] || entry.action,
+        entry.actor?.fullName,
+        entry.targetUser?.fullName,
+        entry.patient?.fullName,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(normalizedSearch));
+    });
+  }, [auditAction, auditActorRole, auditLogs, auditSearch]);
+
+  return (
+    <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-xl font-black text-slate-900">Auditoria reciente</h2>
+          <p className="mt-1 text-sm text-slate-500">Seguimiento base de revisiones, vinculos y cambios sensibles de acceso y operacion clinica.</p>
         </div>
-      ) : auditLogs.slice(0, 10).map((entry) => (
-        <article key={entry.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">{AUDIT_ACTION_LABELS[entry.action] || entry.action}</p>
+        <p className="text-sm font-semibold text-slate-500">{filteredAuditLogs.length} evento(s)</p>
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_180px]">
+        <input
+          type="text"
+          value={auditSearch}
+          onChange={(event) => setAuditSearch(event.target.value)}
+          placeholder="Buscar por accion, actor, paciente o usuario objetivo"
+          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+        />
+        <select
+          value={auditAction}
+          onChange={(event) => setAuditAction(event.target.value)}
+          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+        >
+          <option value="">Todas las acciones</option>
+          {Object.entries(AUDIT_ACTION_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        <select
+          value={auditActorRole}
+          onChange={(event) => setAuditActorRole(event.target.value)}
+          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+        >
+          <option value="">Todos los roles</option>
+          {Object.entries(ROLE_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mt-6 space-y-3">
+        {filteredAuditLogs.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
+            <p className="text-sm font-semibold text-slate-900">Todavia no hay eventos auditados para mostrar.</p>
+            <p className="mt-1 text-sm text-slate-500">Los cambios sensibles iran dejando rastro aqui conforme se use la consola y los nuevos flujos de acceso.</p>
+          </div>
+      ) : filteredAuditLogs.slice(0, 12).map((entry) => (
+          <article key={entry.id} className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">{AUDIT_ACTION_LABELS[entry.action] || entry.action}</p>
               <p className="mt-1 text-sm text-slate-600">
                 {entry.actor?.fullName || 'Sistema'}
                 {entry.actor?.role ? ` (${ROLE_LABELS[entry.actor.role] || entry.actor.role})` : ''}
@@ -97,11 +169,12 @@ const RecentAuditFeed = ({ auditLogs = [] }) => (
               {formatDateTime(entry.createdAt)}
             </span>
           </div>
-        </article>
+          </article>
       ))}
     </div>
-  </div>
-);
+    </div>
+  );
+};
 
 export default function BackofficeScreen(props) {
   const {

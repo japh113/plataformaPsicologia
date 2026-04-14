@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import db from '../../config/db.js';
 import { buildPatientAccessScope, ensurePsychologist, isPsychologist } from '../auth/auth.permissions.js';
 import { getEffectiveAvailabilityForDate } from '../availability/availability.service.js';
+import { logAuditEvent } from '../../utils/audit.js';
 
 const normalizeDateValue = (value) => {
   if (!value) {
@@ -768,6 +769,20 @@ export const createAppointment = async (payload, actor) => {
       }
     }
 
+    await logAuditEvent(client, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: 'appointment_created',
+      entityType: 'appointment',
+      entityId: createdAppointmentId,
+      patientId,
+      metadata: {
+        scheduledDate: payload.scheduledDate,
+        scheduledTime,
+        recurrenceCount: recurrence?.dates?.length || 0,
+      },
+    });
+
     await client.query('COMMIT');
 
     const fulfilledDates = [payload.scheduledDate, ...(recurrence?.dates || [])];
@@ -931,6 +946,21 @@ export const updateAppointment = async (id, payload, actor) => {
       }
     }
 
+    await logAuditEvent(client, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: 'appointment_updated',
+      entityType: 'appointment',
+      entityId: id,
+      patientId: nextPatientId,
+      metadata: {
+        scheduledDate: nextScheduledDate,
+        scheduledTime: nextScheduledTime,
+        status: nextStatus,
+        recurrenceCount: recurrence?.dates?.length || 0,
+      },
+    });
+
     await client.query('COMMIT');
 
     if (nextStatus !== 'cancelled') {
@@ -964,6 +994,20 @@ export const deleteAppointment = async (id, actor) => {
   }
 
   const result = await db.query('DELETE FROM appointments WHERE id = $1', [id]);
+  if (result.rowCount > 0) {
+    await logAuditEvent(db, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: 'appointment_deleted',
+      entityType: 'appointment',
+      entityId: id,
+      patientId: appointment.patientId,
+      metadata: {
+        scheduledDate: appointment.scheduledDate,
+        scheduledTime: appointment.scheduledTime,
+      },
+    });
+  }
   return result.rowCount > 0;
 };
 

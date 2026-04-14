@@ -102,6 +102,8 @@ CREATE TABLE IF NOT EXISTS care_relationships (
   requested_by_role TEXT NOT NULL DEFAULT 'psychologist' CHECK (requested_by_role IN ('admin', 'support', 'superadmin', 'psychologist', 'patient')),
   created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   approved_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+  invite_code TEXT UNIQUE,
+  invite_expires_at TIMESTAMPTZ,
   notes TEXT NOT NULL DEFAULT '',
   approved_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -117,6 +119,20 @@ CREATE INDEX IF NOT EXISTS care_relationships_patient_status_idx
 
 CREATE INDEX IF NOT EXISTS care_relationships_psychologist_status_idx
   ON care_relationships (psychologist_user_id, status);
+
+ALTER TABLE care_relationships
+  ADD COLUMN IF NOT EXISTS invite_code TEXT;
+
+ALTER TABLE care_relationships
+  ADD COLUMN IF NOT EXISTS invite_expires_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS care_relationships_invite_code_idx
+  ON care_relationships (invite_code)
+  WHERE invite_code IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS care_relationships_invite_code_unique_idx
+  ON care_relationships (invite_code)
+  WHERE invite_code IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id BIGSERIAL PRIMARY KEY,

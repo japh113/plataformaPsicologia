@@ -7,6 +7,7 @@ import {
   isPatient,
   isPsychologist,
 } from '../auth/auth.permissions.js';
+import { logAuditEvent } from '../../utils/audit.js';
 
 const normalizeDateValue = (value) => {
   if (!value) {
@@ -580,6 +581,19 @@ export const createPatient = async (payload, actor) => {
       [actor.id, patient.id],
     );
 
+    await logAuditEvent(client, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: 'patient_created',
+      entityType: 'patient',
+      entityId: patient.id,
+      patientId: patient.id,
+      metadata: {
+        riskLevel: patient.riskLevel,
+        status: patient.status,
+      },
+    });
+
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -635,6 +649,19 @@ export const updatePatient = async (id, payload, actor) => {
       updatedPatient.reasonForConsultation,
     ],
   );
+
+  await logAuditEvent(db, {
+    actorUserId: actor.id,
+    actorRole: actor.role,
+    action: 'patient_updated',
+    entityType: 'patient',
+    entityId: id,
+    patientId: id,
+    metadata: {
+      riskLevel: updatedPatient.riskLevel,
+      status: updatedPatient.status,
+    },
+  });
 
   return getPatientById(id, actor);
 };
@@ -748,6 +775,18 @@ export const upsertPatientInterview = async (patientId, payload, actor) => {
       actor.id,
     ],
   );
+
+  await logAuditEvent(db, {
+    actorUserId: actor.id,
+    actorRole: actor.role,
+    action: 'patient_intake_saved',
+    entityType: 'patient_intake',
+    entityId: patientId,
+    patientId,
+    metadata: {
+      byRole: actor.role,
+    },
+  });
 
   return getPatientById(patientId, actor);
 };
@@ -960,6 +999,18 @@ export const createPatientClinicalNote = async (patientId, payload, actor) => {
       [patientId],
     );
 
+    await logAuditEvent(client, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: 'clinical_note_created',
+      entityType: 'clinical_note',
+      entityId: createdClinicalNote.id,
+      patientId,
+      metadata: {
+        appointmentId: String(appointment.id),
+      },
+    });
+
     await client.query('COMMIT');
     return mapClinicalNoteRow(createdClinicalNote);
   } catch (error) {
@@ -1097,6 +1148,18 @@ export const updatePatientClinicalNote = async (patientId, clinicalNoteId, paylo
       [patientId],
     );
 
+    await logAuditEvent(client, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: 'clinical_note_updated',
+      entityType: 'clinical_note',
+      entityId: clinicalNoteId,
+      patientId,
+      metadata: {
+        appointmentId: String(appointment.id),
+      },
+    });
+
     await client.query('COMMIT');
     return mapClinicalNoteRow(result.rows[0]);
   } catch (error) {
@@ -1126,6 +1189,14 @@ export const deletePatientClinicalNote = async (patientId, clinicalNoteId, actor
 
   if (result.rowCount > 0) {
     await refreshPatientLastClinicalNoteDate(patientId);
+    await logAuditEvent(db, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: 'clinical_note_deleted',
+      entityType: 'clinical_note',
+      entityId: clinicalNoteId,
+      patientId,
+    });
     return true;
   }
 

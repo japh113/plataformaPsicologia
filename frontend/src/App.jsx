@@ -48,6 +48,7 @@ import {
 } from './api/appointments';
 import { getAuthToken } from './api/client';
 import {
+  acceptCareRelationshipByCode,
   createCareRelationship,
   getAuditLogs,
   getBackofficeUsers,
@@ -169,6 +170,7 @@ export default function App() {
   const [processingRelationshipId, setProcessingRelationshipId] = useState(null);
   const [backofficeActionError, setBackofficeActionError] = useState('');
   const [relationshipActionError, setRelationshipActionError] = useState('');
+  const [relationshipInvitePreview, setRelationshipInvitePreview] = useState(null);
   const [patientInterviewForm, setPatientInterviewForm] = useState(buildInterviewDraftForm(null, ''));
   const [uiFeedback, setUiFeedback] = useState(null);
 
@@ -235,6 +237,7 @@ export default function App() {
     setProcessingRelationshipId(null);
     setBackofficeActionError('');
     setRelationshipActionError('');
+    setRelationshipInvitePreview(null);
     setMostrarModalNuevoPaciente(false);
     setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
     setPasswordResetError('');
@@ -603,10 +606,12 @@ export default function App() {
 
     setProcessingRelationshipId('invite');
     setRelationshipActionError('');
+    setRelationshipInvitePreview(null);
 
     try {
       const relationship = await inviteCareRelationship(payload);
       syncCareRelationshipState(relationship);
+      setRelationshipInvitePreview(relationship.invitePreview || null);
       showSuccessFeedback('Invitacion enviada al paciente para vincular su expediente.');
       return true;
     } catch (error) {
@@ -646,6 +651,27 @@ export default function App() {
       return true;
     } catch (error) {
       setRelationshipActionError(error.message || 'No se pudo responder la solicitud de vinculo.');
+      return false;
+    } finally {
+      setProcessingRelationshipId(null);
+    }
+  };
+
+  const handleAcceptCareRelationshipByCode = async (payload) => {
+    if (currentUser?.role !== 'patient' || processingRelationshipId) {
+      return false;
+    }
+
+    setProcessingRelationshipId('accept-code');
+    setRelationshipActionError('');
+
+    try {
+      const relationship = await acceptCareRelationshipByCode(payload);
+      syncCareRelationshipState(relationship);
+      showSuccessFeedback('Invitacion aceptada correctamente. El vinculo clinico ya quedo activo.');
+      return true;
+    } catch (error) {
+      setRelationshipActionError(error.message || 'No se pudo aceptar el codigo de invitacion.');
       return false;
     } finally {
       setProcessingRelationshipId(null);
@@ -1477,6 +1503,7 @@ export default function App() {
           reminders={reminders}
           careRelationships={careRelationships}
           availablePsychologists={availablePsychologists}
+          relationshipInvitePreview={relationshipInvitePreview}
           onOpenPatient={abrirNotas}
           onNewPatient={() => setMostrarModalNuevoPaciente(true)}
           onViewAppointments={() => abrirAgenda(isPsychologist ? todayDate : '')}
@@ -1484,6 +1511,7 @@ export default function App() {
           onRequestCareRelationship={handleRequestCareRelationship}
           onInviteCareRelationship={handleInviteCareRelationship}
           onRespondToCareRelationship={handleRespondToCareRelationship}
+          onAcceptCareRelationshipByCode={handleAcceptCareRelationshipByCode}
           processingTaskId={procesandoTareaId}
           processingRelationshipId={processingRelationshipId}
           relationshipActionError={relationshipActionError}
