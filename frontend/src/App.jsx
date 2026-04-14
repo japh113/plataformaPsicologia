@@ -55,6 +55,8 @@ import {
   getPendingPsychologists,
   login,
   logout,
+  registerPatient,
+  registerPsychologist,
   reviewPsychologist,
   updateCareRelationship,
 } from './api/auth';
@@ -147,6 +149,9 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
+  const [registrationError, setRegistrationError] = useState('');
+  const [registrationSuccess, setRegistrationSuccess] = useState('');
+  const [registeringAccount, setRegisteringAccount] = useState(false);
   const [reviewingPsychologistId, setReviewingPsychologistId] = useState(null);
   const [processingRelationshipId, setProcessingRelationshipId] = useState(null);
   const [backofficeActionError, setBackofficeActionError] = useState('');
@@ -329,6 +334,8 @@ export default function App() {
 
     setLoggingIn(true);
     setLoginError('');
+    setRegistrationError('');
+    setRegistrationSuccess('');
 
     try {
       const session = await login(credentials);
@@ -338,6 +345,51 @@ export default function App() {
       setLoginError(error.message || 'No se pudo iniciar sesion.');
     } finally {
       setLoggingIn(false);
+    }
+  };
+
+  const handleRegisterPatient = async (payload) => {
+    if (registeringAccount) {
+      return false;
+    }
+
+    setRegisteringAccount(true);
+    setRegistrationError('');
+    setRegistrationSuccess('');
+    setLoginError('');
+
+    try {
+      const session = await registerPatient(payload);
+      setCurrentUser(session.user);
+      resetSessionState();
+      return true;
+    } catch (error) {
+      setRegistrationError(error.message || 'No se pudo crear la cuenta de paciente.');
+      return false;
+    } finally {
+      setRegisteringAccount(false);
+    }
+  };
+
+  const handleRegisterPsychologist = async (payload) => {
+    if (registeringAccount) {
+      return false;
+    }
+
+    setRegisteringAccount(true);
+    setRegistrationError('');
+    setRegistrationSuccess('');
+    setLoginError('');
+
+    try {
+      await registerPsychologist(payload);
+      setRegistrationSuccess('Tu cuenta profesional fue creada y quedo pendiente de revision. Te avisaremos cuando sea aprobada para iniciar sesion.');
+      return true;
+    } catch (error) {
+      setRegistrationError(error.message || 'No se pudo crear la cuenta de psicologo.');
+      return false;
+    } finally {
+      setRegisteringAccount(false);
     }
   };
 
@@ -1397,7 +1449,18 @@ export default function App() {
   }
 
   if (!currentUser) {
-    return <LoginScreen onLogin={handleLogin} isSubmitting={loggingIn} error={loginError} />;
+    return (
+      <LoginScreen
+        onLogin={handleLogin}
+        onRegisterPatient={handleRegisterPatient}
+        onRegisterPsychologist={handleRegisterPsychologist}
+        isSubmitting={loggingIn}
+        isRegistering={registeringAccount}
+        error={loginError}
+        registrationError={registrationError}
+        registrationSuccess={registrationSuccess}
+      />
+    );
   }
 
   return (

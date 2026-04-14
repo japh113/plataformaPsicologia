@@ -11,6 +11,26 @@ export const login = async (payload) => {
   return session;
 };
 
+export const registerPatient = async (payload) => {
+  const response = await apiRequest('/auth/register/patient', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  const session = response.data;
+  setAuthToken(session.token);
+  return session;
+};
+
+export const registerPsychologist = async (payload) => {
+  const response = await apiRequest('/auth/register/psychologist', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
 export const getCurrentUser = async () => {
   const response = await apiRequest('/auth/me');
   return response.data;
