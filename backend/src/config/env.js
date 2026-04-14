@@ -56,6 +56,8 @@ const env = {
   dbSsl: process.env.DB_SSL === 'true',
   jwtSecret: process.env.JWT_SECRET || 'psicopanel-dev-secret',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  passwordResetTokenTtlMinutes: parsePort(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES, 30),
+  appBaseUrl: process.env.APP_BASE_URL || 'http://localhost:5173',
 };
 
 export default env;

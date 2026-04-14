@@ -31,6 +31,24 @@ export const registerPsychologist = async (payload) => {
   return response.data;
 };
 
+export const requestPasswordReset = async (payload) => {
+  const response = await apiRequest('/auth/password-reset/request', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
+export const confirmPasswordReset = async (payload) => {
+  const response = await apiRequest('/auth/password-reset/confirm', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return response.data;
+};
+
 export const getCurrentUser = async () => {
   const response = await apiRequest('/auth/me');
   return response.data;

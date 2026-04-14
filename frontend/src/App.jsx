@@ -55,9 +55,11 @@ import {
   getPendingPsychologists,
   login,
   logout,
+  requestPasswordReset,
   registerPatient,
   registerPsychologist,
   reviewPsychologist,
+  confirmPasswordReset,
   updateCareRelationship,
 } from './api/auth';
 import { getMyReminders } from './api/reminders';
@@ -152,6 +154,10 @@ export default function App() {
   const [registrationError, setRegistrationError] = useState('');
   const [registrationSuccess, setRegistrationSuccess] = useState('');
   const [registeringAccount, setRegisteringAccount] = useState(false);
+  const [passwordResetError, setPasswordResetError] = useState('');
+  const [passwordResetSuccess, setPasswordResetSuccess] = useState('');
+  const [passwordResetPreview, setPasswordResetPreview] = useState(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
   const [reviewingPsychologistId, setReviewingPsychologistId] = useState(null);
   const [processingRelationshipId, setProcessingRelationshipId] = useState(null);
   const [backofficeActionError, setBackofficeActionError] = useState('');
@@ -220,6 +226,10 @@ export default function App() {
     setBackofficeActionError('');
     setMostrarModalNuevoPaciente(false);
     setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
+    setPasswordResetError('');
+    setPasswordResetSuccess('');
+    setPasswordResetPreview(null);
+    setResettingPassword(false);
   };
 
   const refreshBackofficeData = useCallback(async () => {
@@ -336,6 +346,9 @@ export default function App() {
     setLoginError('');
     setRegistrationError('');
     setRegistrationSuccess('');
+    setPasswordResetError('');
+    setPasswordResetSuccess('');
+    setPasswordResetPreview(null);
 
     try {
       const session = await login(credentials);
@@ -357,6 +370,9 @@ export default function App() {
     setRegistrationError('');
     setRegistrationSuccess('');
     setLoginError('');
+    setPasswordResetError('');
+    setPasswordResetSuccess('');
+    setPasswordResetPreview(null);
 
     try {
       const session = await registerPatient(payload);
@@ -380,6 +396,9 @@ export default function App() {
     setRegistrationError('');
     setRegistrationSuccess('');
     setLoginError('');
+    setPasswordResetError('');
+    setPasswordResetSuccess('');
+    setPasswordResetPreview(null);
 
     try {
       await registerPsychologist(payload);
@@ -390,6 +409,53 @@ export default function App() {
       return false;
     } finally {
       setRegisteringAccount(false);
+    }
+  };
+
+  const handleRequestPasswordReset = async (payload) => {
+    if (resettingPassword) {
+      return false;
+    }
+
+    setResettingPassword(true);
+    setPasswordResetError('');
+    setPasswordResetSuccess('');
+    setPasswordResetPreview(null);
+    setLoginError('');
+    setRegistrationError('');
+
+    try {
+      const result = await requestPasswordReset(payload);
+      setPasswordResetSuccess('Si el correo existe, ya dejamos listo un enlace de recuperacion. En esta fase de desarrollo tambien mostramos una vista previa para probar el flujo sin email.');
+      setPasswordResetPreview(result.preview || null);
+      return true;
+    } catch (error) {
+      setPasswordResetError(error.message || 'No se pudo iniciar la recuperacion de acceso.');
+      return false;
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
+  const handleConfirmPasswordReset = async (payload) => {
+    if (resettingPassword) {
+      return false;
+    }
+
+    setResettingPassword(true);
+    setPasswordResetError('');
+    setPasswordResetSuccess('');
+
+    try {
+      await confirmPasswordReset(payload);
+      setPasswordResetSuccess('La contrasena se actualizo correctamente. Ya puedes iniciar sesion con la nueva clave.');
+      setPasswordResetPreview(null);
+      return true;
+    } catch (error) {
+      setPasswordResetError(error.message || 'No se pudo restablecer la contrasena.');
+      return false;
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -1456,9 +1522,15 @@ export default function App() {
         onRegisterPsychologist={handleRegisterPsychologist}
         isSubmitting={loggingIn}
         isRegistering={registeringAccount}
+        onRequestPasswordReset={handleRequestPasswordReset}
+        onConfirmPasswordReset={handleConfirmPasswordReset}
+        isResetting={resettingPassword}
         error={loginError}
         registrationError={registrationError}
         registrationSuccess={registrationSuccess}
+        passwordResetError={passwordResetError}
+        passwordResetSuccess={passwordResetSuccess}
+        passwordResetPreview={passwordResetPreview}
       />
     );
   }

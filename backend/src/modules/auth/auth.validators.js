@@ -16,6 +16,37 @@ export const validateLoginPayload = (payload = {}) => {
   return errors;
 };
 
+export const validatePasswordResetRequestPayload = (payload = {}) => {
+  const errors = [];
+  const email = normalizeString(payload.email);
+
+  if (!email) {
+    errors.push('email is required');
+  } else if (!isValidEmail(email)) {
+    errors.push('email must be valid');
+  }
+
+  return errors;
+};
+
+export const validatePasswordResetConfirmPayload = (payload = {}) => {
+  const errors = [];
+  const token = normalizeString(payload.token);
+  const password = normalizeString(payload.password);
+
+  if (!token) {
+    errors.push('token is required');
+  }
+
+  if (!password) {
+    errors.push('password is required');
+  } else if (password.length < 8) {
+    errors.push('password must be at least 8 characters');
+  }
+
+  return errors;
+};
+
 export const validatePatientRegistrationPayload = (payload = {}) => {
   const errors = [];
   const firstName = normalizeString(payload.firstName);

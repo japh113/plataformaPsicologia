@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import {
+  confirmPasswordResetHandler,
   createCareRelationshipHandler,
   listBackofficeUsersHandler,
   listCareRelationshipsHandler,
   listPendingPsychologistsHandler,
   loginHandler,
   meHandler,
+  requestPasswordResetHandler,
   registerPatientHandler,
   registerPsychologistHandler,
   reviewPsychologistHandler,
@@ -16,6 +18,8 @@ import { authenticate } from '../../middlewares/authMiddleware.js';
 const router = Router();
 
 router.post('/login', loginHandler);
+router.post('/password-reset/request', requestPasswordResetHandler);
+router.post('/password-reset/confirm', confirmPasswordResetHandler);
 router.post('/register/patient', registerPatientHandler);
 router.post('/register/psychologist', registerPsychologistHandler);
 router.get('/me', authenticate, meHandler);

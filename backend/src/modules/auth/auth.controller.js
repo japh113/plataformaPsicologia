@@ -1,11 +1,13 @@
 import { errorResponse, successResponse } from '../../utils/response.js';
 import { ensureBackofficeManager, ensureBackofficeViewer } from './auth.permissions.js';
 import {
+  confirmPasswordReset,
   createCareRelationship,
   listCareRelationships,
   listBackofficeUsers,
   listPendingPsychologistUsers,
   loginUser,
+  requestPasswordReset,
   registerPatientUser,
   registerPsychologistUser,
   reviewPsychologistUser,
@@ -14,6 +16,8 @@ import {
 import {
   validateCreateCareRelationshipPayload,
   validateLoginPayload,
+  validatePasswordResetConfirmPayload,
+  validatePasswordResetRequestPayload,
   validatePatientRegistrationPayload,
   validatePsychologistRegistrationPayload,
   validatePsychologistReviewPayload,
@@ -35,6 +39,44 @@ export const loginHandler = async (req, res, next) => {
     }
 
     return successResponse(res, session, 'Login successful');
+  } catch (error) {
+    if (error.status) {
+      return errorResponse(res, error.message, error.status);
+    }
+
+    return next(error);
+  }
+};
+
+export const requestPasswordResetHandler = async (req, res, next) => {
+  try {
+    const errors = validatePasswordResetRequestPayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const result = await requestPasswordReset(req.body);
+    return successResponse(res, result, 'Password reset instructions generated successfully');
+  } catch (error) {
+    if (error.status) {
+      return errorResponse(res, error.message, error.status);
+    }
+
+    return next(error);
+  }
+};
+
+export const confirmPasswordResetHandler = async (req, res, next) => {
+  try {
+    const errors = validatePasswordResetConfirmPayload(req.body);
+
+    if (errors.length > 0) {
+      return errorResponse(res, 'Validation error', 400, errors);
+    }
+
+    const result = await confirmPasswordReset(req.body);
+    return successResponse(res, result, 'Password updated successfully');
   } catch (error) {
     if (error.status) {
       return errorResponse(res, error.message, error.status);

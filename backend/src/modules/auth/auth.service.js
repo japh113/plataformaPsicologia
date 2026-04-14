@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import db from '../../config/db.js';
@@ -11,6 +11,13 @@ const createAuthError = (message, status = 400) => {
 };
 
 const normalizeRelationshipStatus = (status) => String(status || 'active').trim().toLowerCase();
+const addMinutesToDate = (date, minutes) => new Date(date.getTime() + minutes * 60 * 1000);
+const hashPasswordResetToken = (token) => createHash('sha256').update(String(token)).digest('hex');
+const buildPasswordResetPreview = ({ token, expiresAt, appBaseUrl = env.appBaseUrl }) => ({
+  resetToken: token,
+  resetUrl: `${appBaseUrl.replace(/\/$/, '')}?resetToken=${encodeURIComponent(token)}`,
+  expiresAt: expiresAt.toISOString(),
+});
 
 const mapUserRow = (row) => ({
   id: String(row.id),
@@ -129,6 +136,22 @@ const assertEmailAvailable = async (client, email) => {
   }
 };
 
+const ensurePasswordResetRecordUsable = (record, now = new Date()) => {
+  if (!record) {
+    throw createAuthError('Password reset token is invalid or expired', 400);
+  }
+
+  if (record.used_at) {
+    throw createAuthError('Password reset token is invalid or expired', 400);
+  }
+
+  const expiresAt = new Date(record.expires_at);
+
+  if (Number.isNaN(expiresAt.getTime()) || expiresAt <= now) {
+    throw createAuthError('Password reset token is invalid or expired', 400);
+  }
+};
+
 export const verifyAuthToken = (token) => jwt.verify(token, env.jwtSecret);
 
 export const getUserById = async (id) => {
@@ -190,6 +213,132 @@ export const loginUser = async ({ email, password }) => {
     user,
     token: signAuthToken(user),
   };
+};
+
+export const requestPasswordReset = async ({ email }) => {
+  const normalizedEmail = email.trim();
+  const userResult = await db.query(
+    `
+      SELECT id, is_active
+      FROM users
+      WHERE LOWER(email) = LOWER($1)
+      LIMIT 1
+    `,
+    [normalizedEmail],
+  );
+
+  const user = userResult.rows[0];
+
+  if (!user || user.is_active === false) {
+    return {
+      sent: true,
+      preview: null,
+    };
+  }
+
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    await client.query(
+      `
+        UPDATE password_reset_tokens
+        SET used_at = NOW()
+        WHERE user_id = $1
+          AND used_at IS NULL
+      `,
+      [user.id],
+    );
+
+    const rawToken = randomBytes(24).toString('hex');
+    const tokenHash = hashPasswordResetToken(rawToken);
+    const expiresAt = addMinutesToDate(new Date(), env.passwordResetTokenTtlMinutes);
+
+    await client.query(
+      `
+        INSERT INTO password_reset_tokens (
+          user_id,
+          token_hash,
+          expires_at
+        )
+        VALUES ($1, $2, $3)
+      `,
+      [user.id, tokenHash, expiresAt.toISOString()],
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      sent: true,
+      preview: env.nodeEnv === 'production' ? null : buildPasswordResetPreview({ token: rawToken, expiresAt }),
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+export const confirmPasswordReset = async ({ token, password }) => {
+  const tokenHash = hashPasswordResetToken(token.trim());
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+
+    const resetResult = await client.query(
+      `
+        SELECT
+          prt.id,
+          prt.user_id,
+          prt.expires_at,
+          prt.used_at
+        FROM password_reset_tokens prt
+        WHERE prt.token_hash = $1
+        LIMIT 1
+      `,
+      [tokenHash],
+    );
+
+    const resetRecord = resetResult.rows[0];
+    ensurePasswordResetRecordUsable(resetRecord);
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await client.query(
+      `
+        UPDATE users
+        SET
+          password_hash = $2,
+          updated_at = NOW()
+        WHERE id = $1
+      `,
+      [resetRecord.user_id, passwordHash],
+    );
+
+    await client.query(
+      `
+        UPDATE password_reset_tokens
+        SET used_at = NOW()
+        WHERE user_id = $1
+          AND used_at IS NULL
+      `,
+      [resetRecord.user_id],
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      reset: true,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const registerPatientUser = async ({
@@ -682,4 +831,10 @@ export const reviewPsychologistUser = async ({
   }
 
   return reviewedUser;
+};
+
+export const __authTestables = {
+  hashPasswordResetToken,
+  buildPasswordResetPreview,
+  ensurePasswordResetRecordUsable,
 };

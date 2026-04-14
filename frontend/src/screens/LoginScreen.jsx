@@ -55,25 +55,35 @@ const TABS = [
   { id: 'login', label: 'Iniciar sesion' },
   { id: 'patient', label: 'Crear cuenta paciente' },
   { id: 'psychologist', label: 'Registro psicologo' },
+  { id: 'reset', label: 'Recuperar acceso' },
 ];
 
 export default function LoginScreen({
   onLogin,
   onRegisterPatient,
   onRegisterPsychologist,
+  onRequestPasswordReset,
+  onConfirmPasswordReset,
   isSubmitting = false,
   isRegistering = false,
+  isResetting = false,
   error = '',
   registrationError = '',
   registrationSuccess = '',
+  passwordResetError = '',
+  passwordResetSuccess = '',
+  passwordResetPreview = null,
 }) {
-  const [activeTab, setActiveTab] = useState('login');
+  const initialResetToken = new URLSearchParams(window.location.search).get('resetToken') || '';
+  const [activeTab, setActiveTab] = useState(initialResetToken ? 'reset' : 'login');
   const [loginForm, setLoginForm] = useState({
     email: demoAccounts[0].email,
     password: demoAccounts[0].password,
   });
   const [patientForm, setPatientForm] = useState(buildEmptyPatientRegisterForm());
   const [psychologistForm, setPsychologistForm] = useState(buildEmptyPsychologistRegisterForm());
+  const [resetRequestForm, setResetRequestForm] = useState({ email: '' });
+  const [resetConfirmForm, setResetConfirmForm] = useState({ token: initialResetToken, password: '' });
 
   const loginErrorMeta = useMemo(() => getLoginErrorMeta(error), [error]);
 
@@ -90,6 +100,16 @@ export default function LoginScreen({
   const handlePsychologistChange = (event) => {
     const { name, value } = event.target;
     setPsychologistForm((currentForm) => ({ ...currentForm, [name]: value }));
+  };
+
+  const handleResetRequestChange = (event) => {
+    const { name, value } = event.target;
+    setResetRequestForm((currentForm) => ({ ...currentForm, [name]: value }));
+  };
+
+  const handleResetConfirmChange = (event) => {
+    const { name, value } = event.target;
+    setResetConfirmForm((currentForm) => ({ ...currentForm, [name]: value }));
   };
 
   const handleUseDemo = (account) => {
@@ -120,6 +140,20 @@ export default function LoginScreen({
 
     if (wasRegistered) {
       setPsychologistForm(buildEmptyPsychologistRegisterForm());
+    }
+  };
+
+  const handlePasswordResetRequestSubmit = async (event) => {
+    event.preventDefault();
+    await onRequestPasswordReset(resetRequestForm);
+  };
+
+  const handlePasswordResetConfirmSubmit = async (event) => {
+    event.preventDefault();
+    const wasConfirmed = await onConfirmPasswordReset(resetConfirmForm);
+
+    if (wasConfirmed) {
+      setResetConfirmForm({ token: '', password: '' });
     }
   };
 
@@ -356,6 +390,107 @@ export default function LoginScreen({
     </form>
   );
 
+  const renderPasswordResetForm = () => (
+    <div className="mt-8 space-y-6">
+      <form onSubmit={handlePasswordResetRequestSubmit} className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+        <div>
+          <h3 className="text-lg font-black text-slate-900">1. Solicitar recuperacion</h3>
+          <p className="mt-1 text-sm text-slate-500">Ingresa tu correo y generaremos un token de recuperacion valido por tiempo limitado.</p>
+        </div>
+
+        {renderTextField({
+          label: 'Correo',
+          name: 'email',
+          value: resetRequestForm.email,
+          onChange: handleResetRequestChange,
+          type: 'email',
+          placeholder: 'tu@email.com',
+          disabled: isResetting,
+          required: true,
+        })}
+
+        <button
+          type="submit"
+          disabled={isResetting}
+          className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isResetting ? 'Generando enlace...' : 'Generar recuperacion'}
+        </button>
+      </form>
+
+      {passwordResetSuccess ? (
+        <InlineNotice
+          tone="success"
+          title="Recuperacion lista"
+          message={passwordResetSuccess}
+        />
+      ) : null}
+
+      {passwordResetError ? (
+        <InlineNotice
+          tone="error"
+          title="No pudimos recuperar el acceso"
+          message={passwordResetError}
+          hint="Verifica el correo o el token antes de volver a intentarlo."
+        />
+      ) : null}
+
+      {passwordResetPreview ? (
+        <div className="space-y-3">
+          <InlineNotice
+            tone="info"
+            title="Vista previa de desarrollo"
+            message={`Token: ${passwordResetPreview.resetToken}`}
+            hint={`Expira: ${passwordResetPreview.expiresAt}`}
+          />
+          <button
+            type="button"
+            onClick={() => setResetConfirmForm((currentForm) => ({ ...currentForm, token: passwordResetPreview.resetToken }))}
+            className="w-full rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-700 transition hover:bg-sky-100"
+          >
+            Usar token de prueba
+          </button>
+        </div>
+      ) : null}
+
+      <form onSubmit={handlePasswordResetConfirmSubmit} className="space-y-4 rounded-3xl border border-slate-200 bg-white p-5">
+        <div>
+          <h3 className="text-lg font-black text-slate-900">2. Restablecer contrasena</h3>
+          <p className="mt-1 text-sm text-slate-500">Usa el token generado para definir una nueva contrasena.</p>
+        </div>
+
+        {renderTextField({
+          label: 'Token',
+          name: 'token',
+          value: resetConfirmForm.token,
+          onChange: handleResetConfirmChange,
+          placeholder: 'Pega aqui el token',
+          disabled: isResetting,
+          required: true,
+        })}
+
+        {renderTextField({
+          label: 'Nueva contrasena',
+          name: 'password',
+          value: resetConfirmForm.password,
+          onChange: handleResetConfirmChange,
+          type: 'password',
+          placeholder: 'Minimo 8 caracteres',
+          disabled: isResetting,
+          required: true,
+        })}
+
+        <button
+          type="submit"
+          disabled={isResetting}
+          className="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isResetting ? 'Actualizando contrasena...' : 'Guardar nueva contrasena'}
+        </button>
+      </form>
+    </div>
+  );
+
   const activeTabMeta = activeTab === 'login'
     ? {
         icon: LockKeyhole,
@@ -368,11 +503,17 @@ export default function LoginScreen({
           title: 'Crear cuenta paciente',
           subtitle: 'La cuenta queda activa al instante para completar entrevista, revisar agenda y seguimiento.',
         }
-      : {
+      : activeTab === 'psychologist'
+        ? {
           icon: UserRoundCheck,
           title: 'Registro de psicologo',
           subtitle: 'Tu cuenta quedara pendiente de revision hasta que el backoffice la apruebe.',
-        };
+        }
+        : {
+            icon: LockKeyhole,
+            title: 'Recuperar acceso',
+            subtitle: 'Solicita un token de recuperacion y define una nueva contrasena sin salir de esta pantalla.',
+          };
 
   const ActiveIcon = activeTabMeta.icon;
 
@@ -447,6 +588,7 @@ export default function LoginScreen({
             {activeTab === 'login' ? renderLoginForm() : null}
             {activeTab === 'patient' ? renderPatientRegistrationForm() : null}
             {activeTab === 'psychologist' ? renderPsychologistRegistrationForm() : null}
+            {activeTab === 'reset' ? renderPasswordResetForm() : null}
           </div>
         </section>
       </div>
