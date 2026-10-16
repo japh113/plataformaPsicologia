@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isLocalDevelopment, resolveJwtSecret } from './security.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,7 +32,7 @@ const loadEnvFile = () => {
     const rawValue = trimmedLine.slice(separatorIndex + 1).trim();
     const value = rawValue.replace(/^['"]|['"]$/g, '');
 
-    if (!process.env[key]) {
+    if (process.env[key] === undefined) {
       process.env[key] = value;
     }
   }
@@ -47,6 +48,7 @@ const parsePort = (value, fallback) => {
 const env = {
   port: parsePort(process.env.PORT, 5000),
   nodeEnv: process.env.NODE_ENV || 'development',
+  localDevelopment: isLocalDevelopment(process.env),
   databaseUrl: process.env.DATABASE_URL || '',
   dbHost: process.env.PGHOST || 'localhost',
   dbPort: parsePort(process.env.PGPORT, 5432),
@@ -54,7 +56,7 @@ const env = {
   dbUser: process.env.PGUSER || 'postgres',
   dbPassword: process.env.PGPASSWORD || '',
   dbSsl: process.env.DB_SSL === 'true',
-  jwtSecret: process.env.JWT_SECRET || 'psicopanel-dev-secret',
+  jwtSecret: resolveJwtSecret(process.env),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   passwordResetTokenTtlMinutes: parsePort(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES, 30),
   appBaseUrl: process.env.APP_BASE_URL || 'http://localhost:5173',

@@ -156,10 +156,22 @@ npm run dev
 En arranques posteriores ejecutar solamente `npm run dev` en cada carpeta.
 
 ## Credenciales demo
+Solo en desarrollo local explicito. No se incluyen en el build de produccion ni se
+permite autenticar los IDs reservados del seed fuera del modo local.
+
 - Psicologo: `doctor@psicopanel.com` / `Demo12345!`
 - Paciente: `juan@example.com` / `Demo12345!`
 
 ## Comandos utiles
+
+La politica de JWT, bloqueo inmediato por estado, configuracion segura e inicializacion
+de produccion sin demos estan en [docs/authentication-security.md](docs/authentication-security.md).
+Incluye pasos de pruebas aisladas desde la laptop y limites de revocacion.
+`LOCAL_DEVELOPMENT=true` solo es valido con `NODE_ENV=development` o `test`; no usarlo
+en entornos remotos. Fuera de local se exige un secreto JWT aleatorio propio y la
+recuperacion de contrasena devuelve 503 hasta configurar un canal privado de entrega.
+`db:init`/`db:schema`/`db:seed` quedan restringidos a local; `db:init:production` acepta
+exclusivamente una base nueva y vacia y no crea cuentas.
 
 ### Frontend
 ```bash

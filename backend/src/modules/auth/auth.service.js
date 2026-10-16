@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import db from '../../config/db.js';
 import env from '../../config/env.js';
+import { ensureAccountCanAuthenticate } from './auth.account-status.js';
 import { buildRelationshipInvitePreview, logAuditEvent } from '../../utils/audit.js';
 
 const createAuthError = (message, status = 400) => {
@@ -115,7 +116,7 @@ const signAuthToken = (user) =>
       email: user.email,
     },
     env.jwtSecret,
-    { expiresIn: env.jwtExpiresIn },
+    { algorithm: 'HS256', expiresIn: env.jwtExpiresIn },
   );
 
 const baseUserSelect = `
@@ -173,30 +174,6 @@ const isBackofficeManagerActor = (actor) => ['admin', 'superadmin'].includes(act
 const isPatientActor = (actor) => actor?.role === 'patient';
 const isPsychologistActor = (actor) => actor?.role === 'psychologist';
 const createInviteCode = () => randomBytes(4).toString('hex').toUpperCase();
-
-const ensurePsychologistCanAuthenticate = (userRow) => {
-  if (userRow.role !== 'psychologist') {
-    return;
-  }
-
-  const approvalStatus = userRow.psychologist_approval_status || 'pending_review';
-
-  if (approvalStatus === 'active') {
-    return;
-  }
-
-  if (approvalStatus === 'pending_review') {
-    throw createAuthError('Psychologist account is pending review', 403);
-  }
-
-  if (approvalStatus === 'rejected') {
-    throw createAuthError('Psychologist account was rejected', 403);
-  }
-
-  if (approvalStatus === 'suspended') {
-    throw createAuthError('Psychologist account is suspended', 403);
-  }
-};
 
 const assertEmailAvailable = async (client, email) => {
   const result = await client.query(
@@ -311,7 +288,13 @@ const ensureCareRelationshipResponseAllowed = (actor, relationship, nextStatus) 
   throw createAuthError('Forbidden', 403);
 };
 
-export const verifyAuthToken = (token) => jwt.verify(token, env.jwtSecret);
+export const verifyAuthToken = (token) => {
+  const payload = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
+  if (typeof payload !== 'object' || typeof payload.sub !== 'string' || !payload.sub.trim()) {
+    throw createAuthError('Invalid token subject', 401);
+  }
+  return payload;
+};
 
 export const getUserById = async (id) => {
   const result = await db.query(
@@ -364,9 +347,8 @@ export const loginUser = async ({ email, password }) => {
     return null;
   }
 
-  ensurePsychologistCanAuthenticate(userRow);
-
   const user = mapUserRow(userRow);
+  ensureAccountCanAuthenticate(user, env);
 
   return {
     user,
@@ -375,6 +357,8 @@ export const loginUser = async ({ email, password }) => {
 };
 
 export const requestPasswordReset = async ({ email }) => {
+  // No email delivery exists yet. Never expose a bearer reset token remotely.
+  if (!env.localDevelopment) throw createAuthError('Password recovery is not configured', 503);
   const normalizedEmail = email.trim();
   const userResult = await db.query(
     `
@@ -442,7 +426,7 @@ export const requestPasswordReset = async ({ email }) => {
 
     return {
       sent: true,
-      preview: env.nodeEnv === 'production' ? null : buildPasswordResetPreview({ token: rawToken, expiresAt }),
+      preview: buildPasswordResetPreview({ token: rawToken, expiresAt }),
     };
   } catch (error) {
     await client.query('ROLLBACK');
@@ -453,6 +437,7 @@ export const requestPasswordReset = async ({ email }) => {
 };
 
 export const confirmPasswordReset = async ({ token, password }) => {
+  if (!env.localDevelopment) throw createAuthError('Password recovery is not configured', 503);
   const tokenHash = hashPasswordResetToken(token.trim());
   const client = await db.getClient();
 

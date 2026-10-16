@@ -1,10 +1,12 @@
 import { errorResponse } from '../utils/response.js';
 import { getUserById, verifyAuthToken } from '../modules/auth/auth.service.js';
+import { ensureAccountCanAuthenticate } from '../modules/auth/auth.account-status.js';
+import env from '../config/env.js';
 
 const getBearerToken = (authorizationHeader = '') => {
-  const [scheme, token] = authorizationHeader.split(' ');
+  const [scheme, token, extra] = authorizationHeader.split(' ');
 
-  if (scheme !== 'Bearer' || !token) {
+  if (scheme !== 'Bearer' || !token || extra) {
     return null;
   }
 
@@ -12,23 +14,22 @@ const getBearerToken = (authorizationHeader = '') => {
 };
 
 export const authenticate = async (req, res, next) => {
+  const token = getBearerToken(req.headers.authorization);
+  if (!token) return errorResponse(res, 'Authorization token is required', 401);
+
+  let payload;
   try {
-    const token = getBearerToken(req.headers.authorization);
-
-    if (!token) {
-      return errorResponse(res, 'Authorization token is required', 401);
-    }
-
-    const payload = verifyAuthToken(token);
+    payload = verifyAuthToken(token);
+  } catch {
+    return errorResponse(res, 'Invalid or expired token', 401);
+  }
+  try {
     const user = await getUserById(payload.sub);
-
-    if (!user) {
-      return errorResponse(res, 'User not found or inactive', 401);
-    }
-
+    ensureAccountCanAuthenticate(user, env);
     req.user = user;
     return next();
   } catch (error) {
-    return errorResponse(res, 'Invalid or expired token', 401);
+    if (error.status === 401 || error.status === 403) return errorResponse(res, error.message, error.status);
+    return next(error);
   }
 };

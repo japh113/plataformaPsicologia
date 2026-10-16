@@ -2,13 +2,13 @@ import React, { useMemo, useState } from 'react';
 import { LockKeyhole, Sparkles, UserPlus2, UserRoundCheck } from 'lucide-react';
 import InlineNotice from '../components/shared/InlineNotice';
 
-const demoAccounts = [
+const demoAccounts = import.meta.env.DEV ? [
   { role: 'Psicologo', email: 'doctor@psicopanel.com', password: 'Demo12345!' },
   { role: 'Paciente', email: 'juan@example.com', password: 'Demo12345!' },
   { role: 'Admin', email: 'admin@psicopanel.com', password: 'Demo12345!' },
   { role: 'Soporte', email: 'support@psicopanel.com', password: 'Demo12345!' },
   { role: 'Superadmin', email: 'root@psicopanel.com', password: 'Demo12345!' },
-];
+] : [];
 
 const buildEmptyPatientRegisterForm = () => ({
   firstName: '',
@@ -34,7 +34,7 @@ const getLoginErrorMeta = (rawMessage = '') => {
   if (message.includes('invalid email') || message.includes('invalid') || message.includes('password')) {
     return {
       title: 'No pudimos validar ese acceso',
-      hint: 'Si estas probando el flujo demo, puedes usar una de las cuentas sugeridas arriba para entrar mas rapido.',
+      hint: 'Revisa tu correo y contrasena e intenta nuevamente.',
     };
   }
 
@@ -77,8 +77,8 @@ export default function LoginScreen({
   const initialResetToken = new URLSearchParams(window.location.search).get('resetToken') || '';
   const [activeTab, setActiveTab] = useState(initialResetToken ? 'reset' : 'login');
   const [loginForm, setLoginForm] = useState({
-    email: demoAccounts[0].email,
-    password: demoAccounts[0].password,
+    email: '',
+    password: '',
   });
   const [patientForm, setPatientForm] = useState(buildEmptyPatientRegisterForm());
   const [psychologistForm, setPsychologistForm] = useState(buildEmptyPsychologistRegisterForm());
@@ -495,7 +495,7 @@ export default function LoginScreen({
     ? {
         icon: LockKeyhole,
         title: 'Iniciar sesion',
-        subtitle: 'Usa una cuenta demo o tu acceso real para entrar al flujo que corresponde a tu rol.',
+        subtitle: 'Ingresa con tu cuenta para acceder.',
       }
     : activeTab === 'patient'
       ? {

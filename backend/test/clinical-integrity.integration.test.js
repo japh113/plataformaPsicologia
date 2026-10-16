@@ -11,7 +11,8 @@ const enabled = process.env.RUN_CLINICAL_INTEGRATION === 'true';
 test('clinical integrity: PostgreSQL migration, HTTP API and concurrency', { skip: !enabled }, async (t) => {
   assert.equal(env.dbName, 'psicopanel_integrity_test', 'Use only the disposable test database');
   assert.equal(env.databaseUrl, '', 'Do not point integration tests at an external database');
-  const sql = name => fs.readFile(new URL(`../sql/${name}`, import.meta.url), 'utf8');
+  const sql = async name => (name === 'seed.sql' ? "SET psicopanel.allow_demo_seed = 'on';\n" : '') +
+    await fs.readFile(new URL(`../sql/${name}`, import.meta.url), 'utf8');
   const migration = await sql('migrations/001_clinical_data_integrity.sql');
   let server;
   try {
