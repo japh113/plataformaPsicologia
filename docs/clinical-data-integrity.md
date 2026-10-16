@@ -69,7 +69,7 @@ docker compose -p psicopanel-integrity-test -f compose.integrity-test.yaml run -
 docker compose -p psicopanel-integrity-test -f compose.integrity-test.yaml run --rm backend
 docker compose -p psicopanel-integrity-test -f compose.integrity-test.yaml run --rm --no-deps frontend
 docker compose -p psicopanel-integrity-test -f compose.integrity-test.yaml up -d --wait init-db
-docker compose -p psicopanel-integrity-test -f compose.integrity-test.yaml down
+docker compose -p psicopanel-integrity-test -f compose.integrity-test.yaml --profile initialization down
 ```
 
 La integracion se ejecuta una vez por base vacia; repetir tras bajar el proyecto de pruebas descarta exclusivamente su tmpfs. Verifica migracion de cascadas con nombres legacy, segunda aplicacion sin cambios de conteo, schema/seed compatibles en datos de prueba, contratos HTTP, permisos, inactivacion, cancelacion, retiro de tareas y objetivos, historial, reprogramacion y bloqueo SQL de DELETE/TRUNCATE. Las carreras en ambos sentidos verifican `pg_stat_activity` para confirmar la espera por bloqueo antes de resolverla.
