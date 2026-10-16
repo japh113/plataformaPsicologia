@@ -34,6 +34,7 @@ services:
       - "127.0.0.1:5000:5000"
     environment:
       NODE_ENV: development
+      LOCAL_DEVELOPMENT: "true"
       PORT: "5000"
       PGHOST: db
       PGPORT: "5432"
@@ -64,6 +65,8 @@ services:
   db:
     image: postgres:17-bookworm
     environment:
+      NODE_ENV: development
+      LOCAL_DEVELOPMENT: "true"
       POSTGRES_DB: psicopanel
       POSTGRES_USER: psicopanel
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Completa POSTGRES_PASSWORD en el archivo .env de la raiz}
@@ -73,6 +76,7 @@ services:
       - ./backend/sql/schema.sql:/opt/psicopanel/schema.sql:ro
       - ./backend/sql/seed.sql:/opt/psicopanel/seed.sql:ro
       - ./backend/sql/migrations/001_clinical_data_integrity.sql:/opt/psicopanel/001_clinical_data_integrity.sql:ro
+      - ./backend/sql/migrations/002_auth_session_version.sql:/opt/psicopanel/002_auth_session_version.sql:ro
     healthcheck:
       # Avoid the temporary socket-only server used during initialization.
       # The marker is written only after both SQL files commit successfully.

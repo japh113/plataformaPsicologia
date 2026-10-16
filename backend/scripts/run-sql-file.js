@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import db from '../src/config/db.js';
+import env from '../src/config/env.js';
+import { assertLocalInitialization } from '../src/config/security.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,8 +18,11 @@ if (!sqlFileArgument) {
 const resolvedFilePath = path.resolve(__dirname, '..', sqlFileArgument);
 
 try {
+  if (['schema.sql', 'seed.sql'].includes(path.basename(resolvedFilePath))) assertLocalInitialization(env);
   const sql = await fs.readFile(resolvedFilePath, 'utf8');
-  await db.query(sql);
+  const prefix = path.basename(resolvedFilePath) === 'seed.sql'
+    ? "SET psicopanel.allow_demo_seed = 'on';\n" : '';
+  await db.query(prefix + sql);
   console.log(`Executed SQL file: ${sqlFileArgument}`);
   await db.close();
 } catch (error) {

@@ -1,3 +1,10 @@
+-- A direct psql execution must also opt in to demo data explicitly.
+DO $$ BEGIN
+  IF current_setting('psicopanel.allow_demo_seed', true) IS DISTINCT FROM 'on' THEN
+    RAISE EXCEPTION 'Demo seed disabled: use the explicit local development initializer';
+  END IF;
+END $$;
+
 INSERT INTO patients (
   id,
   first_name,

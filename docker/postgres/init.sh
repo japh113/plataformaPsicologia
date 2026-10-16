@@ -3,6 +3,12 @@
 # Never call the legacy SQL or normalization scripts on normal app startup.
 set -eu
 
+if [ "${NODE_ENV:-}" != development ] || [ "${LOCAL_DEVELOPMENT:-}" != true ]; then
+  echo 'Demo initialization requires NODE_ENV=development and LOCAL_DEVELOPMENT=true' >&2
+  exit 1
+fi
+export PGOPTIONS="${PGOPTIONS:-} -c psicopanel.allow_demo_seed=on"
+
 psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
   --no-psqlrc --set ON_ERROR_STOP=1 --single-transaction \
   --file /opt/psicopanel/schema.sql \
@@ -12,5 +18,9 @@ psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
 psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
   --no-psqlrc --set ON_ERROR_STOP=1 \
   --file /opt/psicopanel/001_clinical_data_integrity.sql
+
+psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+  --no-psqlrc --set ON_ERROR_STOP=1 \
+  --file /opt/psicopanel/002_auth_session_version.sql
 
 touch "$PGDATA/.psicopanel-initialized"

@@ -3,6 +3,8 @@ services:
   db:
     image: postgres:17-bookworm
     environment:
+      NODE_ENV: development
+      LOCAL_DEVELOPMENT: "true"
       POSTGRES_DB: psicopanel_integrity_test
       POSTGRES_USER: integrity_test
       POSTGRES_PASSWORD: disposable_test_password
@@ -14,14 +16,18 @@ services:
       timeout: 3s
       retries: 30
   backend:
+    build: ./backend
     image: plataformapsicologia-backend:latest
     environment:
+      NODE_ENV: test
+      LOCAL_DEVELOPMENT: "true"
       PGHOST: db
       PGDATABASE: psicopanel_integrity_test
       PGUSER: integrity_test
       PGPASSWORD: disposable_test_password
       JWT_SECRET: disposable_test_secret
       RUN_CLINICAL_INTEGRATION: "true"
+      RUN_AUTH_INTEGRATION: "true"
     volumes:
       - ./backend/src:/app/src:ro
       - ./backend/test:/app/test:ro
@@ -33,6 +39,7 @@ services:
         condition: service_healthy
     command: ["npm", "run", "test:integration"]
   frontend:
+    build: ./frontend
     image: plataformapsicologia-frontend:latest
     volumes:
       - ./frontend/src:/app/src:ro
@@ -47,5 +54,6 @@ services:
       - ./backend/sql/schema.sql:/opt/psicopanel/schema.sql:ro
       - ./backend/sql/seed.sql:/opt/psicopanel/seed.sql:ro
       - ./backend/sql/migrations/001_clinical_data_integrity.sql:/opt/psicopanel/001_clinical_data_integrity.sql:ro
+      - ./backend/sql/migrations/002_auth_session_version.sql:/opt/psicopanel/002_auth_session_version.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "test -f \"$$PGDATA/.psicopanel-initialized\" && pg_isready -h 127.0.0.1 -U integrity_test -d psicopanel_integrity_test"]
