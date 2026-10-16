@@ -1,0 +1,2 @@
+# Shell entrypoints must also work in Windows checkouts with core.autocrlf.
+*.sh text eol=lf

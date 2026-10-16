@@ -1,0 +1,92 @@
+services:
+  frontend:
+    build: ./frontend
+    init: true
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:5000/api
+      PSICOPANEL_USE_POLLING: "true"
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/public:/app/public:ro
+      - ./frontend/index.html:/app/index.html:ro
+      - ./frontend/vite.config.js:/app/vite.config.js:ro
+      - ./frontend/eslint.config.js:/app/eslint.config.js:ro
+      - ./frontend/postcss.config.js:/app/postcss.config.js:ro
+      - ./frontend/tailwind.config.js:/app/tailwind.config.js:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 6
+    networks:
+      - app
+
+  backend:
+    build: ./backend
+    init: true
+    ports:
+      - "127.0.0.1:5000:5000"
+    environment:
+      NODE_ENV: development
+      PORT: "5000"
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: psicopanel
+      PGUSER: psicopanel
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Completa POSTGRES_PASSWORD en el archivo .env de la raiz}
+      DB_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET:?Completa JWT_SECRET en el archivo .env de la raiz}
+      APP_BASE_URL: http://localhost:5173
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/test:/app/test:ro
+      - ./backend/scripts:/app/scripts:ro
+      - ./backend/sql:/app/sql:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5000/api/health').then(async r => process.exit(r.ok && (await r.json()).data?.database === 'connected' ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 6
+    networks:
+      - app
+      - database
+
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: psicopanel
+      POSTGRES_USER: psicopanel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Completa POSTGRES_PASSWORD en el archivo .env de la raiz}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sh:/docker-entrypoint-initdb.d/10-psicopanel.sh:ro
+      - ./backend/sql/schema.sql:/opt/psicopanel/schema.sql:ro
+      - ./backend/sql/seed.sql:/opt/psicopanel/seed.sql:ro
+    healthcheck:
+      # Avoid the temporary socket-only server used during initialization.
+      # The marker is written only after both SQL files commit successfully.
+      test: ["CMD-SHELL", "test -f \"$$PGDATA/.psicopanel-initialized\" && pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 12
+    networks:
+      - database
+
+volumes:
+  postgres_data:
+
+networks:
+  app:
+  database:
+    internal: true
