@@ -44,27 +44,116 @@ Nota:
 - [`AGENTS.md`](./AGENTS.md): guia operativa para futuros chats/agentes
 - [`NOTES.md`](./NOTES.md): decisiones, estado del producto y pendientes
 
-## Correr el proyecto
+## Desarrollo local con Docker (recomendado)
 
-### Backend
+No hace falta instalar Node.js, npm ni PostgreSQL en el host. Las imagenes de desarrollo usan Node 24 y PostgreSQL 17; las dependencias se instalan con `npm ci` usando los lockfiles existentes.
+
+### Requisitos en Windows / Ubuntu WSL 2
+
+- Docker Desktop en modo **Linux containers**, con motor WSL 2.
+- Activar **Settings > Resources > WSL Integration > Ubuntu**.
+- Se recomienda clonar el repositorio dentro del filesystem de Ubuntu, por ejemplo `~/projects/plataformaPsicologia`, y ejecutar los comandos desde esa terminal. Evitar `/mnt/c` mejora el rendimiento.
+- Comprobar `docker version` y `docker compose version`. El entorno tambien puede ejecutarse desde PowerShell con Docker Desktop y el repo accesible.
+
+### Primera ejecucion
+
+Desde la raiz del repositorio, crear la configuracion local:
+
+```bash
+cp .env.example .env
+```
+
+En PowerShell: `Copy-Item .env.example .env`.
+
+Completar `POSTGRES_PASSWORD` y `JWT_SECRET` con dos valores aleatorios distintos de al menos 32 bytes. Se puede generar cada valor sin Node en el host:
+
+```bash
+docker run --rm node:24-bookworm-slim node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+El archivo `.env` de la raiz esta ignorado por Git. Compose rechaza secretos vacios y solo entrega las variables necesarias a cada servicio. No copiar secretos al frontend: las variables `VITE_*` son publicas. Los `.env` del frontend/backend no se copian a las imagenes ni se montan en los contenedores; este entorno usa unicamente la configuracion declarada en Compose.
+
+Levantar los tres servicios:
+
+```bash
+docker compose up --build
+```
+
+- App: http://localhost:5173
+- API: http://localhost:5000/api
+- Salud de API y conexion a PostgreSQL: http://localhost:5000/api/health
+
+La respuesta de salud debe indicar `success: true` y `data.database: "connected"`. Para segundo plano usar `docker compose up --build -d --wait`.
+
+Solo los puertos 5173 y 5000 se publican en `127.0.0.1`. PostgreSQL no publica puertos; esta en una red `internal` compartida solo con el backend. El navegador usa `localhost:5000`, mientras que la API conecta al host interno `db:5432`.
+
+### Inicializacion y persistencia
+
+El volumen nombrado `postgres_data` conserva la base al detener, recrear o reconstruir los contenedores. Solo cuando PostgreSQL crea un directorio de datos nuevo ejecuta `docker/postgres/init.sh`: aplica `schema.sql` y despues `seed.sql` en una unica transaccion con parada ante errores. El healthcheck exige que termine esa inicializacion y que PostgreSQL acepte conexiones TCP antes de arrancar la API.
+
+**El SQL existente no es una migracion inocua**: el esquema incluye cambios de columnas, eliminaciones y normalizaciones; el seed actualiza perfiles, relaciones, citas y notas, y elimina notas duplicadas. No se ejecutan `db:init`, `db:schema`, `db:seed` ni los normalizadores al arrancar el backend o al reiniciar los servicios. Cambiar SQL en el repo no actualiza automaticamente una base existente; cualquier evolucion de esquema requiere revision y ejecucion manual sobre una copia/backup.
+
+Si falla la primera inicializacion, revisar `docker compose logs db`. PostgreSQL no reintenta los scripts sobre un directorio ya creado y el marcador faltante mantiene el servicio no saludable. No crear ese marcador manualmente: corregir el problema y usar un volumen nuevo, conservando el anterior si contiene datos que deban recuperarse.
+
+La contrasena de PostgreSQL se fija al crear el volumen. Cambiarla solo en `.env` no actualiza el usuario de una base existente: restaurar el valor original o cambiarla explicitamente con SQL antes de actualizar la configuracion.
+
+### Trabajo diario y hot reload
+
+```bash
+docker compose logs -f
+docker compose stop
+docker compose start
+docker compose down
+docker compose up --build
+```
+
+`stop` y `down` conservan los datos. **No usar `docker compose down -v` salvo que se quiera eliminar definitivamente la base local y todos sus datos.** Para una demo nueva sin borrar la anterior, usar otro nombre de proyecto, por ejemplo `docker compose -p psicopanel-demo-nueva up --build`, tras detener el proyecto anterior para liberar los puertos. Usar el mismo `-p` en los comandos posteriores.
+
+React/Vite y nodemon observan los cambios con polling para soportar archivos editados desde Windows/WSL. Se montan los directorios fuente y archivos de configuracion en solo lectura desde el contenedor: el editor del host sigue pudiendo modificarlos. `node_modules` vive en las imagenes Linux, sin depender de instalaciones del host ni de volumenes de dependencias que queden desactualizados. Tras cambiar `package.json` o `package-lock.json`, ejecutar `docker compose up --build`.
+
+### Tests y comprobaciones dentro de Docker
+
+Con el entorno levantado:
+
+```bash
+docker compose exec backend npm test
+docker compose exec frontend npm run lint
+docker compose exec frontend npm run build
+curl --fail http://localhost:5000/api/health
+```
+
+En PowerShell puede usarse `Invoke-RestMethod http://localhost:5000/api/health`. El backend tiene tests automatizados de agenda, notas, entrevista, permisos y recuperacion de contrasena; el frontend dispone de lint y build, sin script de tests propio.
+
+Acceso manual a la base, sin publicar PostgreSQL:
+
+```bash
+docker compose exec db psql -U psicopanel -d psicopanel
+```
+
+Si 5173 o 5000 estan ocupados, detener el proceso que los utiliza. Para problemas de arranque revisar `docker compose ps` y `docker compose logs db backend frontend`.
+
+Este Compose es exclusivamente de desarrollo local, con cuentas demo conocidas; no es una configuracion de despliegue de produccion.
+
+## Ejecucion manual alternativa
+
+Solo para quienes ya tengan Node y PostgreSQL instalados. Usar `frontend/.env.example` y `backend/.env.example` como referencia. Aplicar esquema y demo **solo sobre una base local nueva y vacia**, despues de revisar el SQL:
+
 ```bash
 cd backend
-npm install
-npm run db:schema
-npm run db:seed
+npm ci
+npm run db:init
 npm run dev
 ```
 
-### Frontend
+En otra terminal:
+
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
-## Variables de entorno
-- Frontend: usar `frontend/.env.example`
-- Backend: usar `backend/.env.example`
+En arranques posteriores ejecutar solamente `npm run dev` en cada carpeta.
 
 ## Credenciales demo
 - Psicologo: `doctor@psicopanel.com` / `Demo12345!`
