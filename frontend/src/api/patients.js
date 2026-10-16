@@ -106,11 +106,3 @@ export const updatePatientClinicalNote = async (patientId, clinicalNoteId, paylo
 
   return response.data;
 };
-
-export const deletePatientClinicalNote = async (patientId, clinicalNoteId) => {
-  const response = await apiRequest(`/patients/${patientId}/clinical-notes/${clinicalNoteId}`, {
-    method: 'DELETE',
-  });
-
-  return response.data;
-};

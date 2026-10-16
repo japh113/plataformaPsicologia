@@ -68,18 +68,10 @@ export const deleteAppointmentWaitlistEntry = async (id) => {
   return response.data;
 };
 
-export const deleteAppointment = async (id) => {
+export const cancelFutureRecurringAppointments = async (id) => {
   const response = await apiRequest(`/appointments/${id}`, {
-    method: 'DELETE',
+    method: 'PATCH',
+    body: JSON.stringify({ status: 'cancelled', recurrenceEditScope: 'future' }),
   });
-
-  return response.data;
-};
-
-export const deleteFutureRecurringAppointments = async (id) => {
-  const response = await apiRequest(`/appointments/${id}/recurrence`, {
-    method: 'DELETE',
-  });
-
   return response.data;
 };

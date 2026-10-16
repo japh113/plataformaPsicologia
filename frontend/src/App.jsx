@@ -25,7 +25,6 @@ import {
   createPatientObjective,
   createPatientClinicalNote,
   deletePatientObjective,
-  deletePatientClinicalNote,
   deletePatientTask,
   getPatient,
   getPatients,
@@ -38,8 +37,7 @@ import {
 import {
   createAppointment,
   createAppointmentWaitlistEntry,
-  deleteFutureRecurringAppointments,
-  deleteAppointment,
+  cancelFutureRecurringAppointments,
   deleteAppointmentWaitlistEntry,
   getAppointments,
   getAppointmentWaitlist,
@@ -144,7 +142,6 @@ export default function App() {
   const [procesandoTareaId, setProcesandoTareaId] = useState(null);
   const [creandoObjetivo, setCreandoObjetivo] = useState(false);
   const [procesandoObjetivoId, setProcesandoObjetivoId] = useState(null);
-  const [procesandoSesionId, setProcesandoSesionId] = useState(null);
   const [guardandoCita, setGuardandoCita] = useState(false);
   const [procesandoCitaId, setProcesandoCitaId] = useState(null);
   const [appointmentActionError, setAppointmentActionError] = useState('');
@@ -232,7 +229,6 @@ export default function App() {
     setSessionActionError('');
     setGuardandoSesion(false);
     setGuardandoEntrevista(false);
-    setProcesandoSesionId(null);
     setReviewingPsychologistId(null);
     setProcessingRelationshipId(null);
     setBackofficeActionError('');
@@ -955,7 +951,7 @@ export default function App() {
       syncPatientState(nextPatient);
       await refreshReminders();
     } catch (error) {
-      showErrorFeedback(error.message || 'No se pudo eliminar la tarea.');
+      showErrorFeedback(error.message || 'No se pudo retirar la tarea.');
     } finally {
       setProcesandoTareaId(null);
     }
@@ -1035,9 +1031,9 @@ export default function App() {
       };
 
       syncPatientState(nextPatient);
-      showSuccessFeedback('Objetivo eliminado.');
+      showSuccessFeedback('Objetivo retirado; su registro se conserva.');
     } catch (error) {
-      showErrorFeedback(error.message || 'No se pudo eliminar el objetivo.');
+      showErrorFeedback(error.message || 'No se pudo retirar el objetivo.');
     } finally {
       setProcesandoObjetivoId(null);
     }
@@ -1072,7 +1068,6 @@ export default function App() {
     }
 
     setGuardandoSesion(true);
-    setProcesandoSesionId(sessionId);
     setSessionActionError('');
 
     try {
@@ -1087,29 +1082,6 @@ export default function App() {
       return false;
     } finally {
       setGuardandoSesion(false);
-      setProcesandoSesionId(null);
-    }
-  };
-
-  const removeSession = async (sessionId) => {
-    if (!isPsychologist || !pacienteSeleccionado || procesandoSesionId) {
-      return false;
-    }
-
-    setProcesandoSesionId(sessionId);
-    setSessionActionError('');
-
-    try {
-      await deletePatientClinicalNote(pacienteSeleccionado.id, sessionId);
-      await refreshSelectedPatient(pacienteSeleccionado.id);
-      setSessionActionError('');
-      showSuccessFeedback('Nota clinica eliminada.');
-      return true;
-    } catch (error) {
-      setSessionActionError(error.message || 'No se pudo eliminar la nota clinica.');
-      return false;
-    } finally {
-      setProcesandoSesionId(null);
     }
   };
 
@@ -1165,7 +1137,7 @@ export default function App() {
     }
   };
 
-  const handleDeleteAppointment = async (appointmentId) => {
+  const handleCancelFutureRecurringAppointments = async (appointmentId) => {
     if (!isPsychologist || procesandoCitaId) {
       return false;
     }
@@ -1174,35 +1146,13 @@ export default function App() {
     setAppointmentActionError('');
 
     try {
-      await deleteAppointment(appointmentId);
-      syncAppointmentsState((currentAppointments) => currentAppointments.filter((appointment) => appointment.id !== appointmentId));
-      await refreshAppointmentsAndWaitlist();
-      await refreshReminders();
-      showSuccessFeedback('Cita eliminada correctamente.');
-      return true;
-    } catch (error) {
-      showErrorFeedback(error.message || 'No se pudo eliminar la cita.');
-      return false;
-    } finally {
-      setProcesandoCitaId(null);
-    }
-  };
-
-  const handleDeleteFutureRecurringAppointments = async (appointmentId) => {
-    if (!isPsychologist || procesandoCitaId) {
-      return false;
-    }
-
-    setProcesandoCitaId(appointmentId);
-    setAppointmentActionError('');
-
-    try {
-      await deleteFutureRecurringAppointments(appointmentId);
+      await cancelFutureRecurringAppointments(appointmentId);
+      showSuccessFeedback('Citas canceladas; sus registros se conservan.');
       await refreshAppointmentsAndWaitlist();
       await refreshReminders();
       return true;
     } catch (error) {
-      setAppointmentActionError(error.message || 'No se pudieron eliminar las citas futuras de la recurrencia.');
+      setAppointmentActionError(error.message || 'No se pudieron cancelar las citas futuras de la recurrencia.');
       return false;
     } finally {
       setProcesandoCitaId(null);
@@ -1557,8 +1507,7 @@ export default function App() {
           onOpenAppointmentSession={handleOpenSessionFromAppointment}
           onCreateAppointment={handleCreateAppointment}
           onUpdateAppointment={handleUpdateAppointment}
-          onDeleteAppointment={handleDeleteAppointment}
-          onDeleteFutureRecurringAppointments={handleDeleteFutureRecurringAppointments}
+          onCancelFutureRecurringAppointments={handleCancelFutureRecurringAppointments}
           onCreateAppointmentWaitlist={handleCreateAppointmentWaitlist}
           onDeleteAppointmentWaitlist={handleDeleteAppointmentWaitlist}
           onReorderAppointmentWaitlist={handleReorderAppointmentWaitlist}
@@ -1635,7 +1584,6 @@ export default function App() {
           onAddObjective={addObjective}
           onCreateSession={createSession}
           onUpdateSession={updateSession}
-          onDeleteSession={removeSession}
           onSaveInterview={saveInterview}
           sessionActionError={sessionActionError}
           onDismissSessionActionError={() => setSessionActionError('')}
@@ -1646,7 +1594,6 @@ export default function App() {
           processingTaskId={procesandoTareaId}
           isCreatingObjective={creandoObjetivo}
           processingObjectiveId={procesandoObjetivoId}
-          processingSessionId={procesandoSesionId}
         />
       );
     }

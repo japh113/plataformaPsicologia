@@ -142,7 +142,7 @@ const getAppointmentsEmptyStateCopy = ({
 
 export default function AppointmentsScreen({
   viewContext,
-  currentUser, patients, appointments, waitlistEntries = [], availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onDeleteAppointment, onDeleteFutureRecurringAppointments, onCreateAppointmentWaitlist, onDeleteAppointmentWaitlist, onReorderAppointmentWaitlist, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
+  currentUser, patients, appointments, waitlistEntries = [], availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onCancelFutureRecurringAppointments, onCreateAppointmentWaitlist, onDeleteAppointmentWaitlist, onReorderAppointmentWaitlist, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
   isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingWaitlist = false, processingWaitlistId = null, waitlistActionError = '', onDismissWaitlistError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
@@ -704,32 +704,20 @@ export default function AppointmentsScreen({
       resetWaitlistForm(waitlistForm.fecha);
     }
   };
-  const handleDelete = async (appointmentId) => {
-    openConfirmationModal({
-      title: 'Eliminar cita',
-      description: 'Esta accion quitara la cita del calendario. Si quieres conservar el registro, conviene cancelarla en lugar de eliminarla.',
-      confirmLabel: 'Eliminar cita',
-      tone: 'danger',
-      onConfirm: async () => {
-        await onDeleteAppointment(appointmentId);
-        closeConfirmationModal();
-      },
-    });
-  };
-  const handleDeleteFutureRecurrence = async (appointment) => {
+  const handleCancelFutureRecurrence = async (appointment) => {
     if (!appointment?.recurrenciaGrupoId) {
       return;
     }
 
     openConfirmationModal({
-      title: 'Eliminar recurrencia futura',
-      description: 'Se eliminaran esta cita y todas las futuras de la misma serie. Las citas anteriores se conservaran.',
-      confirmLabel: 'Eliminar esta y futuras',
+      title: 'Cancelar recurrencia futura',
+      description: 'Se cancelaran esta cita y las posteriores no canceladas de la serie. Todos los registros se conservaran. Si alguna tiene nota clinica, la operacion se rechazara.',
+      confirmLabel: 'Cancelar esta y futuras',
       tone: 'danger',
       onConfirm: async () => {
-        const wasDeleted = await onDeleteFutureRecurringAppointments?.(appointment.id);
+        const wasCancelled = await onCancelFutureRecurringAppointments?.(appointment.id);
 
-        if (wasDeleted) {
+        if (wasCancelled) {
           closeAppointmentModal();
           closeConfirmationModal();
         }
@@ -1414,7 +1402,6 @@ export default function AppointmentsScreen({
                       )}
                       {isPsychologist && <>
                         <button onClick={() => handleEditAppointment(appointment)} className="px-3 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 transition text-sm font-medium inline-flex items-center"><Pencil size={14} className="mr-2" /> Editar</button>
-                        <button onClick={() => handleDelete(appointment.id)} disabled={processingAppointmentId === appointment.id} className="px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 transition text-sm font-medium inline-flex items-center disabled:opacity-60 disabled:cursor-not-allowed"><Trash2 size={14} className="mr-2" /> Eliminar</button>
                       </>}
                     </div>
                   </div>
@@ -2140,11 +2127,8 @@ export default function AppointmentsScreen({
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               {editingAppointment && editingAppointment.recurrenciaGrupoId && (
                 <>
-                  <button type="button" onClick={() => handleDelete(editingAppointment.id)} disabled={isSavingAppointment || processingAppointmentId === editingAppointment.id} className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed">
-                    {processingAppointmentId === editingAppointment.id ? 'Eliminando...' : 'Eliminar solo esta'}
-                  </button>
-                  <button type="button" onClick={() => handleDeleteFutureRecurrence(editingAppointment)} disabled={isSavingAppointment || processingAppointmentId === editingAppointment.id} className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
-                    {processingAppointmentId === editingAppointment.id ? 'Eliminando...' : 'Eliminar esta y futuras'}
+                  <button type="button" onClick={() => handleCancelFutureRecurrence(editingAppointment)} disabled={isSavingAppointment || processingAppointmentId === editingAppointment.id} className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed">
+                    {processingAppointmentId === editingAppointment.id ? 'Cancelando...' : 'Cancelar esta y futuras'}
                   </button>
                 </>
               )}

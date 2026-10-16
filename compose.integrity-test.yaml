@@ -1,0 +1,51 @@
+# Isolated test project: no host ports, persistent volumes or production secrets.
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: psicopanel_integrity_test
+      POSTGRES_USER: integrity_test
+      POSTGRES_PASSWORD: disposable_test_password
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U integrity_test -d psicopanel_integrity_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  backend:
+    image: plataformapsicologia-backend:latest
+    environment:
+      PGHOST: db
+      PGDATABASE: psicopanel_integrity_test
+      PGUSER: integrity_test
+      PGPASSWORD: disposable_test_password
+      JWT_SECRET: disposable_test_secret
+      RUN_CLINICAL_INTEGRATION: "true"
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/test:/app/test:ro
+      - ./backend/sql:/app/sql:ro
+      - ./backend/scripts:/app/scripts:ro
+      - ./backend/package.json:/app/package.json:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["npm", "run", "test:integration"]
+  frontend:
+    image: plataformapsicologia-frontend:latest
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/eslint.config.js:/app/eslint.config.js:ro
+    command: ["sh", "-c", "npm run lint && npm run build"]
+  init-db:
+    extends:
+      service: db
+    profiles: ["initialization"]
+    volumes:
+      - ./docker/postgres/init.sh:/docker-entrypoint-initdb.d/10-psicopanel.sh:ro
+      - ./backend/sql/schema.sql:/opt/psicopanel/schema.sql:ro
+      - ./backend/sql/seed.sql:/opt/psicopanel/seed.sql:ro
+      - ./backend/sql/migrations/001_clinical_data_integrity.sql:/opt/psicopanel/001_clinical_data_integrity.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -f \"$$PGDATA/.psicopanel-initialized\" && pg_isready -h 127.0.0.1 -U integrity_test -d psicopanel_integrity_test"]
