@@ -54,5 +54,6 @@ services:
       - ./backend/sql/schema.sql:/opt/psicopanel/schema.sql:ro
       - ./backend/sql/seed.sql:/opt/psicopanel/seed.sql:ro
       - ./backend/sql/migrations/001_clinical_data_integrity.sql:/opt/psicopanel/001_clinical_data_integrity.sql:ro
+      - ./backend/sql/migrations/002_auth_session_version.sql:/opt/psicopanel/002_auth_session_version.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "test -f \"$$PGDATA/.psicopanel-initialized\" && pg_isready -h 127.0.0.1 -U integrity_test -d psicopanel_integrity_test"]

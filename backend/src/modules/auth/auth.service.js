@@ -33,6 +33,7 @@ const mapUserRow = (row) => ({
   patientId: row.patient_id ? String(row.patient_id) : null,
   patientName: row.patient_full_name || null,
   isActive: row.is_active !== false,
+  sessionVersion: row.session_version,
   createdAt: row.created_at || null,
   psychologistStatus: row.psychologist_approval_status || null,
   psychologistProfile: row.role === 'psychologist'
@@ -111,6 +112,7 @@ const signAuthToken = (user) =>
   jwt.sign(
     {
       sub: user.id,
+      sv: user.sessionVersion,
       role: user.role,
       patientId: user.patientId,
       email: user.email,
@@ -128,6 +130,7 @@ const baseUserSelect = `
     u.role,
     u.patient_id,
     u.is_active,
+    u.session_version,
     u.created_at,
     p.full_name AS patient_full_name,
     pp.professional_title,
@@ -319,6 +322,7 @@ export const loginUser = async ({ email, password }) => {
         u.last_name,
         u.email,
         u.password_hash,
+        u.session_version,
         u.role,
         u.patient_id,
         pp.professional_title,
@@ -384,6 +388,13 @@ export const requestPasswordReset = async ({ email }) => {
   try {
     await client.query('BEGIN');
 
+    // Use the same user-first lock order as confirmation, including concurrent requests.
+    const activeUser = await client.query('SELECT id FROM users WHERE id=$1 AND is_active=TRUE FOR NO KEY UPDATE', [user.id]);
+    if (!activeUser.rows[0]) {
+      await client.query('COMMIT');
+      return { sent: true, preview: null };
+    }
+
     await client.query(
       `
         UPDATE password_reset_tokens
@@ -443,6 +454,16 @@ export const confirmPasswordReset = async ({ token, password }) => {
 
   try {
     await client.query('BEGIN');
+
+    // Serialize all resets for the same account, even with different reset tokens.
+    // Re-read token usability after acquiring the user lock (READ COMMITTED).
+    const lockedUser = await client.query(`
+      SELECT u.id FROM users u
+      JOIN password_reset_tokens prt ON prt.user_id = u.id
+      WHERE prt.token_hash = $1 AND u.is_active = TRUE
+      FOR NO KEY UPDATE OF u
+    `, [tokenHash]);
+    if (!lockedUser.rows[0]) throw createAuthError('Password reset token is invalid or expired', 400);
 
     const resetResult = await client.query(
       `
@@ -577,6 +598,7 @@ export const registerPatientUser = async ({
           email,
           role,
           patient_id,
+          session_version,
           NULL::text AS professional_title,
           NULL::text AS license_number,
           NULL::text AS psychologist_approval_status,

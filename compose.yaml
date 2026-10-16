@@ -76,6 +76,7 @@ services:
       - ./backend/sql/schema.sql:/opt/psicopanel/schema.sql:ro
       - ./backend/sql/seed.sql:/opt/psicopanel/seed.sql:ro
       - ./backend/sql/migrations/001_clinical_data_integrity.sql:/opt/psicopanel/001_clinical_data_integrity.sql:ro
+      - ./backend/sql/migrations/002_auth_session_version.sql:/opt/psicopanel/002_auth_session_version.sql:ro
     healthcheck:
       # Avoid the temporary socket-only server used during initialization.
       # The marker is written only after both SQL files commit successfully.

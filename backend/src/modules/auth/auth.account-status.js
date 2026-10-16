@@ -14,3 +14,11 @@ export const ensureAccountCanAuthenticate = (user, { localDevelopment = false } 
   };
   reject(messages[user.psychologistStatus] || 'Psychologist account is not approved', 403);
 };
+
+export const ensureSessionIsCurrent = (user, payload) => {
+  if (!Number.isSafeInteger(payload.sv) || payload.sv < 0 ||
+      !Number.isSafeInteger(user.sessionVersion) || user.sessionVersion < 0 ||
+      payload.sv !== user.sessionVersion) {
+    throw Object.assign(new Error('Session has been revoked; sign in again'), { status: 401 });
+  }
+};

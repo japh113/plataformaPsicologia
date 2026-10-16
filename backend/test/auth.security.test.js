@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import jwt from 'jsonwebtoken';
 import { resolveJwtSecret, isLocalDevelopment, assertLocalInitialization } from '../src/config/security.js';
-import { ensureAccountCanAuthenticate } from '../src/modules/auth/auth.account-status.js';
+import { ensureAccountCanAuthenticate, ensureSessionIsCurrent } from '../src/modules/auth/auth.account-status.js';
 import { verifyAuthToken } from '../src/modules/auth/auth.service.js';
 import { authenticate } from '../src/middlewares/authMiddleware.js';
 import db from '../src/config/db.js';
@@ -67,7 +67,7 @@ test('JWT rejects expiry, signature, unsupported algorithm and malformed subject
 
 test('middleware denies before handlers and passes database outages to error handling', async () => {
   const original = db.query;
-  const token = jwt.sign({ sub: 'current-user', role: 'superadmin' }, env.jwtSecret);
+  const token = jwt.sign({ sub: 'current-user', role: 'superadmin', sv: 0 }, env.jwtSecret);
   const invoke = async authorization => {
     const req = { headers: { authorization } };
     const res = { status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
@@ -92,9 +92,28 @@ test('middleware denies before handlers and passes database outages to error han
     const blocked = await invoke(`Bearer ${token}`);
     assert.equal(blocked.res.statusCode, 403);
     assert.equal(blocked.called, false);
-    db.query = async () => ({ rows: [{ id: 'current-user', role: 'patient' }] });
+    db.query = async () => ({ rows: [{ id: 'current-user', role: 'patient', session_version: 0 }] });
     const allowed = await invoke(`Bearer ${token}`);
     assert.equal(allowed.called, true);
     assert.equal(allowed.req.user.role, 'patient');
+    db.query = async () => ({ rows: [{ id: 'current-user', role: 'patient', session_version: 1 }] });
+    const revoked = await invoke(`Bearer ${token}`);
+    assert.equal(revoked.res.statusCode, 401);
+    assert.equal(revoked.called, false);
+    const freshToken = jwt.sign({ sub: 'current-user', sv: 1 }, env.jwtSecret);
+    assert.equal((await invoke(`Bearer ${freshToken}`)).called, true);
   } finally { db.query = original; }
+});
+
+test('session versions reject legacy, malformed and stale claims without coercion', () => {
+  for (const sv of [undefined, null, '0', -1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, {}, true, 1]) {
+    assert.throws(() => ensureSessionIsCurrent({ sessionVersion: 0 }, { sv }), { status: 401 });
+  }
+  for (const sessionVersion of [undefined, null, '0', -1, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => ensureSessionIsCurrent({ sessionVersion }, { sv: 0 }), { status: 401 });
+  }
+  for (const sessionVersion of [0, 1, 2147483647]) {
+    assert.doesNotThrow(() => ensureSessionIsCurrent({ sessionVersion }, { sv: sessionVersion }));
+  }
+  assert.throws(() => ensureSessionIsCurrent({ sessionVersion: 4 }, { sv: 3 }), { status: 401 });
 });

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -89,6 +89,8 @@ test('authentication security with disposable PostgreSQL and real HTTP', {
       const paths = ['/auth/me', '/auth/care-relationships', '/patients', '/appointments', '/availability', '/reminders'];
       assert.equal((await request('/patients', tokens.psychologist)).status, 200);
       for (const state of ['suspended', 'rejected', 'pending_review']) {
+        const previousToken = tokens.psychologist;
+        const previousVersion = jwt.decode(previousToken).sv;
         if (state === 'pending_review') {
           await db.query("UPDATE psychologist_profiles SET approval_status=$1 WHERE user_id='auth_psychologist'", [state]);
         } else {
@@ -97,12 +99,25 @@ test('authentication security with disposable PostgreSQL and real HTTP', {
         }
         for (const path of paths) assert.equal((await request(path, tokens.psychologist)).status, 403, `${state} ${path}`);
         assert.equal((await login('psychologist')).status, 403);
+        const version = async () => (await db.query("SELECT session_version FROM users WHERE id='auth_psychologist'")).rows[0].session_version;
+        assert.equal(await version(), previousVersion + 1);
+        await db.query("UPDATE psychologist_profiles SET approval_status=$1 WHERE user_id='auth_psychologist'", [state]);
+        assert.equal(await version(), previousVersion + 1, 'Repeated review must not increment again');
+        assert.equal((await request('/auth/psychologists/auth_psychologist/review', tokens.admin, 'PATCH',
+          { approvalStatus: 'active' })).status, 200);
+        for (const path of paths) assert.equal((await request(path, previousToken)).status, 401, `reactivated ${state} ${path}`);
+        const fresh = await login('psychologist');
+        assert.equal(fresh.status, 200);
+        tokens.psychologist = fresh.body.data.token;
+        assert.equal(jwt.decode(tokens.psychologist).sv, previousVersion + 1);
+        assert.equal((await request('/auth/me', tokens.psychologist)).status, 200);
       }
       await db.query("DELETE FROM psychologist_profiles WHERE user_id='auth_psychologist'");
       assert.equal((await request('/auth/me', tokens.psychologist)).status, 403);
       assert.equal((await login('psychologist')).status, 403);
       await db.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES ('auth_psychologist','active')");
-      // Current-state revocation ends when an operator explicitly reactivates the account.
+      assert.equal((await request('/auth/me', tokens.psychologist)).status, 401);
+      tokens.psychologist = (await login('psychologist')).body.data.token;
       assert.equal((await request('/auth/me', tokens.psychologist)).status, 200);
     });
 
@@ -114,6 +129,9 @@ test('authentication security with disposable PostgreSQL and real HTTP', {
         }
         assert.equal((await login(role)).status, 401);
         await db.query('UPDATE users SET is_active=true WHERE id=$1', [`auth_${role}`]);
+        assert.equal((await request('/auth/me', tokens[role])).status, 401, 'Reactivation cannot resurrect old sessions');
+        tokens[role] = (await login(role)).body.data.token;
+        assert.equal((await request('/auth/me', tokens[role])).status, 200);
       }
     });
 
@@ -138,6 +156,9 @@ test('authentication security with disposable PostgreSQL and real HTTP', {
         assert.equal((await request('/auth/me', token)).status, 401);
       }
       assert.equal((await request('/auth/login', null, 'POST', { email: 'admin@auth.invalid', password: 'wrong' })).status, 401);
+      for (const sv of [undefined, null, '1', -1, 0.5, 999]) {
+        assert.equal((await request('/auth/me', jwt.sign({ sub: 'auth_admin', sv }, env.jwtSecret))).status, 401);
+      }
     });
 
     await t.test('nonlocal mode blocks copied demo accounts and recovery previews without mutating data', async () => {
@@ -161,6 +182,137 @@ test('authentication security with disposable PostgreSQL and real HTTP', {
       const localReset = await request('/auth/password-reset/request', null, 'POST', { email: 'admin@auth.invalid' });
       assert.equal(localReset.status, 200);
       assert.ok(localReset.body.data.preview.resetToken);
+    });
+
+    await t.test('patient registration issues a versioned JWT and psychologist approval enables a fresh login', async () => {
+      const patient = await request('/auth/register/patient', null, 'POST', {
+        firstName: 'New', email: 'new-patient@auth.invalid', password,
+      });
+      assert.equal(patient.status, 201);
+      assert.equal(jwt.decode(patient.body.data.token).sv, 0);
+      assert.equal((await request('/auth/me', patient.body.data.token)).status, 200);
+      const psychologist = await request('/auth/register/psychologist', null, 'POST', {
+        firstName: 'New', professionalTitle: 'Psychologist', email: 'new-psychologist@auth.invalid', password,
+      });
+      assert.equal(psychologist.status, 201);
+      const credentials = { email: 'new-psychologist@auth.invalid', password };
+      assert.equal((await request('/auth/login', null, 'POST', credentials)).status, 403);
+      assert.equal((await request(`/auth/psychologists/${psychologist.body.data.id}/review`, tokens.admin,
+        'PATCH', { approvalStatus: 'active' })).status, 200);
+      const approved = await request('/auth/login', null, 'POST', credentials);
+      assert.equal(approved.status, 200);
+      assert.equal(jwt.decode(approved.body.data.token).sv, 0);
+      assert.equal((await request('/auth/me', approved.body.data.token)).status, 200);
+    });
+
+    await t.test('HTTP password reset invalidates every older session for every role; failed resets do not', async () => {
+      for (const role of roles) {
+        const first = tokens[role];
+        const second = (await login(role)).body.data.token;
+        const version = jwt.decode(first).sv;
+        const email = `${role}@auth.invalid`;
+        const expired = await request('/auth/password-reset/request', null, 'POST', { email });
+        const expiredToken = expired.body.data.preview.resetToken;
+        await db.query("UPDATE password_reset_tokens SET expires_at=NOW()-INTERVAL '1 minute' WHERE token_hash=$1",
+          [createHash('sha256').update(expiredToken).digest('hex')]);
+        for (const token of ['invalid-reset', expiredToken]) {
+          assert.equal((await request('/auth/password-reset/confirm', null, 'POST', { token, password })).status, 400);
+          assert.equal((await request('/auth/me', first)).status, 200);
+        }
+        const reset = await request('/auth/password-reset/request', null, 'POST', { email });
+        const token = reset.body.data.preview.resetToken;
+        const nextPassword = `Reset-${role}-483!`;
+        assert.equal((await request('/auth/password-reset/confirm', null, 'POST', { token, password: nextPassword })).status, 200);
+        for (const oldToken of [first, second]) {
+          for (const path of ['/auth/me', '/patients', '/appointments']) {
+            assert.equal((await request(path, oldToken)).status, 401, `${role} ${path}`);
+          }
+        }
+        assert.equal((await login(role)).status, 401, 'Previous password cannot log in');
+        const fresh = await request('/auth/login', null, 'POST', { email, password: nextPassword });
+        assert.equal(fresh.status, 200);
+        tokens[role] = fresh.body.data.token;
+        assert.equal(jwt.decode(tokens[role]).sv, version + 1);
+        assert.equal((await request('/auth/me', tokens[role])).status, 200);
+        assert.equal((await request('/auth/password-reset/confirm', null, 'POST', { token, password })).status, 400);
+        assert.equal((await request('/auth/me', tokens[role])).status, 200, 'Reused token must not revoke fresh sessions');
+      }
+    });
+
+    await t.test('direct password changes revoke every role and migration replay never resets versions', async () => {
+      for (const role of roles) {
+        const oldToken = tokens[role];
+        const version = jwt.decode(oldToken).sv;
+        const nextPassword = `Changed-${role}-827!`;
+        await db.query('UPDATE users SET password_hash=$1 WHERE id=$2', [await bcrypt.hash(nextPassword, 4), `auth_${role}`]);
+        assert.equal((await request('/auth/me', oldToken)).status, 401);
+        const fresh = await request('/auth/login', null, 'POST', { email: `${role}@auth.invalid`, password: nextPassword });
+        assert.equal(fresh.status, 200);
+        tokens[role] = fresh.body.data.token;
+        assert.equal(jwt.decode(tokens[role]).sv, version + 1);
+      }
+      const before = (await db.query('SELECT id,session_version FROM users ORDER BY id')).rows;
+      const migration = await fs.readFile(new URL('../sql/migrations/002_auth_session_version.sql', import.meta.url), 'utf8');
+      await db.query(migration);
+      await db.query(migration);
+      assert.deepEqual((await db.query('SELECT id,session_version FROM users ORDER BY id')).rows, before);
+      await assert.rejects(db.query("UPDATE users SET session_version=0 WHERE id='auth_admin'"), /cannot decrease/);
+      for (const role of roles) assert.equal((await request('/auth/me', tokens[role])).status, 200);
+      await db.query("UPDATE users SET password_hash=password_hash, updated_at=NOW() WHERE id='auth_admin'");
+      assert.equal((await request('/auth/me', tokens.admin)).status, 200, 'Unchanged password hash must not revoke');
+    });
+
+    await t.test('revocation and a password change roll back together', async () => {
+      const client = await db.getClient();
+      const before = (await db.query("SELECT password_hash,session_version FROM users WHERE id='auth_admin'")).rows[0];
+      try {
+        await client.query('BEGIN');
+        await client.query("UPDATE users SET password_hash='rolled-back-hash' WHERE id='auth_admin'");
+        assert.equal((await client.query("SELECT session_version FROM users WHERE id='auth_admin'")).rows[0].session_version, before.session_version + 1);
+        await client.query('ROLLBACK');
+      } finally { client.release(); }
+      assert.deepEqual((await db.query("SELECT password_hash,session_version FROM users WHERE id='auth_admin'")).rows[0], before);
+      assert.equal((await request('/auth/me', tokens.admin)).status, 200);
+    });
+
+    await t.test('suspension rollback preserves the session and inactive users cannot consume reset tokens', async () => {
+      const client = await db.getClient();
+      const oldToken = tokens.psychologist;
+      const version = jwt.decode(oldToken).sv;
+      try {
+        await client.query('BEGIN');
+        await client.query("UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id='auth_psychologist'");
+        assert.equal((await client.query("SELECT session_version FROM users WHERE id='auth_psychologist'")).rows[0].session_version, version + 1);
+        await client.query('ROLLBACK');
+      } finally { client.release(); }
+      assert.equal((await request('/auth/me', oldToken)).status, 200);
+      const reset = await request('/auth/password-reset/request', null, 'POST', { email: 'patient@auth.invalid' });
+      const token = reset.body.data.preview.resetToken;
+      await db.query("UPDATE users SET is_active=false WHERE id='auth_patient'");
+      const before = (await db.query("SELECT password_hash,session_version FROM users WHERE id='auth_patient'")).rows[0];
+      assert.equal((await request('/auth/password-reset/confirm', null, 'POST', { token, password })).status, 400);
+      assert.deepEqual((await db.query("SELECT password_hash,session_version FROM users WHERE id='auth_patient'")).rows[0], before);
+      await db.query("UPDATE users SET is_active=true WHERE id='auth_patient'");
+      assert.equal((await request('/auth/me', tokens.patient)).status, 401);
+    });
+
+    await t.test('concurrent reset attempts allow one success and revoke pre-reset JWTs', async () => {
+      const email = 'admin@auth.invalid';
+      const reset = await request('/auth/password-reset/request', null, 'POST', { email });
+      const token = reset.body.data.preview.resetToken;
+      const oldToken = tokens.admin;
+      const beforeVersion = jwt.decode(oldToken).sv;
+      const responses = await Promise.all([
+        request('/auth/password-reset/confirm', null, 'POST', { token, password: 'Concurrent-A-583!' }),
+        request('/auth/password-reset/confirm', null, 'POST', { token, password: 'Concurrent-B-583!' }),
+      ]);
+      assert.deepEqual(responses.map(response => response.status).sort(), [200, 400]);
+      const winner = responses[0].status === 200 ? 'Concurrent-A-583!' : 'Concurrent-B-583!';
+      assert.equal((await request('/auth/me', oldToken)).status, 401);
+      const fresh = await request('/auth/login', null, 'POST', { email, password: winner });
+      assert.equal(fresh.status, 200);
+      assert.equal(jwt.decode(fresh.body.data.token).sv, beforeVersion + 1);
+      assert.equal((await request('/auth/me', fresh.body.data.token)).status, 200);
     });
   } finally {
     Object.assign(env, savedEnv);

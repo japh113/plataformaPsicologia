@@ -40,6 +40,23 @@ test('clinical integrity: PostgreSQL migration, HTTP API and concurrency', { ski
     await db.query(migration);
     await db.query(await sql('seed.sql'));
 
+    await t.test('auth migration upgrades existing populated data additively and is idempotent', async () => {
+      const snapshot = async () => {
+        const result = {};
+        for (const table of ['users', 'patients', 'patient_intakes', 'appointments', 'patient_clinical_notes',
+          'patient_tasks', 'care_relationships', 'psychologist_profiles', 'clinical_record_history']) {
+          result[table] = (await db.query(`SELECT to_jsonb(t) - 'session_version' AS data FROM ${table} t ORDER BY 1`)).rows;
+        }
+        return result;
+      };
+      const beforeUpgrade = await snapshot();
+      const authMigration = await sql('migrations/002_auth_session_version.sql');
+      await db.query(authMigration);
+      await db.query(authMigration);
+      assert.deepEqual(await snapshot(), beforeUpgrade);
+      assert.equal((await db.query('SELECT 1 FROM users WHERE session_version <> 0')).rowCount, 0);
+    });
+
     const yesterday = __testables.addDaysToDateString(__testables.getTodayDateString(), -1);
     const tomorrow = __testables.addDaysToDateString(__testables.getTodayDateString(), 1);
     const insertAppointment = async (status = 'pending', group = null, date = yesterday) =>
@@ -52,7 +69,8 @@ test('clinical integrity: PostgreSQL migration, HTTP API and concurrency', { ski
     server = app.listen(0,'127.0.0.1');
     await new Promise(resolve => server.once('listening',resolve));
     const request = async (path, method = 'GET', body, user = 'u_psy_1') => {
-      const token = jwt.sign({ sub: user }, env.jwtSecret);
+      const version = (await db.query('SELECT session_version FROM users WHERE id=$1', [user])).rows[0].session_version;
+      const token = jwt.sign({ sub: user, sv: version }, env.jwtSecret);
       const response = await fetch(`http://127.0.0.1:${server.address().port}/api${path}`, {
         method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         ...(body === undefined ? {} : {body: JSON.stringify(body)}),

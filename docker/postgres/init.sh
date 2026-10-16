@@ -19,4 +19,8 @@ psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
   --no-psqlrc --set ON_ERROR_STOP=1 \
   --file /opt/psicopanel/001_clinical_data_integrity.sql
 
+psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+  --no-psqlrc --set ON_ERROR_STOP=1 \
+  --file /opt/psicopanel/002_auth_session_version.sql
+
 touch "$PGDATA/.psicopanel-initialized"

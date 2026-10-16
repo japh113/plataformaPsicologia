@@ -20,6 +20,7 @@ export const initializeProduction = async (database = db, config = env) => {
     const sql = name => fs.readFile(new URL(`../sql/${name}`, import.meta.url), 'utf8');
     await client.query(await sql('schema.sql'));
     await client.query(await sql('migrations/001_clinical_data_integrity.sql'));
+    await client.query(await sql('migrations/002_auth_session_version.sql'));
   } finally {
     try {
       await client.query('SELECT pg_advisory_unlock(728194601)');
