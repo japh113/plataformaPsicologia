@@ -6,12 +6,14 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "node test/appointments.logic.test.js && node test/clinical-notes.logic.test.js && node test/patient-intake.logic.test.js && node test/auth.permissions.test.js && node test/auth.password-reset.test.js",
-    "db:schema": "node scripts/run-sql-file.js sql/schema.sql",
+    "test": "node test/appointments.logic.test.js && node test/clinical-notes.logic.test.js && node test/patient-intake.logic.test.js && node test/auth.permissions.test.js && node test/auth.password-reset.test.js && node --test test/clinical-integrity.logic.test.js",
+    "db:schema": "node scripts/run-sql-file.js sql/schema.sql && npm run db:migrate:clinical-integrity",
     "db:seed": "node scripts/run-sql-file.js sql/seed.sql",
     "db:init": "npm run db:schema && npm run db:seed",
     "db:normalize-appointments": "node scripts/normalize-appointment-times.js",
-    "db:normalize-future-clinical-notes": "node scripts/normalize-future-clinical-notes.js"
+    "db:normalize-future-clinical-notes": "node scripts/normalize-future-clinical-notes.js",
+    "db:migrate:clinical-integrity": "node scripts/run-sql-file.js sql/migrations/001_clinical_data_integrity.sql",
+    "test:integration": "node --test test/clinical-integrity.integration.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

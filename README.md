@@ -187,3 +187,7 @@ Este repo ya trae bastante contexto conversacional convertido en codigo. Antes d
 - hacer commits descriptivos cuando un cambio quede estable
 - push frecuente a `main` si la tarea ya esta validada
 - si el cambio es grande o riesgoso, se puede usar branch temporal, pero por defecto se ha trabajado con commits frecuentes a `main`
+
+## Proteccion de expedientes clinicos
+
+La politica de conservacion, la auditoria de citas/pacientes y el procedimiento de migracion estan en [docs/clinical-data-integrity.md](docs/clinical-data-integrity.md). Una base existente requiere la migracion especifica antes de arrancar este backend; reiniciar Docker no la aplica. No usar schema/seed para migrar expedientes reales.

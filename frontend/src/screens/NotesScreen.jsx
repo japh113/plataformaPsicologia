@@ -181,7 +181,6 @@ export default function NotesScreen({
   onAddObjective,
   onCreateSession,
   onUpdateSession,
-  onDeleteSession,
   onSaveInterview,
   sessionActionError = '',
   onDismissSessionActionError,
@@ -192,7 +191,6 @@ export default function NotesScreen({
   processingTaskId = null,
   isCreatingObjective = false,
   processingObjectiveId = null,
-  processingSessionId = null,
 }) {
   const initialMatchedSession = patient?.sesiones?.find((session) => session.citaId === (prefilledAppointmentId || null)) || null;
   const [sessionTaskText, setSessionTaskText] = useState('');
@@ -549,23 +547,6 @@ export default function NotesScreen({
     if (wasSaved) {
       closeSessionModal();
     }
-  };
-
-  const handleDeleteCurrentSession = async (sessionId) => {
-    openConfirmationModal({
-      title: 'Eliminar nota clinica',
-      description: 'Esta accion quitara la nota clinica del expediente. Las tareas ligadas a esa nota tambien dejaran de verse en ese contexto.',
-      confirmLabel: 'Eliminar nota clinica',
-      tone: 'danger',
-      onConfirm: async () => {
-        const wasDeleted = await onDeleteSession(sessionId);
-
-        if (wasDeleted) {
-          closeSessionModal();
-          closeConfirmationModal();
-        }
-      },
-    });
   };
 
   const getAgendaEntries = () => {
@@ -950,6 +931,7 @@ export default function NotesScreen({
                         {isPsychologist && (
                           <button
                             type="button"
+                            title="Retirar tarea (se conserva el registro)"
                             onClick={() => onDeleteTask(task.id)}
                             disabled={processingTaskId === task.id}
                             className="ml-3 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1004,6 +986,7 @@ export default function NotesScreen({
                   {isPsychologist && (
                     <button
                       type="button"
+                      title="Retirar tarea (se conserva el registro)"
                       onClick={() => onDeleteTask(task.id)}
                       disabled={processingTaskId === task.id}
                       className="ml-3 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1081,6 +1064,7 @@ export default function NotesScreen({
               {isPsychologist && (
                 <button
                   type="button"
+                  title="Retirar objetivo (se conserva el registro)"
                   onClick={() => onDeleteObjective(objective.id)}
                   disabled={processingObjectiveId === objective.id}
                   className="ml-3 text-slate-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1533,7 +1517,7 @@ export default function NotesScreen({
               <select
                 value={sessionForm.citaId}
                 onChange={(event) => setSessionForm((current) => ({ ...current, citaId: event.target.value }))}
-                disabled={isSavingSession}
+                disabled={isSavingSession || Boolean(selectedSession)}
                 className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               >
                 <option value="">Selecciona una cita</option>
@@ -1677,16 +1661,7 @@ export default function NotesScreen({
             )}
 
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              {selectedSession && (
-                <button
-                  type="button"
-                  onClick={() => handleDeleteCurrentSession(selectedSession.id)}
-                  disabled={processingSessionId === selectedSession.id}
-                  className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {processingSessionId === selectedSession.id ? 'Eliminando...' : 'Eliminar nota clinica'}
-                </button>
-              )}
+              <p className="text-xs text-slate-500">Las notas se conservan. Las correcciones guardan su historial.</p>
               <button
                 type="button"
                 onClick={handleSaveSession}

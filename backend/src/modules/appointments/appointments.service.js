@@ -1,3 +1,4 @@
+import { clinicalDeletionError } from '../../utils/clinicalIntegrity.js';
 import { randomUUID } from 'crypto';
 import db from '../../config/db.js';
 import { buildPatientAccessScope, ensurePsychologist, isPsychologist } from '../auth/auth.permissions.js';
@@ -189,16 +190,6 @@ const ensureAppointmentCompletionIsAllowed = ({ scheduledDate, status }) => {
     );
     error.status = 409;
     throw error;
-  }
-};
-
-const ensureRecurringDeletionIsAllowed = ({ recurrenceGroupId, linkedFutureClinicalNotesCount }) => {
-  if (!recurrenceGroupId) {
-    throw createValidationError('Esta cita no forma parte de una recurrencia.');
-  }
-
-  if (linkedFutureClinicalNotesCount > 0) {
-    throw createScheduleConflictError('No puedes eliminar futuras citas de esta recurrencia porque al menos una ya tiene nota clinica registrada.');
   }
 };
 
@@ -534,7 +525,7 @@ const listRecurringAppointmentsFromCurrent = async ({ recurrenceGroupId, schedul
     [actor.id, recurrenceGroupId, scheduledDate, appointmentId],
   );
 
-  return result.rows.map(mapAppointmentRow);
+  return result.rows.map(mapAppointmentRow).filter((appointment) => appointment.status !== 'cancelled');
 };
 
 const buildRecurringAppointmentFutureTargets = ({
@@ -545,11 +536,12 @@ const buildRecurringAppointmentFutureTargets = ({
   const anchorScheduledDate = payload.scheduledDate || anchorAppointment.scheduledDate;
   const nextPatientId = payload.patientId?.trim() || anchorAppointment.patientId;
 
-  return recurringAppointments.map((appointment, index) => ({
+  return recurringAppointments.map((appointment) => ({
     currentAppointment: appointment,
     nextPatientId,
     nextScheduledDate: Object.prototype.hasOwnProperty.call(payload, 'scheduledDate')
-      ? addDaysToDateString(anchorScheduledDate, index * 7)
+      ? addDaysToDateString(anchorScheduledDate,
+          Math.round((Date.parse(appointment.scheduledDate) - Date.parse(anchorAppointment.scheduledDate)) / 86400000))
       : appointment.scheduledDate,
     nextScheduledTime: normalizeScheduledTime(payload.scheduledTime || appointment.scheduledTime),
     nextStatus: payload.status || appointment.status,
@@ -582,12 +574,18 @@ const updateFutureRecurringAppointments = async (id, payload, actor) => {
     throw createValidationError('La nueva fecha de esta y futuras no puede ser anterior a la cita actual.');
   }
 
+  if (currentAppointment.status === 'cancelled') {
+    throw createScheduleConflictError('Selecciona una cita no cancelada para modificar la serie.');
+  }
+
   const recurringAppointments = await listRecurringAppointmentsFromCurrent({
     recurrenceGroupId: currentAppointment.recurrenceGroupId,
     scheduledDate: currentAppointment.scheduledDate,
     appointmentId: Number(id),
     actor,
   });
+
+  if (recurringAppointments.length === 0) return currentAppointment;
 
   const targets = buildRecurringAppointmentFutureTargets({
     recurringAppointments,
@@ -665,6 +663,21 @@ const updateFutureRecurringAppointments = async (id, payload, actor) => {
       );
     }
 
+    for (const target of targets) {
+      await logAuditEvent(client, {
+        actorUserId: actor.id, actorRole: actor.role,
+        action: target.nextStatus === 'cancelled' ? 'appointment_cancelled' : 'appointment_updated',
+        entityType: 'appointment', entityId: target.currentAppointment.id,
+        patientId: target.nextPatientId,
+        metadata: {
+          previousDate: target.currentAppointment.scheduledDate,
+          previousTime: target.currentAppointment.scheduledTime,
+          previousStatus: target.currentAppointment.status,
+          scheduledDate: target.nextScheduledDate, scheduledTime: target.nextScheduledTime,
+          status: target.nextStatus, scope: 'future',
+        },
+      });
+    }
     await client.query('COMMIT');
 
     if (targets.some((target) => target.nextStatus !== 'cancelled' && target.nextStatus !== 'no_show')) {
@@ -954,6 +967,9 @@ export const updateAppointment = async (id, payload, actor) => {
       entityId: id,
       patientId: nextPatientId,
       metadata: {
+        previousDate: currentAppointment.scheduledDate,
+        previousTime: currentAppointment.scheduledTime,
+        previousStatus: currentAppointment.status,
         scheduledDate: nextScheduledDate,
         scheduledTime: nextScheduledTime,
         status: nextStatus,
@@ -986,76 +1002,14 @@ export const updateAppointment = async (id, payload, actor) => {
 
 export const deleteAppointment = async (id, actor) => {
   ensurePsychologist(actor);
-
-  const appointment = await getAppointmentById(id, actor);
-
-  if (!appointment) {
-    return false;
-  }
-
-  const result = await db.query('DELETE FROM appointments WHERE id = $1', [id]);
-  if (result.rowCount > 0) {
-    await logAuditEvent(db, {
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'appointment_deleted',
-      entityType: 'appointment',
-      entityId: id,
-      patientId: appointment.patientId,
-      metadata: {
-        scheduledDate: appointment.scheduledDate,
-        scheduledTime: appointment.scheduledTime,
-      },
-    });
-  }
-  return result.rowCount > 0;
+  if (!await getAppointmentById(id, actor)) return false;
+  throw clinicalDeletionError('Las citas se conservan. Usa la cancelacion para liberar el horario.');
 };
 
 export const deleteFutureRecurringAppointments = async (id, actor) => {
   ensurePsychologist(actor);
-
-  const appointment = await getAppointmentById(id, actor);
-
-  if (!appointment) {
-    return null;
-  }
-
-  const linkedFutureClinicalNotes = await db.query(
-    `
-      SELECT a.id
-      FROM appointments a
-      INNER JOIN patient_clinical_notes pcn
-        ON pcn.appointment_id = a.id
-      WHERE a.recurrence_group_id = $1
-        AND (
-          a.scheduled_date > $2
-          OR (a.scheduled_date = $2 AND a.id = $3)
-        )
-      LIMIT 1
-    `,
-    [appointment.recurrenceGroupId, appointment.scheduledDate, id],
-  );
-
-  ensureRecurringDeletionIsAllowed({
-    recurrenceGroupId: appointment.recurrenceGroupId,
-    linkedFutureClinicalNotesCount: linkedFutureClinicalNotes.rowCount,
-  });
-
-  const result = await db.query(
-    `
-      DELETE FROM appointments
-      WHERE recurrence_group_id = $1
-        AND (
-          scheduled_date > $2
-          OR (scheduled_date = $2 AND id = $3)
-        )
-    `,
-    [appointment.recurrenceGroupId, appointment.scheduledDate, id],
-  );
-
-  return {
-    deletedCount: result.rowCount,
-  };
+  if (!await getAppointmentById(id, actor)) return null;
+  throw clinicalDeletionError('Las citas se conservan. Usa PATCH con status cancelled y recurrenceEditScope future para cancelar la serie.');
 };
 
 export const listWaitlistEntries = async ({ date = null, actor }) => {
@@ -1192,8 +1146,10 @@ export const deleteWaitlistEntry = async (id, actor) => {
 
     const result = await client.query(
       `
-        DELETE FROM appointment_waitlist_entries w
+        UPDATE appointment_waitlist_entries w
+        SET status = 'cancelled', updated_at = NOW()
         WHERE w.id = $1
+          AND w.status = 'active'
           AND ${accessScope.clause}
         RETURNING w.id, w.scheduled_date, w.scheduled_time
       `,
@@ -1325,7 +1281,6 @@ export const __testables = {
   buildRecurringDates,
   ensureAppointmentCompletionIsAllowed,
   ensureLinkedClinicalNoteUpdateIsAllowed,
-  ensureRecurringDeletionIsAllowed,
   ensureSlotFitsAvailability,
   ensureWaitlistCreationIsAllowed,
   getTodayDateString,

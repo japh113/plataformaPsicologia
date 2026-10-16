@@ -262,39 +262,6 @@ test('shouldValidateScheduleAvailability is true when changing a scheduled slot'
   assert.equal(result, true);
 });
 
-test('ensureRecurringDeletionIsAllowed rejects deleting future appointments outside a recurrence', () => {
-  assert.throws(
-    () => __testables.ensureRecurringDeletionIsAllowed({
-      recurrenceGroupId: null,
-      linkedFutureClinicalNotesCount: 0,
-    }),
-    {
-      message: 'Esta cita no forma parte de una recurrencia.',
-    },
-  );
-});
-
-test('ensureRecurringDeletionIsAllowed rejects deleting future appointments with linked clinical notes', () => {
-  assert.throws(
-    () => __testables.ensureRecurringDeletionIsAllowed({
-      recurrenceGroupId: 'series-1',
-      linkedFutureClinicalNotesCount: 1,
-    }),
-    {
-      message: 'No puedes eliminar futuras citas de esta recurrencia porque al menos una ya tiene nota clinica registrada.',
-    },
-  );
-});
-
-test('ensureRecurringDeletionIsAllowed allows deleting future appointments when the series is clean', () => {
-  assert.doesNotThrow(() =>
-    __testables.ensureRecurringDeletionIsAllowed({
-      recurrenceGroupId: 'series-1',
-      linkedFutureClinicalNotesCount: 0,
-    }),
-  );
-});
-
 test('buildRecurringAppointmentFutureTargets shifts future series from the edited anchor date', () => {
   const targets = __testables.buildRecurringAppointmentFutureTargets({
     recurringAppointments: [

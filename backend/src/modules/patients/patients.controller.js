@@ -185,7 +185,7 @@ export const deletePatientTaskHandler = async (req, res, next) => {
       return errorResponse(res, 'Task not found', 404);
     }
 
-    return successResponse(res, null, 'Task deleted successfully');
+    return successResponse(res, null, 'Task retired; record preserved');
   } catch (error) {
     return next(error);
   }
@@ -252,7 +252,7 @@ export const deletePatientObjectiveHandler = async (req, res, next) => {
       return errorResponse(res, 'Objective not found', 404);
     }
 
-    return successResponse(res, null, 'Objective deleted successfully');
+    return successResponse(res, null, 'Objective retired; record preserved');
   } catch (error) {
     return next(error);
   }

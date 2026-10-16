@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS patients (
 );
 
 CREATE TABLE IF NOT EXISTS patient_intakes (
-  patient_id TEXT PRIMARY KEY REFERENCES patients(id) ON DELETE CASCADE,
+  patient_id TEXT PRIMARY KEY REFERENCES patients(id) ON DELETE RESTRICT,
   birth_date DATE NOT NULL,
   birth_place TEXT NOT NULL DEFAULT '',
   occupation TEXT NOT NULL DEFAULT '',
@@ -96,8 +96,8 @@ CREATE INDEX IF NOT EXISTS psychologist_profiles_approval_status_idx
 
 CREATE TABLE IF NOT EXISTS care_relationships (
   id BIGSERIAL PRIMARY KEY,
-  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-  psychologist_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
+  psychologist_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'ended', 'rejected')),
   requested_by_role TEXT NOT NULL DEFAULT 'psychologist' CHECK (requested_by_role IN ('admin', 'support', 'superadmin', 'psychologist', 'patient')),
   created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -196,8 +196,8 @@ ALTER TABLE patient_intakes
   ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS psychologist_patient_access (
-  psychologist_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  psychologist_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (psychologist_user_id, patient_id)
 );
@@ -248,7 +248,7 @@ CREATE TABLE IF NOT EXISTS psychologist_availability_exception_blocks (
 
 CREATE TABLE IF NOT EXISTS patient_tasks (
   id BIGSERIAL PRIMARY KEY,
-  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
   clinical_note_id BIGINT,
   kind TEXT NOT NULL DEFAULT 'task' CHECK (kind IN ('task', 'objective')),
   text TEXT NOT NULL,
@@ -259,7 +259,7 @@ CREATE TABLE IF NOT EXISTS patient_tasks (
 
 CREATE TABLE IF NOT EXISTS appointments (
   id BIGSERIAL PRIMARY KEY,
-  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
   scheduled_date DATE NOT NULL,
   scheduled_time TIME NOT NULL,
   recurrence_group_id TEXT,
@@ -271,7 +271,7 @@ CREATE TABLE IF NOT EXISTS appointments (
 
 CREATE TABLE IF NOT EXISTS appointment_waitlist_entries (
   id BIGSERIAL PRIMARY KEY,
-  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
   scheduled_date DATE NOT NULL,
   scheduled_time TIME NOT NULL,
   priority_position INTEGER NOT NULL DEFAULT 1,
@@ -344,8 +344,8 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS patient_clinical_notes (
   id BIGSERIAL PRIMARY KEY,
-  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
-  appointment_id BIGINT NOT NULL UNIQUE REFERENCES appointments(id) ON DELETE CASCADE,
+  patient_id TEXT NOT NULL REFERENCES patients(id) ON DELETE RESTRICT,
+  appointment_id BIGINT NOT NULL UNIQUE REFERENCES appointments(id) ON DELETE RESTRICT,
   created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   clinical_note_date DATE NOT NULL,
   note_format TEXT NOT NULL DEFAULT 'simple' CHECK (note_format IN ('simple', 'soap')),
@@ -450,7 +450,7 @@ ALTER TABLE patient_tasks
   ADD CONSTRAINT patient_tasks_clinical_note_id_fkey
   FOREIGN KEY (clinical_note_id)
   REFERENCES patient_clinical_notes(id)
-  ON DELETE CASCADE;
+  ON DELETE RESTRICT;
 
 ALTER TABLE patient_tasks
   ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'task';

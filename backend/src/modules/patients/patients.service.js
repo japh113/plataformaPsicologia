@@ -1,3 +1,4 @@
+import { clinicalDeletionError } from '../../utils/clinicalIntegrity.js';
 import db from '../../config/db.js';
 import { buildPatientEntity, buildPatientInterviewEntity } from './patients.model.js';
 import {
@@ -99,7 +100,7 @@ const patientSelectColumns = `
       LEFT JOIN patient_clinical_notes pcn
         ON pcn.id = pt.clinical_note_id
       WHERE pt.patient_id = p.id
-        AND pt.kind = 'task'
+        AND pt.kind = 'task' AND pt.retired_at IS NULL
     ),
     '[]'::json
   ) AS tasks,
@@ -115,7 +116,7 @@ const patientSelectColumns = `
       )
       FROM patient_tasks pt
       WHERE pt.patient_id = p.id
-        AND pt.kind = 'objective'
+        AND pt.kind = 'objective' AND pt.retired_at IS NULL
     ),
     '[]'::json
   ) AS objectives
@@ -285,7 +286,7 @@ const syncClinicalNoteTasks = async (client, patientId, clinicalNoteId, tasks) =
       FROM patient_tasks
       WHERE patient_id = $1
         AND clinical_note_id = $2
-        AND kind = 'task'
+        AND kind = 'task' AND retired_at IS NULL
     `,
     [patientId, clinicalNoteId],
   );
@@ -293,18 +294,19 @@ const syncClinicalNoteTasks = async (client, patientId, clinicalNoteId, tasks) =
   const existingTaskIds = new Set(existingTasksResult.rows.map((row) => Number(row.id)));
   const incomingTaskIds = new Set(normalizedTasks.filter((task) => task.id).map((task) => Number(task.id)));
 
-  const taskIdsToDelete = [...existingTaskIds].filter((taskId) => !incomingTaskIds.has(taskId));
+  const taskIdsToRetire = [...existingTaskIds].filter((taskId) => !incomingTaskIds.has(taskId));
 
-  if (taskIdsToDelete.length > 0) {
+  if (taskIdsToRetire.length > 0) {
     await client.query(
       `
-        DELETE FROM patient_tasks
+        UPDATE patient_tasks
+        SET retired_at = NOW(), updated_at = NOW()
         WHERE patient_id = $1
           AND clinical_note_id = $2
-          AND kind = 'task'
+          AND kind = 'task' AND retired_at IS NULL
           AND id = ANY($3::bigint[])
       `,
-      [patientId, clinicalNoteId, taskIdsToDelete],
+      [patientId, clinicalNoteId, taskIdsToRetire],
     );
   }
 
@@ -319,7 +321,7 @@ const syncClinicalNoteTasks = async (client, patientId, clinicalNoteId, tasks) =
             updated_at = NOW()
           WHERE patient_id = $1
             AND clinical_note_id = $2
-            AND kind = 'task'
+            AND kind = 'task' AND retired_at IS NULL
             AND id = $3
         `,
         [patientId, clinicalNoteId, task.id, task.text, task.completed],
@@ -409,23 +411,6 @@ export const getPatientById = async (id, actor) => {
   );
 
   return mapPatientResult(result);
-};
-
-const refreshPatientLastClinicalNoteDate = async (patientId) => {
-  await db.query(
-    `
-      UPDATE patients
-      SET
-        last_clinical_note_date = (
-          SELECT MAX(pcn.clinical_note_date)
-          FROM patient_clinical_notes pcn
-          WHERE pcn.patient_id = $1
-        ),
-        updated_at = NOW()
-      WHERE id = $1
-    `,
-    [patientId],
-  );
 };
 
 const markAppointmentAsCompleted = async (appointmentId) => {
@@ -675,8 +660,7 @@ export const deletePatient = async (id, actor) => {
     return false;
   }
 
-  const result = await db.query('DELETE FROM patients WHERE id = $1', [id]);
-  return result.rowCount > 0;
+  throw clinicalDeletionError('El expediente se conserva. Cambia el estado del paciente a inactivo o dado de alta.');
 };
 
 export const upsertPatientInterview = async (patientId, payload, actor) => {
@@ -829,6 +813,9 @@ const createPatientChecklistItem = async (patientId, payload, actor, kind) => {
 };
 
 const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kind) => {
+  if (!isPsychologist(actor) && Object.prototype.hasOwnProperty.call(payload, 'text')) {
+    throw createForbiddenError('Solo el psicologo puede editar el texto clinico.');
+  }
   const patient = await getPatientById(patientId, actor);
 
   if (!patient) {
@@ -840,7 +827,7 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
       SELECT id, patient_id, text, completed
            , clinical_note_id
       FROM patient_tasks
-      WHERE patient_id = $1 AND id = $2 AND kind = $3
+      WHERE patient_id = $1 AND id = $2 AND kind = $3 AND retired_at IS NULL
       LIMIT 1
     `,
     [patientId, taskId, kind],
@@ -867,11 +854,15 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
         text = $4,
         completed = $5,
         updated_at = NOW()
-      WHERE patient_id = $1 AND id = $2 AND kind = $3
+      WHERE patient_id = $1 AND id = $2 AND kind = $3 AND retired_at IS NULL
       RETURNING id, text, completed, clinical_note_id AS "clinicalNoteId"
     `,
     [patientId, taskId, kind, nextText, nextCompleted],
   );
+
+  if (!result.rows[0]) {
+    return null;
+  }
 
   let session = null;
 
@@ -895,15 +886,27 @@ const deletePatientChecklistItem = async (patientId, taskId, actor, kind) => {
     return false;
   }
 
-  const result = await db.query(
-    `
-      DELETE FROM patient_tasks
-      WHERE patient_id = $1 AND id = $2 AND kind = $3
-    `,
-    [patientId, taskId, kind],
-  );
-
-  return result.rowCount > 0;
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      'UPDATE patient_tasks SET retired_at = NOW(), updated_at = NOW() WHERE patient_id = $1 AND id = $2 AND kind = $3 AND retired_at IS NULL RETURNING id',
+      [patientId, taskId, kind],
+    );
+    if (result.rowCount) {
+      await logAuditEvent(client, {
+        actorUserId: actor.id, actorRole: actor.role, action: 'checklist_item_retired',
+        entityType: kind, entityId: taskId, patientId,
+      });
+    }
+    await client.query('COMMIT');
+    return result.rowCount > 0;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const createPatientTask = async (patientId, payload, actor) => createPatientChecklistItem(patientId, payload, actor, 'task');
@@ -1072,6 +1075,9 @@ export const updatePatientClinicalNote = async (patientId, clinicalNoteId, paylo
     ? Number(payload.appointmentId)
     : currentClinicalNote.appointmentId;
 
+  if (Number(nextAppointmentId) !== Number(currentClinicalNote.appointmentId)) {
+    throw clinicalDeletionError('No puedes cambiar la cita de una nota clinica registrada.');
+  }
   const appointment = await ensureAppointmentBelongsToPatient(nextAppointmentId, patientId);
   ensureAppointmentEligibleForClinicalNote(appointment);
   await ensureAppointmentClinicalNoteUniqueness(Number(appointment.id), Number(clinicalNoteId));
@@ -1172,33 +1178,8 @@ export const updatePatientClinicalNote = async (patientId, clinicalNoteId, paylo
 
 export const deletePatientClinicalNote = async (patientId, clinicalNoteId, actor) => {
   ensurePsychologist(actor);
-
-  const patient = await getPatientById(patientId, actor);
-
-  if (!patient) {
-    return false;
-  }
-
-  const result = await db.query(
-    `
-      DELETE FROM patient_clinical_notes
-      WHERE patient_id = $1 AND id = $2
-    `,
-    [patientId, clinicalNoteId],
-  );
-
-  if (result.rowCount > 0) {
-    await refreshPatientLastClinicalNoteDate(patientId);
-    await logAuditEvent(db, {
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'clinical_note_deleted',
-      entityType: 'clinical_note',
-      entityId: clinicalNoteId,
-      patientId,
-    });
-    return true;
-  }
-
-  return false;
+  if (!await getPatientById(patientId, actor)) return false;
+  const result = await db.query('SELECT id FROM patient_clinical_notes WHERE patient_id = $1 AND id = $2', [patientId, clinicalNoteId]);
+  if (!result.rowCount) return false;
+  throw clinicalDeletionError('Las notas clinicas se conservan. Puedes corregir la nota manteniendo su historial.');
 };

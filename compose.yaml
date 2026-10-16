@@ -72,6 +72,7 @@ services:
       - ./docker/postgres/init.sh:/docker-entrypoint-initdb.d/10-psicopanel.sh:ro
       - ./backend/sql/schema.sql:/opt/psicopanel/schema.sql:ro
       - ./backend/sql/seed.sql:/opt/psicopanel/seed.sql:ro
+      - ./backend/sql/migrations/001_clinical_data_integrity.sql:/opt/psicopanel/001_clinical_data_integrity.sql:ro
     healthcheck:
       # Avoid the temporary socket-only server used during initialization.
       # The marker is written only after both SQL files commit successfully.
