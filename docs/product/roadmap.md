@@ -39,6 +39,24 @@ La corrección de dependencias de producción es el estado de alcance acordado t
 
 **Demo y datos reales:** el usuario confirmó que los datos presentes de la demo local son de prueba y desechables (RN-28/ADR-018). No construir conciliación manual exclusivamente para salvarlos. No se consultó ninguna base en esta tarea ni se preservan conteos de demo como requisitos. Esta condición no permite borrar bases reales ni reinicializar demo sin autorización separada; no tocar volúmenes existentes. La futura estrategia para datos reales sí necesita diagnóstico autorizado de solo lectura, preservación, tratamiento de legacy, ensayo y rollout seguro (ADR-009, AB-06/17).
 
+## Requisito transversal aprobado — Escenarios demo en 2A–2E
+
+**Estado: APROBADO por el usuario; ADR-019 en [decisions.md](decisions.md).** Cada subetapa 2A–2E debe entregar datos demo **ficticios y reproducibles** conforme implemente sus funcionalidades. Es un criterio de aceptación de cada subetapa, sin esperar a la etapa 3 ni exigir que una demo anticipe funcionalidades todavía no implementadas.
+
+Los escenarios deben permitir iniciar sesión como distintos psicólogos y pacientes, con cuentas demo y pasos de acceso documentados, para comprobar visualmente permisos, denegaciones y flujos desde cada perspectiva. Cada entrega debe indicar el estado inicial reproducible, los pasos y el resultado esperado para las funcionalidades que incorpora.
+
+| Subetapa | Cobertura demo conforme se implemente su alcance |
+| --- | --- |
+| 2A | Identidad, vínculo inicial, separación de datos globales/clínicos, episodios y permisos entre distintos psicólogos y pacientes, incluido archivo propio y límites de acceso disponibles. |
+| 2B | Derivación con resumen revisable, cambio directo, citas y avisos del cambio, pausa/reanudación/cierre y suspensión según los flujos entregados. |
+| 2C | Antecedentes adicionales opcionales, autorización limitada, negativa, revocación y nueva autorización de adendas posteriores, sin herencia de permisos. |
+| 2D | Agenda, conflictos de reserva y su resolución visible desde cuentas distintas; las garantías de concurrencia también se prueban automáticamente. |
+| 2E | Visualización coherente de citas, fechas y día local entre cuentas con las zonas definidas por el diseño aprobado. |
+
+Los datos y cuentas demo son **exclusivamente de desarrollo**, en un entorno aislado de datos reales; nunca se habilitan ni cargan automáticamente en producción. Cada implementación debe acompañarse de un procedimiento explícito y seguro para generar o restablecer esos escenarios: identificar y verificar entorno de desarrollo y destino aislado; generar en un destino nuevo; para restablecer, reproducir la demo en otro destino aislado nuevo, sin sobrescribir bases ni volúmenes existentes; detenerse ante un destino existente o un entorno que no sea de desarrollo; y documentar cómo acceder a las cuentas y verificar el estado inicial. El mecanismo y los comandos concretos se especificarán con la implementación, sin darlos por existentes o aprobados aquí.
+
+**Las pruebas automatizadas de cada subetapa siguen siendo obligatorias.** Los escenarios demo complementan la comprobación visual y no sustituyen pruebas de permisos, integridad, concurrencia ni las demás verificaciones aplicables. Este requisito futuro no autoriza generar datos, restablecer la demo actual ni ejecutar código, SQL, schema, seeds o migraciones en este PR documental; se conserva el límite de RN-28/ADR-018.
+
 ## Etapa 0 — Infraestructura Docker
 
 **Estado:** completada para desarrollo. **Dependencias:** ninguna etapa posterior. **Entregables existentes:** Compose, imágenes de desarrollo, inicialización de base nueva y guía en README.

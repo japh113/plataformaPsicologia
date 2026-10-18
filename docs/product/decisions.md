@@ -12,7 +12,7 @@ Fecha: 18 de octubre de 2026. Base revisada: `origin/main` en `7380e80d6fbe43ac0
 
 Cada encargo futuro debe citar estos IDs y cerrar solo las decisiones necesarias para su etapa. Una propuesta pasa a aprobada únicamente con acuerdo explícito registrado en una modificación posterior, explicando consecuencias y criterios; no por aparecer en un PR documental.
 
-Se actualizan ADR-002/003/005/010/011, conservando IDs: resumen obligatorio solo en derivación profesional, archivo completo de episodios propios con adendas, estados del episodio y visión del paciente sustituyen sus formulaciones de #5. ADR-012–ADR-018 registran las nuevas decisiones; RN-01–RN-28 en [business-rules.md](business-rules.md) son sus reglas verificables. ADR-006–ADR-009 siguen siendo PROPUESTAS, adaptadas a esos requisitos.
+Se actualizan ADR-002/003/005/010/011, conservando IDs: resumen obligatorio solo en derivación profesional, archivo completo de episodios propios con adendas, estados del episodio y visión del paciente sustituyen sus formulaciones de #5. ADR-012–ADR-018 registran las nuevas decisiones de dominio; RN-01–RN-28 en [business-rules.md](business-rules.md) son sus reglas verificables. ADR-019 añade el requisito transversal de demos reproducibles a los criterios de aceptación del roadmap. ADR-006–ADR-009 siguen siendo PROPUESTAS, adaptadas a esos requisitos.
 
 ## ADR-001 — Consultorios independientes y red sin acceso implícito
 
@@ -166,6 +166,16 @@ El paciente administra nombre, contactos y fecha de nacimiento globales; el psic
 **Estado: APROBADA como límite operativo. Etapa: planificación 2A. Regla: RN-28.**
 
 **Decisión:** usuario confirma que datos presentes en demo local son de prueba y desechables; no construir conciliación manual exclusivamente para salvarlos. Nunca asumir bases reales borrables. Planificar migración segura, legacy y rollout para datos reales (ADR-009); cualquier reinicialización demo exige autorización separada. Esta tarea no toca volúmenes existentes ni ejecuta schema/seeds/migraciones; 003 aún no existe.
+
+## ADR-019 — Escenarios demo ficticios y reproducibles por subetapa
+
+**Estado: APROBADA expresamente por el usuario como requisito de futuras implementaciones. Etapas: 2A–2E.**
+
+**Decisión:** cada subetapa incorpora escenarios demo conforme implemente sus funcionalidades, con datos ficticios y reproducibles y distintas cuentas de psicólogos y pacientes. Deben permitir iniciar sesión y comprobar visualmente permisos, denegaciones y flujos, con estado inicial, pasos de acceso/recorrido y resultados esperados documentados. La cobertura por subetapa está en [roadmap.md](roadmap.md).
+
+Datos y cuentas demo exclusivamente para desarrollo, aislados de datos reales y nunca habilitados ni cargados automáticamente en producción. Cada entrega debe incluir un procedimiento explícito y seguro de generación/restablecimiento: verificar entorno de desarrollo y destino aislado nuevo, detenerse si existe el destino o si no es desarrollo, y reproducir el estado inicial sin sobrescribir bases ni volúmenes existentes. Restablecer debe usar otro destino aislado nuevo; documentar selección de cuentas y comprobación del estado inicial. Los comandos y el mecanismo técnico se diseñarán en la implementación correspondiente; no se afirma que existan hoy.
+
+**Consecuencia:** demo verificable y pruebas automatizadas obligatorias son entregables complementarios de cada subetapa; la demo no sustituye pruebas ni permite posponerlas hasta 3. El carácter desechable de la demo previa (ADR-018/RN-28) no autoriza sobrescribir bases existentes. Este acuerdo documental tampoco autoriza generar/restablecer datos ni ejecutar código, SQL, schema, seeds o migraciones ahora; cualquier actuación sobre la demo actual sigue requiriendo autorización separada. No cambia las propuestas de migración/rollout ni habilita demos en producción.
 
 ## Asuntos abiertos y momento de resolución
 
