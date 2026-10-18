@@ -1,0 +1,70 @@
+# Use only through scripts/clinical-episodes.sh: fresh project, private network, tmpfs.
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: psicopanel_integrity_test
+      POSTGRES_USER: integrity_test
+      POSTGRES_PASSWORD: disposable_test_password
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U integrity_test -d psicopanel_integrity_test"]
+      interval: 1s
+      timeout: 3s
+      retries: 40
+    networks: [database]
+  backend:
+    build:
+      context: ./backend
+      labels:
+        io.psicopanel.episodes.project: ${COMPOSE_PROJECT_NAME:?Use scripts/clinical-episodes.sh}
+    image: ${COMPOSE_PROJECT_NAME:?Use scripts/clinical-episodes.sh}-backend:isolated
+    environment:
+      NODE_ENV: test
+      LOCAL_DEVELOPMENT: "true"
+      PGHOST: db
+      PGDATABASE: psicopanel_integrity_test
+      PGUSER: integrity_test
+      PGPASSWORD: disposable_test_password
+      JWT_SECRET: disposable_episode_test_secret
+      RUN_EPISODE_INTEGRATION: "true"
+      RUN_AUTH_INTEGRATION: "true"
+      RUN_CLINICAL_INTEGRATION: "true"
+      EPISODE_TEST_RUN_ID: ${EPISODE_TEST_RUN_ID:?Use scripts/clinical-episodes.sh}
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/test:/app/test:ro
+      - ./backend/scripts:/app/scripts:ro
+      - ./backend/sql:/app/sql:ro
+      - ./backend/package.json:/app/package.json:ro
+    networks: [database]
+    command: ["npm", "run", "test:episodes"]
+  api:
+    extends: backend
+    profiles: [demo]
+    environment:
+      NODE_ENV: development
+      PORT: "5000"
+      PGDATABASE: psicopanel_episode_demo
+    ports: ["127.0.0.1::5000"]
+    command: ["node", "src/server.js"]
+    networks: [database, app]
+  frontend:
+    build:
+      context: ./frontend
+      labels:
+        io.psicopanel.episodes.project: ${COMPOSE_PROJECT_NAME:?Use scripts/clinical-episodes.sh}
+    image: ${COMPOSE_PROJECT_NAME:?Use scripts/clinical-episodes.sh}-frontend:isolated
+    profiles: [demo]
+    ports: ["127.0.0.1::5173"]
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/eslint.config.js:/app/eslint.config.js:ro
+    environment:
+      VITE_API_URL: ${EPISODE_DEMO_API_URL:-http://localhost:5000/api}
+    networks: [app]
+networks:
+  database:
+    internal: true
+  app:

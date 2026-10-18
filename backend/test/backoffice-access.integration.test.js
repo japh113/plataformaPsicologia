@@ -1,3 +1,4 @@
+import { migrate as migrateEpisodes } from '../scripts/episode-migration.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import pg from 'pg';
@@ -50,6 +51,13 @@ test('backoffice clinical isolation and operational projections with PostgreSQL 
     const note = (await db.query("INSERT INTO patient_clinical_notes(patient_id,appointment_id,clinical_note_date,content,created_by_user_id) VALUES ('own',$1,CURRENT_DATE - 2,'professional-note','psychologist') RETURNING id", [appointment])).rows[0].id;
     const task = (await db.query("INSERT INTO patient_tasks(patient_id,kind,text,clinical_note_id) VALUES ('own','task','patient-activity',$1) RETURNING id", [note])).rows[0].id;
     const objective = (await db.query("INSERT INTO patient_tasks(patient_id,kind,text) VALUES ('own','objective','shared-objective') RETURNING id")).rows[0].id;
+    if (process.env.RUN_EPISODE_INTEGRATION === 'true') {
+      const migrationClient = await db.getClient();
+      try {
+        const name = (await migrationClient.query('SELECT current_database() AS name')).rows[0].name;
+        await migrateEpisodes(migrationClient, { expectedDatabase: name });
+      } finally { migrationClient.release(); }
+    }
     server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.once('listening', resolve));
     const tokens = {};
