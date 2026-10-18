@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken';
 import db from '../../config/db.js';
 import env from '../../config/env.js';
 import { ensureAccountCanAuthenticate } from './auth.account-status.js';
+import { ensureBackofficeViewer, ensureBackofficeManager, ensureClinicalActor } from './auth.permissions.js';
+import { projectOperationalAuditMetadata } from '../../utils/audit-projections.js';
 import { buildRelationshipInvitePreview, logAuditEvent } from '../../utils/audit.js';
 
 const createAuthError = (message, status = 400) => {
@@ -46,6 +48,27 @@ const mapUserRow = (row) => ({
     : null,
 });
 
+const projectOperationalUser = (user) => ({
+  id: user.id,
+  firstName: user.firstName,
+  lastName: user.lastName,
+  fullName: user.fullName,
+  email: user.email,
+  role: user.role,
+  patientId: user.patientId,
+  patientName: user.patientName,
+  isActive: user.isActive,
+  createdAt: user.createdAt,
+  psychologistStatus: user.psychologistStatus,
+  psychologistProfile: user.psychologistProfile ? {
+    professionalTitle: user.psychologistProfile.professionalTitle,
+    licenseNumber: user.psychologistProfile.licenseNumber,
+    approvalStatus: user.psychologistProfile.approvalStatus,
+  } : null,
+});
+
+const mapOperationalUserRow = (row) => projectOperationalUser(mapUserRow(row));
+
 const mapCareRelationshipRow = (row) => ({
   id: String(row.id),
   status: row.status,
@@ -70,6 +93,22 @@ const mapCareRelationshipRow = (row) => ({
   },
 });
 
+const mapOperationalRelationshipRow = (row) => ({
+  id: String(row.id),
+  status: row.status,
+  requestedByRole: row.requested_by_role,
+  createdAt: row.created_at || null,
+  approvedAt: row.approved_at || null,
+  patient: { id: String(row.patient_id), fullName: row.patient_full_name, email: row.patient_email || '' },
+  psychologist: {
+    id: String(row.psychologist_user_id),
+    fullName: `${row.psychologist_first_name} ${row.psychologist_last_name}`.trim(),
+    email: row.psychologist_email,
+    professionalTitle: row.professional_title || '',
+    approvalStatus: row.psychologist_approval_status || 'pending_review',
+  },
+});
+
 const mapPsychologistDirectoryRow = (row) => ({
   id: String(row.id),
   fullName: `${row.first_name} ${row.last_name}`.trim(),
@@ -82,7 +121,6 @@ const mapAuditLogRow = (row) => ({
   id: String(row.id),
   action: row.action,
   entityType: row.entity_type,
-  entityId: row.entity_id ? String(row.entity_id) : null,
   createdAt: row.created_at || null,
   actor: row.actor_user_id
     ? {
@@ -99,13 +137,7 @@ const mapAuditLogRow = (row) => ({
         email: row.target_email || '',
       }
     : null,
-  patient: row.patient_id
-    ? {
-        id: String(row.patient_id),
-        fullName: row.patient_full_name || '',
-      }
-    : null,
-  metadata: row.metadata || {},
+  metadata: projectOperationalAuditMetadata(row.action, row.metadata),
 });
 
 const signAuthToken = (user) =>
@@ -144,16 +176,14 @@ const baseUserSelect = `
     ON pp.user_id = u.id
 `;
 
-const relationshipBaseSelect = `
+const relationshipBaseSelect = (includeSensitive = true) => `
   SELECT
     cr.id,
     cr.patient_id,
     cr.psychologist_user_id,
     cr.status,
-    cr.notes,
+    ${includeSensitive ? 'cr.notes, cr.invite_code, cr.invite_expires_at,' : ''}
     cr.requested_by_role,
-    cr.invite_code,
-    cr.invite_expires_at,
     cr.created_at,
     cr.approved_at,
     p.full_name AS patient_full_name,
@@ -173,7 +203,6 @@ const relationshipBaseSelect = `
 `;
 
 const isBackofficeActor = (actor) => ['admin', 'support', 'superadmin'].includes(actor?.role || '');
-const isBackofficeManagerActor = (actor) => ['admin', 'superadmin'].includes(actor?.role || '');
 const isPatientActor = (actor) => actor?.role === 'patient';
 const isPsychologistActor = (actor) => actor?.role === 'psychologist';
 const createInviteCode = () => randomBytes(4).toString('hex').toUpperCase();
@@ -239,10 +268,10 @@ const buildRelationshipScope = (actor) => {
   throw createAuthError('Forbidden', 403);
 };
 
-const getRelationshipById = async (client, relationshipId) => {
+const getRelationshipById = async (client, relationshipId, operational = false) => {
   const result = await client.query(
     `
-      ${relationshipBaseSelect}
+      ${relationshipBaseSelect(!operational)}
       WHERE cr.id = $1
       LIMIT 1
     `,
@@ -254,6 +283,8 @@ const getRelationshipById = async (client, relationshipId) => {
   if (!row) {
     return null;
   }
+
+  if (operational) return mapOperationalRelationshipRow(row);
 
   return mapCareRelationshipRow({
     ...row,
@@ -694,7 +725,8 @@ export const registerPsychologistUser = async ({
   }
 };
 
-export const listPendingPsychologistUsers = async () => {
+export const listPendingPsychologistUsers = async (actor) => {
+  ensureBackofficeViewer(actor);
   const result = await db.query(
     `
       ${baseUserSelect}
@@ -705,10 +737,11 @@ export const listPendingPsychologistUsers = async () => {
     [],
   );
 
-  return result.rows.map(mapUserRow);
+  return result.rows.map(mapOperationalUserRow);
 };
 
-export const listBackofficeUsers = async () => {
+export const listBackofficeUsers = async (actor) => {
+  ensureBackofficeViewer(actor);
   const result = await db.query(
     `
       ${baseUserSelect}
@@ -726,7 +759,7 @@ export const listBackofficeUsers = async () => {
     [],
   );
 
-  return result.rows.map(mapUserRow);
+  return result.rows.map(mapOperationalUserRow);
 };
 
 export const listAvailablePsychologists = async () => {
@@ -757,7 +790,7 @@ export const listCareRelationships = async (actor) => {
   const { clause, params } = buildRelationshipScope(actor);
   const result = await db.query(
     `
-      ${relationshipBaseSelect}
+      ${relationshipBaseSelect(!isBackofficeActor(actor))}
       WHERE ${clause}
       ORDER BY
         CASE cr.status
@@ -773,7 +806,7 @@ export const listCareRelationships = async (actor) => {
   );
 
   return result.rows.map((row) =>
-    mapCareRelationshipRow({
+    isBackofficeActor(actor) ? mapOperationalRelationshipRow(row) : mapCareRelationshipRow({
       ...row,
       psychologist_full_name: `${row.psychologist_first_name} ${row.psychologist_last_name}`.trim(),
     }),
@@ -781,12 +814,18 @@ export const listCareRelationships = async (actor) => {
 };
 
 export const listAuditLogs = async ({
+  actor,
   action = '',
   actorRole = '',
   search = '',
 } = {}) => {
+  ensureBackofficeViewer(actor);
   const params = [];
-  const filters = [];
+  const filters = [
+    "al.patient_id IS NULL",
+    `((al.action = 'psychologist_reviewed' AND al.entity_type = 'psychologist_profile')
+      OR (al.action IN ('password_reset_requested', 'password_reset_confirmed') AND al.entity_type = 'auth'))`,
+  ];
 
   if (action.trim()) {
     params.push(action.trim());
@@ -803,7 +842,6 @@ export const listAuditLogs = async ({
     filters.push(`(
       LOWER(COALESCE(actor.first_name, '') || ' ' || COALESCE(actor.last_name, '')) LIKE $${params.length}
       OR LOWER(COALESCE(target.first_name, '') || ' ' || COALESCE(target.last_name, '')) LIKE $${params.length}
-      OR LOWER(COALESCE(p.full_name, '')) LIKE $${params.length}
       OR LOWER(al.action) LIKE $${params.length}
     )`);
   }
@@ -816,27 +854,25 @@ export const listAuditLogs = async ({
         al.id,
         al.action,
         al.entity_type,
-        al.entity_id,
         al.actor_user_id,
         al.actor_role,
         al.target_user_id,
-        al.patient_id,
-        al.metadata,
+        CASE WHEN al.action = 'psychologist_reviewed'
+          AND al.metadata->>'approvalStatus' IN ('active', 'pending_review', 'rejected', 'suspended')
+          THEN jsonb_build_object('approvalStatus', al.metadata->>'approvalStatus')
+          ELSE '{}'::jsonb END AS metadata,
         al.created_at,
         actor.first_name AS actor_first_name,
         actor.last_name AS actor_last_name,
         actor.email AS actor_email,
         target.first_name AS target_first_name,
         target.last_name AS target_last_name,
-        target.email AS target_email,
-        p.full_name AS patient_full_name
+        target.email AS target_email
       FROM audit_logs al
       LEFT JOIN users actor
         ON actor.id = al.actor_user_id
       LEFT JOIN users target
         ON target.id = al.target_user_id
-      LEFT JOIN patients p
-        ON p.id = al.patient_id
       ${whereClause}
       ORDER BY al.created_at DESC
       LIMIT 80
@@ -946,6 +982,8 @@ export const createCareRelationship = async ({
   status = 'active',
   notes = '',
 }) => {
+  ensureBackofficeManager(actor);
+  if (notes.trim()) throw createAuthError('Backoffice cannot read or write relationship notes', 403);
   const client = await db.getClient();
 
   try {
@@ -977,17 +1015,16 @@ export const createCareRelationship = async ({
           UPDATE care_relationships
           SET
             status = $2,
-            notes = $3,
-            requested_by_role = $4,
-            created_by_user_id = $5,
-            approved_by_user_id = CASE WHEN $2 = 'active' THEN $5 ELSE approved_by_user_id END,
+            requested_by_role = $3,
+            created_by_user_id = $4,
+            approved_by_user_id = CASE WHEN $2 = 'active' THEN $4 ELSE approved_by_user_id END,
             approved_at = CASE WHEN $2 = 'active' THEN NOW() ELSE NULL END,
             invite_code = NULL,
             invite_expires_at = NULL,
             updated_at = NOW()
           WHERE id = $1
         `,
-        [relationshipId, normalizedStatus, notes.trim(), actor.role, actor.id],
+        [relationshipId, normalizedStatus, actor.role, actor.id],
       );
     } else {
       const insertResult = await client.query(
@@ -1007,7 +1044,7 @@ export const createCareRelationship = async ({
           VALUES ($1, $2, $3, $4, $5, CASE WHEN $3 = 'active' THEN $5 ELSE NULL END, CASE WHEN $3 = 'active' THEN NOW() ELSE NULL END, NULL, NULL, $6)
           RETURNING id
         `,
-        [patientId, psychologistUserId, normalizedStatus, actor.role, actor.id, notes.trim()],
+        [patientId, psychologistUserId, normalizedStatus, actor.role, actor.id, ''],
       );
       relationshipId = insertResult.rows[0].id;
     }
@@ -1030,7 +1067,7 @@ export const createCareRelationship = async ({
 
     await client.query('COMMIT');
 
-    return getRelationshipById(db, relationshipId);
+    return getRelationshipById(db, relationshipId, true);
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -1045,6 +1082,8 @@ export const updateCareRelationship = async ({
   status,
   notes = '',
 }) => {
+  ensureBackofficeManager(actor);
+  if (notes.trim()) throw createAuthError('Backoffice cannot read or write relationship notes', 403);
   const client = await db.getClient();
 
   try {
@@ -1076,15 +1115,14 @@ export const updateCareRelationship = async ({
         UPDATE care_relationships
         SET
           status = $2,
-          notes = $3,
-          approved_by_user_id = CASE WHEN $2 = 'active' THEN $4 ELSE approved_by_user_id END,
+          approved_by_user_id = CASE WHEN $2 = 'active' THEN $3 ELSE approved_by_user_id END,
           approved_at = CASE WHEN $2 = 'active' THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
           invite_code = CASE WHEN $2 = 'pending' THEN invite_code ELSE NULL END,
           invite_expires_at = CASE WHEN $2 = 'pending' THEN invite_expires_at ELSE NULL END,
           updated_at = NOW()
         WHERE id = $1
       `,
-      [relationshipId, normalizedStatus, notes.trim(), actor.id],
+      [relationshipId, normalizedStatus, actor.id],
     );
 
     await syncLegacyRelationshipAccess(
@@ -1109,7 +1147,7 @@ export const updateCareRelationship = async ({
 
     await client.query('COMMIT');
 
-    return getRelationshipById(db, relationshipId);
+    return getRelationshipById(db, relationshipId, true);
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -1318,7 +1356,6 @@ export const inviteCareRelationship = async ({
       metadata: {
         requestType: 'psychologist_invitation',
         patientEmail: patientUser.email,
-        inviteCode,
       },
     });
 
@@ -1339,6 +1376,7 @@ export const respondToCareRelationship = async ({
   status,
   notes = '',
 }) => {
+  ensureClinicalActor(actor);
   const client = await db.getClient();
 
   try {
@@ -1465,9 +1503,7 @@ export const acceptCareRelationshipInvite = async ({
       entityId: relationshipId,
       targetUserId: relationship.psychologist.id,
       patientId: relationship.patient.id,
-      metadata: {
-        inviteCode: inviteCode.trim().toUpperCase(),
-      },
+      metadata: {},
     });
 
     await client.query('COMMIT');
@@ -1488,6 +1524,7 @@ export const reviewPsychologistUser = async ({
   approvalStatus,
   reviewNotes = '',
 }) => {
+  ensureBackofficeManager({ id: reviewerUserId, role: reviewerRole });
   const client = await db.getClient();
 
   try {
@@ -1498,7 +1535,7 @@ export const reviewPsychologistUser = async ({
         UPDATE psychologist_profiles
         SET
           approval_status = $2,
-          review_notes = $3,
+          review_notes = CASE WHEN $3 <> '' THEN $3 ELSE review_notes END,
           reviewed_at = NOW(),
           reviewed_by_user_id = $4,
           approved_at = CASE
@@ -1525,7 +1562,6 @@ export const reviewPsychologistUser = async ({
       targetUserId: psychologistUserId,
       metadata: {
         approvalStatus,
-        reviewNotes: reviewNotes.trim(),
       },
     });
 
@@ -1537,7 +1573,7 @@ export const reviewPsychologistUser = async ({
       throw createAuthError('Psychologist user not found', 404);
     }
 
-    return reviewedUser;
+    return projectOperationalUser(reviewedUser);
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

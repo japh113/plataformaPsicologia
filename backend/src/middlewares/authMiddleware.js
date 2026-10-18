@@ -2,6 +2,16 @@ import { errorResponse } from '../utils/response.js';
 import { getUserById, verifyAuthToken } from '../modules/auth/auth.service.js';
 import { ensureAccountCanAuthenticate, ensureSessionIsCurrent } from '../modules/auth/auth.account-status.js';
 import env from '../config/env.js';
+import { ensureClinicalActor } from '../modules/auth/auth.permissions.js';
+
+export const authorizeClinical = (req, res, next) => {
+  try {
+    ensureClinicalActor(req.user);
+    return next();
+  } catch (error) {
+    return errorResponse(res, error.message, error.status);
+  }
+};
 
 const getBearerToken = (authorizationHeader = '') => {
   const [scheme, token, extra] = authorizationHeader.split(' ');

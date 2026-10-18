@@ -574,7 +574,6 @@ export const createPatient = async (payload, actor) => {
       entityId: patient.id,
       patientId: patient.id,
       metadata: {
-        riskLevel: patient.riskLevel,
         status: patient.status,
       },
     });
@@ -643,7 +642,6 @@ export const updatePatient = async (id, payload, actor) => {
     entityId: id,
     patientId: id,
     metadata: {
-      riskLevel: updatedPatient.riskLevel,
       status: updatedPatient.status,
     },
   });

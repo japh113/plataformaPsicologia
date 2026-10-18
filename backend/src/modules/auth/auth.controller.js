@@ -142,7 +142,7 @@ export const registerPsychologistHandler = async (req, res, next) => {
 export const listPendingPsychologistsHandler = async (req, res, next) => {
   try {
     ensureBackofficeViewer(req.user);
-    const pendingPsychologists = await listPendingPsychologistUsers();
+    const pendingPsychologists = await listPendingPsychologistUsers(req.user);
     return successResponse(res, pendingPsychologists, 'Pending psychologists fetched successfully');
   } catch (error) {
     if (error.status) {
@@ -184,7 +184,7 @@ export const reviewPsychologistHandler = async (req, res, next) => {
 export const listBackofficeUsersHandler = async (req, res, next) => {
   try {
     ensureBackofficeViewer(req.user);
-    const users = await listBackofficeUsers();
+    const users = await listBackofficeUsers(req.user);
     return successResponse(res, users, 'Backoffice users fetched successfully');
   } catch (error) {
     if (error.status) {
@@ -353,6 +353,7 @@ export const listAuditLogsHandler = async (req, res, next) => {
   try {
     ensureBackofficeViewer(req.user);
     const auditLogs = await listAuditLogs({
+      actor: req.user,
       action: req.query.action || '',
       actorRole: req.query.actorRole || '',
       search: req.query.search || '',

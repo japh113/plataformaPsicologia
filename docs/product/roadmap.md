@@ -2,9 +2,9 @@
 
 Fecha: 18 de octubre de 2026. Base revisada: `origin/main` en `7380e80d6fbe43ac048c1af08eaa64857306a66d`, con PR #5 integrado. Las etapas y requisitos de producto están acordados; sus mecanismos técnicos pendientes de aprobación siguen como PROPUESTAS y asuntos ABIERTOS en [decisions.md](decisions.md).
 
-## Alcance de esta entrega documental
+## Antecedente documental y primer PR de 2A
 
-Actualizar únicamente [vision.md](vision.md), [business-rules.md](business-rules.md), este roadmap y [decisions.md](decisions.md), en una rama nueva desde `main`, con commit y PR documental hacia `main`, sin merge. Esta entrega integra acuerdos posteriores a #5; no crea ni ejecuta 003, que todavía NO existe; no modifica código, SQL, Docker, dependencias, volúmenes ni datos. No ejecutar schema/seeds/migraciones ni tests npm por cambios Markdown. La implementación requiere encargos separados.
+El encargo documental anterior actualizó únicamente [vision.md](vision.md), [business-rules.md](business-rules.md), este roadmap y [decisions.md](decisions.md), sin implementación ni ejecución sobre datos. El primer PR de 2A tiene ahora un encargo separado: corregir permisos clínicos del backoffice y proteger proyecciones de API/auditoría, registrar AB-02/13 y ejecutar sus pruebas en bases aisladas y desechables, con commit y PR hacia `main`, sin merge. No crea ni ejecuta 003 ni modifica 001/002; no usa schema/seed en la base habitual ni toca datos o volúmenes existentes. El resto de 2A requiere encargos posteriores.
 
 Los documentos son contexto durable para nuevos chats. Cada encargo futuro debe citar la etapa, sus reglas RN y ADR, decisiones que debe cerrar, exclusiones, criterios de aceptación y evidencia esperada. El cierre de una etapa debe actualizar su estado en una tarea posterior autorizada, sin depender solo del historial de conversación.
 
@@ -35,7 +35,7 @@ La corrección de dependencias de producción es el estado de alcance acordado t
 | `patientSelectColumns` reúne entrevista, riesgo, contexto, tareas y objetivos; notas se agregan por paciente | El aislamiento debe incluir datos globales, metadatos y derivados, no solo la colección de notas. |
 | [appointments.service.js](../../backend/src/modules/appointments/appointments.service.js), [availability.service.js](../../backend/src/modules/availability/availability.service.js) y [reminders.service.js](../../backend/src/modules/reminders/reminders.service.js) consultan acceso heredado | Una corrección limitada a `patients` deja rutas laterales de acceso o comportamiento inconsistente. |
 | Zona fija en servicios de pacientes/citas y en [001_clinical_data_integrity.sql](../../backend/sql/migrations/001_clinical_data_integrity.sql) | 2E debe coordinar validaciones de aplicación y base sin reescribir la migración histórica 001. |
-| `superadmin` tiene permisos amplios en [auth.permissions.js](../../backend/src/modules/auth/auth.permissions.js); edición clínica previa permite actualizar notas | Brechas frente a RN-23/27: nota finalizada inmutable/adendas y ausencia de acceso global ordinario de backoffice. Diseñar corrección en 2A, sin habilitar emergencia implícita. |
+| El primer PR de 2A elimina el permiso global de `superadmin` en [auth.permissions.js](../../backend/src/modules/auth/auth.permissions.js) y protege respuestas operativas/auditoría; la edición clínica previa aún permite actualizar notas | RN-27 cubierto para roles administrativos sin habilitar emergencia. RN-23 (inmutabilidad/adendas) y permisos por episodio siguen pendientes. |
 
 **Demo y datos reales:** el usuario confirmó que los datos presentes de la demo local son de prueba y desechables (RN-28/ADR-018). No construir conciliación manual exclusivamente para salvarlos. No se consultó ninguna base en esta tarea ni se preservan conteos de demo como requisitos. Esta condición no permite borrar bases reales ni reinicializar demo sin autorización separada; no tocar volúmenes existentes. La futura estrategia para datos reales sí necesita diagnóstico autorizado de solo lectura, preservación, tratamiento de legacy, ensayo y rollout seguro (ADR-009, AB-06/17).
 
@@ -78,7 +78,7 @@ Los datos y cuentas demo son **exclusivamente de desarrollo**, en un entorno ais
 **Criterios de aceptación:**
 
 - Un paciente no puede acabar con dos responsables vigentes: activos y pausados cuentan. Reanudar pausa conserva episodio; retorno tras finalización/A→B→A crea otro sin sobrescribir identidad/autoría.
-- Identidad global única sin exposición por búsqueda entre consultorios ni unión automática de coincidencias. Cuentas obligatorias, verificación progresiva y primer vínculo bilateral; paciente administra básicos, psicólogo solo pide corrección. Resolver AB-13 antes de implementar duplicados/recuperación.
+- Identidad global única sin exposición por búsqueda entre consultorios ni unión automática de coincidencias. Cuentas obligatorias, verificación progresiva y primer vínculo bilateral; paciente administra básicos, psicólogo solo pide corrección. AB-13 tiene decisión de producto aprobada; especificar sus métodos técnicos excepcionales pendientes antes de implementar duplicados/recuperación.
 - Lectura/escritura segmentadas por episodio, autor y autorización. Archivo clínico completo de episodios propios, sin gestión actual ni episodios ajenos; adendas solo a notas propias aun cerradas. Borradores editables, finalizadas inmutables y nuevas adendas sin acceso heredado del receptor.
 - Entrevista/riesgo/tareas/objetivos por episodio; riesgo inicial NO EVALUADO, evaluación/entrevista propias aun con antecedente. Paciente ve sus actividades históricas; notas sin visibilidad automática y ARCO separado.
 - `superadmin`, `admin` y `support` sin acceso clínico global ordinario ni exportación/alteración clínica; sin excepción de emergencia implícita.
@@ -90,6 +90,10 @@ Los datos y cuentas demo son **exclusivamente de desarrollo**, en un entorno ais
 La fuente única en `care_relationships`, el índice parcial por paciente, las referencias `care_relationship_id` y la retirada del fallback heredado son propuestas de arquitectura, no decisiones de código aprobadas por este documento.
 
 **Reparto transversal:** 2A planifica estructura/permisos para notas/adendas, resumen versionado, cambios, pausa/cierre, suspensión y cancelación de citas. 2B entrega sus flujos mínimos; 2C consentimiento de antecedentes adicionales/adendas y revocación; 2D profundiza concurrencia de agenda. Dividir implementación en PR acotados con dependencias explícitas; no concentrar todo en 2A ni posponer sus fundamentos hasta 2C. Un índice limitado solo a activos no cumpliría exclusividad con pausados.
+
+**Primer PR acotado de 2A — RN-27 / ADR-017:** denegación clínica de `superadmin`, `admin` y `support` en rutas y servicios; proyecciones operativas de vínculos/cuentas; auditoría administrativa limitada a eventos de cuentas y metadatos permitidos, sin exponer eventos clínicos por filtros o límites. Se conservan registros históricos y la operación legítima del backoffice. Las pruebas cubren denegaciones, proyecciones, pacientes/psicólogos y regresión JWT en PostgreSQL aislado. Este PR no cierra 2A ni implementa AB-02/13.
+
+**Dependencias pendientes:** segmentar por episodio, quitar el fallback heredado de psicólogos y resolver atribución histórica necesita el diseño posterior de ADR-006/009/AB-14/17 y la evolución de datos correspondiente. No se crea ni ejecuta 003, no se cambian 001/002, ni se usa schema/seed sobre la base habitual. La revisión de identidad excepcional y el nuevo flujo de entrevista siguen sin implementarse.
 
 ## Etapa 2B — Derivación con resumen, cambio directo y pausas/cierre
 

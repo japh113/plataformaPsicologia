@@ -7,7 +7,7 @@ import appointmentsRoutes from './modules/appointments/appointments.routes.js';
 import availabilityRoutes from './modules/availability/availability.routes.js';
 import patientsRoutes from './modules/patients/patients.routes.js';
 import remindersRoutes from './modules/reminders/reminders.routes.js';
-import { authenticate } from './middlewares/authMiddleware.js';
+import { authenticate, authorizeClinical } from './middlewares/authMiddleware.js';
 import notFoundMiddleware from './middlewares/notFoundMiddleware.js';
 import errorMiddleware from './middlewares/errorMiddleware.js';
 
@@ -18,10 +18,10 @@ app.use(express.json());
 
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/appointments', authenticate, appointmentsRoutes);
-app.use('/api/availability', authenticate, availabilityRoutes);
-app.use('/api/patients', authenticate, patientsRoutes);
-app.use('/api/reminders', authenticate, remindersRoutes);
+app.use('/api/appointments', authenticate, authorizeClinical, appointmentsRoutes);
+app.use('/api/availability', authenticate, authorizeClinical, availabilityRoutes);
+app.use('/api/patients', authenticate, authorizeClinical, patientsRoutes);
+app.use('/api/reminders', authenticate, authorizeClinical, remindersRoutes);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);

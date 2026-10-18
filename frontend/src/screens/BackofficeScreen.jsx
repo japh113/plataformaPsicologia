@@ -7,23 +7,8 @@ const APPROVAL_STATUS_LABELS = { pending_review: 'Pendiente', active: 'Aprobado'
 const RELATIONSHIP_STATUS_LABELS = { pending: 'Pendiente', active: 'Activa', ended: 'Finalizada', rejected: 'Rechazada' };
 const AUDIT_ACTION_LABELS = {
   psychologist_reviewed: 'Revision de psicologo',
-  care_relationship_created: 'Relacion creada desde backoffice',
-  care_relationship_updated: 'Relacion actualizada desde backoffice',
-  care_relationship_requested: 'Solicitud de vinculo del paciente',
-  care_relationship_invited: 'Invitacion enviada por psicologo',
-  care_relationship_responded: 'Respuesta a solicitud o invitacion',
-  care_relationship_accepted_by_code: 'Invitacion aceptada con codigo',
   password_reset_requested: 'Recuperacion de acceso solicitada',
   password_reset_confirmed: 'Contrasena actualizada',
-  patient_created: 'Paciente creado',
-  patient_updated: 'Paciente actualizado',
-  patient_intake_saved: 'Entrevista inicial actualizada',
-  clinical_note_created: 'Nota clinica creada',
-  clinical_note_updated: 'Nota clinica actualizada',
-  clinical_note_deleted: 'Nota clinica eliminada',
-  appointment_created: 'Cita creada',
-  appointment_updated: 'Cita actualizada',
-  appointment_deleted: 'Cita eliminada',
 };
 
 const buildRoleBadgeClassName = (role) => {
@@ -100,7 +85,6 @@ const RecentAuditFeed = ({ auditLogs = [] }) => {
         AUDIT_ACTION_LABELS[entry.action] || entry.action,
         entry.actor?.fullName,
         entry.targetUser?.fullName,
-        entry.patient?.fullName,
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(normalizedSearch));
@@ -112,7 +96,7 @@ const RecentAuditFeed = ({ auditLogs = [] }) => {
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
           <h2 className="text-xl font-black text-slate-900">Auditoria reciente</h2>
-          <p className="mt-1 text-sm text-slate-500">Seguimiento base de revisiones, vinculos y cambios sensibles de acceso y operacion clinica.</p>
+          <p className="mt-1 text-sm text-slate-500">Revisiones de cuentas y recuperacion de acceso.</p>
         </div>
         <p className="text-sm font-semibold text-slate-500">{filteredAuditLogs.length} evento(s)</p>
       </div>
@@ -122,7 +106,7 @@ const RecentAuditFeed = ({ auditLogs = [] }) => {
           type="text"
           value={auditSearch}
           onChange={(event) => setAuditSearch(event.target.value)}
-          placeholder="Buscar por accion, actor, paciente o usuario objetivo"
+          placeholder="Buscar por accion, actor o usuario objetivo"
           className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
         />
         <select
@@ -161,7 +145,6 @@ const RecentAuditFeed = ({ auditLogs = [] }) => {
               <p className="mt-1 text-sm text-slate-600">
                 {entry.actor?.fullName || 'Sistema'}
                 {entry.actor?.role ? ` (${ROLE_LABELS[entry.actor.role] || entry.actor.role})` : ''}
-                {entry.patient?.fullName ? ` · Paciente: ${entry.patient.fullName}` : ''}
                 {entry.targetUser?.fullName ? ` · Objetivo: ${entry.targetUser.fullName}` : ''}
               </p>
             </div>
@@ -197,7 +180,7 @@ export default function BackofficeScreen(props) {
   const [selectedPsychologist, setSelectedPsychologist] = useState(null);
   const [reviewForm, setReviewForm] = useState({ approvalStatus: 'active', reviewNotes: '' });
   const [relationshipModalOpen, setRelationshipModalOpen] = useState(false);
-  const [relationshipForm, setRelationshipForm] = useState({ patientId: '', psychologistUserId: '', status: 'active', notes: '' });
+  const [relationshipForm, setRelationshipForm] = useState({ patientId: '', psychologistUserId: '', status: 'active' });
 
   const canReviewPsychologists = ['admin', 'superadmin'].includes(currentUser?.role || '');
   const canManageRelationships = ['admin', 'superadmin'].includes(currentUser?.role || '');
@@ -248,14 +231,13 @@ export default function BackofficeScreen(props) {
       patientId: availablePatients[0]?.patientId || '',
       psychologistUserId: approvedPsychologists[0]?.id || '',
       status: 'active',
-      notes: '',
     });
     setRelationshipModalOpen(true);
   };
 
   const closeRelationshipModal = () => {
     setRelationshipModalOpen(false);
-    setRelationshipForm({ patientId: '', psychologistUserId: '', status: 'active', notes: '' });
+    setRelationshipForm({ patientId: '', psychologistUserId: '', status: 'active' });
   };
 
   const handleSubmitRelationship = async (event) => {
@@ -266,7 +248,7 @@ export default function BackofficeScreen(props) {
   };
 
   const handleQuickRelationshipStatus = async (relationship, status) => {
-    await onUpdateCareRelationship(relationship.id, { status, notes: relationship.notes || '' });
+    await onUpdateCareRelationship(relationship.id, { status });
   };
 
   const RelationshipList = () => (
@@ -305,7 +287,6 @@ export default function BackofficeScreen(props) {
                   <p>Paciente: {relationship.patient.email || 'Sin correo'}</p>
                   <p>Psicologo: {relationship.psychologist.email} · {relationship.psychologist.professionalTitle || 'Psicologo'}</p>
                   <p>Creada: {formatDateTime(relationship.createdAt)}</p>
-                  {relationship.notes ? <p>Notas: {relationship.notes}</p> : null}
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -591,11 +572,6 @@ export default function BackofficeScreen(props) {
                     </button>
                   ))}
                 </div>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">Notas internas</label>
-                <textarea rows={4} value={relationshipForm.notes} disabled={!canManageRelationships} onChange={(event) => setRelationshipForm((currentForm) => ({ ...currentForm, notes: event.target.value }))} placeholder="Contexto del vinculo, origen de la relacion o notas operativas." className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-70" />
               </div>
 
               {!canManageRelationships ? <InlineNotice tone="warning" title="Acceso de solo lectura" message="Tu rol puede revisar relaciones, pero la creacion o cierre queda reservada para admin o superadmin." /> : null}
