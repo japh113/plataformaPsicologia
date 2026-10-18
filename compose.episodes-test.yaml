@@ -15,8 +15,11 @@ services:
       retries: 40
     networks: [database]
   backend:
-    build: ./backend
-    image: plataformapsicologia-backend:latest
+    build:
+      context: ./backend
+      labels:
+        io.psicopanel.episodes.project: ${COMPOSE_PROJECT_NAME:?Use scripts/clinical-episodes.sh}
+    image: ${COMPOSE_PROJECT_NAME:?Use scripts/clinical-episodes.sh}-backend:isolated
     environment:
       NODE_ENV: test
       LOCAL_DEVELOPMENT: "true"
@@ -48,8 +51,11 @@ services:
     command: ["node", "src/server.js"]
     networks: [database, app]
   frontend:
-    build: ./frontend
-    image: plataformapsicologia-frontend:latest
+    build:
+      context: ./frontend
+      labels:
+        io.psicopanel.episodes.project: ${COMPOSE_PROJECT_NAME:?Use scripts/clinical-episodes.sh}
+    image: ${COMPOSE_PROJECT_NAME:?Use scripts/clinical-episodes.sh}-frontend:isolated
     profiles: [demo]
     ports: ["127.0.0.1::5173"]
     volumes:

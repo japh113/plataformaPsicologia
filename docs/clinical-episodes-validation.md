@@ -14,7 +14,8 @@ Base: `main` limpio, actualizado en `93aa035` (merge PR #7). Rama: `feat/clinica
 | `backend/test/clinical-episodes.integration.test.js` | Instalación, conservación, integridad, concurrencia, deriva y rollback. |
 | `backend/test/auth.security.integration.test.js`, `backoffice-access.integration.test.js`, `clinical-integrity.integration.test.js` | Opt-in para ejecutar HTTP con 003 instalada. Se elimina el replay de schema/seed sobre datos ya poblados de la suite clínica. |
 | `backend/package.json` | Comandos explícitos de migración/diagnóstico y suite 003, sin nuevas dependencias. |
-| `compose.episodes-test.yaml`, `scripts/clinical-episodes.sh` | Proyecto UUID nuevo, PostgreSQL tmpfs, verificación de aislamiento y demo opcional. |
+| `compose.episodes-test.yaml`, `scripts/clinical-episodes.sh` | Proyecto UUID nuevo, PostgreSQL tmpfs, imágenes propias por ejecución, verificación de aislamiento y demo opcional. |
+| `scripts/episode_images.py`, `scripts/test_episode_images.py` | Verificación de etiquetas/configuración/IDs preexistentes y limpieza exacta de imágenes con comprobación de propiedad; seis pruebas de regresión. |
 | `docs/product/decisions.md`, `roadmap.md` | ADR-006/009 aprobados para fundamentos y estado parcial de 2A. |
 | `docs/clinical-episodes-foundation.md`, este reporte, `README.md` | Procedimiento, límites, demo y evidencia. |
 
@@ -59,3 +60,15 @@ Durante una primera ejecución se detectó replay de schema/seed en la propia ba
 - 001/002 se adoptan tras comprobar estructura/funciones/triggers/FK, sin fingir prueba de sus ejecuciones históricas. Propietarios/superusuarios aún pueden alterar protecciones o evidencias; no se declara hardening de producción.
 - No se resolvieron expedientes reales, autoría desconocida, permisos por episodio, estructura de adendas, flujos de pausa/cierre, derivaciones o consentimientos. La demo no presenta esos flujos como implementados.
 - Las vulnerabilidades de desarrollo observadas requieren revisión aparte; no bloquean la ejecución del migrador, que no depende de nodemon.
+
+## Corrección de aislamiento Docker del PR #8
+
+Las etiquetas fijas de imágenes de aplicación podían sobrescribir las del entorno habitual. Ahora se derivan del proyecto Compose con UUID: `${COMPOSE_PROJECT_NAME}-backend:isolated` y `${COMPOSE_PROJECT_NAME}-frontend:isolated`. La API hereda la referencia backend de esa misma ejecución, evitando una tercera imagen por servicio. Cada imagen construida lleva un label de propiedad del proyecto.
+
+Se valida la configuración resuelta frente a las referencias del Compose habitual y de integración antes de construir; se rechazan colisiones y destinos de imagen existentes. Se registran los IDs de todas las etiquetas preexistentes y se comprueba que permanezcan iguales tras build, pruebas/demo y limpieza. La limpieza automática de tests y el comando explícito de cierre de demo retiran únicamente sus dos etiquetas, comprobando proyecto/propietario, sin force, borrado por ID ni limpieza global. Se conservan imágenes base y caché de compilación compartidas.
+
+Revalidación: seis comprobaciones nuevas de imágenes aprobadas, 80 unitarias backend, 16 escenarios PostgreSQL 003, 30 escenarios de integración existentes y lint/build correctos. Proyecto test: `psicopanel-episodes-c4c3ed30-1eb8-43b7-b023-aa10a258d461`.
+
+Demo nueva: `psicopanel-episodes-f796c43c-b1fc-4aae-b068-563f4a8ede09`. UI HTTP 200; login de A/B/P/Q, acceso propio y denegación de acceso ajeno correctos. Se verificó que la API utiliza exactamente la imagen backend del proyecto y que intentar reutilizar esas etiquetas se rechaza. Tras el comando `cleanup`, no quedan contenedores, redes ni etiquetas de aplicación de esa demo; las etiquetas preexistentes conservan sus IDs.
+
+No cambia SQL 003, manifiesto, otras migraciones, servicios clínicos ni Compose habitual. No se ejecutaron migraciones sobre la base habitual ni se alteraron sus contenedores o volúmenes.

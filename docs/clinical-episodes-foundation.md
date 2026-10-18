@@ -50,13 +50,19 @@ DDL, registro de versiones y checks finales se confirman juntos. Ante error se r
 
 ## Pruebas aisladas y demo — ADR-019
 
-Requisitos: Docker con Compose y Bash en Linux/WSL. El wrapper construye las imágenes con los manifests actuales:
+Requisitos: Docker con Compose, Python 3 y Bash en Linux/WSL. El wrapper construye las imágenes con los manifests actuales:
 
 ```sh
 bash scripts/clinical-episodes.sh test
 ```
 
-Cada ejecución genera UUID y proyecto nuevo; rechaza contenedores/redes ya existentes con esa etiqueta. PostgreSQL usa tmpfs, red privada, sin puerto publicado ni volumen persistente. El wrapper inspecciona tmpfs/red/puertos antes del primer cliente. Los tests comprueban entorno, destino, usuario, clúster de control vacío y crean sus propias bases con nombres nuevos; CREATE DATABASE falla si existen. No se copian datos reales. La limpieza elimina exclusivamente contenedores/redes del nuevo proyecto y su tmpfs; nunca usa `down -v`, prune o reseteo de volúmenes.
+Cada ejecución genera UUID y proyecto nuevo; rechaza contenedores/redes ya existentes con esa etiqueta. PostgreSQL usa tmpfs, red privada, sin puerto publicado ni volumen persistente. El wrapper inspecciona tmpfs/red/puertos antes del primer cliente. Los tests comprueban entorno, destino, usuario, clúster de control vacío y crean sus propias bases con nombres nuevos; CREATE DATABASE falla si existen. No se copian datos reales. La limpieza elimina exclusivamente contenedores/redes del nuevo proyecto, su tmpfs y sus dos etiquetas de aplicación; nunca usa `down -v`, prune o reseteo de volúmenes.
+
+Las imágenes de aplicación se etiquetan como `${COMPOSE_PROJECT_NAME}-backend:isolated` y `${COMPOSE_PROJECT_NAME}-frontend:isolated`; el nombre del proyecto incluye el UUID generado para esa ejecución. Se eligen referencias explícitas derivadas del proyecto para que la API herede exactamente la imagen backend, sin crear/construir una tercera imagen por servicio. No se reutilizan etiquetas de desarrollo. PostgreSQL y Node son imágenes base compartidas que no se reconstruyen, retaggean ni eliminan.
+
+Antes de construir, `scripts/episode_images.py` valida la configuración Compose resuelta contra las referencias del Compose habitual y de integración; exige etiquetas y labels de propiedad de la ejecución, rechaza destinos de imagen ya existentes y registra los IDs de todas las etiquetas preexistentes. Después de construir, ejecutar y limpiar, comprueba que esas etiquetas conservan sus IDs. Seis pruebas automatizadas cubren colisiones, API/backend, reutilización, propietario, cambios de IDs y alcance de limpieza.
+
+El modo test limpia también ante fallos. La demo conserva sus imágenes mientras está activa y se cierra con el comando impreso `bash scripts/clinical-episodes.sh cleanup UUID`. Este valida la evidencia de esa ejecución antes de detener sus contenedores y retira solo las dos referencias exactas con label de propiedad coincidente, mediante `docker image rm --no-prune`, sin force ni borrado por ID. La evidencia temporal se elimina al completar la limpieza. Se conserva la caché de compilación de Docker; no se ejecuta limpieza global.
 
 La suite nueva comprueba instalación vacía/poblada sintética; todas las filas y autores originales; reaplicación sin DDL; checksums/versiones/deriva; prerrequisitos; diagnóstico; identidad/terminalidad; paciente y autor; NULL parcial; exclusividad y bloqueos concurrentes; rollback DDL y reintento. Las suites existentes optan por instalar 003 **antes de abrir HTTP**, cubriendo autenticación/JWT, backoffice, notas, tareas, agenda/recurrencias, disponibilidad y espera. Se ejecutan también unitarias y lint/build de frontend.
 
