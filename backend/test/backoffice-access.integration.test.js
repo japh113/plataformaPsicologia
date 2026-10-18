@@ -121,7 +121,7 @@ test('backoffice clinical isolation and operational projections with PostgreSQL 
       assert.match(JSON.stringify(relationships.body.data), /clinical-relationship-text/);
     });
 
-    await t.test('operational accounts, review and link management remain usable without free text or secrets', async () => {
+    await t.test('operational queries and psychologist reviews remain usable without free text or secrets', async () => {
       for (const role of ['admin','support','superadmin']) {
         const accounts = await request('/auth/users', role);
         assert.equal(accounts.status, 200);
@@ -144,18 +144,52 @@ test('backoffice clinical isolation and operational projections with PostgreSQL 
         assert.equal(reviewed.status, 200);
         assert.equal('reviewNotes' in reviewed.body.data.psychologistProfile, false);
         assert.equal((await db.query("SELECT review_notes FROM psychologist_profiles WHERE user_id='psychologist'")).rows[0].review_notes, 'legacy-free-text');
-        const created = await request('/auth/care-relationships',role,'POST', { patientId: 'other', psychologistUserId: 'psychologist', status: 'pending' });
-        assert.equal(created.status, 201);
-        assert.equal('notes' in created.body.data, false);
-        const id = created.body.data.id;
-        assert.equal((await request('/auth/care-relationships/' + id,role,'PATCH', { status: 'rejected', notes: 'clinical-write' })).status, 403);
-        const updated = await request('/auth/care-relationships/' + id,role,'PATCH', { status: 'rejected' });
-        assert.equal(updated.status, 200);
-        assert.equal('inviteCode' in updated.body.data, false);
       }
-      const own = (await db.query("SELECT id FROM care_relationships WHERE patient_id='own' AND psychologist_user_id='psychologist'")).rows[0].id;
-      assert.equal((await request('/auth/care-relationships/' + own,'admin','PATCH', { status: 'active' })).status, 200);
-      assert.equal((await db.query('SELECT notes FROM care_relationships WHERE id=$1',[own])).rows[0].notes, 'clinical-relationship-text');
+    });
+
+    await t.test('administrative endpoints cannot create, reactivate, close or rewrite clinical relationships or inherited access', async () => {
+      // Independent pairs cover every persisted source state without granting access
+      // to the unlinked patient used by POST attempts.
+      for (const status of ['pending', 'ended', 'rejected']) {
+        const patientId = 'state-' + status;
+        await db.query("INSERT INTO patients(id,first_name,full_name) VALUES ($1,'Fixture','State Fixture')", [patientId]);
+        await db.query(`INSERT INTO care_relationships(patient_id,psychologist_user_id,status,requested_by_role,notes)
+          VALUES ($1,'psychologist',$2,'patient','preserve-relationship')`, [patientId, status]);
+      }
+      const relationships = (await db.query("SELECT id,patient_id,status FROM care_relationships WHERE psychologist_user_id='psychologist' ORDER BY id")).rows;
+      const snapshot = async () => ({
+        relationships: (await db.query('SELECT * FROM care_relationships ORDER BY id')).rows,
+        access: (await db.query('SELECT * FROM psychologist_patient_access ORDER BY psychologist_user_id,patient_id')).rows,
+        audit: (await db.query('SELECT * FROM audit_logs ORDER BY id')).rows,
+      });
+      const before = await snapshot();
+      assert.equal((await db.query("SELECT 1 FROM psychologist_patient_access WHERE patient_id='other'")).rowCount, 0);
+      assert.equal((await request('/patients/other', 'psychologist')).status, 404);
+      for (const role of ['admin', 'superadmin', 'support']) {
+        for (const status of [undefined, 'active', 'pending', 'ended', 'rejected']) {
+          // POST must neither create a new pair nor overwrite an existing one.
+          for (const patientId of ['other', ...relationships.map(r => r.patient_id)]) {
+            const response = await request('/auth/care-relationships', role, 'POST',
+              { patientId, psychologistUserId: 'psychologist', ...(status ? { status } : {}) });
+            assert.equal(response.status, 403, `${role} POST ${patientId} ${status}`);
+            assert.deepEqual(await snapshot(), before);
+          }
+          for (const relationship of [...relationships, { id: '999999', status: 'missing' }]) {
+            const response = await request('/auth/care-relationships/' + relationship.id, role, 'PATCH',
+              status ? { status } : {});
+            assert.equal(response.status, 403, `${role} PATCH ${relationship.status} -> ${status}`);
+            assert.deepEqual(await snapshot(), before);
+          }
+        }
+        for (const [path, method] of [['/auth/care-relationships','POST'], ['/auth/care-relationships/999999','PATCH']]) {
+          for (const body of [{}, { status: 'invalid' }, { notes: 'clinical-write' }]) {
+            assert.equal((await request(path, role, method, body)).status, 403);
+            assert.deepEqual(await snapshot(), before);
+          }
+        }
+      }
+      assert.equal((await request('/patients/other', 'psychologist')).status, 404, 'No indirect clinical grant');
+      assert.equal((await request('/patients/own', 'psychologist')).status, 200, 'Existing legitimate access remains');
     });
 
     await t.test('legacy audit metadata and clinical events never leak via fields, filters or the result limit', async () => {

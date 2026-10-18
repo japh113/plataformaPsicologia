@@ -183,7 +183,8 @@ export default function BackofficeScreen(props) {
   const [relationshipForm, setRelationshipForm] = useState({ patientId: '', psychologistUserId: '', status: 'active' });
 
   const canReviewPsychologists = ['admin', 'superadmin'].includes(currentUser?.role || '');
-  const canManageRelationships = ['admin', 'superadmin'].includes(currentUser?.role || '');
+  // Administrative writes remain disabled until bilateral authorization is available.
+  const canManageRelationships = false;
   const summaryCards = useMemo(() => buildSummaryCards(users, pendingPsychologists, relationships), [users, pendingPsychologists, relationships]);
 
   const filteredUsers = useMemo(() => {
@@ -248,6 +249,7 @@ export default function BackofficeScreen(props) {
   };
 
   const handleQuickRelationshipStatus = async (relationship, status) => {
+    if (!canManageRelationships) return;
     await onUpdateCareRelationship(relationship.id, { status });
   };
 
@@ -269,11 +271,15 @@ export default function BackofficeScreen(props) {
         </div>
       </div>
 
+      <div className="mt-5">
+        <InlineNotice tone="warning" title="Vinculos de solo lectura" message="La creacion y los cambios de estado desde backoffice estan temporalmente bloqueados hasta contar con un flujo de autorizacion bilateral." />
+      </div>
+
       <div className="mt-6 grid gap-4">
         {filteredRelationships.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
             <p className="text-sm font-semibold text-slate-900">No encontramos relaciones con ese criterio.</p>
-            <p className="mt-1 text-sm text-slate-500">Ajusta la busqueda o crea un nuevo vinculo desde backoffice.</p>
+            <p className="mt-1 text-sm text-slate-500">Ajusta la busqueda para consultar los vinculos existentes.</p>
           </div>
         ) : filteredRelationships.map((relationship) => (
           <article key={relationship.id} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
@@ -574,7 +580,7 @@ export default function BackofficeScreen(props) {
                 </div>
               </div>
 
-              {!canManageRelationships ? <InlineNotice tone="warning" title="Acceso de solo lectura" message="Tu rol puede revisar relaciones, pero la creacion o cierre queda reservada para admin o superadmin." /> : null}
+              {!canManageRelationships ? <InlineNotice tone="warning" title="Acceso de solo lectura" message="La creacion y los cambios de estado desde backoffice estan temporalmente bloqueados." /> : null}
 
               <div className="flex flex-wrap justify-end gap-3 pt-2">
                 <button type="button" onClick={closeRelationshipModal} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100">Cerrar</button>

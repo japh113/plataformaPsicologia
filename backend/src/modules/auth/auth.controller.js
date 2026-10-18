@@ -21,7 +21,6 @@ import {
 } from './auth.service.js';
 import {
   validateAcceptCareRelationshipInvitePayload,
-  validateCreateCareRelationshipPayload,
   validateInviteCareRelationshipPayload,
   validateLoginPayload,
   validatePasswordResetConfirmPayload,
@@ -31,7 +30,6 @@ import {
   validatePsychologistReviewPayload,
   validateRequestCareRelationshipPayload,
   validateRespondCareRelationshipPayload,
-  validateUpdateCareRelationshipPayload,
 } from './auth.validators.js';
 
 export const loginHandler = async (req, res, next) => {
@@ -210,21 +208,7 @@ export const listCareRelationshipsHandler = async (req, res, next) => {
 
 export const createCareRelationshipHandler = async (req, res, next) => {
   try {
-    ensureBackofficeManager(req.user);
-
-    const errors = validateCreateCareRelationshipPayload(req.body);
-
-    if (errors.length > 0) {
-      return errorResponse(res, 'Validation error', 400, errors);
-    }
-
-    const relationship = await createCareRelationship({
-      actor: req.user,
-      patientId: req.body.patientId,
-      psychologistUserId: req.body.psychologistUserId,
-      status: req.body.status || 'active',
-      notes: req.body.notes || '',
-    });
+    const relationship = await createCareRelationship({ actor: req.user });
 
     return successResponse(res, relationship, 'Care relationship created successfully', 201);
   } catch (error) {
@@ -238,20 +222,7 @@ export const createCareRelationshipHandler = async (req, res, next) => {
 
 export const updateCareRelationshipHandler = async (req, res, next) => {
   try {
-    ensureBackofficeManager(req.user);
-
-    const errors = validateUpdateCareRelationshipPayload(req.body);
-
-    if (errors.length > 0) {
-      return errorResponse(res, 'Validation error', 400, errors);
-    }
-
-    const relationship = await updateCareRelationship({
-      actor: req.user,
-      relationshipId: req.params.relationshipId,
-      status: req.body.status,
-      notes: req.body.notes || '',
-    });
+    const relationship = await updateCareRelationship({ actor: req.user });
 
     return successResponse(res, relationship, 'Care relationship updated successfully');
   } catch (error) {

@@ -77,9 +77,35 @@ test('operational services enforce their own viewer and manager permissions', as
   await assert.rejects(createCareRelationship({ actor }), { status: 403 });
   await assert.rejects(updateCareRelationship({ actor }), { status: 403 });
   await assert.rejects(reviewPsychologistUser({ reviewerUserId: actor.id, reviewerRole: actor.role }), { status: 403 });
-  for (const role of ['admin', 'superadmin']) {
-    await assert.rejects(createCareRelationship({ actor: { role }, notes: 'sensitive' }), { status: 403 });
-    await assert.rejects(updateCareRelationship({ actor: { role }, notes: 'sensitive' }), { status: 403 });
+
+});
+
+test('administrative relationship writes are blocked for every status before database access', async () => {
+  const originalQuery = db.query;
+  const originalGetClient = db.getClient;
+  let queries = 0;
+  const failQuery = () => { queries += 1; throw new Error('Unexpected database access'); };
+  db.query = failQuery;
+  db.getClient = failQuery;
+  try {
+    for (const role of ['admin', 'superadmin', 'support']) {
+      const actor = { id: role, role };
+      for (const status of [undefined, 'active', 'pending', 'ended', 'rejected', 'invalid']) {
+        await assert.rejects(createCareRelationship({
+          actor, patientId: 'new-patient', psychologistUserId: 'psychologist', status,
+        }), { status: 403 }, `${role} create ${status}`);
+        for (const relationshipId of ['active', 'pending', 'ended', 'rejected', 'missing']) {
+          await assert.rejects(updateCareRelationship({ actor, relationshipId, status }),
+            { status: 403 }, `${role} ${relationshipId} -> ${status}`);
+        }
+      }
+      await assert.rejects(createCareRelationship({ actor, notes: 'sensitive' }), { status: 403 });
+      await assert.rejects(updateCareRelationship({ actor, notes: 'sensitive' }), { status: 403 });
+    }
+    assert.equal(queries, 0, 'No transaction or inherited-access synchronization may run');
+  } finally {
+    db.query = originalQuery;
+    db.getClient = originalGetClient;
   }
 });
 

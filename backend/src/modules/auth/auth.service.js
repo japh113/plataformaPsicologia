@@ -14,7 +14,6 @@ const createAuthError = (message, status = 400) => {
   return error;
 };
 
-const normalizeRelationshipStatus = (status) => String(status || 'active').trim().toLowerCase();
 const normalizeRelationshipResponseStatus = (status) => String(status || '').trim().toLowerCase();
 const addMinutesToDate = (date, minutes) => new Date(date.getTime() + minutes * 60 * 1000);
 const addDaysToDate = (date, days) => new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
@@ -975,185 +974,20 @@ const syncLegacyRelationshipAccess = async (client, patientId, psychologistUserI
   );
 };
 
-export const createCareRelationship = async ({
-  actor,
-  patientId,
-  psychologistUserId,
-  status = 'active',
-  notes = '',
-}) => {
+// These legacy administrative endpoints cannot establish bilateral authorization.
+// Keep every write disabled, including pending/ended/rejected transitions: they can
+// overwrite clinical responsibility or add/remove inherited clinical access.
+const denyAdministrativeRelationshipWrite = (actor) => {
   ensureBackofficeManager(actor);
-  if (notes.trim()) throw createAuthError('Backoffice cannot read or write relationship notes', 403);
-  const client = await db.getClient();
-
-  try {
-    await client.query('BEGIN');
-
-    await ensurePatientExists(client, patientId);
-    await ensurePsychologistCanBeLinked(client, psychologistUserId);
-
-    const normalizedStatus = normalizeRelationshipStatus(status);
-    const existingResult = await client.query(
-      `
-        SELECT id, status
-        FROM care_relationships
-        WHERE patient_id = $1
-          AND psychologist_user_id = $2
-        ORDER BY created_at DESC
-        LIMIT 1
-      `,
-      [patientId, psychologistUserId],
-    );
-
-    let relationshipId = null;
-
-    if (existingResult.rows[0]) {
-      relationshipId = existingResult.rows[0].id;
-
-      await client.query(
-        `
-          UPDATE care_relationships
-          SET
-            status = $2,
-            requested_by_role = $3,
-            created_by_user_id = $4,
-            approved_by_user_id = CASE WHEN $2 = 'active' THEN $4 ELSE approved_by_user_id END,
-            approved_at = CASE WHEN $2 = 'active' THEN NOW() ELSE NULL END,
-            invite_code = NULL,
-            invite_expires_at = NULL,
-            updated_at = NOW()
-          WHERE id = $1
-        `,
-        [relationshipId, normalizedStatus, actor.role, actor.id],
-      );
-    } else {
-      const insertResult = await client.query(
-        `
-          INSERT INTO care_relationships (
-            patient_id,
-            psychologist_user_id,
-            status,
-            requested_by_role,
-            created_by_user_id,
-            approved_by_user_id,
-            approved_at,
-            invite_code,
-            invite_expires_at,
-            notes
-          )
-          VALUES ($1, $2, $3, $4, $5, CASE WHEN $3 = 'active' THEN $5 ELSE NULL END, CASE WHEN $3 = 'active' THEN NOW() ELSE NULL END, NULL, NULL, $6)
-          RETURNING id
-        `,
-        [patientId, psychologistUserId, normalizedStatus, actor.role, actor.id, ''],
-      );
-      relationshipId = insertResult.rows[0].id;
-    }
-
-    await syncLegacyRelationshipAccess(client, patientId, psychologistUserId, normalizedStatus);
-
-    await logAuditEvent(client, {
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'care_relationship_created',
-      entityType: 'care_relationship',
-      entityId: relationshipId,
-      targetUserId: psychologistUserId,
-      patientId,
-      metadata: {
-        status: normalizedStatus,
-        requestedByRole: actor.role,
-      },
-    });
-
-    await client.query('COMMIT');
-
-    return getRelationshipById(db, relationshipId, true);
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
+  throw createAuthError('Administrative care relationship changes are temporarily disabled; bilateral clinical authorization is required', 403);
 };
 
-export const updateCareRelationship = async ({
-  actor,
-  relationshipId,
-  status,
-  notes = '',
-}) => {
-  ensureBackofficeManager(actor);
-  if (notes.trim()) throw createAuthError('Backoffice cannot read or write relationship notes', 403);
-  const client = await db.getClient();
+export const createCareRelationship = async ({ actor }) => {
+  denyAdministrativeRelationshipWrite(actor);
+};
 
-  try {
-    await client.query('BEGIN');
-
-    const currentResult = await client.query(
-      `
-        SELECT
-          id,
-          patient_id,
-          psychologist_user_id
-        FROM care_relationships
-        WHERE id = $1
-        LIMIT 1
-      `,
-      [relationshipId],
-    );
-
-    const currentRelationship = currentResult.rows[0];
-
-    if (!currentRelationship) {
-      throw createAuthError('Care relationship not found', 404);
-    }
-
-    const normalizedStatus = normalizeRelationshipStatus(status);
-
-    await client.query(
-      `
-        UPDATE care_relationships
-        SET
-          status = $2,
-          approved_by_user_id = CASE WHEN $2 = 'active' THEN $3 ELSE approved_by_user_id END,
-          approved_at = CASE WHEN $2 = 'active' THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
-          invite_code = CASE WHEN $2 = 'pending' THEN invite_code ELSE NULL END,
-          invite_expires_at = CASE WHEN $2 = 'pending' THEN invite_expires_at ELSE NULL END,
-          updated_at = NOW()
-        WHERE id = $1
-      `,
-      [relationshipId, normalizedStatus, actor.id],
-    );
-
-    await syncLegacyRelationshipAccess(
-      client,
-      currentRelationship.patient_id,
-      currentRelationship.psychologist_user_id,
-      normalizedStatus,
-    );
-
-    await logAuditEvent(client, {
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'care_relationship_updated',
-      entityType: 'care_relationship',
-      entityId: relationshipId,
-      targetUserId: currentRelationship.psychologist_user_id,
-      patientId: currentRelationship.patient_id,
-      metadata: {
-        status: normalizedStatus,
-      },
-    });
-
-    await client.query('COMMIT');
-
-    return getRelationshipById(db, relationshipId, true);
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
+export const updateCareRelationship = async ({ actor }) => {
+  denyAdministrativeRelationshipWrite(actor);
 };
 
 export const requestCareRelationship = async ({
