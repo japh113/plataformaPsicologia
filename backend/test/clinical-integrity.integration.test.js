@@ -1,3 +1,4 @@
+import { migrate as migrateEpisodes } from '../scripts/episode-migration.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -35,10 +36,7 @@ test('clinical integrity: PostgreSQL migration, HTTP API and concurrency', { ski
     const unsafe = await db.query(`SELECT conname FROM pg_constraint WHERE contype='f' AND confdeltype='c'
       AND confrelid IN ('patients'::regclass, 'appointments'::regclass, 'patient_clinical_notes'::regclass)`);
     assert.equal(unsafe.rowCount, 0);
-    // Required schema + seed compatibility checks, solely in the disposable database.
-    await db.query(await sql('schema.sql'));
-    await db.query(migration);
-    await db.query(await sql('seed.sql'));
+    // Schema/seed are fresh-install inputs, never replay them after population.
 
     await t.test('auth migration upgrades existing populated data additively and is idempotent', async () => {
       const snapshot = async () => {
@@ -66,6 +64,13 @@ test('clinical integrity: PostgreSQL migration, HTTP API and concurrency', { ski
     const note = (await db.query(`INSERT INTO patient_clinical_notes(patient_id,appointment_id,clinical_note_date,content)
       VALUES ('1',$1,$2,'original note') RETURNING id`, [linked,yesterday])).rows[0].id;
     const task = (await db.query(`INSERT INTO patient_tasks(patient_id,clinical_note_id,text) VALUES ('1',$1,'preserve me') RETURNING id`, [note])).rows[0].id;
+    if (process.env.RUN_EPISODE_INTEGRATION === 'true') {
+      const migrationClient = await db.getClient();
+      try {
+        const name = (await migrationClient.query('SELECT current_database() AS name')).rows[0].name;
+        await migrateEpisodes(migrationClient, { expectedDatabase: name });
+      } finally { migrationClient.release(); }
+    }
     server = app.listen(0,'127.0.0.1');
     await new Promise(resolve => server.once('listening',resolve));
     const request = async (path, method = 'GET', body, user = 'u_psy_1') => {

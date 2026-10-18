@@ -1,3 +1,4 @@
+import { migrate as migrateEpisodes } from '../scripts/episode-migration.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -68,6 +69,13 @@ test('authentication security with disposable PostgreSQL and real HTTP', {
         VALUES ($1,'Auth','Fixture',$2,$3,$4)`, [`auth_${role}`, `${role}@auth.invalid`, hash, role]);
     }
     await db.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES ('auth_psychologist','active')");
+    if (process.env.RUN_EPISODE_INTEGRATION === 'true') {
+      const migrationClient = await db.getClient();
+      try {
+        const name = (await migrationClient.query('SELECT current_database() AS name')).rows[0].name;
+        await migrateEpisodes(migrationClient, { expectedDatabase: name });
+      } finally { migrationClient.release(); }
+    }
     server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.once('listening', resolve));
     const request = async (path, token, method = 'GET', body) => {

@@ -2,6 +2,8 @@
 
 Fecha: 18 de octubre de 2026. Base revisada: `origin/main` en `7380e80d6fbe43ac048c1af08eaa64857306a66d` (PR #5 integrado). Fuente: decisiones expresamente confirmadas y reproducidas por el usuario para esta actualización posterior a #5. El examen del repositorio contrasta brechas; no sustituye acuerdos ni acredita implementación.
 
+Actualización técnica posterior a #7: base de implementación `main` en `93aa035`. ADR-006/009 formalizan las decisiones aprobadas para fundamentos 003; el resto conserva su alcance y pendientes.
+
 ## Estados y uso del registro
 
 - **APROBADA:** decisión de producto o secuencia de trabajo expresamente acordada. No significa implementada.
@@ -12,7 +14,7 @@ Fecha: 18 de octubre de 2026. Base revisada: `origin/main` en `7380e80d6fbe43ac0
 
 Cada encargo futuro debe citar estos IDs y cerrar solo las decisiones necesarias para su etapa. Una propuesta pasa a aprobada únicamente con acuerdo explícito registrado en una modificación posterior, explicando consecuencias y criterios; no por aparecer en un PR documental.
 
-Se actualizan ADR-002/003/005/010/011, conservando IDs: resumen obligatorio solo en derivación profesional, archivo completo de episodios propios con adendas, estados del episodio y visión del paciente sustituyen sus formulaciones de #5. ADR-012–ADR-018 registran las nuevas decisiones de dominio; RN-01–RN-28 en [business-rules.md](business-rules.md) son sus reglas verificables. ADR-019 añade el requisito transversal de demos reproducibles a los criterios de aceptación del roadmap. ADR-006–ADR-009 siguen siendo PROPUESTAS, adaptadas a esos requisitos.
+Se actualizan ADR-002/003/005/010/011, conservando IDs: resumen obligatorio solo en derivación profesional, archivo completo de episodios propios con adendas, estados del episodio y visión del paciente sustituyen sus formulaciones de #5. ADR-012–ADR-018 registran las nuevas decisiones de dominio; RN-01–RN-28 en [business-rules.md](business-rules.md) son sus reglas verificables. ADR-019 añade el requisito transversal de demos reproducibles a los criterios de aceptación del roadmap. ADR-006/009 se aprueban técnicamente para el PR de fundamentos posterior a #7, con el alcance aditivo descrito abajo; ADR-007/008 siguen siendo propuestas para sus flujos.
 
 ## ADR-001 — Consultorios independientes y red sin acceso implícito
 
@@ -30,7 +32,7 @@ Se actualizan ADR-002/003/005/010/011, conservando IDs: resumen obligatorio solo
 
 **Decisión:** como máximo un responsable vigente por paciente; episodios `activo` y `pausado` cuentan para exclusividad. Reanudar pausa conserva episodio; tras `finalizado` se abre otro, incluido A→B→A. No sobrescribir episodios ni reatribuir citas/notas. Cualquiera puede iniciar pausa o finalizar unilateralmente con confirmación/motivo apropiado y aviso al otro, resolviendo citas futuras antes sin borrado. Reanudar requiere ambos; pausa impide citas nuevas y permite finalizar. El paciente puede quedar sin responsable (RN-02/03/21).
 
-**Consecuencia:** responsabilidad actual no habilita gestión de episodios cerrados ni antecedentes ajenos. Archivo y adendas propias se rigen por ADR-005/013; alta inicial por ADR-012. Índices, estados técnicos y transacciones siguen en ADR-006/008 y AB-14/15. No interpretar la pausa como vacante para otro responsable.
+**Consecuencia:** responsabilidad actual no habilita gestión de episodios cerrados ni antecedentes ajenos. Archivo y adendas propias se rigen por ADR-005/013; alta inicial por ADR-012. Índice y estados técnicos de los fundamentos están aprobados en ADR-006; las transacciones funcionales siguen en ADR-008 y AB-14/15. No interpretar la pausa como vacante para otro responsable.
 
 ## ADR-003 — Derivación profesional con resumen y cambio directo
 
@@ -63,17 +65,19 @@ En ambas, una sola solicitud pendiente de cambio por paciente, cancelable, y A s
 
 La migración [001_clinical_data_integrity.sql](../../backend/sql/migrations/001_clinical_data_integrity.sql) protege histórico y registros; [002_auth_session_version.sql](../../backend/sql/migrations/002_auth_session_version.sql) versiona y revoca JWT. No modificarlas ni debilitarlas. La edición versionada descrita en [clinical-data-integrity.md](../clinical-data-integrity.md) es contexto previo; el objetivo aprobado para notas finalizadas es adenda sin sobrescritura (ADR-013).
 
-## ADR-006 — Fuente única de responsabilidad y atribución por episodio
+## ADR-006 — Episodios independientes y atribución opcional
 
-**Estado: PROPUESTA; no aprobada para código. Etapa: 2A.**
+**Estado: APROBADA para los fundamentos técnicos del PR posterior a #7. Etapa: 2A, entrega parcial.**
 
-**Contexto confirmado:** [schema.sql](../../backend/sql/schema.sql) limita activos por par paciente/profesional, no por paciente. [auth.permissions.js](../../backend/src/modules/auth/auth.permissions.js) conserva el fallback `psychologist_patient_access`; el alta de pacientes lo inserta en [patients.service.js](../../backend/src/modules/patients/patients.service.js). [auth.service.js](../../backend/src/modules/auth/auth.service.js) reutiliza filas de relación y puede sobrescribir el episodio. Citas/espera carecen de propietario profesional/episodio; autor de nota nullable y autorización por paciente no segmentan autores.
+**Decisión técnica confirmada por el usuario:** crear `clinical_episodes` independiente de `care_relationships`; conservar `patients.id` como identidad global estable. El episodio referencia paciente y psicólogo, sin referencia permanente obligatoria a la cuenta del paciente: la asociación de cuenta se resuelve en el modelo de identidad y puede cambiar en una recuperación excepcional sin reescribir historia clínica.
 
-**Propuesta:** usar `care_relationships` como episodios con identidad e historia conservadas, sin reutilizar finalizados, y como fuente única de responsabilidad vigente. El ciclo de vida permite pausa/reanudación sin borrar historia. Evaluar unicidad por paciente que incluya activos Y pausados; el índice propuesto en #5 solo para `active` ya no cubre el requisito aprobado. Predicado, columnas y constraints exactos pendientes. Retirar fallback solo tras migración segura y revisión de todos los lectores/escritores.
+Estados técnicos `active`, `paused`, `finalized`; índice único parcial por paciente para activos Y pausados. Identidad del episodio inmutable, finalización terminal y conservación sin DELETE/TRUNCATE. Regresar tras finalización crea otro ID, incluso A→B→A. Referencia compuesta al rol profesional impide atribuir episodios a usuarios no psicólogos sin impedir suspensión de la cuenta.
 
-Vincular nuevas citas, notas, tareas y espera con `care_relationship_id` según especificación; conservar nullable lo legacy ambiguo hasta revisión auditada. Segmentar entrevista, objetivos, riesgo y contexto global para que no se filtren al nuevo episodio.
+Añadir `episode_id` opcional a citas, notas, tareas/objetivos y espera. Claves compuestas validadas garantizan paciente/episodio y nota/cita/tarea consistentes; una nota atribuida exige autor conocido del episodio. Las claves internas generadas comparan también ausencia de episodio: una referencia nullable no puede dejar cita/nota o nota/tarea con atribución parcial. La atribución existente no se elimina ni cambia de episodio.
 
-**Pendiente de aprobación:** esquema exacto y atribución, clasificación de campos globales restantes, contratos/permisos y sustitución de rutas heredadas. El alcance funcional de archivo completo, identidad global, básicos administrados por paciente y ciclo de episodios ya están aprobados; su implementación no. No atribuir citas al profesional actual sin evidencia. Planificar estructura de borradores, notas inmutables y adendas desde 2A, sin concentrar toda entrega transversal en un PR.
+**Consecuencias y límites:** reemplaza la propuesta anterior de reutilizar `care_relationships` como episodios y de usar `care_relationship_id`. No se crean episodios desde relaciones legacy ni se atribuye histórico al psicólogo actual, incluso si su vínculo está activo. Citas/notas/autoría originales permanecen intactas. El backend actual continúa operando con atribución nula; la nueva tabla todavía no es fuente de autorización. No se retira el fallback `psychologist_patient_access` ni se activan permisos, endpoints o flujos nuevos.
+
+Clasificación restante de datos globales/clínicos, entrevista/riesgo, estructura de borradores/adendas, identidad excepcional y sustitución coordinada de lectores/escritores siguen pendientes. La activación de atribución y permisos necesita otro PR; no atribuir desde escritores externos mientras el backend actual no pueda propagar el episodio. Véase el contrato SQL y operativo en [clinical-episodes-foundation.md](../clinical-episodes-foundation.md).
 
 ## ADR-007 — Estructuras de derivación y autorización de alcance fijo
 
@@ -95,15 +99,19 @@ Cada autorización identificaría destinatario y alcance fijo de registros/versi
 
 **Pendiente de aprobación:** locks, orden, idempotencia, reintentos/errores y protocolo exacto de agenda/espera. Ya están aprobados solicitud pendiente única/cancelable y cancelación confirmada de futuras al cambiar. No trasladar automáticamente citas, espera, entrevista ni riesgo; no inventar atribución incierta.
 
-## ADR-009 — Migración 003 y rollout conservador
+## ADR-009 — Migración 003 aditiva y ejecución explícita comprobable
 
-**Estado: PROPUESTA; no aprobada para crear ni ejecutar SQL. Etapa: 2A.**
+**Estado: APROBADA para implementar y probar en destinos nuevos desechables; no autoriza ejecutarla en la base habitual. Etapa: 2A, fundamentos.**
 
-**Propuesta:** una migración 003 posterior, aditiva e idempotente, tras cerrar la especificación. Primero diagnosticar responsables duplicados y atribuciones inciertas; ante conflictos, bloquear e informar en vez de eliminar filas, escoger dueño o reconstruir autoría sin evidencia. No usar `schema.sql`, `seed.sql` ni normalizadores como migración sobre expedientes.
+**Decisión:** `003_clinical_episode_foundation.sql` implementa ADR-006 de forma aditiva, sin modificar 001/002, schema, seed o registros originales. No hace backfill, atribución, conciliación ni corrección automática. Las relaciones legacy inconsistentes bloquean las nuevas claves; vínculos múltiples o autoría desconocida solo se diagnostican y nunca eligen un dueño.
 
-**Condiciones del diseño:** conservación de 001/002, diagnóstico y ensayo en copia aislada autorizada, evidencia de reaplicación/conservación, respaldo restaurable y coordinación de versiones del backend y otros escritores durante el rollout. Evitar convivencia de versiones que sigan concediendo acceso heredado o ignoren el protocolo transaccional. La recuperación debe conservar histórico, sin reintroducir permisos inseguros.
+Ejecución exclusivamente explícita: URL y nombre de base confirmados, transacción, lock compartido con inicialización, prerrequisitos verificables de 001/002, SHA-256 de archivos, registro de versiones y huella de catálogo. Reaplicar verifica y no repite DDL. Versiones/checksums incompatibles, deriva o 003 no registrada se rechazan; no hay opción de forzado. 001/002 se adoptan como prerrequisitos estructuralmente comprobados, sin ejecutarlas ni afirmar evidencia histórica de sus archivos. Diagnóstico independiente en transacción de solo lectura, con conteos y sin candidatos de atribución.
 
-**Límite de esta entrega:** 003 todavía NO existe; no se crea ni ejecuta SQL ni se toca base/volumen. Demo desechable y datos reales se distinguen según ADR-018; la estrategia conservadora aplica a entornos reales y no obliga a salvar manualmente datos solo de prueba. Véase [roadmap.md](roadmap.md).
+**Evidencia requerida:** PostgreSQL aislado creado por las pruebas; instalación vacía y sintética poblada, conservación de todas las filas/autoría, reaplicación, deriva/versiones, exclusividad y concurrencia, relaciones compuestas con NULL, regresión 001/002 y backend, rollback transaccional ante fallo DDL. Demo ficticia reproducible conforme ADR-019, limitada a fundamentos SQL y permisos actuales; no anticipar UI o autorización por episodios.
+
+**Rollout futuro:** ventana sin escritores, respaldo restaurable, ensayo autorizado y estimación de bloqueos/espacio por columnas generadas e índices. Las instalaciones nuevas aplicarán 003 explícitamente después de inicializar 001/002; no se incorpora al arranque habitual. En bases existentes nunca ejecutar schema/seed o normalizadores. Recuperación sin borrar historia ni restaurar cascadas. El protocolo funcional de cambio/pausa/cierre y la segmentación de acceso necesitan diseño y entrega posteriores.
+
+**Alcance de este encargo:** crear rama desde main con #7 integrado, implementar, probar y abrir PR hacia main sin merge. No consultar ni migrar expedientes reales, ni tocar base habitual o volúmenes existentes. Procedimiento, demo y límites: [clinical-episodes-foundation.md](../clinical-episodes-foundation.md). No cierra toda 2A ni implementa 2B/2C.
 
 ## ADR-010 — Secuencia de trabajo y UI mínima
 
@@ -204,18 +212,18 @@ Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen de
 | AB-11 | ¿Qué almacenamiento temporal y zona gobiernan consultorio/paciente, API/UI y día clínico? ¿Cómo mantener interpretación de datos legacy? | Diseño de 2E |
 | AB-12 | ¿Qué roles jurídicos reales, avisos, contratos, conservación, respaldos, restauración y controles operativos se requieren en México? | Diseño aplicable de 2C y salida de 5 |
 | AB-13 | Verificación normal de correo/teléfono, sin fusión por contactos; revisión excepcional no clínica por soporte autorizado, auditada y con evidencia adicional cuando proceda: APROBADO en ADR-012. Pendientes los métodos técnicos concretos de verificación excepcional y recuperación. | Identidad/alta 2A y cambio directo 2B |
-| AB-14 | ¿Cuáles serán columnas, constraints, contratos y permisos exactos de identidad/episodios/notas/adendas? ¿Cómo sustituir todas las rutas heredadas? | Implementación aplicable 2A |
+| AB-14 | Fundamentos de episodios/atribución aprobados en ADR-006. Pendientes contratos/permisos, identidad, notas/adendas y sustitución de todas las rutas heredadas. | Implementación aplicable 2A |
 | AB-15 | ¿Qué locks/transacciones, idempotencia, errores y coordinación de lectores/escritores preservan exclusividad, cambios atómicos, pausa/cierre/suspensión y agenda? | Diseño 2A/2B, ampliación 2C/2D |
 | AB-16 | ¿Qué estado técnico, procedimiento y actores resuelven citas pendientes por suspensión, respetando privacidad y sin cancelación automática? | Permisos 2A y flujo 2B; agenda 2D |
-| AB-17 | ¿Cómo diseñar 003, rollout y recuperación seguros sobre datos reales/legacy, ensayos y coexistencia de versiones, diferenciando demo autorizada? | Plan 2A; antes de crear/ejecutar migración |
+| AB-17 | Diseño/ensayo de fundamentos 003 aprobados en ADR-009. Pendientes resolución de legacy real, activación de atribuciones/permisos y autorización/ensayo del rollout de cada entorno. | Antes del despliegue y activación de 2A |
 
-Antes de encargar código de cada parte de 2A deben cerrarse sus propuestas y asuntos bloqueantes, especialmente AB-02/06/08/13–AB-17. Los requisitos de producto aprobados no aprueban todos los detalles técnicos de 2A. No inventar respuestas de 2C para cerrar este PR documental; dividir encargos y dependencias según [roadmap.md](roadmap.md).
+Los fundamentos de este encargo están autorizados y delimitados en ADR-006/009; AB-06 no autoriza atribución legacy. Antes de activar el resto de 2A deben cerrarse las propuestas y asuntos bloqueantes aplicables, especialmente AB-02/06/08/13–AB-17. Los requisitos de producto aprobados no aprueban todos los detalles técnicos de 2A. No inventar respuestas de 2C para cerrar este PR documental; dividir encargos y dependencias según [roadmap.md](roadmap.md).
 
 ## Acciones y supuestos no aprobados
 
 **Estado: NO APROBADA para el alcance actual**, o incompatibles con las reglas firmes según se indica:
 
-- Crear o ejecutar la migración 003, modificar 001/002, usar schema/seed en la base habitual o tocar datos/volúmenes existentes; hacer merge sin autorización. El encargo documental anterior solo autorizó los cuatro documentos. El primer PR de 2A autoriza exclusivamente la corrección de permisos/proyecciones, sus pruebas y las decisiones AB-02/13, con integración en bases aisladas y desechables.
+- Ejecutar 003 en la base habitual, modificar 001/002, usar schema/seed sobre bases existentes, tocar volúmenes existentes o hacer merge. El encargo posterior a #7 autoriza crear/probar 003 en destinos propios desechables y abrir PR; no autoriza despliegue ni atribución histórica.
 - Tratar los nombres de tablas, índice, referencias, bloqueos, estados o snapshots propuestos como arquitectura ya aprobada para código.
 - Implementar ahora la red estatal/nacional, migración móvil, emergencias o un flujo break-glass por aparecer en la visión futura.
 - Conceder expediente por red o backoffice, aceptar dos responsables vigentes (incluida pausa), heredar consentimiento, compartir automáticamente historial, reutilizar episodios finalizados o cambiar autoría: incompatibles con RN-01–RN-12/27.

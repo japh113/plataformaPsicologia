@@ -208,3 +208,7 @@ Este repo ya trae bastante contexto conversacional convertido en codigo. Antes d
 ## Proteccion de expedientes clinicos
 
 La politica de conservacion, la auditoria de citas/pacientes y el procedimiento de migracion estan en [docs/clinical-data-integrity.md](docs/clinical-data-integrity.md). Una base existente requiere la migracion especifica antes de arrancar este backend; reiniciar Docker no la aplica. No usar schema/seed para migrar expedientes reales.
+
+## Fundamentos de episodios clínicos (003)
+
+Migración aditiva de 2A con ejecución explícita; no se aplica al iniciar Docker ni activa permisos por episodio. Procedimiento para instalaciones nuevas/existentes autorizadas, diagnóstico, pruebas y demo en [docs/clinical-episodes-foundation.md](docs/clinical-episodes-foundation.md). Pruebas aisladas: `bash scripts/clinical-episodes.sh test`; demo nueva: `bash scripts/clinical-episodes.sh demo`. No usar schema/seed para actualizar bases existentes.

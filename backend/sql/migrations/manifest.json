@@ -1,0 +1,17 @@
+[
+  {
+    "version": "001",
+    "file": "001_clinical_data_integrity.sql",
+    "sha256": "350625b992d8303812732f46f111ced5d70f5f9cc4b392067fede134a136cde9"
+  },
+  {
+    "version": "002",
+    "file": "002_auth_session_version.sql",
+    "sha256": "018f0c727cacae02c5c2f0bcfd042960a1c3c98668b0a6f23e16f6b22393e0fa"
+  },
+  {
+    "version": "003",
+    "file": "003_clinical_episode_foundation.sql",
+    "sha256": "98180bd12d2f014663a3ee1feedee61b8e2cd21fc2b1e5f441ed756d13ad13b7"
+  }
+]
