@@ -1,5 +1,5 @@
 import db from '../../config/db.js';
-import { ensureAuthenticated, isPatient, isPsychologist } from '../auth/auth.permissions.js';
+import { ensureClinicalActor, isPatient, isPsychologist } from '../auth/auth.permissions.js';
 
 const normalizeDateValue = (value) => {
   if (!value) {
@@ -237,7 +237,7 @@ const sortReminders = (reminders) => {
 };
 
 export const listMyReminders = async (actor) => {
-  ensureAuthenticated(actor);
+  ensureClinicalActor(actor);
 
   if (isPsychologist(actor)) {
     const [appointmentReminders, taskReminders] = await Promise.all([

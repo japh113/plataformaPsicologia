@@ -26,14 +26,20 @@ test('ensureBackofficeManager only allows admin and superadmin roles', () => {
   assert.throws(() => ensureBackofficeManager({ role: 'support' }), { status: 403 });
 });
 
-test('buildPatientAccessScope only grants full clinical access to superadmin', () => {
-  assert.deepEqual(buildPatientAccessScope({ role: 'superadmin' }, 'p.id'), {
-    clause: 'TRUE',
-    params: [],
-  });
+test('administrative roles never gain clinical scope, even with inherited identifiers', () => {
+  for (const role of ['superadmin', 'admin', 'support']) {
+    assert.throws(() => buildPatientAccessScope({ id: 'psy', patientId: 'patient', role }, 'p.id'), { status: 403 });
+  }
+});
 
-  assert.throws(() => buildPatientAccessScope({ role: 'admin' }, 'p.id'), { status: 403 });
-  assert.throws(() => buildPatientAccessScope({ role: 'support' }, 'p.id'), { status: 403 });
+test('clinical scopes retain patient ownership and psychologist access parameters', () => {
+  assert.deepEqual(buildPatientAccessScope({ role: 'patient', patientId: 'own' }, 'p.id', 2),
+    { clause: 'p.id = $2', params: ['own'] });
+  const scope = buildPatientAccessScope({ role: 'psychologist', id: 'psy' }, 'p.id', 3);
+  assert.deepEqual(scope.params, ['psy']);
+  assert.match(scope.clause, /cr.psychologist_user_id = \$3/);
+  assert.match(scope.clause, /spa.psychologist_user_id = \$3/);
+  assert.throws(() => buildPatientAccessScope(null, 'p.id'), { status: 401 });
 });
 
 test('validateCreateCareRelationshipPayload enforces patient and psychologist ids', () => {

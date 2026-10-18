@@ -5,7 +5,13 @@ export const isSupport = (actor) => actor?.role === 'support';
 export const isSuperadmin = (actor) => actor?.role === 'superadmin';
 export const canViewBackoffice = (actor) => isAdmin(actor) || isSupport(actor) || isSuperadmin(actor);
 export const canManageBackoffice = (actor) => isAdmin(actor) || isSuperadmin(actor);
-export const canAccessAllClinicalData = (actor) => isSuperadmin(actor);
+// Administrative roles never confer clinical authorization (RN-27 / ADR-017).
+export const ensureClinicalActor = (actor) => {
+  ensureAuthenticated(actor);
+  if (!isPsychologist(actor) && !isPatient(actor)) {
+    throw createForbiddenError();
+  }
+};
 
 export const createForbiddenError = (message = 'Forbidden') => {
   const error = new Error(message);
@@ -58,14 +64,7 @@ export const ensureBackofficeManager = (actor) => {
 };
 
 export const buildPatientAccessScope = (actor, patientColumnReference, paramIndex = 1) => {
-  ensureAuthenticated(actor);
-
-  if (canAccessAllClinicalData(actor)) {
-    return {
-      clause: 'TRUE',
-      params: [],
-    };
-  }
+  ensureClinicalActor(actor);
 
   if (isPsychologist(actor)) {
     return {

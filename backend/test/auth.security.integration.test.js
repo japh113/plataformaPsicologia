@@ -139,8 +139,7 @@ test('authentication security with disposable PostgreSQL and real HTTP', {
       for (const role of roles) assert.equal((await request('/auth/me', tokens[role])).status, 200);
       for (const role of ['admin', 'support', 'superadmin']) assert.equal((await request('/auth/users', tokens[role])).status, 200);
       for (const role of ['psychologist', 'patient']) assert.equal((await request('/auth/users', tokens[role])).status, 403);
-      for (const role of ['admin', 'support']) assert.equal((await request('/patients', tokens[role])).status, 403);
-      assert.equal((await request('/patients', tokens.superadmin)).status, 200);
+      for (const role of ['admin', 'support', 'superadmin']) assert.equal((await request('/patients', tokens[role])).status, 403);
       assert.equal((await request('/auth/psychologists/auth_psychologist/review', tokens.support, 'PATCH',
         { approvalStatus: 'suspended' })).status, 403);
       await db.query("UPDATE users SET role='support' WHERE id='auth_admin'");

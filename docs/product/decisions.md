@@ -127,7 +127,9 @@ Cada autorización identificaría destinatario y alcance fijo de registros/versi
 
 **Decisión:** identidad global única sin búsqueda que revele pacientes de otro consultorio; prevenir duplicados sin unión automática por coincidencias. Todos los pacientes y psicólogos tienen cuenta digital obligatoria. Paciente se registra o psicólogo invita; primer responsable solo después de verificación y confirmación bilateral. Si hay episodio vigente, usar cambio. Verificar correo y teléfono al activar y adicionalmente en duplicados/recuperación; no imponer universalmente CURP/documento oficial. Contactos verificados no prueban identidad física única.
 
-El paciente administra nombre, contactos y fecha de nacimiento globales; el psicólogo solicita corrección, no cambia identidad. Básicos acompañan al paciente tras cambio confirmado; clínicos por episodio. **Abierto:** resolución de identidad real duplicada, recuperación y verificación detalladas, resto de campos y diseño de almacenamiento (AB-02/13/14).
+El paciente administra nombre, contactos y fecha de nacimiento globales; el psicólogo solicita corrección, no cambia identidad. Básicos acompañan al paciente tras cambio confirmado; clínicos por episodio.
+
+**AB-13 — Identidad y recuperación: decisión de producto APROBADA.** Verificación de correo y teléfono en el flujo normal; nunca fusionar identidades automáticamente por coincidencia de contactos. Los casos excepcionales requieren revisión por personal autorizado de soporte, limitada a datos no clínicos y auditada, con evidencia adicional cuando sea necesaria. No revelar relaciones entre pacientes y otros consultorios. **Pendiente de diseño técnico:** métodos concretos de verificación excepcional, evidencia y controles de recuperación. Este acuerdo no autoriza implementar esos flujos en el primer PR de permisos de 2A. El resto de campos y almacenamiento sigue en AB-02/14.
 
 ## ADR-013 — Nota finalizada inmutable y adendas propias
 
@@ -153,13 +155,19 @@ El paciente administra nombre, contactos y fecha de nacimiento globales; el psic
 
 **Estado: APROBADA. Etapas: 2A/2B. Reglas: RN-25/26.**
 
-**Decisión:** entrevista inicial, riesgo, tareas y objetivos por episodio. Riesgo inicial NO EVALUADO, nunca sin riesgo por defecto. Antecedente autorizado no sustituye entrevista ni evaluación propias. Al cerrar, pendientes quedan no completados por cierre; paciente conserva lectura histórica de actividades. Columnas y resto de clasificación global/clínica siguen abiertos, sin trasladar contenido automáticamente.
+**Decisión:** entrevista inicial, riesgo, tareas y objetivos por episodio. Riesgo inicial NO EVALUADO, nunca sin riesgo por defecto. Antecedente autorizado no sustituye entrevista ni evaluación propias. Al cerrar, pendientes quedan no completados por cierre; paciente conserva lectura histórica de actividades.
+
+**AB-02 — Entrevista clínica: decisión de producto APROBADA.** Una entrevista independiente por episodio. Las respuestas del paciente están separadas de la valoración profesional: el paciente puede completar y consultar sus respuestas, incluso históricamente; las correcciones posteriores conservan trazabilidad. La valoración profesional no se muestra automáticamente, sin limitar los derechos ARCO. La entrevista anterior no se comparte automáticamente al cambiar de psicólogo. Esta decisión no implementa el nuevo flujo ni cambia ahora la edición de la entrevista existente. Columnas, clasificación restante y representación de metadatos, adjuntos, versiones y alcance compartible siguen pendientes en AB-02/14.
 
 ## ADR-017 — Backoffice sin acceso clínico global ordinario
 
 **Estado: APROBADA; emergencia ABIERTA y LEGAL A VALIDAR. Etapa: permisos en 2A. Regla: RN-27.**
 
-**Decisión:** `superadmin`, `admin` y `support` sin acceso global ordinario a registros clínicos, entrevistas, notas, exportaciones ni alteración clínica. El código actual que lo permite es brecha a corregir, no excepción aceptada. Acceso de emergencia requiere diseño y revisión jurídica aparte; este documento no habilita puerta trasera ni rol de conciliación con acceso clínico global (AB-06/07).
+**Decisión:** `superadmin`, `admin` y `support` sin acceso global ordinario a registros clínicos, entrevistas, notas, exportaciones ni alteración clínica. El acceso global que permitía el código era una brecha, no una excepción aceptada. Acceso de emergencia requiere diseño y revisión jurídica aparte; este documento no habilita puerta trasera ni rol de conciliación con acceso clínico global (AB-06/07).
+
+**Primer PR de 2A:** se retira el bypass de `superadmin`, se deniegan las rutas y servicios clínicos a los tres roles administrativos y se proyectan explícitamente las respuestas operativas. El feed de auditoría del backoffice solo consulta eventos de revisión de psicólogos y solicitud/confirmación de recuperación, sin texto libre, pacientes, referencias clínicas ni secretos; los demás eventos históricos permanecen almacenados. Los vínculos administrativos conservan únicamente consulta operativa de datos básicos/estado, sin lectura ni escritura de notas ni exposición de invitaciones. Crear vínculos o cambiar cualquier estado desde backoffice está temporalmente bloqueado (403), incluso pending/ended/rejected: esas escrituras podían conceder o revocar acceso heredado y alterar responsabilidad clínica sin autorización bilateral. Se rechazan antes de consultar la base; el flujo seguro queda pendiente de diseño, sin implementar episodios ahora. No se crea autorización clínica independiente para administradores.
+
+El modelo actual de rol único no representa doble autorización administrativa/clínica. La segmentación por episodio, archivo propio y sustitución segura del fallback `psychologist_patient_access` requieren el diseño de ADR-006/009 y una evolución posterior de datos (003 sigue sin crearse ni ejecutarse); no se improvisan en este PR.
 
 ## ADR-018 — Demo desechable y migraciones seguras para datos reales
 
@@ -179,12 +187,12 @@ Datos y cuentas demo exclusivamente para desarrollo, aislados de datos reales y 
 
 ## Asuntos abiertos y momento de resolución
 
-Los siguientes puntos están **ABIERTOS**; no tienen una respuesta implícita aprobada:
+Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen decisiones de producto aprobadas explícitas arriba; solo sus detalles indicados siguen pendientes:
 
 | ID | Pregunta a resolver | Antes de |
 | --- | --- | --- |
 | AB-01 | ¿Seleccionar antecedentes por categorías, por registros o una combinación? ¿Cómo confirmar y mostrar el alcance final al paciente? | Especificar 2C |
-| AB-02 | Dado lo aprobado en ADR-005/012/016, ¿cómo clasificar campos globales/clínicos restantes y representar metadatos, adjuntos, versiones y alcance compartible? Archivo completo propio y entrevista/riesgo/tareas/objetivos por episodio ya están decididos. | Modelo/permisos 2A; divulgación 2C |
+| AB-02 | Entrevista por episodio, respuestas propias históricas separadas de valoración profesional, trazabilidad y no divulgación automática: APROBADO en ADR-016. Pendiente: clasificar campos restantes y representar metadatos, adjuntos, versiones y alcance compartible. | Modelo/permisos 2A; divulgación 2C |
 | AB-03 | ¿Qué procedimiento separado atenderá solicitudes de acceso clínico/ARCO sin bloqueo arbitrario? La visibilidad ordinaria está decidida en RN-24; notas no visibles automáticamente. | Diseño aplicable y revisión de 5; no limitar derechos por UI |
 | AB-04 | ¿Quién verifica identidad y firma presencial, con qué evidencia, independencia, estados y controles? ¿Cómo tratar evidencia incompleta o impugnada? | Consentimiento presencial de 2C |
 | AB-05 | ¿Qué duración tendrá el permiso, cuál será la metodología de autorización/verificación y qué ocurre al ampliar alcance, corregir versiones, caducar o revocar? | Contratos de 2C |
@@ -195,7 +203,7 @@ Los siguientes puntos están **ABIERTOS**; no tienen una respuesta implícita ap
 | AB-10 | ¿Cuándo se activa el acceso de antecedentes respecto al cambio? ¿Cómo pedir permiso nuevo sobre notas de A en B→C? ¿Qué garantías tienen consultas en curso al revocar? | Especificación de 2C |
 | AB-11 | ¿Qué almacenamiento temporal y zona gobiernan consultorio/paciente, API/UI y día clínico? ¿Cómo mantener interpretación de datos legacy? | Diseño de 2E |
 | AB-12 | ¿Qué roles jurídicos reales, avisos, contratos, conservación, respaldos, restauración y controles operativos se requieren en México? | Diseño aplicable de 2C y salida de 5 |
-| AB-13 | ¿Cómo resolver identidad física duplicada y recuperación, con verificación progresiva detallada sin exponer otros consultorios ni unir coincidencias automáticamente? | Identidad/alta 2A y cambio directo 2B |
+| AB-13 | Verificación normal de correo/teléfono, sin fusión por contactos; revisión excepcional no clínica por soporte autorizado, auditada y con evidencia adicional cuando proceda: APROBADO en ADR-012. Pendientes los métodos técnicos concretos de verificación excepcional y recuperación. | Identidad/alta 2A y cambio directo 2B |
 | AB-14 | ¿Cuáles serán columnas, constraints, contratos y permisos exactos de identidad/episodios/notas/adendas? ¿Cómo sustituir todas las rutas heredadas? | Implementación aplicable 2A |
 | AB-15 | ¿Qué locks/transacciones, idempotencia, errores y coordinación de lectores/escritores preservan exclusividad, cambios atómicos, pausa/cierre/suspensión y agenda? | Diseño 2A/2B, ampliación 2C/2D |
 | AB-16 | ¿Qué estado técnico, procedimiento y actores resuelven citas pendientes por suspensión, respetando privacidad y sin cancelación automática? | Permisos 2A y flujo 2B; agenda 2D |
@@ -207,7 +215,7 @@ Antes de encargar código de cada parte de 2A deben cerrarse sus propuestas y as
 
 **Estado: NO APROBADA para el alcance actual**, o incompatibles con las reglas firmes según se indica:
 
-- Crear o ejecutar ahora la migración 003; modificar código, SQL, Docker, dependencias, bases o volúmenes; hacer merge del PR sin autorización. Esta tarea solo autoriza los cuatro documentos, su commit, push y apertura del PR.
+- Crear o ejecutar la migración 003, modificar 001/002, usar schema/seed en la base habitual o tocar datos/volúmenes existentes; hacer merge sin autorización. El encargo documental anterior solo autorizó los cuatro documentos. El primer PR de 2A autoriza exclusivamente la corrección de permisos/proyecciones, sus pruebas y las decisiones AB-02/13, con integración en bases aisladas y desechables.
 - Tratar los nombres de tablas, índice, referencias, bloqueos, estados o snapshots propuestos como arquitectura ya aprobada para código.
 - Implementar ahora la red estatal/nacional, migración móvil, emergencias o un flujo break-glass por aparecer en la visión futura.
 - Conceder expediente por red o backoffice, aceptar dos responsables vigentes (incluida pausa), heredar consentimiento, compartir automáticamente historial, reutilizar episodios finalizados o cambiar autoría: incompatibles con RN-01–RN-12/27.
@@ -219,4 +227,4 @@ Antes de encargar código de cada parte de 2A deben cerrarse sus propuestas y as
 
 [README.md](../../README.md), [ARCHITECTURE.md](../../ARCHITECTURE.md), [AGENTS.md](../../AGENTS.md), [NOTES.md](../../NOTES.md), [clinical-data-integrity.md](../clinical-data-integrity.md) y [authentication-security.md](../authentication-security.md) se leyeron para contrastar el estado. `NOTES.md` tiene fecha de abril de 2026; `ARCHITECTURE.md` aún menciona falta de tests y módulos legacy, mientras hoy existen suites en [backend/test](../../backend/test). Las guías de seguridad conservan evidencia histórica previa a #4; no asumir que sus conteos npm describen el estado posterior.
 
-Las referencias antiguas a trabajar/push en `main` o ejecutar lint/build no cambian esta tarea: rama documental y PR sin merge, sin tests npm para Markdown. Las indicaciones históricas sobre schema/seed no autorizan ejecutarlos. El «acceso maestro» de `superadmin` en AGENTS.md y la edición versionada previa se subordinan al objetivo RN-23/27; su código aún requiere implementación posterior. No se corrigen archivos fuera de los cuatro autorizados. Futuras tareas deben distinguir decisiones objetivo y comportamiento implementado.
+Las referencias antiguas a trabajar/push en `main` no sustituyen los encargos con rama y PR sin merge. La exención de tests npm correspondía al PR solo documental; el primer PR de 2A sí exige pruebas, lint y build, con integración exclusivamente aislada y desechable. Las indicaciones históricas sobre schema/seed no autorizan ejecutarlos en la base habitual. El «acceso maestro» de `superadmin` en AGENTS.md y la edición versionada previa se subordinan al objetivo RN-23/27; su código aún requiere implementación posterior. La restricción a cuatro archivos correspondía al encargo documental anterior. Futuras tareas deben distinguir decisiones objetivo y comportamiento implementado.

@@ -19,7 +19,7 @@ import {
   reviewPsychologistHandler,
   updateCareRelationshipHandler,
 } from './auth.controller.js';
-import { authenticate } from '../../middlewares/authMiddleware.js';
+import { authenticate, authorizeClinical } from '../../middlewares/authMiddleware.js';
 
 const router = Router();
 
@@ -34,11 +34,11 @@ router.get('/users', authenticate, listBackofficeUsersHandler);
 router.get('/audit-logs', authenticate, listAuditLogsHandler);
 router.get('/care-relationships', authenticate, listCareRelationshipsHandler);
 router.post('/care-relationships', authenticate, createCareRelationshipHandler);
-router.post('/care-relationships/request', authenticate, requestCareRelationshipHandler);
-router.post('/care-relationships/invite', authenticate, inviteCareRelationshipHandler);
-router.post('/care-relationships/accept-code', authenticate, acceptCareRelationshipInviteHandler);
+router.post('/care-relationships/request', authenticate, authorizeClinical, requestCareRelationshipHandler);
+router.post('/care-relationships/invite', authenticate, authorizeClinical, inviteCareRelationshipHandler);
+router.post('/care-relationships/accept-code', authenticate, authorizeClinical, acceptCareRelationshipInviteHandler);
 router.patch('/care-relationships/:relationshipId', authenticate, updateCareRelationshipHandler);
-router.patch('/care-relationships/:relationshipId/respond', authenticate, respondToCareRelationshipHandler);
+router.patch('/care-relationships/:relationshipId/respond', authenticate, authorizeClinical, respondToCareRelationshipHandler);
 router.get('/psychologists/pending', authenticate, listPendingPsychologistsHandler);
 router.patch('/psychologists/:userId/review', authenticate, reviewPsychologistHandler);
 
