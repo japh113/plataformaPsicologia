@@ -1,16 +1,14 @@
 # Roadmap de producto y arquitectura
 
-Fecha: 18 de octubre de 2026. Base revisada: `origin/main` en `7380e80d6fbe43ac048c1af08eaa64857306a66d`, con PR #5 integrado. Las etapas y requisitos de producto están acordados; sus mecanismos técnicos pendientes de aprobación siguen como PROPUESTAS y asuntos ABIERTOS en [decisions.md](decisions.md).
+Fecha: 18 de octubre de 2026. Base revisada: `main`/`origin/main` en `b3bfd40`, con PR #7 y #8 integrados. Las etapas y requisitos de producto están acordados; sus mecanismos técnicos pendientes de aprobación siguen como PROPUESTAS y asuntos ABIERTOS en [decisions.md](decisions.md).
 
-## Antecedente documental y primer PR de 2A
+## Antecedentes y alcance documental actual
 
-El encargo documental anterior actualizó únicamente [vision.md](vision.md), [business-rules.md](business-rules.md), este roadmap y [decisions.md](decisions.md), sin implementación ni ejecución sobre datos. El primer PR de 2A tiene ahora un encargo separado: corregir permisos clínicos del backoffice y proteger proyecciones de API/auditoría, registrar AB-02/13 y ejecutar sus pruebas en bases aisladas y desechables, con commit y PR hacia `main`, sin merge. No crea ni ejecuta 003 ni modifica 001/002; no usa schema/seed en la base habitual ni toca datos o volúmenes existentes. El resto de 2A requiere encargos posteriores.
+#5 fijó la base documental de producto. El PR [#7](https://github.com/japh113/plataformaPsicologia/pull/7) integró aislamiento clínico del backoffice y bloqueó cambios administrativos de vínculos. El PR [#8](https://github.com/japh113/plataformaPsicologia/pull/8) integró `clinical_episodes`, 003, atribución opcional consistente, ejecutor explícito y pruebas/demo aisladas. Véanse [fundamentos](../clinical-episodes-foundation.md) y [evidencia histórica](../clinical-episodes-validation.md). No implica despliegue de 003 en la base habitual ni activación de autorización por episodio.
 
-Los documentos son contexto durable para nuevos chats. Cada encargo futuro debe citar la etapa, sus reglas RN y ADR, decisiones que debe cerrar, exclusiones, criterios de aceptación y evidencia esperada. El cierre de una etapa debe actualizar su estado en una tarea posterior autorizada, sin depender solo del historial de conversación.
+Esta entrega actualiza los cuatro documentos de producto y añade el [diseño propuesto de identidad, directorio básico y vinculación inicial](../stage2a-identity-directory-intake.md), pendiente de revisión y aprobación. Solo documentación, commit y PR sin merge; sin backend/frontend, SQL/migraciones, base habitual, contenedores o volúmenes. Las autorizaciones de los PR históricos no permiten ejecutar sus procedimientos ahora.
 
-## PR de fundamentos posterior a #7
-
-El PR #7 integra el bloqueo clínico del backoffice y de cambios administrativos de vínculos. El siguiente encargo aprueba ADR-006/009 para crear `clinical_episodes` independiente, identidad global estable, exclusividad de active/paused, cierre terminal y atribución opcional consistente. Implementa 003, ejecutor explícito con versiones/checksums/lock, diagnóstico de solo lectura y pruebas/demo aisladas; no activa autorización por episodios ni cierra 2A. No modifica 001/002 ni toca base habitual, datos reales o volúmenes existentes. Véase [procedimiento y pruebas](../clinical-episodes-foundation.md). Las restricciones de los encargos documentales/primer PR descritas abajo son contexto histórico y no cancelan esta aprobación posterior.
+Los documentos son contexto durable. Cada encargo futuro cita etapa, RN/ADR, decisiones técnicas aprobadas, exclusiones, aceptación y evidencia esperada. Documentar una propuesta no autoriza implementarla.
 
 ## Estado de partida y evidencia
 
@@ -18,12 +16,12 @@ El PR #7 integra el bloqueo clínico del backoffice y de cambios administrativos
 | --- | --- | --- |
 | 0. Docker de desarrollo | Completada para su alcance | PR [#1](https://github.com/japh113/plataformaPsicologia/pull/1), merge `9dbc305`; [README.md](../../README.md), [compose.yaml](../../compose.yaml) y [docker/postgres/init.sh](../../docker/postgres/init.sh). No es despliegue de producción. |
 | 1. Integridad, autenticación y dependencias de producción | Completada para su alcance | PR [#2](https://github.com/japh113/plataformaPsicologia/pull/2), merge `6a23ac8`; [#3](https://github.com/japh113/plataformaPsicologia/pull/3), merge `0e8b13f`; [#4](https://github.com/japh113/plataformaPsicologia/pull/4), merge `3a1f0d7`. No certifica el estado de una base desplegada ni elimina deuda de desarrollo/hardening. |
-| Documentación de producto | Base #5 integrada; actualización posterior en este PR | PR [#5](https://github.com/japh113/plataformaPsicologia/pull/5), merge `7380e80`; no implementó etapas 2. |
-| 2A–2E | 2A parcial; 2B–2E pendientes | #7 integra permisos del backoffice. El PR de fundamentos crea 003 sin activación de permisos por episodio ni despliegue; identidad, segmentación y flujos siguen pendientes. |
+| Documentación de producto | Base y decisiones posteriores integradas; ampliación documental de 2A en este PR | PR [#5](https://github.com/japh113/plataformaPsicologia/pull/5), merge `7380e80`; no implementó etapas 2. |
+| 2A–2E | 2A parcial; 2B–2E pendientes | #7 integra backoffice y #8 fundamentos 003 con evidencia aislada, sin despliegue ni permisos por episodio. Identidad verificada, directorio básico, vinculación y segmentación siguen pendientes. |
 | 3. Pruebas y confiabilidad | Pendiente como etapa de ampliación | Ya hay tests unitarios e integración; no se parte de cero. Cada etapa 2 debe traer sus propias pruebas. |
 | 4. Experiencia y refactor gradual | Pendiente | La UI funcional mínima de 2B y 2C se entrega en esas etapas. |
 | 5. Preparación para producción | Pendiente | Incluye revisión legal, privacidad, restauración, monitoreo y despliegue. |
-| 6. Red estatal/nacional | Visión futura | Directorio y derivación; no se implementa en el alcance inmediato. |
+| 6. Red estatal/nacional | Visión futura | Reseñas, reputación, filtros avanzados, descubrimiento y funciones de red; directorio básico de vinculación pasa a 2A. |
 
 La corrección de dependencias de producción es el estado de alcance acordado tras #4, no una auditoría nueva ejecutada por esta tarea. `npm audit` de desarrollo sigue con riesgos por investigar; no fijar conteos como si fueran permanentes. Los conteos de vulnerabilidades al final de [authentication-security.md](../authentication-security.md) pertenecen a la evidencia anterior a #4. Tampoco se repiten aquí sus resultados de pruebas como si se hubieran ejecutado hoy.
 
@@ -31,15 +29,15 @@ La corrección de dependencias de producción es el estado de alcance acordado t
 
 | Hallazgo y ruta existente | Implicación para el plan |
 | --- | --- |
-| [backend/sql/schema.sql](../../backend/sql/schema.sql): índices activos de `care_relationships` por `(patient_id, psychologist_user_id)` | No impiden dos profesionales distintos activos sobre el mismo paciente. 2A debe resolverlo sin eliminar duplicados automáticamente. |
+| [schema.sql](../../backend/sql/schema.sql): unicidad legacy por par; [003](../../backend/sql/migrations/003_clinical_episode_foundation.sql): índice por paciente active/paused | 003 garantiza exclusividad de episodios donde esté instalada; la aplicación aún usa vínculos legacy. No deducir que ya controla su autorización ni eliminar duplicados. |
 | [auth.permissions.js](../../backend/src/modules/auth/auth.permissions.js): `buildPatientAccessScope` admite relación activa **o** `psychologist_patient_access` | El vínculo heredado puede seguir concediendo acceso sin responsable activo. 2A debe cubrir todas las rutas, no solo el expediente. |
 | [patients.service.js](../../backend/src/modules/patients/patients.service.js): `createPatient` inserta acceso heredado; [auth.service.js](../../backend/src/modules/auth/auth.service.js) sincroniza ese acceso y reutiliza relaciones | Crear pacientes y cambiar vínculos exige revisión conjunta. Reactivar/sobrescribir relaciones impide conservar episodios distintos. |
-| [schema.sql](../../backend/sql/schema.sql): citas y espera solo referencian paciente; tareas no tienen episodio | Falta atribución segura a profesional/episodio. Una relación nueva puede exponer operación previa si solo se filtra por paciente. |
+| #8 añade `episode_id` opcional a citas, notas, tareas/objetivos y espera; escritores actuales siguen usando NULL | Falta activación coordinada de atribución y permisos. Una relación nueva puede exponer operación previa si solo se filtra por paciente. |
 | `patient_clinical_notes.created_by_user_id` es nullable; [patients.service.js](../../backend/src/modules/patients/patients.service.js) lee/edita notas por paciente y nota | Autor informado al crear no equivale a autorización por autor. Se necesita segmentación y tratamiento de autoría legacy desconocida. |
 | `patientSelectColumns` reúne entrevista, riesgo, contexto, tareas y objetivos; notas se agregan por paciente | El aislamiento debe incluir datos globales, metadatos y derivados, no solo la colección de notas. |
 | [appointments.service.js](../../backend/src/modules/appointments/appointments.service.js), [availability.service.js](../../backend/src/modules/availability/availability.service.js) y [reminders.service.js](../../backend/src/modules/reminders/reminders.service.js) consultan acceso heredado | Una corrección limitada a `patients` deja rutas laterales de acceso o comportamiento inconsistente. |
 | Zona fija en servicios de pacientes/citas y en [001_clinical_data_integrity.sql](../../backend/sql/migrations/001_clinical_data_integrity.sql) | 2E debe coordinar validaciones de aplicación y base sin reescribir la migración histórica 001. |
-| El primer PR de 2A elimina el permiso global de `superadmin` en [auth.permissions.js](../../backend/src/modules/auth/auth.permissions.js) y protege respuestas operativas/auditoría; la edición clínica previa aún permite actualizar notas | RN-27 cubierto para roles administrativos sin habilitar emergencia. RN-23 (inmutabilidad/adendas) y permisos por episodio siguen pendientes. |
+| El PR #7 eliminó el permiso global de `superadmin` en [auth.permissions.js](../../backend/src/modules/auth/auth.permissions.js) y protege respuestas operativas/auditoría; la edición clínica previa aún permite actualizar notas | RN-27 cubierto para roles administrativos sin habilitar emergencia. RN-23 (inmutabilidad/adendas) y permisos por episodio siguen pendientes. |
 
 **Demo y datos reales:** el usuario confirmó que los datos presentes de la demo local son de prueba y desechables (RN-28/ADR-018). No construir conciliación manual exclusivamente para salvarlos. No se consultó ninguna base en esta tarea ni se preservan conteos de demo como requisitos. Esta condición no permite borrar bases reales ni reinicializar demo sin autorización separada; no tocar volúmenes existentes. La futura estrategia para datos reales sí necesita diagnóstico autorizado de solo lectura, preservación, tratamiento de legacy, ensayo y rollout seguro (ADR-009, AB-06/17).
 
@@ -51,7 +49,7 @@ Los escenarios deben permitir iniciar sesión como distintos psicólogos y pacie
 
 | Subetapa | Cobertura demo conforme se implemente su alcance |
 | --- | --- |
-| 2A | Identidad, vínculo inicial, separación de datos globales/clínicos, episodios y permisos entre distintos psicólogos y pacientes, incluido archivo propio y límites de acceso disponibles. |
+| 2A | Registro independiente, verificación, perfil privado/público y admisión independiente, consulta anónima, solicitud con confirmación final, invitación previa a cuenta, cancelación/caducidad y denegaciones sin acceso prematuro; separación de datos globales/clínicos, episodios y permisos entre distintos psicólogos y pacientes, incluido archivo propio y límites de acceso disponibles. |
 | 2B | Derivación con resumen revisable, cambio directo, citas y avisos del cambio, pausa/reanudación/cierre y suspensión según los flujos entregados. |
 | 2C | Antecedentes adicionales opcionales, autorización limitada, negativa, revocación y nueva autorización de adendas posteriores, sin herencia de permisos. |
 | 2D | Agenda, conflictos de reserva y su resolución visible desde cuentas distintas; las garantías de concurrencia también se prueban automáticamente. |
@@ -75,9 +73,9 @@ Los datos y cuentas demo son **exclusivamente de desarrollo**, en un entorno ais
 
 **Pendientes explícitos:** riesgos del audit de desarrollo, hardening (entre otros, intentos de login, almacenamiento de JWT, CORS, TLS y recuperación remota segura), mínimo privilegio y copias/restauración. No declarar preparación para producción por haber cerrado esta etapa.
 
-## Etapa 2A — Modelo, identidad, episodios, permisos y plan de migración
+## Etapa 2A — Identidad, directorio básico, vinculación inicial, episodios y permisos
 
-**Estado:** parcial: permisos de backoffice integrados en #7; fundamentos 003 en este PR, sin despliegue ni autorización por episodios. **Dependencia:** 1 y cierre de propuestas técnicas aplicables ADR-006–ADR-009/AB-02/06/08/13–AB-17. **Requisitos aprobados:** RN-01–RN-03/10/15–RN-17/21–RN-28 y ADR-002/005/012–ADR-018 según su alcance. **Entregables previstos:** modelo y permisos de identidad global/básicos del paciente frente a datos clínicos por episodio, alta/vínculo inicial verificado, inventario de rutas/derivados, estructura de notas/adendas y permisos de archivo, planificación de 003 y rollout seguro con datos reales/legacy. No se aprueba todo el diseño técnico por esta enumeración; el SQL se crea solo en encargo posterior autorizado.
+**Estado:** parcial: backoffice integrado en #7 y fundamentos 003 en #8, sin despliegue autorizado en base habitual ni autorización por episodio. El presente diseño es documental y PROPUESTO. **Dependencia:** 1 y cierre de propuestas aplicables ADR-006–ADR-009/AB-02/06/08/13–AB-22. **Requisitos aprobados:** RN-01–RN-03/10/15–RN-17/21–RN-40; ADR-002/005/012–ADR-022 según alcance. **Entregables pendientes:** identidad global verificada y registro independiente, perfil público optativo y directorio mínimo, solicitud e invitación inicial separadas de episodio, permisos por episodio/archivo, datos globales frente a clínicos, inventario de rutas/derivados y rollout seguro posterior a 003. Las propuestas técnicas se revisan antes del siguiente encargo de código.
 
 **Criterios de aceptación:**
 
@@ -88,16 +86,20 @@ Los datos y cuentas demo son **exclusivamente de desarrollo**, en un entorno ais
 - `superadmin`, `admin` y `support` sin acceso clínico global ordinario ni exportación/alteración clínica; sin excepción de emergencia implícita.
 - Se cubren alta de paciente, vínculos administrativos e invitaciones, expediente, entrevista, tareas, objetivos, riesgo, agenda, recurrencias, disponibilidad, espera y recordatorios. Ninguna ruta antigua debe saltarse las reglas ordinarias.
 - Nuevos registros clínicos/operativos tienen atribución inequívoca según diseño aprobado. Legacy real ambiguo sin asignación inventada, con procedimiento mínimo autorizado/auditado compatible con RN-27 por definir; no construir conciliación manual solo para demo.
-- La propuesta 003 es aditiva e idempotente; detecta conflictos/duplicados y se detiene con diagnóstico en vez de borrar o elegir un responsable automáticamente. No modifica 001 ni 002 ni ejecuta schema/seed.
+- 003 integrada es aditiva e idempotente: inconsistencias de claves bloquean instalación; vínculos múltiples/autoría ausente se diagnostican sin borrar ni elegir responsable. No modifica 001 ni 002 ni ejecuta schema/seed.
 - El ensayo posterior usa una copia aislada y autorizada, comprueba conservación de datos y reaplicación, y define coordinación de todas las versiones/escritores durante el despliegue y recuperación sin perder historia.
+
+**Aceptación adicional de directorio/vinculación (ADR-020–ADR-022):** registro sin episodio; perfiles privados por defecto, públicos solo por elección del aprobado; publicar y recibir solicitudes independientes; consulta anónima mínima sin datos de pacientes; solicitudes autenticadas/verificadas con mensaje opcional privado y confirmación final; una pendiente iniciada por paciente en ambas esperas; cancelación/caducidad y protección de abuso; invitación profesional incluso sin cuenta previa, sin política de simultaneidad inventada. Ningún pendiente habilita expediente ni rutas legacy. PostgreSQL arbitra confirmaciones concurrentes, sin exponer otro consultorio ni sustituir cambio 2B. Plazos, estados y límites técnicos necesitan aprobación.
+
+**Secuencia recomendada, aún sin autorización de código:** (1) identidad/verificación, perfil y directorio básico sin habilitar vínculo clínico; (2) solicitudes/invitaciones y controles aprobados, sin habilitar creación de episodios hasta satisfacer permisos; (3) activación atómica con segmentación y retirada coordinada de rutas legacy. Si se revisa como un solo PR, conserva estas barreras verificables. Dependencias, decisiones D-01–D-12, pruebas y demo están en el [diseño técnico](../stage2a-identity-directory-intake.md). Cada PR incluye UI mínima de su alcance, pruebas automatizadas y demo ADR-019; la secuencia no posterga esas comprobaciones hasta 3/4.
 
 ADR-006/009 sustituyen la propuesta de `care_relationships` como episodios: fundamentos en tabla independiente `clinical_episodes`, índice active/paused por paciente y referencias `episode_id` aprobados para 003. La activación de autorización y retirada del fallback heredado siguen pendientes.
 
 **Reparto transversal:** 2A planifica estructura/permisos para notas/adendas, resumen versionado, cambios, pausa/cierre, suspensión y cancelación de citas. 2B entrega sus flujos mínimos; 2C consentimiento de antecedentes adicionales/adendas y revocación; 2D profundiza concurrencia de agenda. Dividir implementación en PR acotados con dependencias explícitas; no concentrar todo en 2A ni posponer sus fundamentos hasta 2C. Un índice limitado solo a activos no cumpliría exclusividad con pausados.
 
-**Primer PR acotado de 2A — RN-27 / ADR-017:** denegación clínica de `superadmin`, `admin` y `support` en rutas y servicios; proyecciones operativas de vínculos/cuentas; auditoría administrativa limitada a eventos de cuentas y metadatos permitidos, sin exponer eventos clínicos por filtros o límites. Se conservan registros históricos, consulta operativa, gestión de cuentas y aprobación/suspensión de psicólogos. La creación y cualquier cambio de estado de vínculos administrativos quedan temporalmente bloqueados hasta un mecanismo seguro de autorización bilateral; no pueden sincronizar acceso heredado ni alterar responsabilidad clínica. Las pruebas cubren denegaciones, proyecciones, pacientes/psicólogos y regresión JWT en PostgreSQL aislado. Este PR no cierra 2A ni implementa AB-02/13.
+**Primer PR de 2A, integrado como #7 — RN-27 / ADR-017:** denegación clínica de `superadmin`, `admin` y `support` en rutas y servicios; proyecciones operativas de vínculos/cuentas; auditoría administrativa limitada a eventos de cuentas y metadatos permitidos, sin exponer eventos clínicos por filtros o límites. Se conservan registros históricos, consulta operativa, gestión de cuentas y aprobación/suspensión de psicólogos. La creación y cualquier cambio de estado de vínculos administrativos quedan temporalmente bloqueados hasta un mecanismo seguro de autorización bilateral; no pueden sincronizar acceso heredado ni alterar responsabilidad clínica. Las pruebas cubren denegaciones, proyecciones, pacientes/psicólogos y regresión JWT en PostgreSQL aislado. #7 no cerró 2A ni implementó AB-02/13.
 
-**Dependencias pendientes tras los fundamentos:** segmentar por episodio, quitar el fallback heredado de psicólogos y resolver atribución histórica necesita el diseño y la autorización posteriores de ADR-006/009/AB-14/17. 003 se crea y ensaya solo en destinos desechables; no se despliega en la base habitual, no se cambian 001/002 ni se usa schema/seed sobre bases pobladas. La revisión de identidad excepcional y el nuevo flujo de entrevista siguen sin implementarse.
+**Dependencias pendientes tras los fundamentos:** segmentar por episodio, quitar el fallback heredado de psicólogos y resolver atribución histórica necesita el diseño y la autorización posteriores de ADR-006/009/AB-14/17. 003 ya se creó y ensayó en destinos desechables en #8; no se despliega en la base habitual, no se cambian 001/002 ni se usa schema/seed sobre bases pobladas. La revisión de identidad excepcional y el nuevo flujo de entrevista siguen sin implementarse.
 
 ## Etapa 2B — Derivación con resumen, cambio directo y pausas/cierre
 
@@ -147,7 +149,7 @@ No implementar esta etapa antes de decidir las verificaciones presenciales y el 
 
 **Estado:** pendiente como ampliación; existen pruebas en [backend/test](../../backend/test) y entorno [compose.integrity-test.yaml](../../compose.integrity-test.yaml). **Dependencia:** 2A–2E para su cierre. **Entregables previstos:** regresión transversal, matriz de permisos, pruebas de carreras/fallos, trazabilidad y ensayos de actualización sobre datos legacy aislados.
 
-**Criterios de aceptación:** escenarios RN y A→B→C/A→B→A reproducibles; identidad/alta sin exposición entre consultorios; dos vías de cambio y resumen aprobado; pausa/cierre/suspensión; archivo completo propio/adendas con nueva autorización; denegaciones por actor/episodio/alcance; consentimiento digital/presencial y revocación concurrente; sin filtraciones por rutas secundarias; conservación de 001/002 y migración segura de datos reales. Verificar lint/build y pruebas pertinentes para implementación, con resultados/límites; no se ejecutan por este PR Markdown. La etapa 3 amplía cobertura, no pospone pruebas esenciales de cada etapa 2.
+**Criterios de aceptación:** escenarios RN y A→B→C/A→B→A reproducibles; identidad/alta sin exposición entre consultorios; dos vías de cambio y resumen aprobado; pausa/cierre/suspensión; archivo completo propio/adendas con nueva autorización; denegaciones por actor/episodio/alcance; consentimiento digital/presencial y revocación concurrente; sin filtraciones por rutas secundarias; conservación de 001/002 y migración segura de datos reales. Verificar lint/build y pruebas pertinentes para implementación, con resultados/límites. En este PR Markdown se intentaron lint/build, pero npm no está disponible; no se ejecutaron suites de integración ni operaciones sobre bases. La etapa 3 amplía cobertura, no pospone pruebas esenciales de cada etapa 2.
 
 ## Etapa 4 — Frontend, experiencia y refactor gradual
 
@@ -163,7 +165,7 @@ No implementar esta etapa antes de decidir las verificaciones presenciales y el 
 
 ## Etapa 6 — Red estatal y nacional
 
-**Estado:** visión futura, sin implementación inmediata. **Dependencia:** aislamiento y derivación confiables, operación de producción validada y alcance de red aprobado. **Entregables futuros:** especificación de directorio, admisión/identidad profesional, descubrimiento y derivaciones entre consultorios.
+**Estado:** visión futura, sin implementación inmediata. **Dependencia:** aislamiento y derivación confiables, operación de producción validada y alcance de red aprobado. **Entregables futuros:** reseñas, reputación, filtros avanzados, descubrimiento, funciones y operación de red estatal/nacional y evolución de derivaciones entre consultorios. El directorio público básico, perfil optativo y admisión inicial pertenecen a 2A por ADR-020; no duplicarlos como pendientes exclusivos de 6.
 
 **Criterios de aceptación futuros:** red sin acceso implícito ni búsqueda que revele pacientes de otro consultorio; identidad global, máximo un responsable vigente (activo/pausado), episodios distintos y permiso separado/no heredable. Validar límites de datos públicos, escalabilidad y operación por estado antes de expandir a nivel nacional; no convertir red en clínica con pacientes compartidos.
 

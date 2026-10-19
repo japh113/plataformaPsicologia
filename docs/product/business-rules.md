@@ -1,6 +1,6 @@
 # Reglas de negocio y permisos
 
-Referencia: 18 de octubre de 2026; base revisada `main` en `7380e80` (PR #5 integrado). Este documento describe requisitos APROBADOS de producto, no afirma que el código actual ya los cumpla. Las propuestas de almacenamiento y transacciones y los asuntos ABIERTOS están separados en [decisions.md](decisions.md). Se conservan los IDs RN-01–RN-14, actualizando su alcance, y se añaden RN-15–RN-28.
+Referencia: 18 de octubre de 2026; base revisada `main` en `b3bfd40` (PR #7 y #8 integrados). Este documento describe requisitos APROBADOS de producto, no afirma que el código actual ya los cumpla. Las propuestas de almacenamiento y transacciones y los asuntos ABIERTOS están separados en [decisions.md](decisions.md). Se conservan los IDs RN-01–RN-28; esta ampliación añade RN-29–RN-40. #7 cubre el aislamiento administrativo y #8 los fundamentos SQL, sin acreditar permisos por episodio ni despliegue de 003 en la base habitual.
 
 ## Conceptos
 
@@ -8,6 +8,9 @@ Referencia: 18 de octubre de 2026; base revisada `main` en `7380e80` (PR #5 inte
 | --- | --- |
 | Responsabilidad vigente | Único psicólogo a cargo de un episodio `activo` o `pausado`; ambos cuentan para exclusividad. No equivale a la figura jurídica de responsable del tratamiento de datos. |
 | Episodio | Periodo de atención con estados `activo`, `pausado`, `finalizado`. Reanudar pausa conserva episodio; regresar tras finalización crea otro. |
+| Vinculación inicial | Alta bilateral sin responsabilidad vigente; una solicitud o invitación pendiente no es un episodio ni una autorización clínica. No equivale al cambio de 2B. |
+| Solicitud inicial del paciente | Petición a un perfil público que acepta nuevos pacientes; ocupa el cupo único hasta resolución, incluida espera de confirmación final. |
+| Invitación profesional inicial | Invitación a paciente conocido, incluso si aún no tiene cuenta; separada del cupo de solicitudes iniciadas por paciente. |
 | Derivación profesional (ordinaria) | Cambio iniciado por A, aceptado por paciente y B, con resumen obligatorio de A cuya versión exacta aprueba el paciente. |
 | Cambio directo | Solicitud iniciada por paciente con identidad verificada y aceptación de B; no requiere consentimiento ni resumen de A. |
 | Antecedentes adicionales | Información clínica opcional, distinta del resumen obligatorio de derivación, con alcance expresamente autorizado. |
@@ -44,8 +47,20 @@ Referencia: 18 de octubre de 2026; base revisada `main` en `7380e80` (PR #5 inte
 | RN-24 | El paciente ve citas, tareas, objetivos compartidos y resúmenes para él, incluido histórico de sus actividades. Las notas profesionales no son visibles automáticamente; acceso clínico/derechos ARCO se tramitan aparte sin bloqueo arbitrario (RN-13). |
 | RN-25 | Riesgo clínico POR EPISODIO; uno nuevo comienza NO EVALUADO, nunca sin riesgo por defecto. Una entrevista independiente por episodio, sin compartir automáticamente la anterior al cambiar de psicólogo. AB-02: respuestas del paciente separadas de valoración profesional; paciente puede completar y consultar sus respuestas incluso históricamente, con trazabilidad de correcciones. La valoración profesional no se muestra automáticamente, sin limitar ARCO. Antecedentes autorizados no sustituyen entrevista ni evaluación propias. |
 | RN-26 | Tareas y objetivos POR EPISODIO. Al cerrar, pendientes quedan registrados como no completados por cierre, sin inventar completitud; paciente conserva lectura histórica de sus actividades. |
-| RN-27 | `superadmin`, `admin` y `support` sin acceso global ordinario a registros clínicos, entrevistas, notas, exportaciones ni alteración clínica. Los permisos actuales amplios de `superadmin` son brecha, no política aprobada. Emergencias pendientes de diseño/validación jurídica, sin puerta trasera. |
+| RN-27 | `superadmin`, `admin` y `support` sin acceso global ordinario a registros clínicos, entrevistas, notas, exportaciones ni alteración clínica. Los permisos globales previos de `superadmin` eran brecha, corregida para backoffice por #7, no política aprobada. Emergencias pendientes de diseño/validación jurídica, sin puerta trasera. |
 | RN-28 | Datos de la demo local confirmados por usuario como de prueba y desechables: no construir conciliación manual exclusivamente para salvarlos. Nunca extenderlo a bases reales. Migración futura segura para datos reales; reinicializar demo requiere autorización separada y no se tocan ahora volúmenes existentes. |
+| RN-29 | El paciente puede registrarse independientemente, sin psicólogo. Mantiene identidad global y verificación de correo y teléfono; registrarse no crea episodio ni concede acceso clínico a un profesional. |
+| RN-30 | Cada psicólogo decide publicar su perfil, privado por defecto. Solo profesionales aprobados pueden activarlo públicamente. La publicación no expone pacientes, expedientes ni relaciones terapéuticas. |
+| RN-31 | Visibilidad pública y recepción de nuevos pacientes son configuraciones independientes. Un perfil público puede indicar que no acepta nuevos pacientes; ello no impide invitar directamente a pacientes conocidos. |
+| RN-32 | Cualquier visitante puede consultar perfiles públicos e información profesional mínima sin registro. El directorio básico pertenece a 2A; reseñas, reputación, filtros avanzados y funciones de red quedan en 6 y requieren diseño posterior de privacidad. |
+| RN-33 | Solo pacientes autenticados y con las verificaciones exigidas pueden solicitar atención desde un perfil público que acepte nuevos pacientes. |
+| RN-34 | El psicólogo invita a un paciente conocido; este se registra si es necesario, verifica sus datos y acepta expresamente. La invitación sola no crea episodio ni permisos clínicos: se requieren las confirmaciones y validaciones pertinentes. |
+| RN-35 | El paciente puede enviar solicitud inicial con mensaje breve OPCIONAL; no se exige explicar motivo de consulta. El psicólogo acepta o rechaza; si acepta, el paciente debe confirmar finalmente antes de crear episodio y completar las verificaciones correspondientes. |
+| RN-36 | El mensaje opcional es privado y sensible; no aparece en directorio ni auditoría administrativa. Su existencia no habilita lectura del expediente. |
+| RN-37 | Cada paciente tiene como máximo UNA solicitud inicial pendiente iniciada por él. Ocupa el cupo esperando respuesta profesional o confirmación final del paciente. Este cupo es distinto de RN-19 (cambio). |
+| RN-38 | El paciente puede cancelar su solicitud inicial y las solicitudes caducan. Plazos, límites de frecuencia y políticas de bloqueo requieren diseño y aprobación; no se fijan aquí. |
+| RN-39 | Debe haber protección frente a solicitudes/cancelaciones masivas, automatización y acoso. Los rechazos no habilitan acoso repetitivo ni bloquean injustificadamente acceso a atención. Invitaciones profesionales se gestionan separadamente: no hay política definitiva aprobada sobre simultáneas de distintos profesionales. |
+| RN-40 | Solicitudes pendientes no conceden acceso clínico. Crear episodio es transaccional, conserva la garantía PostgreSQL de uno activo o pausado por paciente y no revela otros consultorios. Con episodio vigente corresponde cambio 2B; los permisos clínicos son por episodio, nunca por directorio o aceptación parcial. |
 
 ## Matriz breve de actores y permisos objetivo
 
@@ -54,13 +69,15 @@ Esta matriz limita permisos clínicos ordinarios. No crea nuevos roles técnicos
 | Actor o situación | Lectura clínica | Escritura clínica | Derivación y consentimiento |
 | --- | --- | --- | --- |
 | Psicólogo con responsabilidad vigente | Información de su episodio; antecedentes ajenos solo autorizados | Operación según estado; pausa impide nuevas citas. Borradores propios editables; notas finalizadas solo con adendas | Inicia derivación profesional y redacta resumen; no bloquea cambio directo |
-| Destinatario con solicitud pendiente | Solo datos mínimos según vía; resumen aprobado/antecedentes solo con autorización pertinente, nunca expediente por mera solicitud | Ninguna escritura clínica por esa solicitud | Acepta recibir al paciente; esa aceptación no sustituye la del paciente |
+| Visitante del directorio | Solo información profesional pública mínima, sin datos de pacientes | Ninguna | Consultar no permite solicitar sin autenticación/verificaciones |
+| Profesional con solicitud o invitación inicial pendiente | Solo datos mínimos del flujo y mensaje privado autorizado al destinatario; sin expediente | Ninguna por la solicitud/invitación | Su aceptación no sustituye la confirmación final exigida al paciente |
+| Destinatario con solicitud pendiente de cambio | Solo datos mínimos según vía; resumen aprobado/antecedentes solo con autorización pertinente, nunca expediente por mera solicitud | Ninguna escritura clínica por esa solicitud | Acepta recibir al paciente; esa aceptación no sustituye la del paciente |
 | Destinatario tras completar el cambio | Información de su nuevo episodio; historial anterior solo si está autorizado | Su nuevo episodio y sus propias notas | La aceptación del cambio no lo autoriza a recibir todo el historial |
 | Psicólogo histórico | Expediente clínico completo de sus propios episodios, sin episodios ajenos ni gestión actual | Solo adendas a notas propias, sin sobrescribir originales | Conserva trazabilidad; no puede extender el permiso del paciente |
 | Paciente | Citas, tareas, objetivos compartidos y resúmenes para él; histórico de actividades. Notas sin visibilidad automática; acceso/ARCO aparte | Administra básicos globales y participa en actividades; no edita notas profesionales | Acepta o inicia cambio, aprueba versión exacta de resumen y autoriza antecedentes aparte; revoca |
 | `support` / `admin` | Sin lectura clínica global por su rol de backoffice | Sin escritura clínica por ese rol | Gestión operativa no sustituye los acuerdos ni el consentimiento |
 | Revisión de datos legacy (procedimiento pendiente) | Sin permiso clínico nuevo por este documento; diseñar acceso mínimo compatible con RN-27 y revisión jurídica | No inventar atribución ni borrar historia; no exige conciliación manual de la demo desechable | No puede consentir en nombre del paciente |
-| `superadmin` | Sin acceso clínico global ordinario, incluidas exportaciones; código actual debe corregirse | Sin alteración clínica global | No sustituye acuerdos/consentimiento; emergencia sin diseñar no concede acceso |
+| `superadmin` | Sin acceso clínico global ordinario, incluidas exportaciones; #7 implementó su denegación administrativa | Sin alteración clínica global | No sustituye acuerdos/consentimiento; emergencia sin diseñar no concede acceso |
 | Psicólogo suspendido | Los JWT quedan inválidos; no se concede acceso por esta matriz | Sin creación de citas nuevas | No puede bloquear cambio directo; rehabilitación sin restablecer vínculos cambiados |
 | Miembro de futura red sin relación asistencial | Ningún acceso al expediente por pertenecer a la red | Ninguno | Podrá participar en directorio/derivación según etapa futura |
 
@@ -68,10 +85,14 @@ El permiso de lectura de una nota ajena no habilita sus tareas, adjuntos, versio
 
 ## Estados funcionales y condiciones de transición
 
-Lo aprobado son las condiciones siguientes y los estados de episodio `activo`, `pausado`, `finalizado`. Los estados API, orden detallado de aceptaciones/revisión, caducidades, errores, almacenamiento y mecanismos de concurrencia siguen ABIERTOS o PROPUESTOS; no confundirlos con la cancelabilidad y solicitud pendiente única ya aprobadas.
+Lo aprobado son las condiciones siguientes y los estados de episodio `activo`, `pausado`, `finalizado`. En vinculación inicial está aprobada la confirmación final del paciente tras aceptación profesional de su solicitud. Los estados API, otros detalles de orden, plazos de caducidad, errores, almacenamiento y mecanismos de concurrencia siguen ABIERTOS o PROPUESTOS; no confundirlos con la cancelabilidad y solicitud pendiente única ya aprobadas.
 
 | Situación funcional | Condición | Efecto obligatorio |
 | --- | --- | --- |
+| Registro independiente | Cuenta del paciente sin vínculo confirmado | Sin episodio ni acceso clínico profesional |
+| Solicitud inicial pendiente | Espera respuesta profesional o confirmación final del paciente | Ocupa cupo RN-37; no concede expediente |
+| Solicitud inicial lista | Profesional acepta y paciente confirma finalmente, con verificaciones y sin episodio vigente | Crear episodio atómicamente sin revelar consultorios ajenos |
+| Invitación inicial | Paciente conocido se registra si hace falta, verifica y acepta expresamente; restantes validaciones cumplidas | La invitación sola no habilita expediente; episodio solo al completar condiciones |
 | Derivación profesional pendiente | Falta aceptación de paciente/B o aprobación exacta del resumen | A sigue responsable; sin resumen aprobado no completar ni comunicarlo a B |
 | Derivación profesional lista | A inicia, paciente acepta cambio y versión exacta del resumen, B acepta, paciente confirma cancelación de citas futuras | Cambio atómico, episodio nuevo, cancelaciones consistentes e histórico íntegro; solo contenido aprobado |
 | Cambio directo listo | Paciente con identidad verificada solicita, B acepta y paciente confirma cancelación de citas futuras con A | No exige consentimiento/resumen de A; cambio atómico y notificación a A, sin historial automático |
@@ -106,6 +127,12 @@ Falta decidir la duración, metodología presencial exacta, momento de activaci�
 11. **Pausa y cierre:** paciente pausa con futuras citas resueltas. No puede vincularse otro responsable ni crear citas nuevas por estar pausado; reanudar exige ambos. El psicólogo puede finalizar con confirmación/motivo y aviso, conservando pendientes como no completados por cierre.
 12. **Suspensión:** las citas futuras quedan pendientes de resolución y se avisa sin motivo privado. Paciente puede cambiar directamente. Rehabilitar A no recupera vínculo ya cambiado ni reactiva canceladas.
 13. **Identidad y alta:** una coincidencia de correo/teléfono no une pacientes ni revela otro consultorio. Invitación inicial sin confirmación bilateral/verificación no activa responsabilidad; un episodio pausado obliga a usar cambio.
+
+14. **Registro sin profesional:** paciente crea cuenta; ningún psicólogo obtiene acceso ni se abre episodio. Visita perfiles sin sesión, pero no puede enviar solicitud sin autenticación y verificaciones.
+15. **Perfil público sin admisión:** profesional aprobado publica pero desactiva recepción. Visitantes ven información mínima y estado de admisión; no pueden enviar solicitudes. El profesional conserva la vía de invitar a pacientes conocidos.
+16. **Confirmación final y cupo:** P solicita a A sin mensaje; A acepta. Mientras P no confirme, no hay episodio y otra solicitud iniciada por P se rechaza. Cancelar o caducar resuelve la solicitud; frecuencias de reintento siguen por aprobar.
+17. **Mensaje sensible:** mensaje opcional de P solo accesible a las partes autorizadas del flujo; no aparece en proyecciones públicas, auditoría administrativa ni feed público. Ni aceptación ni mensaje habilitan expediente.
+18. **Invitación y concurrencia:** paciente aún sin cuenta puede ser invitado y luego registrarse/verificar/aceptar. Dos confirmaciones concurrentes nunca crean dos episodios vigentes; no se divulga identidad de otro profesional. La política de simultaneidad de invitaciones sigue pendiente.
 
 ## Reglas existentes que se conservan
 
