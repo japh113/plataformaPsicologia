@@ -1,8 +1,8 @@
 # PR B — identidad adulta y verificación de contactos
 
-Continuidad C: B integrado en #11 (5e549f5). [Contrato C](contact-changes.md) amplía contactos seguros, comparte cuotas B y distingue propósitos. Aplicación C requiere 005; el contrato B de abajo conserva su corte original y sus evidencias no sustituyen [validación C](contact-change-validation.md).
+Estado al 19 de octubre de 2026: B integrado en #11 (5e549f5) y C en #12 (543442e). [Contrato C](contact-changes.md) amplía contactos seguros, comparte cuotas B y distingue propósitos. Aplicación C requiere 005; las secciones de demo B conservan su alcance de entrega y sus evidencias no sustituyen la [validación final C](contact-change-deadline-validation.md). [CI](ci-plan.md) propuesta, sin workflows implementados.
 
-Implementado en rama sobre 0f2ebba (#10); revisión/integración pendientes. Sin despliegue habitual, proveedores reales, C/D o nueva vinculación clínica. Decisiones: ADR-012/019/023/024/028, RN-41–48/57–58 y AB-23. [Evidencia](patient-identity-validation.md), [matriz legacy](stage2a-legacy-mutations.md).
+B fue implementado sobre 0f2ebba (#10) e integrado en #11. Sin despliegue habitual acreditado, proveedores reales, D o nueva vinculación clínica. Decisiones: ADR-012/019/023/024/028, RN-41–48/57–58 y AB-23. [Evidencia histórica B](patient-identity-validation.md), [matriz legacy](stage2a-legacy-mutations.md).
 
 ## Registro, titularidad y fuentes
 
@@ -21,7 +21,7 @@ Ambos registros públicos (paciente y profesional) devuelven 202 con accepted=tr
 | DOB de entrevista | patient_intakes.birth_date sigue como dato clínico de esa entrevista; etiqueta explícita y ninguna escritura de DOB global. |
 | Evidencia | contact_verification_state por cuenta/canal/contacto vigente; nunca una marca enviada por cliente, cuenta previa o relación. |
 
-GET /api/auth/identity devuelve solo firstName/lastName/birthDate/email/phone/emailVerifiedAt/phoneVerifiedAt de la cuenta paciente titular. PATCH admite exclusivamente nombre/apellido. El usuario confirmó dejar pendiente cualquier captura o corrección posterior de DOB, también para históricos desconocidos. Cambios de email/teléfono requieren PR C y se rechazan aquí. El profesional solo puede escribir riskLevel/status/notes/reasonForConsultation mediante PUT patients; se preservan sus capacidades clínicas autorizadas.
+GET /api/auth/identity devuelve solo firstName/lastName/birthDate/email/phone/emailVerifiedAt/phoneVerifiedAt de la cuenta paciente titular. PATCH admite exclusivamente nombre/apellido. El usuario confirmó dejar pendiente cualquier captura o corrección posterior de DOB, también para históricos desconocidos. Cambios de email/teléfono usan exclusivamente el flujo C ya integrado y se rechazan en este PATCH. El profesional solo puede escribir riskLevel/status/notes/reasonForConsultation mediante PUT patients; se preservan sus capacidades clínicas autorizadas.
 
 ## Selector legacy y correos profesionales
 
@@ -43,7 +43,7 @@ Envíos: 60 s y máximo cinco por ventana móvil de 24 h, tanto por cuenta/canal
 
 **Aprobación adicional B:** solicitar SMS exige email vigente verificado. Teléfonos compartidos están permitidos, sin unicidad/fusión ni política definitiva para reciclados. Otras cuentas con email verificado aún pueden agotar la cuota compartida de un número: reducción de abuso, sin promesa de eliminación completa. Controles adicionales por red/costo, antiautomatización de producción y resolución excepcional siguen pendientes antes de envíos reales.
 
-Los triggers de 004 invalidan evidencia/desafíos al cambiar contacto, incluso al restaurar el valor anterior. Email y SMS son independientes: cambiar email conserva evidencia SMS; cambiar teléfono conserva email. Cambio de asociación/rol de cuenta invalida ambos. C deberá coordinar locks, reautenticación y sesiones; esos triggers no habilitan cambios de contacto ahora.
+Los triggers de 004 invalidan evidencia/desafíos al cambiar contacto, incluso al restaurar el valor anterior. Email y SMS son independientes: cambiar email conserva evidencia SMS; cambiar teléfono conserva email. Cambio de asociación/rol de cuenta invalida ambos. C coordina locks, reautenticación y sesiones mediante su flujo específico; estos triggers por sí solos no habilitan edición genérica de contactos.
 
 No se escriben tokens/códigos en auditoría, historial clínico, logs o respuestas HTTP. Identity usa no-store/no-referrer; CORS expone Retry-After a la UI. La entrega ocurre después del COMMIT; si falla se invalida el desafío y la cuota permanece consumida. No se reintenta silenciosamente ni se mantiene un outbox con secretos recuperables.
 
@@ -55,7 +55,7 @@ VERIFICATION_SECRET: clave separada de al menos 32 bytes, suministrada por entor
 
 En test, el buzón privado está en memoria del proceso y solo es accesible mediante helper test. En demo, mensajes cifrados AES-256-GCM en /tmp/psicopanel-verification-mailbox, directorio 0700 y archivos 0600 dentro del contenedor. El CLI local descifra la entrega del destinatario ficticio seleccionado. No hay endpoint, backoffice, log del servidor o preview HTTP para leer códigos. El buzón se pierde al recrear contenedor; nunca es infraestructura de correo productiva.
 
-004_patient_identity_verification.sql agrega DOB y tablas privadas de evidencia/desafíos e índices de cuotas; no cambia filas históricas ni crea accesos. 001–003 y sus checksums permanecen intactos. Runner reconoce manifest 001–004 y targets explícitos 003/004; verifica huella actual antes del upgrade, agrega ledger y huella 004, conserva ledger anterior y rechaza downgrade/deriva/versiones desconocidas/checksum incorrecto. Transacción y lock compartido con inicializador se conservan. Diagnóstico 003 sigue siendo lectura.
+004_patient_identity_verification.sql agrega DOB y tablas privadas de evidencia/desafíos e índices de cuotas; no cambia filas históricas ni crea accesos. 001–003 y sus checksums permanecen intactos. B amplió el runner a 004; C reconoce manifiesto 001–005 y targets explícitos 003/004/005. Verifica huella actual antes del upgrade, agrega ledger/huella de la sucesora, conserva ledger anterior y rechaza downgrade/deriva/versiones desconocidas/checksum incorrecto. Transacción y lock compartido con inicializador se conservan. Diagnóstico 003 sigue siendo lectura; aplicación C requiere target 005, el comando 004 siguiente describe solo la entrega B.
 
 Solo para un destino de ensayo **nuevo y explícitamente autorizado** con baseline/001/002 ya instalados:
 
@@ -110,6 +110,6 @@ Los enlaces email se importan al montar y al cambiar el fragmento en la misma pe
 
 ## Pendientes y límites de entrega
 
-Corrección/alta histórica de DOB, contacto seguro C, directorio D, solicitudes/invitaciones y permisos por episodio siguen pendientes. No hay recovery excepcional, fusión, menores alternativos, proveedores reales o despliegue. Nuevos vínculos futuros exigirán ambos contactos; B no los implementa. La clínica ya establecida conserva sus permisos actuales sin exigir verificaciones adicionales. Retención/limpieza/rotación y antiautomatización antes de producción siguen abiertas.
+Corrección/alta histórica de DOB, directorio D, solicitudes/invitaciones y permisos por episodio siguen pendientes; contactos seguros ya integrados en C. No hay recovery excepcional, fusión, menores alternativos, proveedores reales o despliegue acreditado. Nuevos vínculos futuros exigirán ambos contactos; B/C no los implementan. La clínica ya establecida conserva sus permisos actuales sin exigir verificaciones adicionales. B mantiene pendientes retención/limpieza/rotación y antiautomatización antes de producción; C documenta su limpieza propia y sus límites en el contrato.
 
 La evidencia vigente y sus límites están en [validación](patient-identity-validation.md); no atribuir la indisponibilidad histórica de navegador a las revisiones posteriores con Chromium real.

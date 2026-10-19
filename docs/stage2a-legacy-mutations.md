@@ -1,6 +1,6 @@
 # Mutaciones legacy — inventario revalidado y barrera B
 
-Fecha: 18 de octubre de 2026. Base 0f2ebba (#10), contrastada contra los servicios/rutas de B. **AB-23 aprobado expresamente e implementado en rama; revisión/integración pendientes, sin despliegue habitual.** A documentó la propuesta; este encargo autoriza su cierre funcional global.
+Inventario B del 18 de octubre de 2026, sobre base 0f2ebba (#10). Estado actualizado al 19 de octubre, main 543442e tras #12: **AB-23 implementado e integrado en #11; C integrado sin reabrir entradas legacy.** D no iniciado, sin despliegue habitual acreditado. A documentó la propuesta; B autorizó su cierre funcional global. Esta actualización solo documental no ejecuta ensayos ni modifica la barrera.
 
 Se recorrieron [auth.routes](../backend/src/modules/auth/auth.routes.js), [auth.controller](../backend/src/modules/auth/auth.controller.js), [auth.service](../backend/src/modules/auth/auth.service.js), [patients.routes](../backend/src/modules/patients/patients.routes.js), [patients.controller](../backend/src/modules/patients/patients.controller.js), [patients.service](../backend/src/modules/patients/patients.service.js), [permisos](../backend/src/modules/auth/auth.permissions.js), SQL, scripts y clientes. Se buscaron todos los escritores de care_relationships, psychologist_patient_access y users.patient_id. Ningún inventario/ensayo consultó la base habitual.
 

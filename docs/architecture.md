@@ -1,8 +1,8 @@
 # Arquitectura vigente de PsicoPanel
 
-Corte actual C: B integrado en #11 (5e549f5). [Cambio seguro de contactos C](contact-changes.md) implementado en rama: servicio específico, candidato cifrado, autorización por sesión, confirmación atómica y avisos durables. La aplicación C requiere sucesora 005; sin despliegue habitual, D ni episodios activados. Las secciones siguientes describen la base B salvo esta ampliación.
+Corte documental: 19 de octubre de 2026, main `543442ea634e5977bc887ace1db5457eee2ebf8c` tras #12. A/B/C integrados; D no iniciado. [Cambio seguro de contactos C](contact-changes.md): servicio específico, candidato cifrado, autorización por sesión, confirmación atómica y avisos durables. La aplicación C requiere sucesora 005; sin despliegue habitual acreditado ni episodios activados.
 
-Corte B: base 0f2ebba (#10), implementación en rama, sin integración ni despliegue habitual. [Producto](product/vision.md), [reglas](product/business-rules.md) y [decisiones](product/decisions.md) definen objetivos; esta página describe la implementación y sus límites.
+[Producto](product/vision.md), [reglas](product/business-rules.md) y [decisiones](product/decisions.md) definen objetivos; esta página describe la implementación y sus límites. [GitHub Actions/CI](ci-plan.md) sigue propuesto, sin workflows implementados en este corte.
 
 ## Aplicación implementada
 
@@ -25,13 +25,13 @@ La autorización clínica **todavía es por paciente**: `buildPatientAccessScope
 
 El [servicio auth](../backend/src/modules/auth/auth.service.js) mantiene login, recuperación y revisión profesional. Ambos registros públicos devuelven 202 uniforme sin sesión/ID para evitar enumeración de la tabla compartida; login posterior conserva JWT 002. Paciente exige DOB adulta global y teléfono internacional, sin entrevista/vínculo/acceso. Nombre propio y verificaciones residen en [identity.service](../backend/src/modules/auth/identity.service.js); [guía de contratos y autoridad de datos](patient-identity-verification.md).
 
-AB-23 bloquea las cinco mutaciones legacy en servicio antes de DB. No existe ya un llamador de syncLegacyRelationshipAccess en esos servicios; los lectores/fallback y la atención existente se conservan. Edición profesional limita campos a riesgo/estado/contexto/motivo clínicos. DOB de entrevista sigue como dato clínico separado, sin copiar a identidad. Corrección posterior de DOB y cambios de contacto no habilitados.
+AB-23 bloquea las cinco mutaciones legacy en servicio antes de DB. No existe ya un llamador de syncLegacyRelationshipAccess en esos servicios; los lectores/fallback y la atención existente se conservan. Edición profesional limita campos a riesgo/estado/contexto/motivo clínicos. DOB de entrevista sigue como dato clínico separado, sin copiar a identidad. Corrección posterior de DOB pendiente; contactos se cambian exclusivamente mediante el flujo C, no por edición genérica.
 
 ## Dominios y datos
 
 | Dominio | Tablas/servicios existentes y límites |
 | --- | --- |
-| Identidad y cuentas | patients, users (patient_id único opcional), password_reset_tokens. Paciente conserva ID global. 004 añade patients.global_birth_date, contact_verification_state y contact_verification_challenges. Evidencia independiente por contacto, HMAC y cuotas compartidas PostgreSQL; sin cambio de contacto C. |
+| Identidad y cuentas | patients, users (patient_id único opcional), password_reset_tokens. Paciente conserva ID global. 004 añade patients.global_birth_date, contact_verification_state y contact_verification_challenges. Evidencia independiente por contacto, HMAC y cuotas compartidas PostgreSQL. 005 y servicio C añaden solicitudes/avisos privados, confirmación atómica y revocación total de sesiones; solo entrega simulada. |
 | Profesional y vínculos | psychologist_profiles con título/cédula, aprobación y notas de revisión; care_relationships y psychologist_patient_access legacy. Sin versiones de credenciales, opt-in público o admisión independiente. Selector legacy deshabilitado (403 sin consulta) y sin carga frontend; DTO clínico de vínculos sin email profesional. Backoffice conserva proyección operativa autorizada. Directorio D pendiente. |
 | Expediente | patient_intakes, patient_tasks (tareas/objetivos), patient_clinical_notes. Entrevista/riesgo/contexto se agregan por paciente; no están segmentados funcionalmente por episodio. Paciente tiene acciones limitadas de entrevista/actividades; no asumir toda la visión RN-24 implementada. |
 | Agenda | appointments, appointment_waitlist_entries; citas/recurrencias, cancelación conservadora, espera manual priorizada y retiro sin borrar. Reglas de 60 min/hora exacta y nota/cita en servicios y 001; no confundirlas con toda la concurrencia objetivo de etapa 2D. |
@@ -51,21 +51,21 @@ La política de día clínico aún usa America/Los_Angeles en partes de aplicaci
 | Migración integrada | Garantía implementada en SQL | Límite |
 | --- | --- | --- |
 | [001](../backend/sql/migrations/001_clinical_data_integrity.sql) | Conservación de registros, historial, integridad de nota/cita y restricciones históricas | No implementar adendas o consentimientos por implicación; no modificar el archivo. |
-| [002](../backend/sql/migrations/002_auth_session_version.sql) | Revocación persistente JWT por session_version y estados | Cambios de contacto todavía no incorporados; no modificar el archivo. |
+| [002](../backend/sql/migrations/002_auth_session_version.sql) | Revocación persistente JWT por session_version y estados | C reutiliza session_version para revocar todas las sesiones al confirmar contacto; no modifica 002. |
 | [003](../backend/sql/migrations/003_clinical_episode_foundation.sql) | clinical_episodes independiente, active/paused/finalized, uno active/paused por paciente, identidad/terminalidad y referencias compuestas opcionales episode_id en citas/notas/tareas/espera | Backend actual escribe sin atribución; sin backfill histórico, nuevas rutas ni autorización por episodio. Tenerla integrada no acredita ejecución en entorno habitual. |
 | [004](../backend/sql/migrations/004_patient_identity_verification.sql) | DOB global nullable, evidencia/desafíos privados, cuotas e invalidación por contacto | Solo B; sin backfill, acceso clínico nuevo o despliegue habitual. |
-| [005](../backend/sql/migrations/005_secure_contact_changes.sql) | Solicitud privada cifrada, desafío por propósito, autorización por sesión, eventos mínimos y avisos durables; confirmación C revoca todas las sesiones | C en rama, pendiente de integración; sin backfill ni despliegue habitual. |
+| [005](../backend/sql/migrations/005_secure_contact_changes.sql) | Solicitud privada cifrada, desafío por propósito, autorización por sesión, eventos mínimos y avisos durables; confirmación C revoca todas las sesiones | Integrada en #12; sin backfill ni despliegue habitual acreditado. |
 
-[Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) reconocen 001–004 y targets explícitos 003/004; conservan destino, checksums históricos, ledger, lock, transacción y huella de la última versión. No admiten downgrade ni adopción de estructuras no registradas. Procedimiento en [fundamentos 003](clinical-episodes-foundation.md); evidencia histórica en [validación #8](clinical-episodes-validation.md).
+[Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) reconocen 001–005 y targets explícitos 003/004/005; conservan destino, checksums históricos, ledger, lock, transacción y huella de la última versión. No admiten downgrade ni adopción de estructuras no registradas. Procedimiento en [fundamentos 003](clinical-episodes-foundation.md); evidencia histórica en [validación #8](clinical-episodes-validation.md) y [validación final C](contact-change-deadline-validation.md).
 
-## Límites de B y diseño pendiente
+## Límites de B/C y diseño pendiente
 
-[Plan A/B/C/D](identity-directory-delivery-plan.md): B registro adulto/básicos/verificación; C cambio seguro de contactos; D perfiles/revisión/directorio y retiro público. A integrado; B autorizado e implementado en rama. 004 existe sin despliegue habitual; 005/006 estimadas. El resto del [diseño 2A](stage2a-identity-directory-intake.md) sigue propuesto. La [validación B](patient-identity-validation.md) distingue ejecución aislada de integración/despliegue.
+[Plan A/B/C/D](identity-directory-delivery-plan.md): A/B/C integrados; D perfiles/revisión/directorio y retiro público no iniciado. 004/005 existen sin despliegue habitual acreditado; 006 estimada. El resto del [diseño 2A](stage2a-identity-directory-intake.md) sigue propuesto. ADR-029/RN-59–61 exigen entrevista validada antes de activar todo episodio nuevo; la precondición backend/DB sigue pendiente, con relaciones legacy sin reinterpretación.
 
 Solicitudes/invitaciones nuevas, permisos/activación por episodio, derivaciones, adendas, consentimientos de antecedentes, recuperación excepcional y menores siguen pendientes. No tratar una cuenta verificada o un perfil público como vínculo asistencial. No afirmar que los límites actuales por paciente ya aíslan episodios.
 
 ## Pruebas, documentación y dirección futura
 
-Existen unitarias Node y suites HTTP/PostgreSQL en [backend/test](../backend/test); frontend dispone de lint/build, sin script propio de tests. [Desarrollo](development.md) centraliza herramientas, Docker/WSL, pruebas y destinos aislados; los ensayos requieren alcance autorizado. A fue documental. B ejecuta pruebas y demo en recursos UUID nuevos, sin Node/npm de host ni servicios habituales.
+Existen unitarias Node y suites HTTP/PostgreSQL en [backend/test](../backend/test); frontend tiene `npm test`, lint y build. [Desarrollo](development.md) centraliza herramientas y destinos aislados; los ensayos requieren alcance autorizado. B/C conservan evidencia histórica de pruebas/demo en recursos UUID nuevos. El wrapper actual no ejecuta `frontend npm test` ni automatiza por sí solo las revisiones Chromium; [CI propuesta](ci-plan.md) debe cubrir expresamente esas brechas.
 
 Dirección futura: React Native/Expo, Node/TypeScript/Express, PostgreSQL, alojamiento Railway/Render, auth propia y Expo Notifications; R2 para archivos y Resend para emails son referencias futuras, **no proveedores contratados o autorizados para B/C/D**. Google Calendar/WhatsApp también son futuros. Mantener lógica en servicios y contratos reutilizables; no migrar stack ni incorporar estos servicios en PR A.

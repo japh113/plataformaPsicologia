@@ -1,8 +1,8 @@
 # Documentación de PsicoPanel
 
-Corte C: B integrado en #11 (5e549f5); C autorizado en rama, pendiente de revisión/integración. [Contrato C](contact-changes.md) y [validación C](contact-change-validation.md). Sin despliegue habitual. Las referencias siguientes al corte B conservan su contexto anterior al merge. [Primera revisión P2](contact-change-review-validation.md). [Revisión del deadline y pruebas nuevas](contact-change-deadline-validation.md).
+Corte documental: 19 de octubre de 2026, main `543442ea634e5977bc887ace1db5457eee2ebf8c` tras #12. A/B/C integrados; D no iniciado. [Contrato C](contact-changes.md). No acredita despliegue habitual. [GitHub Actions/CI](ci-plan.md) es propuesta, sin workflows implementados en este corte.
 
-Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AGENTS](../AGENTS.md). A integrado en #10 (0f2ebba). B autorizado e implementado en su rama, con pruebas y demo aisladas; revisión/integración pendientes, sin despliegue habitual ni C/D.
+Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AGENTS](../AGENTS.md) y [contribución](../CONTRIBUTING.md). A (#10, 0f2ebba), B (#11, 5e549f5) y C (#12, 543442e) integrados. Las pruebas y demos de B/C son evidencia histórica aislada; no ejecuciones de CI ni validación nueva de esta actualización.
 
 ## Fuentes canónicas
 
@@ -11,10 +11,12 @@ Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AG
 | Arquitectura | [architecture.md](architecture.md): implementación, fundamentos no activados y futuro separados |
 | Desarrollo y pruebas | [development.md](development.md): Docker/WSL, inicialización nueva, seguridad y destinos aislados |
 | Producto | [Visión](product/vision.md), [decisiones/abiertos](product/decisions.md), [reglas](product/business-rules.md), [roadmap](product/roadmap.md): aprobado no equivale a implementado |
-| Plan de entregas | [identity-directory-delivery-plan.md](identity-directory-delivery-plan.md): A integrado, B en ejecución/revisión; C/D pendientes |
+| Plan de entregas | [identity-directory-delivery-plan.md](identity-directory-delivery-plan.md): A/B/C integrados; D no iniciado |
+| CI y contribución | [ci-plan.md](ci-plan.md), [CONTRIBUTING](../CONTRIBUTING.md): propuesta de checks, aislamiento, artifacts, protección y aceptación; sin activación administrativa |
 | Diseño 2A | [stage2a-identity-directory-intake.md](stage2a-identity-directory-intake.md): mecanismos propuestos y requisitos aprobados diferenciados |
 | Mutaciones legacy | [stage2a-legacy-mutations.md](stage2a-legacy-mutations.md): inventario revalidado por ruta/escritor; bloqueo AB-23 implementado en B |
 | Identidad/verificación B | [Guía](patient-identity-verification.md), [validación](patient-identity-validation.md): código y demo aislada, sin despliegue habitual |
+| Contactos C | [Contrato](contact-changes.md), [validación final del deadline](contact-change-deadline-validation.md); informes [inicial](contact-change-validation.md) y [primera revisión P2](contact-change-review-validation.md) históricos |
 | Reorganización A | [documentation-audit.md](documentation-audit.md): inventario, clasificación, instrucciones sustituidas y validación |
 
 ## Seguridad, procedimientos y evidencia conservados
