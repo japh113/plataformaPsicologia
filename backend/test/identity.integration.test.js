@@ -128,6 +128,33 @@ test('004: adult identity, private verification, concurrency and legacy barrier 
       assert.equal((await send('sms')).status, 409, 'Email prerequisite before any SMS quota consumption');
       assert.equal((await client.query("SELECT 1 FROM contact_verification_challenges WHERE user_id=$1", [userId])).rowCount, 0);
     });
+    await t.test('unverified new patient cannot enumerate professional emails in the selector or related DTOs', async () => {
+      const identity = (await request('/auth/identity',session.token)).body.data;
+      assert.equal(identity.emailVerifiedAt,null); assert.equal(identity.phoneVerifiedAt,null);
+      const professionalEmails = (await client.query("SELECT email FROM users WHERE role='psychologist'")).rows.map(r => r.email);
+      for (const [path,status] of [
+        ['/auth/psychologists/available',403], ['/auth/users',403], ['/auth/psychologists/pending',403],
+        ['/auth/audit-logs',403], ['/auth/care-relationships',200], ['/auth/me',200],
+        ['/auth/identity',200], ['/patients',200],
+      ]) {
+        const result = await request(path,session.token);
+        assert.equal(result.status,status,path);
+        for (const email of professionalEmails) assert.equal(JSON.stringify(result.body).includes(email),false,path);
+        if (path === '/auth/care-relationships') assert.deepEqual(result.body.data,[]);
+      }
+      assert.equal((await request('/auth/psychologists/available',null)).status,401);
+      const historical = (await request('/auth/login',null,'POST',{ email:'p@episodes.invalid',password:'Episode-Demo-Only-284!' })).body.data;
+      const relationships = await request('/auth/care-relationships',historical.token);
+      assert.equal(relationships.status,200); assert.equal(relationships.body.data.length,1);
+      assert.equal(relationships.body.data[0].status,'active');
+      assert.equal(relationships.body.data[0].psychologist.id,'a');
+      assert.ok(relationships.body.data[0].psychologist.fullName);
+      assert.equal('email' in relationships.body.data[0].psychologist,false);
+      for (const email of professionalEmails) assert.equal(JSON.stringify(relationships.body).includes(email),false);
+      const professional = (await request('/auth/login',null,'POST',{ email:'a@episodes.invalid',password:'Episode-Demo-Only-284!' })).body.data;
+      assert.equal((await request('/auth/psychologists/available',professional.token)).status,403);
+      assert.equal((await request('/patients/p',professional.token)).status,200);
+    });
     await t.test('email concurrency, owner binding, replacement, expiry, consumption and cross-session visibility', async () => {
       const results = await Promise.all(Array.from({ length: 8 }, () => send('email')));
       assert.equal(results.filter(r => r.status === 200).length, 1);

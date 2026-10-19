@@ -37,6 +37,9 @@ request('/auth/register/patient', method='POST', body=payload, expected=202)
 session = request('/auth/login', method='POST',body=dict(email=email,password=password))['data']
 second = request('/auth/login', method='POST',body=dict(email=email,password=password))['data']
 token = session['token']
+request('/auth/psychologists/available',token,expected=403)
+assert request('/auth/care-relationships',token)['data'] == []
+request('/auth/users',token,expected=403)
 request('/auth/verification/sms/request',token,'POST',{},409)
 request('/auth/verification/email/request',token,'POST',{})
 request('/auth/verification/email/request',token,'POST',{},429)
@@ -50,5 +53,11 @@ request('/auth/care-relationships/request',token,'POST',dict(psychologistUserId=
 professional = request('/auth/login',method='POST',body=dict(email='a@episodes.invalid',password='Episode-Demo-Only-284!'))['data']
 request('/patients/'+session['user']['patientId'],professional['token'],expected=404)
 request('/patients/p',professional['token'])
-print('PASS: registration, two sessions, email+SMS, resend limit, own name, legacy denial and existing clinical care.')
+historical = request('/auth/login',method='POST',body=dict(email='p@episodes.invalid',password='Episode-Demo-Only-284!'))['data']
+relationships = request('/auth/care-relationships',historical['token'])['data']
+assert len(relationships) == 1 and relationships[0]['status'] == 'active'
+assert relationships[0]['psychologist']['fullName']
+assert 'email' not in relationships[0]['psychologist']
+
+print('PASS: registration, two sessions, email+SMS, resend limit, own name, disabled selector/no professional email, legacy denial and existing clinical care.')
 print('Fictional smoke account:',email)

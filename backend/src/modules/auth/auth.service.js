@@ -84,8 +84,7 @@ const mapCareRelationshipRow = (row) => ({
   },
   psychologist: {
     id: String(row.psychologist_user_id),
-    fullName: row.psychologist_full_name,
-    email: row.psychologist_email,
+    fullName: [row.psychologist_first_name, row.psychologist_last_name].filter(Boolean).join(' '),
     professionalTitle: row.professional_title || '',
     approvalStatus: row.psychologist_approval_status || 'pending_review',
   },
@@ -105,14 +104,6 @@ const mapOperationalRelationshipRow = (row) => ({
     professionalTitle: row.professional_title || '',
     approvalStatus: row.psychologist_approval_status || 'pending_review',
   },
-});
-
-const mapPsychologistDirectoryRow = (row) => ({
-  id: String(row.id),
-  fullName: `${row.first_name} ${row.last_name}`.trim(),
-  email: row.email,
-  professionalTitle: row.professional_title || 'Psicologo',
-  approvalStatus: row.approval_status || 'pending_review',
 });
 
 const mapAuditLogRow = (row) => ({
@@ -700,28 +691,9 @@ export const listBackofficeUsers = async (actor) => {
   return result.rows.map(mapOperationalUserRow);
 };
 
+// Disabled with the legacy selector. No query or professional contact DTO while D is pending.
 export const listAvailablePsychologists = async () => {
-  const result = await db.query(
-    `
-      SELECT
-        u.id,
-        u.first_name,
-        u.last_name,
-        u.email,
-        pp.professional_title,
-        pp.approval_status
-      FROM users u
-      INNER JOIN psychologist_profiles pp
-        ON pp.user_id = u.id
-      WHERE u.role = 'psychologist'
-        AND u.is_active = TRUE
-        AND pp.approval_status = 'active'
-      ORDER BY u.first_name ASC, u.last_name ASC
-    `,
-    [],
-  );
-
-  return result.rows.map(mapPsychologistDirectoryRow);
+  throw createAuthError('El selector de profesionales está temporalmente deshabilitado.', 403);
 };
 
 export const listCareRelationships = async (actor) => {

@@ -57,11 +57,6 @@ export const getBackofficeUsers = async () => {
   return response.data;
 };
 
-export const getAvailablePsychologists = async () => {
-  const response = await apiRequest('/auth/psychologists/available');
-  return response.data;
-};
-
 export const getPendingPsychologists = async () => {
   const response = await apiRequest('/auth/psychologists/pending');
   return response.data;

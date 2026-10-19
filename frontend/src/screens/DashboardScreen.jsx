@@ -221,7 +221,6 @@ export default function DashboardScreen({
   appointments,
   reminders,
   careRelationships = [],
-  availablePsychologists = [],
   relationshipInvitePreview = null,
   onOpenPatient,
   onViewAppointments,
@@ -443,7 +442,6 @@ export default function DashboardScreen({
           <div className="space-y-6">
             <PatientCareRelationshipPanel
               relationships={careRelationships}
-              availablePsychologists={availablePsychologists}
               onRequestCareRelationship={onRequestCareRelationship}
               onRespondToCareRelationship={onRespondToCareRelationship}
               onAcceptCareRelationshipByCode={onAcceptCareRelationshipByCode}

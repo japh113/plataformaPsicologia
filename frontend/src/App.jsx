@@ -51,7 +51,6 @@ import {
   createCareRelationship,
   getAuditLogs,
   getBackofficeUsers,
-  getAvailablePsychologists,
   getCareRelationships,
   getCurrentUser,
   getPendingPsychologists,
@@ -127,7 +126,6 @@ export default function App() {
   const [backofficeUsers, setBackofficeUsers] = useState([]);
   const [pendingPsychologists, setPendingPsychologists] = useState([]);
   const [careRelationships, setCareRelationships] = useState([]);
-  const [availablePsychologists, setAvailablePsychologists] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [mostrarModalNuevoPaciente, setMostrarModalNuevoPaciente] = useState(false);
   const [nuevoPacienteForm, setNuevoPacienteForm] = useState({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
@@ -219,7 +217,6 @@ export default function App() {
     setBackofficeUsers([]);
     setPendingPsychologists([]);
     setCareRelationships([]);
-    setAvailablePsychologists([]);
     setAuditLogs([]);
     setNotasTemp('');
     setErrorCarga('');
@@ -285,7 +282,6 @@ export default function App() {
       let backendWaitlist = [];
       let backendAvailability = [];
       let backendAvailabilityExceptions = [];
-      let backendPsychologists = [];
 
       if (currentUser.role === 'psychologist') {
         [
@@ -303,10 +299,7 @@ export default function App() {
           getMyAvailabilityExceptions(),
         ]);
       } else {
-        [backendPatients, backendAppointments, backendReminders, backendRelationships, backendPsychologists] = await Promise.all([
-          ...commonRequests,
-          getAvailablePsychologists(),
-        ]);
+        [backendPatients, backendAppointments, backendReminders, backendRelationships] = await Promise.all(commonRequests);
       }
 
       setPacientes(backendPatients.map(mapBackendPatientToUiPatient));
@@ -318,13 +311,11 @@ export default function App() {
         setAvailability(backendAvailability);
         setAvailabilityDraft(backendAvailability);
         setAvailabilityExceptions(backendAvailabilityExceptions);
-        setAvailablePsychologists([]);
       } else {
         setAppointmentWaitlist([]);
         setAvailability([]);
         setAvailabilityDraft([]);
         setAvailabilityExceptions([]);
-        setAvailablePsychologists(backendPsychologists);
       }
     } catch (error) {
       setErrorCarga(error.message || 'No se pudieron cargar los datos del tablero.');
@@ -1449,7 +1440,6 @@ export default function App() {
           appointments={isPsychologist ? todayAppointments : appointments}
           reminders={reminders}
           careRelationships={careRelationships}
-          availablePsychologists={availablePsychologists}
           relationshipInvitePreview={relationshipInvitePreview}
           onOpenPatient={abrirNotas}
           onNewPatient={() => setMostrarModalNuevoPaciente(true)}
