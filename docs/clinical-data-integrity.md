@@ -1,5 +1,7 @@
 # Proteccion de expedientes: auditoria y politica implementada
 
+> Reporte/procedimiento de 001 conservado como evidencia histórica. La edición con versiones descrita aquí sigue siendo comportamiento previo; el objetivo de adendas/inmutabilidad RN-23 aún está pendiente. Arquitectura actual en [architecture.md](architecture.md) y pruebas/operación en [development.md](development.md). Este PR documental no ejecuta sus procedimientos sobre ninguna base.
+
 Fecha: 16 de octubre de 2026. Base revisada: `main` en `9dbc305`, con Docker integrado.
 Trabajo local en `fix/clinical-data-integrity`; sin push, merge ni cambios a la base en uso.
 

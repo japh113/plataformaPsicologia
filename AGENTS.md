@@ -1,136 +1,30 @@
 # AGENTS
 
-## Proposito
-Este archivo existe para que cualquier chat nuevo o agente futuro arranque con contexto operativo real y no tenga que reconstruirlo desde cero.
+## Contexto y fuentes
 
-## Producto
-PsicoPanel es una plataforma clinica para psicologos y pacientes con foco en:
-- agenda
-- seguimiento clinico
-- tareas
-- notas clinicas
-- disponibilidad
-- lista de espera
+PsicoPanel es hoy una web-app React/Vite + Express JavaScript + PostgreSQL. La dirección futura es React Native/Expo y TypeScript, sin migración ahora. Preservar lógica reutilizable, contratos claros y estilo existente. Leer [README](README.md), [índice](docs/README.md), [arquitectura](docs/architecture.md), [decisiones](docs/product/decisions.md), [reglas](docs/product/business-rules.md) y [roadmap](docs/product/roadmap.md).
 
-Tambien existe ahora una capa de backoffice separada del flujo clinico diario.
+Distinguir producto aprobado, propuesta técnica e implementación. PR #7 aisló backoffice; #8 integró fundamentos 003, sin activar permisos por episodio ni acreditar despliegue; #9 documentó identidad/directorio. ADR-023–028 recogen acuerdos posteriores. [Plan A/B/C/D](docs/identity-directory-delivery-plan.md): solo A documental autorizado ahora; B espera revisión/aprobación de A y autorización. No crear ramas B/C/D ni implementar o deshabilitar funciones por una propuesta.
 
-Importante:
-- hoy el producto activo en este repo es una `web-app`
-- la direccion futura es una app movil
-- cualquier agente nuevo debe tener presente ambas cosas al proponer cambios
+## Límites operativos
 
-## Stack objetivo a tener presente
-Aunque hoy se trabaja sobre React web + Vite, la referencia futura del producto es:
-- React Native + Expo
-- Node.js + TypeScript + Express
-- PostgreSQL
-- Railway o Render
-- Auth propia
-- Expo Notifications
-- Cloudflare R2 si se necesitan archivos
-- Resend para emails
+- Revisar estado/diff antes de editar; preservar cambios ajenos. Usar rama de la tarea, commits pequeños/descriptivos y PR hacia main sin merge cuando así se encargue. No push directo a main ni merge por costumbre; respetar autorización del encargo.
+- No ejecutar schema/seed, normalizadores o migraciones sobre bases existentes/habitual; no borrar datos ni alterar contenedores/volúmenes existentes. No modificar 001/002/003 ni checksums. 004–006 son estimaciones, no autorización.
+- Desarrollo Docker/WSL, herramientas y pruebas: [development.md](docs/development.md). No instalar herramientas en host o reconstruir entorno habitual para suplir npm sin autorización. Ensayos futuros solo en PostgreSQL nuevo y aislado, destino explícito y recursos propios verificados. No inferir despliegue por tener SQL en Git.
+- No atribuir DOB/identidad/verificación/episodio/autoría históricos desde edad, entrevista, contactos, vínculos o aprobación. No fusionar identidades ni habilitar altas de menores por vías alternativas.
+- Antes de B, revalidar [todas las mutaciones legacy](docs/stage2a-legacy-mutations.md) para cuentas nuevas y existentes. Bloquear/adaptar y sus pérdidas funcionales siguen pendientes de aprobación. No activar permisos por episodio sin retirar coordinadamente fallback y probar aislamiento completo.
+- No seleccionar/habilitar proveedores comerciales, credenciales remotas, recuperación excepcional, invitaciones/solicitudes nuevas o acceso de emergencia por aparecer en un diseño.
 
-Esto no significa migrar ahora mismo.
-Significa:
-- no perder de vista que esta web-app es una base transitoria del producto
-- favorecer logica reutilizable y contratos claros
-- evitar acoplar decisiones innecesarias solo a web cuando haya alternativa razonable
+## Invariantes y UX
 
-## Estado del repo
-- rama principal de trabajo: `main`
-- el proyecto ya viene con muchos cambios integrados y funcionales
-- se acostumbra hacer `commit + push` frecuente a `main` cuando el cambio esta estable
-- si un cambio es mas riesgoso o exploratorio, se puede abrir branch temporal y luego mergear
+Backoffice separado de clínica: support es lector operativo; admin/superadmin gestionan funciones autorizadas, sin acceso clínico global ordinario ni break-glass implícito (RN-27). Identidad, publicación y verificaciones no conceden clínica.
 
-## Convenciones de trabajo
-- preservar el estilo visual ya existente
-- no introducir redisenos bruscos sin motivo claro
-- preferir mejoras incrementales
-- cuando haya riesgo operativo, priorizar flujo manual asistido sobre automatizacion total
+Citas de 60 min por hora exacta, sin solapamientos ni múltiples activas del paciente por día; no completar futuras. Nota solo desde cita completada no futura; cita con nota no vuelve a pendiente/cancelada. Conservar historia; adendas RN-23 son objetivo pendiente, no afirmar que ya están implementadas.
 
-## Reglas funcionales importantes
+Waitlist manual: sugerir prioridad 1 y conservar decisión profesional. Disponibilidad: múltiples bloques, excepciones y rangos; no dejar citas futuras sin cobertura. Menos ruido en expediente, modales cuando se sature, agenda mensual calendario, chips compactos semanales/mensuales y colores semánticos distintos.
 
-### Roles
-- `patient`: experiencia del paciente
-- `psychologist`: operacion clinica
-- `support`: backoffice de solo lectura operativa
-- `admin`: backoffice con capacidad de aprobar psicologos y gestionar usuarios
-- `superadmin`: acceso maestro; debe tratarse como rol excepcional y no mezclarse con la UI clinica normal
+## Archivos y verificación
 
-Importante:
-- `admin` y `support` no deben asumir acceso clinico global por defecto
-- la UI de backoffice debe mantenerse separada de la UI clinica
-- si se plantea acceso clinico total, debe pensarse como flujo excepcional tipo break-glass/auditable
+Estado principal: frontend/src/App.jsx; pantallas AppointmentsScreen y NotesScreen. Servicios sensibles: auth, patients, appointments y availability en backend/src/modules. Contratos y lectores laterales en [arquitectura](docs/architecture.md).
 
-### Citas
-- duran 60 minutos
-- se agendan por hora exacta
-- no se permiten solapamientos
-- un paciente no puede tener multiples citas activas el mismo dia
-- si una cita tiene nota clinica vinculada, no debe volver a pendiente o cancelada
-- no se pueden completar citas futuras
-
-### Notas Clinicas
-- no se registra nota clinica sin cita
-- no se registran notas clinicas para citas futuras
-- el flujo correcto es cita -> completada -> nota clinica
-
-### Waitlist
-- la asignacion desde lista de espera debe ser manual, no automatica
-- el sistema solo debe sugerir a la prioridad 1
-- el psicologo debe conservar control final
-
-### Disponibilidad
-- soporta multiples bloques por dia
-- soporta excepciones por fecha
-- soporta bloqueos por rango
-- no se debe permitir guardar disponibilidad que deje citas futuras fuera de cobertura
-
-## UX preferences del usuario
-- menos ruido visual, especialmente en expediente
-- preferencia por modales cuando una pantalla se satura
-- agenda visual limpia
-- mensual tipo calendario, no lista
-- semanal y mensual con chips compactos
-- colores semanticos claros
-- no mezclar colores de conceptos distintos
-
-## Archivos calientes
-Estos archivos concentran mucho comportamiento:
-- [`frontend/src/App.jsx`](./frontend/src/App.jsx)
-- [`frontend/src/screens/AppointmentsScreen.jsx`](./frontend/src/screens/AppointmentsScreen.jsx)
-- [`frontend/src/screens/NotesScreen.jsx`](./frontend/src/screens/NotesScreen.jsx)
-- [`backend/src/modules/appointments/appointments.service.js`](./backend/src/modules/appointments/appointments.service.js)
-- [`backend/src/modules/patients/patients.service.js`](./backend/src/modules/patients/patients.service.js)
-- [`backend/src/modules/availability/availability.service.js`](./backend/src/modules/availability/availability.service.js)
-
-## Checklist antes de cerrar una tarea
-1. Revisar impacto en frontend y backend si toca agenda
-2. Verificar si hay efectos colaterales en waitlist o disponibilidad
-3. Correr:
-   - `cd frontend && npm run lint`
-   - `cd frontend && npm run build`
-4. Si cambia schema o seed:
-   - `cd backend && npm run db:schema`
-   - `cd backend && npm run db:seed`
-5. Hacer commit descriptivo
-6. Push a `main` si el cambio esta estable
-
-## Regla operativa sobre commits
-- no acumular demasiado trabajo sin commit
-- preferir commits pequenos y descriptivos por feature o ajuste importante
-- si se actualizaron docs/contexto, tambien commitearlo
-- cuando el usuario lo permita, empujar periodicamente a `main`
-
-## Commits
-Preferir mensajes concretos:
-- `feat: ...`
-- `fix: ...`
-- `refactor: ...`
-
-Evitar mensajes genericos.
-
-## No olvidar
-- hay decisiones de producto ya tomadas que conviene respetar
-- Google Calendar y WhatsApp estan pensados como fase futura, no implementados todavia
-- no asumir que "automatico" es mejor en procesos clinicos
+Antes de cerrar: revisar diff/scope y permisos; si toca agenda, evaluar backend/frontend, espera y disponibilidad. Código funcional: unitarias backend, integración pertinente **aislada**, frontend lint/build y demo ficticia ADR-019 por entrega. Markdown solo: contrastar código y validar enlaces/fragmentos/IDs y diff; no ejecutar bases o demos. Documentar comprobaciones no disponibles sin presentar evidencia histórica como nueva. Commitear documentación también; push a la rama y abrir solo el PR autorizado.
