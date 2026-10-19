@@ -1,3 +1,4 @@
+import { sessionHash } from '../modules/auth/contact-change.crypto.js';
 import { errorResponse } from '../utils/response.js';
 import { getUserById, verifyAuthToken } from '../modules/auth/auth.service.js';
 import { ensureAccountCanAuthenticate, ensureSessionIsCurrent } from '../modules/auth/auth.account-status.js';
@@ -37,6 +38,7 @@ export const authenticate = async (req, res, next) => {
     const user = await getUserById(payload.sub);
     ensureAccountCanAuthenticate(user, env);
     ensureSessionIsCurrent(user, payload);
+    Object.defineProperty(user, 'sessionHash', { value: sessionHash(token), enumerable: false });
     req.user = user;
     return next();
   } catch (error) {

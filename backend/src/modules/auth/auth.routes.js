@@ -1,3 +1,4 @@
+import { getContactChangeHandler,startContactChangeHandler,operateContactChangeHandler } from './contact-change.controller.js';
 import { getOwnIdentityHandler, updateOwnIdentityHandler, requestVerificationHandler, confirmVerificationHandler } from './identity.controller.js';
 import { Router } from 'express';
 import {
@@ -29,6 +30,9 @@ router.post('/password-reset/request', requestPasswordResetHandler);
 router.post('/password-reset/confirm', confirmPasswordResetHandler);
 router.post('/register/patient', registerPatientHandler);
 router.post('/register/psychologist', registerPsychologistHandler);
+router.get('/contact-changes', authenticate, getContactChangeHandler);
+router.post('/contact-changes', authenticate, startContactChangeHandler);
+router.post('/contact-changes/:requestId/:operation', authenticate, operateContactChangeHandler);
 router.get('/identity', authenticate, getOwnIdentityHandler);
 router.patch('/identity', authenticate, updateOwnIdentityHandler);
 router.post('/verification/:channel/request', authenticate, requestVerificationHandler);

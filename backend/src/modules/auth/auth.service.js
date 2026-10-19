@@ -132,6 +132,7 @@ const mapAuditLogRow = (row) => ({
 const signAuthToken = (user) =>
   jwt.sign(
     {
+      jti: randomUUID(),
       sub: user.id,
       sv: user.sessionVersion,
       role: user.role,
@@ -393,7 +394,7 @@ export const requestPasswordReset = async ({ email }) => {
     await client.query('BEGIN');
 
     // Use the same user-first lock order as confirmation, including concurrent requests.
-    const activeUser = await client.query('SELECT id FROM users WHERE id=$1 AND is_active=TRUE FOR NO KEY UPDATE', [user.id]);
+    const activeUser = await client.query('SELECT id FROM users WHERE id=$1 AND is_active=TRUE AND lower(email)=lower($2) FOR NO KEY UPDATE', [user.id, normalizedEmail]);
     if (!activeUser.rows[0]) {
       await client.query('COMMIT');
       return { sent: true, preview: null };
