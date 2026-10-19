@@ -52,8 +52,16 @@ def main(job):
             for file in (box.path/'browser'/'work').glob('*.json'):
                 if file.name not in ['results.json','review-data.json']:continue
                 data=json.loads(file.read_text())
-                report.setdefault('browserCases',[]).extend({'id':r['id'],'status':r['status']} for r in data.get('results',[]))
+                report.setdefault('browserCases',[]).extend({'id':r['id'],'status':r['status'],'failureCategory':r.get('failureCategory','unspecified') if r.get('failureCategory') in ['assertion','timeout','other'] else 'unspecified'} for r in data.get('results',[]))
                 report.setdefault('browserEvents',[]).extend({'scenario':e.get('scenario'),'kind':e.get('kind',e.get('type')),'expected':bool(e.get('expected')),'status':e.get('status')} for e in data.get('events',[]))
+                failed={r['id'] for r in data.get('results',[]) if r['status']!='PASS'}|{e.get('scenario') for e in data.get('events',[]) if not e.get('expected')}
+                for shot in data.get('shots',data.get('screenshots',[])):
+                    if shot.get('scenario') not in failed:continue
+                    assert shot.get('secretsMasked')
+                    name=Path(shot['file']).name;source=box.path/'browser'/'out'/'screenshots'/name
+                    assert name.endswith('.png') and source.is_file()
+                    dest=target/('failure-'+box.run)/'screenshots'/name;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source,dest)
+                    report.setdefault('browserFailureScreenshots',[]).append(str(dest.relative_to(target)))
         for box in boxes:
             try:box.cleanup()
             except Exception:report['status']='failure';report['cleanupError']=True;result=1

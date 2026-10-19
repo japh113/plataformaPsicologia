@@ -55,6 +55,8 @@ Los dos workflows de cualificación quedan únicamente bajo workflow_dispatch de
 
 Guardas Python existentes: seis pruebas. Contratos CI finales: nueve pruebas, incluidos hashes sin mutación, decisiones protegidas, TAP incompleto, casos declarados ausentes y nombres run/intento/UUID. PostgreSQL exploratorio pasó en 66,925 s; B/C exploratorios pasaron 51/13 casos en 440,178 s con limpieza. Se ejecutaron mientras evolucionaba la rama y no se atribuyen al HEAD final ni sustituyen sus checks de GitHub. No se instalaron herramientas en host ni se operó Compose habitual.
 
+La [primera revisión de cierre](https://github.com/japh113/plataformaPsicologia/actions/runs/39344393210), HEAD `b619026550895f3abab586a7cda51de9db64f3a1`, detectó F06 FAIL en B; no hubo errores JS/HTTP inesperados y la limpieza quedó confirmada. Evidence preservó el fallo y required lo rechazó. F06 leía inmediatamente la cantidad de chips Verificado tras la respuesta HTTP; se añade espera explícita a que ambos chips sean visibles, manteniendo la aserción exacta, sin repetir solicitudes, reintentar suites ni ampliar timeouts globales. Se clasifica como corrección de sincronización del harness; la causa concreta del fallo histórico no se infiere de un nuevo pase. Los fallos Chromium posteriores conservan además capturas enmascaradas de los casos afectados y una categoría de error sin mensajes/valores privados. Toda revisión requiere su propia matriz verde.
+
 ## Estado de aceptación
 
 | Criterio | Estado y límite |
@@ -71,7 +73,7 @@ No se declara terminada la aceptación obligatoria de CI mientras CI-02 permanez
 
 ## Commits técnicos y revisión
 
-Commits anteriores al cierre documental (el HEAD definitivo y su ejecución se entregan también en el informe del PR):
+Commits anteriores a las correcciones posteriores del cierre documental (el HEAD definitivo y su ejecución se entregan también en el informe del PR):
 
 | SHA | Cambio |
 | --- | --- |
