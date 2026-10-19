@@ -9,7 +9,7 @@ function save(){fs.writeFileSync('/control/review-data.json',clean(JSON.stringif
 async function rpc(action,values={}){const p=new Promise(r=>receivers.push(r));console.log('CONTROL '+JSON.stringify({action,...values}));const r=await p;if(r.error)throw Error(r.error);if(r.secret)secrets.add(r.secret);return r;}
 function instrument(p){
  p.on('pageerror',e=>{events.push({scenario:current,kind:'pageerror',expected:false,message:clean(e.message)});save();});
- p.on('console',m=>{if(!['error','warning'].includes(m.type()))return;const s=clean(m.text()),code=/status of (\d+)/.exec(s);events.push({scenario:current,kind:'console-'+m.type(),expected:!!(code&&expected.has(+code[1])),message:s});save();});
+ p.on('console',m=>{if(!['error','warning'].includes(m.type()))return;const s=clean(m.text()),code=/status of (\d+)/.exec(s);events.push({scenario:current,kind:'console-'+m.type(),expected:!!(code&&expected.has(+code[1]))||(current==='A05'&&m.type()==='warning'&&s.includes('2026-02-30')&&s.includes('yyyy-MM-dd')),message:s});save();});
  p.on('response',r=>{if(r.status()<400)return;events.push({scenario:current,kind:'http',method:r.request().method(),path:new URL(r.url()).pathname,status:r.status(),expected:expected.has(r.status())});save();});
  p.on('requestfailed',r=>{const s=r.failure()?.errorText||'';events.push({scenario:current,kind:'requestfailed',path:new URL(r.url()).pathname,expected:s==='net::ERR_ABORTED',message:clean(s)});save();});
 }

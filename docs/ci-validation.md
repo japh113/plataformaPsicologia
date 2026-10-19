@@ -25,6 +25,10 @@ Artifacts de la matriz corregida: cinco componentes y un índice `ci-results-393
 
 Los ensayos negativos de la [cualificación reforzada](https://github.com/japh113/plataformaPsicologia/actions/runs/39342629362/attempts/1) pasaron su verificador con nombres de recursos run/intento/UUID, inventario real previo y rechazo de fallos/omisiones. Su segundo intento prueba cancelación con aislamiento incluido directamente entre las dependencias del gate.
 
+La [revisión del control date nativo](https://github.com/japh113/plataformaPsicologia/actions/runs/39342996978) ejecutó sus 51 casos B en PASS, pero rechazó correctamente una advertencia de consola no clasificada: el propio fixture de 30 de febrero produce el aviso nativo de formato. Se comprobó ese aviso en un contenedor Chromium nuevo, sin red ni DB; solo se clasifica como esperado durante A05 con ese valor/formato concretos. No se relajan otros errores de consola. Evidencia y required fallaron en esa revisión, sin atribuirle aprobación.
+
+La [cancelación temprana reforzada, intento 3](https://github.com/japh113/plataformaPsicologia/actions/runs/39342629362/attempts/3) dejó todas las suites y aislamiento cancelled; el gate con esas dependencias falló y el verificador de evidencia incompleta también. La [cancelación automática del flujo principal](https://github.com/japh113/plataformaPsicologia/actions/runs/39342909323) dejó PostgreSQL/Chromium cancelled y required failure. Los reportes de esos jobs no confirman limpieza; no se aceptan ni se confunden con los ensayos controlados que sí la verificaron.
+
 La imagen inicial instalaba Chromium bajo el home de root, inaccesible al usuario del contenedor. Se corrigió con imagen oficial Playwright fijada por digest, lockfile y HOME temporal. El runner CI final también añade inventario de casos declarados y resumen TAP completo; las revisiones posteriores requieren nueva matriz para su propio HEAD, no heredan la aprobación anterior.
 
 ## Verificación local, distinta de Actions
