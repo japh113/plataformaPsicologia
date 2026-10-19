@@ -82,10 +82,14 @@ for(let i=0;i<4;i++)await client.query("INSERT INTO contact_verification_challen
 await client.query('COMMIT');}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();await db.close();}""",c['demo'],email)
   return {'fixture':'own-new-quota-history-only'}
  raise RuntimeError('Unknown private operation')
+frontend=subprocess.check_output(compose+['ps','-q','frontend'],env=env,text=True).strip()
+front=json.loads(subprocess.check_output(['docker','inspect',frontend],text=True))[0]
+assert front['Config']['Labels']['com.docker.compose.project']==c['project']
+address=front['NetworkSettings']['Networks'][c['network']]['IPAddress']
 source=root/'scripts/identity-ui-review.cjs'
 assert source.is_file()
 revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-cmd=['docker','run','--rm','--init','-i','--name','psicopanel-ui-browser-'+c['run'],'--label','io.psicopanel.ui-review.run='+c['run'],'--user',str(os.getuid())+':'+str(os.getgid()),'--network',c['network'],'--read-only','--tmpfs','/tmp:size=1g,mode=1777','--shm-size=1g','--cap-drop=ALL','--security-opt','no-new-privileges','-e','REVIEW_BASE='+c['base'],'-e','REVIEW_REVISION='+revision,'-v',c['work']+':/control','-v',c['out']+':/evidence','-v',str(source)+':/review/driver.cjs:ro',c['image'],'node','/review/driver.cjs']
+cmd=['docker','run','--rm','--init','-i','--name','psicopanel-ui-browser-'+c['run'],'--label','io.psicopanel.ui-review.run='+c['run'],'--user',str(os.getuid())+':'+str(os.getgid()),'--network',c['network'],'--add-host','frontend.localhost:'+address,'-e','REVIEW_FRONTEND_IP='+address,'--read-only','--tmpfs','/tmp:size=1g,mode=1777','--shm-size=1g','--cap-drop=ALL','--security-opt','no-new-privileges','-e','REVIEW_BASE='+c['base'],'-e','REVIEW_REVISION='+revision,'-v',c['work']+':/control','-v',c['out']+':/evidence','-v',str(source)+':/review/driver.cjs:ro',c['image'],'node','/review/driver.cjs']
 p=subprocess.Popen(cmd,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1)
 with open(c['work']+'/browser-progress.log','w')as log:
  for line in p.stdout:

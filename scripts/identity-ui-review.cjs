@@ -34,7 +34,7 @@ async function api(p,path){
 }
 
 async function main(){
- browser=await chromium.launch({headless:true});fs.writeFileSync('/control/runtime.json',JSON.stringify({playwright:require('playwright/package.json').version,chromium:browser.version(),node:process.version,headless:true,revision:process.env.REVIEW_REVISION}));
+ browser=await chromium.launch({headless:true,args:['--host-resolver-rules=MAP frontend.localhost '+process.env.REVIEW_FRONTEND_IP]});fs.writeFileSync('/control/runtime.json',JSON.stringify({playwright:require('playwright/package.json').version,chromium:browser.version(),node:process.version,headless:true,revision:process.env.REVIEW_REVISION}));
  const context=await browser.newContext({viewport:{width:1440,height:900},locale:'es-MX',timezoneId:'America/Mexico_City'});page=await context.newPage();instrument(page);
  const email='adult-'+Date.now()+'@ui-review.invalid';let f,user,emailToken,sms,early,stale,verified=false;
  await test('A01','Login escritorio','Pantalla real legible a 1440×900.',async()=>{await page.goto(base);await text('Iniciar sesion');return {screenshot:await shot('01-login-desktop')};});
