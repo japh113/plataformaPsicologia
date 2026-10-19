@@ -1,8 +1,10 @@
-# Validación PR C — cambio seguro de contactos
+# Validación inicial PR C — cambio seguro de contactos
+
+Este informe conserva la evidencia histórica anterior a la revisión de `6e3a81d`. **No acredita las correcciones P2.** Los resultados nuevos, reproducciones fallidas y capturas corregidas están en [validación tras revisión](contact-change-review-validation.md).
 
 Fecha: 19 de octubre de 2026. Base main/origin/main verificada en `5e549f51bc7fa3e2535db023b4f9bca3d383a7c5` (#11/B integrado). Rama `feat/stage2a-secure-contact-changes`. Código funcional y harness revisados en `f997a616e5e1a642e9954264a29170f6ccd7e659`; documentación en commit posterior. [Contrato y diseño aplicado](contact-changes.md). Sin merge ni despliegue habitual.
 
-## Resultados nuevos
+## Resultados de la entrega inicial
 
 | Comprobación | Resultado |
 | --- | --- |
