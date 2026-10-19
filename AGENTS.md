@@ -1,6 +1,6 @@
 # AGENTS
 
-Corte documental, 19 de octubre de 2026: A/B/C integrados en #10/#11/#12; main de referencia `543442ea634e5977bc887ace1db5457eee2ebf8c`. D no iniciado ni autorizado. [Contrato C](docs/contact-changes.md). Encargo actual exclusivamente documental por rama nueva y PR separado, sin merge, cambios administrativos, código funcional ni operación de Docker/PostgreSQL/migraciones/SMS/emails. [CI propuesta](docs/ci-plan.md), todavía sin workflows implementados; [contribución](CONTRIBUTING.md).
+Corte documental, 19 de octubre de 2026: A/B/C integrados en #10/#11/#12; main de referencia `543442ea634e5977bc887ace1db5457eee2ebf8c`. D no iniciado ni autorizado. [Contrato C](docs/contact-changes.md). Encargo CI actual: una rama y un PR técnico, sin merge; autorización para GitHub-hosted Ubuntu y PostgreSQL/Docker nuevos aislados, fixtures ficticios y entrega simulada, retención técnica 14 días. [Implementación/evidencia CI](docs/ci-implementation.md), [plan](docs/ci-plan.md) y [contribución](CONTRIBUTING.md). No modificar administración/protecciones ni operar recursos habituales.
 
 ## Contexto y fuentes
 

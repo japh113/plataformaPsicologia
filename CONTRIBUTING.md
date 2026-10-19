@@ -15,7 +15,7 @@ Solo Markdown: contrastar estado/código, enlaces/fragmentos, UTF-8, IDs y diff.
 
 Código funcional: unitarias backend y frontend, lint/build, integración pertinente en destino nuevo verificado y demo ficticia ADR-019 conforme al alcance autorizado. [Desarrollo](docs/development.md) contiene procedimientos; leerlos no autoriza operar entornos. Registrar fallos/cancelaciones/omisiones, no solo salida cero. Si afecta agenda, revisar backend/frontend, disponibilidad y espera; identidad/contactos exige regresión JWT/backoffice/clínica y barrera legacy.
 
-GitHub Actions/CI está **propuesto, sin workflows implementados en el corte #12**. [Plan CI y aceptación CI-01–07](docs/ci-plan.md) define checks obligatorios futuros, DB aislada, evidencia y protección. La política de revisión de este documento no prueba que GitHub la aplique técnicamente. Cuando se implemente y autorice protección, registrar workflow, checks reales y configuración verificada; hasta entonces no afirmar que existe un bloqueo automatizado.
+GitHub Actions/CI tiene [implementación técnica en revisión](docs/ci-implementation.md) conforme al [plan CI-01–07](docs/ci-plan.md). Exige la matriz completa incluso en PR documentales. El resumen `ci/required` solo aprueba con todos los componentes y evidencias vigentes. Consultar el informe para distinguir resultados locales y Actions. La protección administrativa/checks requeridos sigue pendiente de autorización separada; no afirmar que GitHub bloquea integración por esos checks hasta verificarla.
 
 ## Datos y decisiones
 

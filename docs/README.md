@@ -1,6 +1,6 @@
 # Documentación de PsicoPanel
 
-Corte documental: 19 de octubre de 2026, main `543442ea634e5977bc887ace1db5457eee2ebf8c` tras #12. A/B/C integrados; D no iniciado. [Contrato C](contact-changes.md). No acredita despliegue habitual. [GitHub Actions/CI](ci-implementation.md) tiene implementaci?n t?cnica en revisi?n; [plan y aceptaci?n](ci-plan.md).
+Corte documental: 19 de octubre de 2026, main `543442ea634e5977bc887ace1db5457eee2ebf8c` tras #12. A/B/C integrados; D no iniciado. [Contrato C](contact-changes.md). No acredita despliegue habitual. [GitHub Actions/CI](ci-implementation.md) tiene implementación técnica en revisión; [plan y aceptación](ci-plan.md).
 
 Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AGENTS](../AGENTS.md) y [contribución](../CONTRIBUTING.md). A (#10, 0f2ebba), B (#11, 5e549f5) y C (#12, 543442e) integrados. Las pruebas y demos de B/C son evidencia histórica aislada; no ejecuciones de CI ni validación nueva de esta actualización.
 
