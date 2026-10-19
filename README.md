@@ -1,6 +1,6 @@
 # PsicoPanel
 
-Corte documental: 19 de octubre de 2026, después del merge de PR #12 en `543442ea634e5977bc887ace1db5457eee2ebf8c`. A, B y C están integrados; D no está iniciado. Integración en Git no acredita despliegue habitual. GitHub Actions/CI tiene [implementación técnica en revisión](docs/ci-implementation.md), conforme al [plan](docs/ci-plan.md); su aceptación requiere ejecuciones reales y revisión.
+Corte documental: 19 de octubre de 2026, después del merge de PR #12 en `543442ea634e5977bc887ace1db5457eee2ebf8c`. A, B y C están integrados; D no está iniciado. Integración en Git no acredita despliegue habitual. GitHub Actions/CI tiene [implementación técnica en revisión](docs/ci-implementation.md), conforme al [plan](docs/ci-plan.md); hay [resultados reales](docs/ci-validation.md), con CI-02 y CI-07 pendientes.
 
 Plataforma para psicólogos independientes y pacientes: agenda, disponibilidad, espera manual asistida, tareas, objetivos, notas y seguimiento clínico, con backoffice separado.
 
@@ -17,7 +17,7 @@ PR #7 restringió el acceso clínico del backoffice; #8 integró fundamentos SQL
 | Arquitectura implementada y fundamentos no activados | [docs/architecture.md](docs/architecture.md) |
 | Identidad y verificación B | [Guía y demo](docs/patient-identity-verification.md), [evidencia aislada](docs/patient-identity-validation.md) |
 | Desarrollo Docker/WSL, pruebas y demos aisladas | [docs/development.md](docs/development.md) |
-| Contribuir por rama y PR; propuesta de CI y aceptación | [CONTRIBUTING.md](CONTRIBUTING.md), [docs/ci-plan.md](docs/ci-plan.md) |
+| Contribuir por rama y PR; CI, evidencia y aceptación | [CONTRIBUTING.md](CONTRIBUTING.md), [implementación](docs/ci-implementation.md), [resultados](docs/ci-validation.md) |
 | Contrato C y evidencia histórica final | [Cambio seguro de contactos](docs/contact-changes.md), [deadline](docs/contact-change-deadline-validation.md); informes anteriores: [inicial](docs/contact-change-validation.md), [primera revisión P2](docs/contact-change-review-validation.md) |
 | Producto y reglas aprobadas | [Visión](docs/product/vision.md), [decisiones](docs/product/decisions.md), [reglas](docs/product/business-rules.md), [roadmap](docs/product/roadmap.md) |
 | Próximas entregas y decisiones pendientes | [Plan A/B/C/D](docs/identity-directory-delivery-plan.md), [diseño 2A](docs/stage2a-identity-directory-intake.md), [mutaciones legacy](docs/stage2a-legacy-mutations.md) |

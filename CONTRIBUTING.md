@@ -11,7 +11,7 @@ Corte: 19 de octubre de 2026, después de #12 (`543442ea634e5977bc887ace1db5457e
 
 ## Verificación según alcance
 
-Solo Markdown: contrastar estado/código, enlaces/fragmentos, UTF-8, IDs y diff. Confirmar que las garantías clínicas y decisiones permanecen intactas. No ejecutar SQL, integración, Docker o demos para comprobar documentación. Esta actualización conserva literalmente ADR-029 y RN-59–61, y deja pendiente su precondición técnica de activación.
+Solo Markdown: contrastar estado/código, enlaces/fragmentos, UTF-8, IDs y diff. Confirmar que las garantías clínicas y decisiones permanecen intactas. No ejecutar manualmente SQL, integración, Docker o demos locales para comprobar documentación. La CI autorizada sí ejecuta automáticamente su matriz completa en runners nuevos, incluso para PR documentales. Esta actualización conserva literalmente ADR-029 y RN-59–61, y deja pendiente su precondición técnica de activación.
 
 Código funcional: unitarias backend y frontend, lint/build, integración pertinente en destino nuevo verificado y demo ficticia ADR-019 conforme al alcance autorizado. [Desarrollo](docs/development.md) contiene procedimientos; leerlos no autoriza operar entornos. Registrar fallos/cancelaciones/omisiones, no solo salida cero. Si afecta agenda, revisar backend/frontend, disponibilidad y espera; identidad/contactos exige regresión JWT/backoffice/clínica y barrera legacy.
 

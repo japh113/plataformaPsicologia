@@ -1,9 +1,6 @@
 name: CI explicit abrupt runner qualification
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    types: [synchronize]
 permissions:
   contents: read
 jobs:
