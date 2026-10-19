@@ -3,6 +3,7 @@ import db from '../../config/db.js';
 import {resolveChange} from './contact-change.service.js';
 import {openContact,sealContact,activeContactKeyId} from './contact-change.crypto.js';
 import {deliverContactNotice,NOTICE_DELIVERY_TIMEOUT_MS} from './contact-change.delivery.js';
+import {monotonicNow,remainingMilliseconds,deadlineFromDatabase} from './contact-change.deadline.js';
 
 // No external delivery in this path: scheduled independently even while a batch runs.
 export async function maintainContactChangeData({batchSize=100}={}) {
@@ -81,23 +82,35 @@ async function claimNotice() {
     const claimed=(await client.query(`UPDATE contact_change_notices SET lease_token=$2,
       lease_until=LEAST(retry_until,clock_timestamp()+INTERVAL '30 seconds'),attempts=attempts+1
       WHERE id=$1 RETURNING *`,[row.id,token])).rows[0];
-    await client.query('COMMIT');return {...claimed,claimedAt:now};
+    await client.query('COMMIT');return claimed;
   } catch(error){await client.query('ROLLBACK');throw error;}
   finally{client.release();}
+}
+
+// An unlocked, fresh PostgreSQL sample AFTER claim COMMIT (and again after worker startup).
+async function authorizeNotice(row,maxMs,ceilingNs) {
+  const sentNs=monotonicNow();
+  const current=(await db.query(`SELECT status,lease_token,lease_until,retry_until,clock_timestamp() AS now,
+    EXTRACT(EPOCH FROM (LEAST(lease_until,retry_until)-clock_timestamp()))*1000 AS remaining_ms
+    FROM contact_change_notices WHERE id=$1`,[row.id])).rows[0];
+  if(!current||current.status!=='pending'||current.lease_token!==row.lease_token||!current.lease_until)return null;
+  const deadline=deadlineFromDatabase(current.remaining_ms,sentNs,{maxMs,ceilingNs});
+  return deadline!==null&&remainingMilliseconds(deadline)>0?deadline:null;
 }
 
 async function settleNotice(row,delivered) {
   const client=await db.getClient();
   try {
     await client.query('BEGIN');
-    const current=(await client.query(`SELECT id,retry_until,attempts FROM contact_change_notices
+    const current=(await client.query(`SELECT id,retry_until,lease_until,attempts FROM contact_change_notices
       WHERE id=$1 AND status='pending' AND lease_token=$2 FOR UPDATE`,[row.id,row.lease_token])).rows[0];
     if(!current){await client.query('COMMIT');return;}
     // Fresh DB time AFTER the failure and AFTER reacquiring the lock, never claim time.
     const now=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+    if(current.retry_until>now&&current.lease_until<=now){await client.query('COMMIT');return;}
     if(delivered || current.retry_until<=now){
       await client.query(`UPDATE contact_change_notices SET status=$2,destination_cipher=NULL,
-        lease_token=NULL,lease_until=NULL WHERE id=$1`,[row.id,delivered?'delivered':'exhausted']);
+        lease_token=NULL,lease_until=NULL WHERE id=$1`,[row.id,current.retry_until<=now?'exhausted':'delivered']);
     } else {
       const delay=Math.min(3600,60*2**Math.min(current.attempts-1,6));
       await client.query(`UPDATE contact_change_notices SET next_attempt_at=LEAST(retry_until,
@@ -118,12 +131,18 @@ export async function processContactChangeMaintenance({batchSize=100,deliveryWor
     const row=await claimNotice();if(!row)break;
     let delivered=false;
     try {
-      const contact=openContact(row.destination_cipher,'notice:'+row.user_id+':'+row.id);
-      await deliverContactNotice({userId:row.user_id,channel:row.channel,contact,purpose:'contact_change_notice',
-        noticeId:row.id,requestId:row.request_id,kind:row.kind,createdAt:row.created_at.toISOString()},
-      {workerUrl:deliveryWorker,workerData:deliveryWorkerData,
-        timeoutMs:Math.min(deliveryTimeoutMs,row.retry_until.getTime()-row.claimedAt.getTime())});
-      delivered=true;
+      const deadlineNs=await authorizeNotice(row,Math.min(deliveryTimeoutMs,NOTICE_DELIVERY_TIMEOUT_MS));
+      if(deadlineNs!==null){
+        const contact=openContact(row.destination_cipher,'notice:'+row.user_id+':'+row.id);
+        // Decryption and all subsequent work consume the same budget; never renew it.
+        if(remainingMilliseconds(deadlineNs)>0){
+          await deliverContactNotice({userId:row.user_id,channel:row.channel,contact,purpose:'contact_change_notice',
+            noticeId:row.id,requestId:row.request_id,kind:row.kind,createdAt:row.created_at.toISOString()},
+          {workerUrl:deliveryWorker,workerData:deliveryWorkerData,timeoutMs:deliveryTimeoutMs,deadlineNs,
+            authorize:()=>authorizeNotice(row,Math.min(deliveryTimeoutMs,NOTICE_DELIVERY_TIMEOUT_MS),deadlineNs)});
+          delivered=true;
+        }
+      }
     } catch { /* Failed or terminated isolate: settle using a fresh database clock. */ }
     await settleNotice(row,delivered);processed++;
   }
