@@ -1,0 +1,51 @@
+name: CI explicit abrupt runner qualification
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [synchronize]
+permissions:
+  contents: read
+jobs:
+  hard_stop:
+    name: qualification/abrupt-hosted-worker-stop
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Prepare fresh sandbox and verify own hosted worker
+        run: python3 scripts/ci/runner_stop.py prepare
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runner-pre-stop-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: tmp/ci-export/pre-stop/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Abruptly terminate only this VM job worker
+        run: python3 scripts/ci/runner_stop.py stop
+      # Intentionally no post-stop cleanup/upload: this verifies an abrupt loss.
+  audit:
+    name: qualification/verify-abrupt-stop-rejected
+    needs: [hard_stop]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: runner-pre-stop-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: tmp/pre-stop
+      - run: python3 scripts/ci/runner_stop.py audit
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runner-stop-results-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: tmp/ci-export/runner-stop/
+          if-no-files-found: error
+          retention-days: 14
