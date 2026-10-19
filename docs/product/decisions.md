@@ -1,8 +1,10 @@
 # Registro de decisiones de producto y arquitectura
 
-Fecha: 18 de octubre de 2026. Base revisada: `main`/`origin/main` en `b3bfd40`, con PR #7 y #8 integrados. Antecedentes: #5 fijó la base documental; #7 restringió backoffice; #8 integró fundamentos 003. Esto no acredita ejecución de 003 en la base habitual ni autorización clínica por episodio.
+Fecha: 18 de octubre de 2026. Base auditada: `main`/`origin/main` en `0077f46`, merge de PR #9; #7 y #8 integrados. Esto no acredita ejecución de 003 en la base habitual ni autorización clínica por episodio.
 
-Esta actualización exclusivamente documental recoge nuevas decisiones de producto expresamente aprobadas por el usuario: registro independiente, directorio básico y vinculación inicial. ADR-012 se precisa y ADR-020–ADR-022 amplían producto; el [diseño técnico](../stage2a-identity-directory-intake.md) es PROPUESTA pendiente de revisión y aprobación, sin autorización para código ni operaciones de base.
+PR A es exclusivamente documental. Incorpora las decisiones posteriores a #9 en ADR-023–028 y RN-41–58, sin renumerar ADR-001–022 ni RN-01–40. La división A/B/C/D está aprobada; solo A está autorizado para ejecución. B, C y D requieren revisión y autorización posterior, sin ramas ni implementación ahora. Véase el [plan de entregas](../identity-directory-delivery-plan.md).
+
+El [diseño de 2A](../stage2a-identity-directory-intake.md) distingue requisitos de producto aprobados de propuestas técnicas. Aprobar la secuencia no aprueba deshabilitar funcionalidades legacy, proveedores, políticas pendientes o despliegues.
 
 ## Estados y uso del registro
 
@@ -14,7 +16,7 @@ Esta actualización exclusivamente documental recoge nuevas decisiones de produc
 
 Cada encargo futuro debe citar estos IDs y cerrar solo las decisiones necesarias para su etapa. Una propuesta pasa a aprobada únicamente con acuerdo explícito registrado en una modificación posterior, explicando consecuencias y criterios; no por aparecer en un PR documental.
 
-Se actualizan ADR-002/003/005/010/011, conservando IDs: resumen obligatorio solo en derivación profesional, archivo completo de episodios propios con adendas, estados del episodio y visión del paciente sustituyen sus formulaciones de #5. ADR-012–ADR-018 registran las nuevas decisiones de dominio; RN-01–RN-40 en [business-rules.md](business-rules.md) son sus reglas verificables. ADR-019 añade el requisito transversal de demos reproducibles a los criterios de aceptación del roadmap. ADR-006/009 se aprueban técnicamente para el PR de fundamentos posterior a #7, con el alcance aditivo descrito abajo; ADR-007/008 siguen siendo propuestas para sus flujos.
+Como antecedente de #5/#9, se actualizaron ADR-002/003/005/010/011, conservando IDs: resumen obligatorio solo en derivación profesional, archivo completo de episodios propios con adendas, estados del episodio y visión del paciente sustituyen sus formulaciones de #5. ADR-012–ADR-018 registran las nuevas decisiones de dominio; RN-01–RN-58 en [business-rules.md](business-rules.md) son sus reglas verificables. ADR-019 añade el requisito transversal de demos reproducibles a los criterios de aceptación del roadmap. ADR-006/009 fueron aprobados técnicamente para los fundamentos integrados en #8, con el alcance aditivo descrito abajo; ADR-007/008 siguen siendo propuestas para sus flujos.
 
 ## ADR-001 — Consultorios independientes y red sin acceso implícito
 
@@ -201,7 +203,7 @@ Datos y cuentas demo exclusivamente para desarrollo, aislados de datos reales y 
 
 Cualquier visitante consulta perfiles públicos sin registrarse. Solo pacientes autenticados y con verificaciones exigidas solicitan atención desde perfiles públicos que aceptan nuevos pacientes. En 2A entra exclusivamente directorio básico e información profesional mínima necesaria para vinculación inicial. Reseñas, reputación, filtros avanzados y funciones de red siguen en etapa 6 con diseño posterior de privacidad.
 
-**Consecuencias y pendientes:** no publicar perfiles existentes automáticamente. Campos públicos exactos, identificador, caché y comportamiento de solicitudes en curso al cambiar configuraciones requieren aprobación técnica (AB-18). Aprobar un profesional no equivale a que elija publicar ni a garantía de reputación.
+**Consecuencias y pendientes:** no publicar perfiles existentes automáticamente. Campos y defaults públicos están resueltos en ADR-026; suspensión/rehabilitación en ADR-027. Identificador, caché y comportamiento futuro de solicitudes en curso requieren definición técnica (AB-18). Aprobar un profesional no equivale a que elija publicar ni a garantía de reputación.
 
 ## ADR-021 — Vinculación inicial bilateral, separada del episodio
 
@@ -222,6 +224,71 @@ El mensaje es privado y sensible: no aparece en directorio ni auditoría adminis
 Invitaciones profesionales se administran separadamente del cupo del paciente. No queda aprobada una política definitiva para invitaciones simultáneas de profesionales distintos; exclusividad de episodio vigente sí permanece obligatoria. Tampoco se mezcla este cupo con el de cambio en RN-19.
 
 **Pendiente de aprobación antes de habilitar los flujos:** plazos por estado, límites de frecuencia, cooldown, bloqueos y revisión, simultaneidad de invitaciones y tratamiento de solicitudes en curso. El diseño propone mecanismos, sin fijar valores ni reglas definitivas por defecto (AB-19/20).
+
+## ADR-023 — Registro independiente exclusivamente adulto y DOB global
+
+**Estado: APROBADA como producto; implementación pendiente en PR B. Reglas: RN-41–43.**
+
+La primera versión del registro independiente exige fecha de nacimiento válida y edad de al menos 18 años, comprobadas en backend; cumplir exactamente 18 sí permite registrarse. Rechazar fechas inexistentes o futuras y probar los bordes de edad. DOB pertenece a la identidad global, bajo control del paciente conforme ADR-012, no al episodio ni a la entrevista clínica.
+
+El registro no exige motivo de consulta, entrevista, evaluación de riesgo, CURP ni documento oficial. No crea episodio, vínculo asistencial ni acceso profesional. Registro y consulta del directorio no requieren terminar verificaciones. Los contactos no prueban identidad física única y nunca provocan fusiones automáticas.
+
+El flujo de menores, incluidos invitados por profesionales, sigue pendiente; no habilitar nuevas altas por rutas alternativas. Esto no autoriza bloquear atención o reinterpretar registros históricos de menores. Conservar datos previos sin deducir DOB desde edad/entrevista, identidad desde contactos, verificación desde existencia de cuenta ni episodios desde vínculos.
+
+## ADR-024 — Verificación normal de email y teléfono
+
+**Estado: APROBADA como producto; implementación pendiente en PR B. Reglas: RN-44–48.**
+
+| Canal | Método | Vigencia | Reenvío mínimo | Cuota por destino en ventana de 24 h | Intentos |
+| --- | --- | --- | --- | --- | --- |
+| Email | Enlace único, de un solo uso | 24 horas | 60 segundos | Máximo 5 enlaces por dirección | Límite adicional de confirmación pendiente de diseño |
+| Teléfono | Código temporal por SMS | 10 minutos | 60 segundos | Máximo 5 SMS por número | Máximo 5 intentos de validación por código |
+
+Generar un desafío nuevo invalida el anterior del mismo flujo; no reinicia cuotas. Los tokens de email son impredecibles y los secretos de ambos canales se almacenan de forma segura, sin aparecer en logs, auditoría ni respuestas públicas. Proteger frente a automatización, fuerza bruta, reenvíos concurrentes, múltiples cuentas, consumo abusivo y bloqueo provocado por terceros. Exceder límites de SMS restringe temporalmente la operación, sin suspender toda la cuenta.
+
+Entrega configurable mediante adaptadores y simuladores seguros de desarrollo/pruebas, sin email/SMS reales. Ningún proveedor comercial ni credencial de producción queda seleccionado o habilitado. Las operaciones sensibles que requieran identidad verificada deben comprobar en backend que ambos contactos vigentes están verificados; una sesión o una marca enviada por frontend no bastan. La lista de operaciones existentes afectadas sigue pendiente en AB-23.
+
+## ADR-025 — Cambio de contacto, reautenticación y revocación
+
+**Estado: APROBADA como producto; implementación pendiente en PR C. Reglas: RN-49–50.**
+
+Cambiar email o teléfono exige reautenticación reciente con contraseña, notificación al contacto anterior, verificación del nuevo e invalidación de la evidencia anterior del canal correspondiente. La confirmación debe ser consistente y revocar todas las sesiones mediante `session_version`, incluida la que hizo el cambio. El aviso no da veto al contacto anterior ni exige conservar acceso a él.
+
+No modificar episodios, citas, notas ni historial clínico. La recuperación excepcional de identidad permanece pendiente y no se sustituye por un cambio inseguro de contacto.
+
+Mantener el contacto candidato separado del vigente hasta confirmar, usar una prueba temporal de reautenticación y coordinar notificación/commit mediante entrega durable son recomendaciones técnicas, no decisiones de producto ya aprobadas. Vigencia exacta de reautenticación, tratamiento de fallos y carreras: AB-25.
+
+## ADR-026 — Campos públicos y revisión selectiva profesional
+
+**Estado: APROBADA como producto; implementación pendiente en PR D. Reglas: RN-51–55.**
+
+Campos de primera versión: nombre profesional, fotografía opcional, formación académica, cédula profesional, especialidades, enfoque terapéutico, modalidad presencial/en línea/ambas, ciudad, estado, descripción profesional breve e indicador de recepción de nuevos pacientes. Sin precios, reseñas, agenda pública ni datos personales de contacto.
+
+Perfil privado y recepción desactivada por defecto, con controles independientes. Solo profesionales aprobados pueden publicar; cuentas existentes no se publican automáticamente. Perfil público sin admisión sigue siendo válido y no debe impedir futuras invitaciones directas.
+
+Foto, descripción, modalidad y ubicación se actualizan directamente. Formación, cédula y credenciales verificables requieren aprobación administrativa; especialidades y enfoque requieren revisión cuando impliquen credenciales verificables. La clasificación exacta de estas declaraciones queda en AB-24; no puede decidirla unilateralmente el profesional para evitar revisión.
+
+Conservar públicamente la última versión aprobada durante revisión. La propuesta pendiente solo la ven titular y administradores autorizados para revisarla; `support` no obtiene acceso al contenido pendiente por ser lector operativo. Aprobar publica el cambio dentro de un perfil elegible y elegido público; no enciende el opt-in de un perfil privado. Rechazar conserva lo aprobado y comunica razón al titular. Registrar revisión y decisión sin acceso clínico. Ningún endpoint del titular puede cambiar aprobación o publicar credenciales pendientes.
+
+La proyección pública será explícita y limitada, consultable sin autenticación, sin reutilizar DTO clínico/administrativo completo. Excluir pacientes, relaciones, cuentas privadas, notas de revisión y metadatos internos.
+
+## ADR-027 — Retiro público y rehabilitación profesional
+
+**Estado: APROBADA como producto; implementación pendiente en PR D. Regla: RN-56.**
+
+Profesional suspendido, inactivo o sin aprobación vigente desaparece del directorio y no recibe nuevas solicitudes públicas. Consultar y modificar perfil deben comprobar elegibilidad en backend, sin revelar públicamente el motivo de suspensión.
+
+Rehabilitar no republica ni reactiva recepción automáticamente: el profesional confirma nuevamente ambas preferencias. Conservar información aprobada, salvo credenciales que requieran revisión. No alterar, borrar, reabrir episodios ni restaurar relaciones o citas por rehabilitar la cuenta. Las solicitudes públicas siguen fuera de B/C/D; esta regla define su futura elegibilidad, no autoriza implementarlas.
+
+## ADR-028 — Secuencia A/B/C/D y barrera legacy
+
+**Estado: APROBADA la división y el inicio exclusivo de A. Reglas: RN-57–58.**
+
+A documenta decisiones y reorganiza; B aborda registro adulto, básicos y verificación; C cambios de contacto/sesiones; D perfiles, credenciales y directorio juntos. Cada implementación futura debe incluir sus pruebas y demo ficticia aislada conforme ADR-019. El [plan](../identity-directory-delivery-plan.md) delimita dependencias y aceptación.
+
+Antes de B, inventariar TODAS las mutaciones legacy que creen/modifiquen vínculos o concedan acceso, para cuentas nuevas y existentes. La [auditoría](../stage2a-legacy-mutations.md) propone bloquear, preservar o adaptar cada ruta y explica pérdidas temporales. **La deshabilitación funcional no está aprobada.** No basta restringir cuentas nuevas ni verificar contactos manteniendo otras puertas de activación.
+
+No activar permisos por episodio mientras subsista el fallback por paciente sin retirada coordinada y aislamiento probado. No crear solicitudes/invitaciones nuevas, derivaciones, pagos, reseñas o recuperación excepcional en estas entregas. 004–006 son estimaciones; no archivos o migraciones aprobados. No ejecutar sobre la base habitual, modificar 001–003 o alterar contenedores/volúmenes existentes. A no crea SQL ni ejecuta pruebas de base o demos. Un PR se revisa sin merge; B espera revisión/aprobación de A y autorización de inicio.
 
 ## Asuntos abiertos y momento de resolución
 
@@ -246,13 +313,18 @@ Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen de
 | AB-15 | ¿Qué locks/transacciones, idempotencia, errores y coordinación de lectores/escritores preservan exclusividad, cambios atómicos, pausa/cierre/suspensión y agenda? | Diseño 2A/2B, ampliación 2C/2D |
 | AB-16 | ¿Qué estado técnico, procedimiento y actores resuelven citas pendientes por suspensión, respetando privacidad y sin cancelación automática? | Permisos 2A y flujo 2B; agenda 2D |
 | AB-17 | Diseño/ensayo de fundamentos 003 aprobados en ADR-009. Pendientes resolución de legacy real, activación de atribuciones/permisos y autorización/ensayo del rollout de cada entorno. | Antes del despliegue y activación de 2A |
-| AB-18 | ¿Qué campos mínimos e identificador público, configuración de admisión, caché y tratamiento de pendientes ante despublicación/cierre de admisión se aprueban? | Implementación del directorio básico de 2A |
+| AB-18 | Campos, defaults y reconfirmación tras rehabilitación: aprobados en ADR-026/027. Pendientes identificador público, caché/retiro y tratamiento futuro de solicitudes en curso. | Directorio PR D; pendientes de solicitudes en entrega posterior |
 | AB-19 | ¿Qué estados técnicos, plazos de respuesta/confirmación, caducidad, versión de aceptación, cancelación y eventos terminales se aprueban para alta inicial? | Habilitar solicitudes/invitaciones 2A |
 | AB-20 | ¿Qué cuotas/ventanas, cooldown, bloqueo y revisión evitan abuso sin exclusión injustificada? ¿Qué política rige invitaciones simultáneas y colisiones entre vías? | Habilitar solicitudes/invitaciones 2A |
-| AB-21 | ¿Qué normalización, métodos y proveedores de correo/teléfono, recuperación excepcional, revalidación y controles de entrega se aprueban? | Identidad verificada 2A; AB-13 sigue abierto técnicamente |
+| AB-21 | Métodos y límites normales aprobados en ADR-024. Pendientes normalización/país de teléfono, números compartidos o reciclados, unicidad y entrega comercial. Sin fusión automática; recuperación excepcional AB-13 no habilitada. | Identidad PR B; proveedor antes de producción |
 | AB-22 | ¿Qué retención, acceso, cifrado/llaves y tratamiento de mensajes/tokens/evidencia en historial, copias y eliminación se aprueban? | Guardar datos sensibles de vinculación 2A; revisión jurídica aplicable |
+| AB-23 | ¿Qué mutaciones legacy bloquear/preservar/adaptar para TODAS las cuentas y qué operaciones existentes requieren ambas verificaciones? Aprobar expresamente la pérdida temporal de funcionalidad y tratamiento de pendientes; la matriz es propuesta. | Antes de implementar PR B |
+| AB-24 | ¿Cómo clasificar especialidades/enfoque con credenciales verificables y controlar cambios de nombre profesional? ¿Qué mecanismo se usa para fotografía y para credenciales que requieran nueva revisión al rehabilitar? | PR D, antes del flujo correspondiente |
+| AB-25 | ¿Cuánto dura la reautenticación reciente? ¿Cómo expira/cancela un cambio, maneja fallos de aviso/entrega y confirma bajo concurrencia? | PR C |
+| AB-26 | ¿Qué límites adicionales por cuenta/red/costo y duración de restricciones complementan los valores de ADR-024 sin permitir bloqueo por terceros? ¿Qué normalización y reloj gobiernan bordes de DOB? | PR B |
+| AB-27 | ¿Cómo se muestran revisión/rechazo y estado propio a un profesional no aprobado sin conceder sesión clínica? Login actual deniega pendiente/rechazado/suspendido. | PR D si se modifica esa experiencia |
 
-Los fundamentos integrados en #8 están delimitados en ADR-006/009; AB-06 no autoriza atribución legacy. Antes de activar el resto de 2A deben cerrarse las propuestas y asuntos bloqueantes aplicables, especialmente AB-02/06/08/13–AB-22. Las decisiones técnicas D-01–D-12 del diseño permanecen PROPUESTAS hasta aprobación explícita. Los requisitos de producto aprobados no aprueban todos los detalles técnicos de 2A. No inventar respuestas de 2C para cerrar este PR documental; dividir encargos y dependencias según [roadmap.md](roadmap.md).
+Los fundamentos integrados en #8 están delimitados en ADR-006/009; AB-06 no autoriza atribución legacy. Antes de activar el resto de 2A deben cerrarse las propuestas y asuntos bloqueantes aplicables, especialmente AB-02/06/08/13–AB-22. Los mecanismos técnicos D-01–D-12 permanecen PROPUESTOS salvo los requisitos de producto expresamente resueltos en ADR-023–028. AB-23 no está aprobado por aceptar la división. Los requisitos de producto aprobados no aprueban todos los detalles técnicos de 2A. No inventar respuestas de 2C para cerrar este PR documental; dividir encargos y dependencias según [roadmap.md](roadmap.md).
 
 ## Acciones y supuestos no aprobados
 
@@ -266,8 +338,8 @@ Los fundamentos integrados en #8 están delimitados en ADR-006/009; AB-06 no aut
 - Completar derivación profesional sin resumen aprobado, mostrar adendas posteriores sin nueva autorización, unir identidades por contacto, exigir CURP universal, cancelar futuras por suspensión automáticamente o reinicializar demo sin autorización separada: incompatibles con RN-04/15/16/22/23/28.
 - Asignar automáticamente dueños legacy inciertos, borrar duplicados o trasladar agenda/espera para facilitar la migración: sin aprobación y contrarios al enfoque conservador propuesto.
 
-## Referencias y discrepancias de contexto existentes
+## Fuentes vigentes y evidencia histórica
 
-[README.md](../../README.md), [ARCHITECTURE.md](../../ARCHITECTURE.md), [AGENTS.md](../../AGENTS.md), [NOTES.md](../../NOTES.md), [clinical-data-integrity.md](../clinical-data-integrity.md) y [authentication-security.md](../authentication-security.md) se leyeron para contrastar el estado. `NOTES.md` tiene fecha de abril de 2026; `ARCHITECTURE.md` aún menciona falta de tests y módulos legacy, mientras hoy existen suites en [backend/test](../../backend/test). Las guías de seguridad conservan evidencia histórica previa a #4; no asumir que sus conteos npm describen el estado posterior.
+[README](../../README.md) es la entrada, [AGENTS](../../AGENTS.md) contiene instrucciones operativas y [arquitectura](../architecture.md) describe la implementación. Las [notas de abril](../archive/notes-2026-04-13.md) son historia, no requisitos. El [inventario documental](../documentation-audit.md) explica traslados, correcciones e instrucciones sustituidas.
 
-Las referencias antiguas a trabajar/push en `main` no sustituyen los encargos con rama y PR sin merge. La exención de tests npm correspondía al PR solo documental; el primer PR de 2A sí exige pruebas, lint y build, con integración exclusivamente aislada y desechable. Las indicaciones históricas sobre schema/seed no autorizan ejecutarlos en la base habitual. El «acceso maestro» de `superadmin` en AGENTS.md se subordina a RN-27, implementada en #7 para backoffice. La edición versionada previa sigue pendiente de alineación con RN-23 y la autorización clínica por episodio no fue activada por #8. La restricción a cuatro archivos correspondía al encargo documental anterior. Futuras tareas deben distinguir decisiones objetivo y comportamiento implementado.
+Las guías de [integridad](../clinical-data-integrity.md), [autenticación](../authentication-security.md), [fundamentos 003](../clinical-episodes-foundation.md) y su [validación histórica](../clinical-episodes-validation.md) conservan evidencia y procedimientos pertinentes. No trasladar resultados o conteos npm antiguos a una validación nueva. #7 restringió el backoffice; #8 no activó permisos por episodio. La edición versionada actual de notas aún no cumple el objetivo de adendas RN-23.
