@@ -59,12 +59,13 @@ def parse_tap(text):
 
 def scan(data):
     text=data.decode('utf-8')
-    patterns=[r'eyJ[\w-]+\.[\w-]+\.[\w-]+',r'(?i)bearer\s+\S+',r'(?i)"(?:secret|password|candidate|destination|authorization|otp|token)"\s*:',r'gh[pousr]_[A-Za-z0-9_]{15,}',r'PRIVATE KEY',r'CI_SENSITIVE_FIXTURE']
+    patterns=[r'eyJ[\w-]+\.[\w-]+\.[\w-]+',r'(?i)bearer\s+\S+',r'(?i)"(?:secret|password|candidate|destination|authorization|otp|token)"\s*:',r'gh[pousr]_[A-Za-z0-9_]{15,}',r'PRIVATE KEY',r'CI_SENSITIVE_FIXTURE',r'(?i)\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b',r'\+\d[\d ()-]{7,}']
     if any(re.search(p,text) for p in patterns):raise ValueError('Sensitive evidence rejected')
 
 def hashes(directory):
     directory=Path(directory);files={}
     for p in sorted(directory.rglob('*')):
+        if p.is_symlink():raise ValueError('Artifact symlink rejected')
         if p.is_file() and p.name!='SHA256SUMS':
             if p.is_symlink() or p.suffix not in ['.json','.png','.tap']:raise ValueError('Artifact allowlist violation')
             if p.suffix in ['.json','.tap']:scan(p.read_bytes())

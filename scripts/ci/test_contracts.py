@@ -25,7 +25,7 @@ class Contracts(unittest.TestCase):
         with self.assertRaises(ValueError):docs.check_link(Path('README.md'),'ci-nonexistent.md')
         with self.assertRaises(ValueError):docs.check_link(Path('README.md'),'README.md#ci-missing-fragment')
     def test_sanitization_sensitive_fixtures(self):
-        for fixture in ['{"otp":"123456"}','{"candidate":"fictitious@ci.invalid"}','Bearer dummy-fixture','CI_SENSITIVE_FIXTURE','ghp_abcdefghijklmnopqrstuvwxyz']:
+        for fixture in ['{"otp":"123456"}','{"candidate":"fictitious@ci.invalid"}','Bearer dummy-fixture','CI_SENSITIVE_FIXTURE','ghp_abcdefghijklmnopqrstuvwxyz','fictional@ci.invalid','+525500001234']:
             with self.assertRaises(ValueError):scan(fixture.encode())
     def test_artifact_missing_tamper_and_allowlist(self):
         with tempfile.TemporaryDirectory() as tmp:
