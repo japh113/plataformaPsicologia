@@ -68,7 +68,7 @@ test('clinical integrity: PostgreSQL migration, HTTP API and concurrency', { ski
       const migrationClient = await db.getClient();
       try {
         const name = (await migrationClient.query('SELECT current_database() AS name')).rows[0].name;
-        await migrateEpisodes(migrationClient, { expectedDatabase: name });
+        await migrateEpisodes(migrationClient, { expectedDatabase: name, target: '004' });
       } finally { migrationClient.release(); }
     }
     server = app.listen(0,'127.0.0.1');

@@ -1,3 +1,4 @@
+import { getOwnIdentityHandler, updateOwnIdentityHandler, requestVerificationHandler, confirmVerificationHandler } from './identity.controller.js';
 import { Router } from 'express';
 import {
   acceptCareRelationshipInviteHandler,
@@ -28,6 +29,10 @@ router.post('/password-reset/request', requestPasswordResetHandler);
 router.post('/password-reset/confirm', confirmPasswordResetHandler);
 router.post('/register/patient', registerPatientHandler);
 router.post('/register/psychologist', registerPsychologistHandler);
+router.get('/identity', authenticate, getOwnIdentityHandler);
+router.patch('/identity', authenticate, updateOwnIdentityHandler);
+router.post('/verification/:channel/request', authenticate, requestVerificationHandler);
+router.post('/verification/:channel/confirm', authenticate, confirmVerificationHandler);
 router.get('/me', authenticate, meHandler);
 router.get('/psychologists/available', authenticate, listAvailablePsychologistsHandler);
 router.get('/users', authenticate, listBackofficeUsersHandler);

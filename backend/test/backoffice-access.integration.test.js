@@ -55,7 +55,7 @@ test('backoffice clinical isolation and operational projections with PostgreSQL 
       const migrationClient = await db.getClient();
       try {
         const name = (await migrationClient.query('SELECT current_database() AS name')).rows[0].name;
-        await migrateEpisodes(migrationClient, { expectedDatabase: name });
+        await migrateEpisodes(migrationClient, { expectedDatabase: name, target: '004' });
       } finally { migrationClient.release(); }
     }
     server = app.listen(0, '127.0.0.1');
@@ -125,7 +125,7 @@ test('backoffice clinical isolation and operational projections with PostgreSQL 
       assert.equal((await request(`/patients/own/tasks/${task}`, 'psychologist', 'PATCH', { text: 'updated-activity' })).status, 200);
       assert.equal((await request('/availability/me', 'psychologist')).status, 200);
       const relationships = await request('/auth/care-relationships', 'psychologist');
-      assert.match(JSON.stringify(relationships.body.data), /CODE-psychologist/);
+      assert.doesNotMatch(JSON.stringify(relationships.body.data), /CODE-psychologist/);
       assert.match(JSON.stringify(relationships.body.data), /clinical-relationship-text/);
     });
 
@@ -238,18 +238,18 @@ test('backoffice clinical isolation and operational projections with PostgreSQL 
       assert.deepEqual((await db.query('SELECT * FROM audit_logs ORDER BY id')).rows, before, 'Never delete or rewrite historical audit events');
       for (const role of ['patient','psychologist']) assert.equal((await request('/auth/audit-logs',role)).status, 403);
     });
-    await t.test('real recovery and invitation events preserve legitimate flows without logging credentials', async () => {
+    await t.test('recovery remains available and legacy invitations cannot activate access', async () => {
       const registration = await request('/auth/register/patient', null, 'POST',
-        { firstName: 'Invited', email: 'invited@access.invalid', password });
-      assert.equal(registration.status, 201);
-      tokens.invited = registration.body.data.token;
+        { firstName: 'Invited', email: 'invited@access.invalid', password, birthDate: '1990-01-01', phone: '+525500000002' });
+      assert.equal(registration.status, 202);
+      const session = await request('/auth/login', null, 'POST', { email: 'invited@access.invalid', password });
+      tokens.invited = session.body.data.token;
       const invitation = await request('/auth/care-relationships/invite', 'psychologist', 'POST',
         { patientEmail: 'invited@access.invalid', notes: 'private-invitation-text' });
-      assert.equal(invitation.status, 201);
-      const code = invitation.body.data.inviteCode;
-      assert.ok(code);
+      assert.equal(invitation.status, 403);
+      const code = 'OLD-PRIVATE-CODE';
       const accepted = await request('/auth/care-relationships/accept-code', 'invited', 'POST', { inviteCode: code });
-      assert.equal(accepted.status, 200);
+      assert.equal(accepted.status, 403);
       const reset = await request('/auth/password-reset/request', null, 'POST', { email: 'invited@access.invalid' });
       assert.equal(reset.status, 200);
       const resetToken = reset.body.data.preview.resetToken;

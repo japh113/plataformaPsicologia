@@ -103,7 +103,7 @@ export const registerPatientHandler = async (req, res, next) => {
     }
 
     const session = await registerPatientUser(req.body);
-    return successResponse(res, session, 'Patient account created successfully', 201);
+    return successResponse(res, session, 'Si los datos permiten el registro, ya puedes iniciar sesión. Si tienes cuenta, utiliza tu acceso habitual.', 202);
   } catch (error) {
     if (error.status) {
       return errorResponse(res, error.message, error.status);
@@ -125,8 +125,8 @@ export const registerPsychologistHandler = async (req, res, next) => {
     return successResponse(
       res,
       psychologistUser,
-      'Psychologist account created and pending review',
-      201,
+      'Si los datos permiten el registro, la solicitud profesional queda pendiente de revisión. Si tienes cuenta, utiliza tu acceso habitual.',
+      202,
     );
   } catch (error) {
     if (error.status) {
@@ -249,12 +249,6 @@ export const listAvailablePsychologistsHandler = async (req, res, next) => {
 
 export const requestCareRelationshipHandler = async (req, res, next) => {
   try {
-    const errors = validateRequestCareRelationshipPayload(req.body);
-
-    if (errors.length > 0) {
-      return errorResponse(res, 'Validation error', 400, errors);
-    }
-
     const relationship = await requestCareRelationship({
       actor: req.user,
       psychologistUserId: req.body.psychologistUserId,
@@ -273,12 +267,6 @@ export const requestCareRelationshipHandler = async (req, res, next) => {
 
 export const inviteCareRelationshipHandler = async (req, res, next) => {
   try {
-    const errors = validateInviteCareRelationshipPayload(req.body);
-
-    if (errors.length > 0) {
-      return errorResponse(res, 'Validation error', 400, errors);
-    }
-
     const relationship = await inviteCareRelationship({
       actor: req.user,
       patientEmail: req.body.patientEmail,
@@ -297,12 +285,6 @@ export const inviteCareRelationshipHandler = async (req, res, next) => {
 
 export const respondToCareRelationshipHandler = async (req, res, next) => {
   try {
-    const errors = validateRespondCareRelationshipPayload(req.body);
-
-    if (errors.length > 0) {
-      return errorResponse(res, 'Validation error', 400, errors);
-    }
-
     const relationship = await respondToCareRelationship({
       actor: req.user,
       relationshipId: req.params.relationshipId,
@@ -341,12 +323,6 @@ export const listAuditLogsHandler = async (req, res, next) => {
 
 export const acceptCareRelationshipInviteHandler = async (req, res, next) => {
   try {
-    const errors = validateAcceptCareRelationshipInvitePayload(req.body);
-
-    if (errors.length > 0) {
-      return errorResponse(res, 'Validation error', 400, errors);
-    }
-
     const relationship = await acceptCareRelationshipInvite({
       actor: req.user,
       inviteCode: req.body.inviteCode,

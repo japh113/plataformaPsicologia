@@ -1,3 +1,4 @@
+import { registrationErrors } from './identity.validation.js';
 const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -47,38 +48,7 @@ export const validatePasswordResetConfirmPayload = (payload = {}) => {
   return errors;
 };
 
-export const validatePatientRegistrationPayload = (payload = {}) => {
-  const errors = [];
-  const firstName = normalizeString(payload.firstName);
-  const email = normalizeString(payload.email);
-  const password = normalizeString(payload.password);
-
-  if (!firstName) {
-    errors.push('firstName is required');
-  }
-
-  if (!email) {
-    errors.push('email is required');
-  } else if (!isValidEmail(email)) {
-    errors.push('email must be valid');
-  }
-
-  if (!password) {
-    errors.push('password is required');
-  } else if (password.length < 8) {
-    errors.push('password must be at least 8 characters');
-  }
-
-  if (payload.age !== undefined && payload.age !== null && payload.age !== '') {
-    const numericAge = Number(payload.age);
-
-    if (!Number.isInteger(numericAge) || numericAge < 0) {
-      errors.push('age must be a non-negative integer');
-    }
-  }
-
-  return errors;
-};
+export const validatePatientRegistrationPayload = registrationErrors;
 
 export const validatePsychologistRegistrationPayload = (payload = {}) => {
   const errors = [];

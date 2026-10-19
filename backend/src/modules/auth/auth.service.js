@@ -1,3 +1,4 @@
+import { registrationErrors, normalizeEmail, normalizePhone } from './identity.validation.js';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -6,7 +7,7 @@ import env from '../../config/env.js';
 import { ensureAccountCanAuthenticate } from './auth.account-status.js';
 import { ensureBackofficeViewer, ensureBackofficeManager, ensureClinicalActor } from './auth.permissions.js';
 import { projectOperationalAuditMetadata } from '../../utils/audit-projections.js';
-import { buildRelationshipInvitePreview, logAuditEvent } from '../../utils/audit.js';
+import { logAuditEvent } from '../../utils/audit.js';
 
 const createAuthError = (message, status = 400) => {
   const error = new Error(message);
@@ -75,9 +76,7 @@ const mapCareRelationshipRow = (row) => ({
   requestedByRole: row.requested_by_role,
   createdAt: row.created_at || null,
   approvedAt: row.approved_at || null,
-  inviteCode: row.invite_code || null,
   inviteExpiresAt: row.invite_expires_at || null,
-  invitePreview: row.invite_code ? buildRelationshipInvitePreview({ inviteCode: row.invite_code, expiresAt: row.invite_expires_at }) : null,
   patient: {
     id: String(row.patient_id),
     fullName: row.patient_full_name,
@@ -205,22 +204,6 @@ const isBackofficeActor = (actor) => ['admin', 'support', 'superadmin'].includes
 const isPatientActor = (actor) => actor?.role === 'patient';
 const isPsychologistActor = (actor) => actor?.role === 'psychologist';
 const createInviteCode = () => randomBytes(4).toString('hex').toUpperCase();
-
-const assertEmailAvailable = async (client, email) => {
-  const result = await client.query(
-    `
-      SELECT 1
-      FROM users
-      WHERE LOWER(email) = LOWER($1)
-      LIMIT 1
-    `,
-    [email.trim()],
-  );
-
-  if (result.rows[0]) {
-    throw createAuthError('Email is already in use', 409);
-  }
-};
 
 const ensurePasswordResetRecordUsable = (record, now = new Date()) => {
   if (!record) {
@@ -569,88 +552,38 @@ export const confirmPasswordReset = async ({ token, password }) => {
   }
 };
 
-export const registerPatientUser = async ({
-  firstName,
-  lastName = '',
-  email,
-  password,
-  age = null,
-  reasonForConsultation = '',
-}) => {
+export const registerPatientUser = async (payload) => {
+  const errors = registrationErrors(payload);
+  if (errors.length) throw createAuthError(errors.join('; '), 400);
+  const { firstName, lastName = '', password, birthDate } = payload;
+  const email = normalizeEmail(payload.email);
+  const phone = normalizePhone(payload.phone);
+  // Hash even on a duplicate; public outcome never discloses account existence.
+  const passwordHash = await bcrypt.hash(password, 10);
   const client = await db.getClient();
-
   try {
     await client.query('BEGIN');
-
-    await assertEmailAvailable(client, email);
-
-    const patientId = randomUUID();
-    const userId = randomUUID();
-    const normalizedFirstName = firstName.trim();
-    const normalizedLastName = lastName.trim();
-    const fullName = `${normalizedFirstName} ${normalizedLastName}`.trim();
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    await client.query(
-      `
-        INSERT INTO patients (
-          id,
-          first_name,
-          last_name,
-          full_name,
-          email,
-          risk_level,
-          status,
-          age,
-          reason_for_consultation
-        )
-        VALUES ($1, $2, $3, $4, $5, 'none', 'active', $6, $7)
-      `,
-      [patientId, normalizedFirstName, normalizedLastName, fullName, email.trim(), age === '' ? null : age, reasonForConsultation.trim()],
-    );
-
-    const result = await client.query(
-      `
-        INSERT INTO users (
-          id,
-          first_name,
-          last_name,
-          email,
-          password_hash,
-          role,
-          patient_id
-        )
-        VALUES ($1, $2, $3, $4, $5, 'patient', $6)
-        RETURNING
-          id,
-          first_name,
-          last_name,
-          email,
-          role,
-          patient_id,
-          session_version,
-          NULL::text AS professional_title,
-          NULL::text AS license_number,
-          NULL::text AS psychologist_approval_status,
-          NULL::text AS review_notes
-      `,
-      [userId, normalizedFirstName, normalizedLastName, email.trim(), passwordHash, patientId],
-    );
-
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 4081))', [email]);
+    const exists = await client.query('SELECT 1 FROM users WHERE lower(email)=lower($1)', [email]);
+    if (!exists.rowCount) {
+      const patientId = randomUUID(), userId = randomUUID();
+      await client.query(
+        `INSERT INTO patients(id,first_name,last_name,full_name,email,phone,global_birth_date)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [patientId, firstName.trim(), lastName.trim(), (firstName.trim() + ' ' + lastName.trim()).trim(), email, phone, birthDate]);
+      await client.query(
+        `INSERT INTO users(id,first_name,last_name,email,password_hash,role,patient_id)
+         VALUES ($1,$2,$3,$4,$5,'patient',$6)`,
+        [userId, firstName.trim(), lastName.trim(), email, passwordHash, patientId]);
+    }
     await client.query('COMMIT');
-
-    const user = mapUserRow(result.rows[0]);
-
-    return {
-      user,
-      token: signAuthToken(user),
-    };
+    return { accepted: true };
   } catch (error) {
     await client.query('ROLLBACK');
+    // A concurrent older registration may race our pre-check; still no disclosure.
+    if (error.code === '23505') return { accepted: true };
     throw error;
-  } finally {
-    client.release();
-  }
+  } finally { client.release(); }
 };
 
 export const registerPsychologistUser = async ({
@@ -661,17 +594,22 @@ export const registerPsychologistUser = async ({
   professionalTitle,
   licenseNumber = '',
 }) => {
+  email = normalizeEmail(email);
+  const passwordHash = await bcrypt.hash(password, 10);
   const client = await db.getClient();
 
   try {
     await client.query('BEGIN');
 
-    await assertEmailAvailable(client, email);
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 4081))', [email]);
+    if ((await client.query('SELECT 1 FROM users WHERE lower(email)=lower($1)', [email])).rowCount) {
+      await client.query('COMMIT');
+      return { accepted: true };
+    }
 
     const userId = randomUUID();
     const normalizedFirstName = firstName.trim();
     const normalizedLastName = lastName.trim();
-    const passwordHash = await bcrypt.hash(password, 10);
 
     await client.query(
       `
@@ -689,7 +627,7 @@ export const registerPsychologistUser = async ({
       [userId, normalizedFirstName, normalizedLastName, email.trim(), passwordHash],
     );
 
-    const result = await client.query(
+    await client.query(
       `
         INSERT INTO psychologist_profiles (
           user_id,
@@ -715,9 +653,10 @@ export const registerPsychologistUser = async ({
 
     await client.query('COMMIT');
 
-    return mapUserRow(result.rows[0]);
+    return { accepted: true };
   } catch (error) {
     await client.query('ROLLBACK');
+    if (error.code === '23505') return { accepted: true };
     throw error;
   } finally {
     client.release();
@@ -882,474 +821,20 @@ export const listAuditLogs = async ({
   return result.rows.map(mapAuditLogRow);
 };
 
-const ensurePatientExists = async (client, patientId) => {
-  const result = await client.query(
-    `
-      SELECT id
-      FROM patients
-      WHERE id = $1
-      LIMIT 1
-    `,
-    [patientId],
-  );
-
-  if (!result.rows[0]) {
-    throw createAuthError('Patient not found', 404);
-  }
-};
-
-const findPatientUserByEmail = async (client, email) => {
-  const result = await client.query(
-    `
-      SELECT
-        u.id,
-        u.email,
-        u.is_active,
-        p.id AS patient_id,
-        p.full_name
-      FROM users u
-      INNER JOIN patients p
-        ON p.id = u.patient_id
-      WHERE u.role = 'patient'
-        AND LOWER(u.email) = LOWER($1)
-      LIMIT 1
-    `,
-    [email.trim()],
-  );
-
-  return result.rows[0] || null;
-};
-
-const ensurePsychologistCanBeLinked = async (client, psychologistUserId) => {
-  const result = await client.query(
-    `
-      SELECT
-        u.id,
-        COALESCE(pp.approval_status, 'pending_review') AS approval_status
-      FROM users u
-      LEFT JOIN psychologist_profiles pp
-        ON pp.user_id = u.id
-      WHERE u.id = $1
-        AND u.role = 'psychologist'
-        AND u.is_active = TRUE
-      LIMIT 1
-    `,
-    [psychologistUserId],
-  );
-
-  const psychologist = result.rows[0];
-
-  if (!psychologist) {
-    throw createAuthError('Psychologist user not found', 404);
-  }
-
-  if (psychologist.approval_status !== 'active') {
-    throw createAuthError('Only active psychologists can be linked to patients', 409);
-  }
-};
-
-const syncLegacyRelationshipAccess = async (client, patientId, psychologistUserId, status) => {
-  if (status === 'active') {
-    await client.query(
-      `
-        INSERT INTO psychologist_patient_access (
-          psychologist_user_id,
-          patient_id
-        )
-        VALUES ($1, $2)
-        ON CONFLICT (psychologist_user_id, patient_id) DO NOTHING
-      `,
-      [psychologistUserId, patientId],
-    );
-    return;
-  }
-
-  await client.query(
-    `
-      DELETE FROM psychologist_patient_access
-      WHERE psychologist_user_id = $1
-        AND patient_id = $2
-    `,
-    [psychologistUserId, patientId],
-  );
-};
-
-// These legacy administrative endpoints cannot establish bilateral authorization.
-// Keep every write disabled, including pending/ended/rejected transitions: they can
-// overwrite clinical responsibility or add/remove inherited clinical access.
-const denyAdministrativeRelationshipWrite = (actor) => {
-  ensureBackofficeManager(actor);
-  throw createAuthError('Administrative care relationship changes are temporarily disabled; bilateral clinical authorization is required', 403);
+const denyLegacyRelationshipWrite = (actor) => {
+  ensureClinicalActor(actor);
+  throw createAuthError('Las nuevas vinculaciones están temporalmente deshabilitadas. Los vínculos existentes se conservan.', 403);
 };
 
 export const createCareRelationship = async ({ actor }) => {
-  denyAdministrativeRelationshipWrite(actor);
+  ensureBackofficeManager(actor);
+  throw createAuthError('Administrative care relationship changes are temporarily disabled; bilateral clinical authorization is required', 403);
 };
-
-export const updateCareRelationship = async ({ actor }) => {
-  denyAdministrativeRelationshipWrite(actor);
-};
-
-export const requestCareRelationship = async ({
-  actor,
-  psychologistUserId,
-  notes = '',
-}) => {
-  if (!isPatientActor(actor) || !actor.patientId) {
-    throw createAuthError('Only patients can request a psychologist link', 403);
-  }
-
-  const client = await db.getClient();
-
-  try {
-    await client.query('BEGIN');
-
-    await ensurePatientExists(client, actor.patientId);
-    await ensurePsychologistCanBeLinked(client, psychologistUserId);
-
-    const existingResult = await client.query(
-      `
-        SELECT id, status
-        FROM care_relationships
-        WHERE patient_id = $1
-          AND psychologist_user_id = $2
-        ORDER BY created_at DESC
-        LIMIT 1
-      `,
-      [actor.patientId, psychologistUserId],
-    );
-
-    const existingRelationship = existingResult.rows[0];
-
-    if (existingRelationship?.status === 'active') {
-      throw createAuthError('This psychologist is already linked to the patient', 409);
-    }
-
-    let relationshipId = existingRelationship?.id || null;
-
-    if (relationshipId) {
-      await client.query(
-        `
-          UPDATE care_relationships
-          SET
-            status = 'pending',
-            notes = $2,
-            requested_by_role = 'patient',
-            created_by_user_id = $3,
-            approved_by_user_id = NULL,
-            approved_at = NULL,
-            invite_code = NULL,
-            invite_expires_at = NULL,
-            updated_at = NOW()
-          WHERE id = $1
-        `,
-        [relationshipId, notes.trim(), actor.id],
-      );
-    } else {
-      const insertResult = await client.query(
-        `
-          INSERT INTO care_relationships (
-            patient_id,
-            psychologist_user_id,
-            status,
-            requested_by_role,
-            created_by_user_id,
-            invite_code,
-            invite_expires_at,
-            notes
-          )
-          VALUES ($1, $2, 'pending', 'patient', $3, NULL, NULL, $4)
-          RETURNING id
-        `,
-        [actor.patientId, psychologistUserId, actor.id, notes.trim()],
-      );
-
-      relationshipId = insertResult.rows[0].id;
-    }
-
-    await syncLegacyRelationshipAccess(client, actor.patientId, psychologistUserId, 'pending');
-
-    await logAuditEvent(client, {
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'care_relationship_requested',
-      entityType: 'care_relationship',
-      entityId: relationshipId,
-      targetUserId: psychologistUserId,
-      patientId: actor.patientId,
-      metadata: {
-        requestType: 'patient_request',
-      },
-    });
-
-    await client.query('COMMIT');
-
-    return getRelationshipById(db, relationshipId);
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-};
-
-export const inviteCareRelationship = async ({
-  actor,
-  patientEmail,
-  notes = '',
-}) => {
-  if (!isPsychologistActor(actor)) {
-    throw createAuthError('Only psychologists can send patient invitations', 403);
-  }
-
-  const client = await db.getClient();
-
-  try {
-    await client.query('BEGIN');
-
-    await ensurePsychologistCanBeLinked(client, actor.id);
-    const inviteCode = createInviteCode();
-    const inviteExpiresAt = addDaysToDate(new Date(), 14);
-
-    const patientUser = await findPatientUserByEmail(client, patientEmail);
-
-    if (!patientUser || patientUser.is_active === false) {
-      throw createAuthError('No active patient account was found with that email', 404);
-    }
-
-    const existingResult = await client.query(
-      `
-        SELECT id, status
-        FROM care_relationships
-        WHERE patient_id = $1
-          AND psychologist_user_id = $2
-        ORDER BY created_at DESC
-        LIMIT 1
-      `,
-      [patientUser.patient_id, actor.id],
-    );
-
-    const existingRelationship = existingResult.rows[0];
-
-    if (existingRelationship?.status === 'active') {
-      throw createAuthError('That patient is already linked to this psychologist', 409);
-    }
-
-    let relationshipId = existingRelationship?.id || null;
-
-    if (relationshipId) {
-      await client.query(
-        `
-          UPDATE care_relationships
-          SET
-            status = 'pending',
-            notes = $2,
-            requested_by_role = 'psychologist',
-            created_by_user_id = $3,
-            approved_by_user_id = NULL,
-            approved_at = NULL,
-            invite_code = $4,
-            invite_expires_at = $5,
-            updated_at = NOW()
-          WHERE id = $1
-        `,
-        [relationshipId, notes.trim(), actor.id, inviteCode, inviteExpiresAt.toISOString()],
-      );
-    } else {
-      const insertResult = await client.query(
-        `
-          INSERT INTO care_relationships (
-            patient_id,
-            psychologist_user_id,
-            status,
-            requested_by_role,
-            created_by_user_id,
-            invite_code,
-            invite_expires_at,
-            notes
-          )
-          VALUES ($1, $2, 'pending', 'psychologist', $3, $4, $5, $6)
-          RETURNING id
-        `,
-        [patientUser.patient_id, actor.id, actor.id, inviteCode, inviteExpiresAt.toISOString(), notes.trim()],
-      );
-
-      relationshipId = insertResult.rows[0].id;
-    }
-
-    await syncLegacyRelationshipAccess(client, patientUser.patient_id, actor.id, 'pending');
-
-    await logAuditEvent(client, {
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'care_relationship_invited',
-      entityType: 'care_relationship',
-      entityId: relationshipId,
-      targetUserId: patientUser.id,
-      patientId: patientUser.patient_id,
-      metadata: {
-        requestType: 'psychologist_invitation',
-        patientEmail: patientUser.email,
-      },
-    });
-
-    await client.query('COMMIT');
-
-    return getRelationshipById(db, relationshipId);
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-};
-
-export const respondToCareRelationship = async ({
-  actor,
-  relationshipId,
-  status,
-  notes = '',
-}) => {
-  ensureClinicalActor(actor);
-  const client = await db.getClient();
-
-  try {
-    await client.query('BEGIN');
-
-    const currentRelationship = await getRelationshipById(client, relationshipId);
-
-    if (!currentRelationship) {
-      throw createAuthError('Care relationship not found', 404);
-    }
-
-    const normalizedStatus = ensureCareRelationshipResponseAllowed(actor, currentRelationship, status);
-
-    await client.query(
-      `
-        UPDATE care_relationships
-        SET
-          status = $2,
-          notes = CASE WHEN $3 <> '' THEN $3 ELSE notes END,
-          approved_by_user_id = CASE WHEN $2 = 'active' THEN $4 ELSE approved_by_user_id END,
-          approved_at = CASE WHEN $2 = 'active' THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
-          invite_code = NULL,
-          invite_expires_at = NULL,
-          updated_at = NOW()
-        WHERE id = $1
-      `,
-      [relationshipId, normalizedStatus, notes.trim(), actor.id],
-    );
-
-    await syncLegacyRelationshipAccess(
-      client,
-      currentRelationship.patient.id,
-      currentRelationship.psychologist.id,
-      normalizedStatus,
-    );
-
-    await logAuditEvent(client, {
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'care_relationship_responded',
-      entityType: 'care_relationship',
-      entityId: relationshipId,
-      targetUserId: currentRelationship.psychologist.id,
-      patientId: currentRelationship.patient.id,
-      metadata: {
-        status: normalizedStatus,
-        requestedByRole: currentRelationship.requestedByRole,
-      },
-    });
-
-    await client.query('COMMIT');
-
-    return getRelationshipById(db, relationshipId);
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-};
-
-export const acceptCareRelationshipInvite = async ({
-  actor,
-  inviteCode,
-}) => {
-  if (!isPatientActor(actor) || !actor.patientId) {
-    throw createAuthError('Only patients can accept invitation codes', 403);
-  }
-
-  const client = await db.getClient();
-
-  try {
-    await client.query('BEGIN');
-
-    const relationshipResult = await client.query(
-      `
-        SELECT id
-        FROM care_relationships
-        WHERE patient_id = $1
-          AND invite_code = $2
-          AND status = 'pending'
-          AND requested_by_role = 'psychologist'
-          AND (invite_expires_at IS NULL OR invite_expires_at > NOW())
-        LIMIT 1
-      `,
-      [actor.patientId, inviteCode.trim().toUpperCase()],
-    );
-
-    const relationshipId = relationshipResult.rows[0]?.id;
-
-    if (!relationshipId) {
-      throw createAuthError('Invitation code is invalid or expired', 404);
-    }
-
-    await client.query(
-      `
-        UPDATE care_relationships
-        SET
-          status = 'active',
-          approved_by_user_id = $2,
-          approved_at = NOW(),
-          invite_code = NULL,
-          invite_expires_at = NULL,
-          updated_at = NOW()
-        WHERE id = $1
-      `,
-      [relationshipId, actor.id],
-    );
-
-    const relationship = await getRelationshipById(client, relationshipId);
-
-    await syncLegacyRelationshipAccess(
-      client,
-      relationship.patient.id,
-      relationship.psychologist.id,
-      'active',
-    );
-
-    await logAuditEvent(client, {
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'care_relationship_accepted_by_code',
-      entityType: 'care_relationship',
-      entityId: relationshipId,
-      targetUserId: relationship.psychologist.id,
-      patientId: relationship.patient.id,
-      metadata: {},
-    });
-
-    await client.query('COMMIT');
-
-    return getRelationshipById(db, relationshipId);
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-};
+export const updateCareRelationship = createCareRelationship;
+export const requestCareRelationship = async ({ actor }) => denyLegacyRelationshipWrite(actor);
+export const inviteCareRelationship = async ({ actor }) => denyLegacyRelationshipWrite(actor);
+export const respondToCareRelationship = async ({ actor }) => denyLegacyRelationshipWrite(actor);
+export const acceptCareRelationshipInvite = async ({ actor }) => denyLegacyRelationshipWrite(actor);
 
 export const reviewPsychologistUser = async ({
   reviewerUserId,

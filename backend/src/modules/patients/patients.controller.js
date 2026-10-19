@@ -53,12 +53,6 @@ export const createPatientHandler = async (req, res, next) => {
   try {
     ensurePsychologist(req.user);
 
-    const errors = validateCreatePatient(req.body);
-
-    if (errors.length > 0) {
-      return errorResponse(res, 'Validation error', 400, errors);
-    }
-
     const patient = await createPatient(req.body, req.user);
     return successResponse(res, patient, 'Patient created successfully', 201);
   } catch (error) {
