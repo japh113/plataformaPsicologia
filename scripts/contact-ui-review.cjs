@@ -11,7 +11,21 @@ async function settle(p=page){await p.waitForLoadState('networkidle',{timeout:90
 const panel=(p=page)=>p.locator('[aria-label="Cambio seguro de contactos"]');
 const button=(p,name)=>p.getByRole('button',{name,exact:true});
 async function click(p,locator,path,status=200){const response=p.waitForResponse(r=>new URL(r.url()).pathname===path);await locator.click();const res=await response;assert.equal(res.status(),status,path);await settle(p);return (await res.json()).data;}
-async function shot(name,p=page){await settle(p);assert.ok(!/[#?].*(changeEmail|verifyEmail|Token)/.test(p.url()));await p.screenshot({path:'/evidence/screenshots/'+name+'.png',fullPage:true,animations:'disabled',mask:[p.locator('input[type=password]'),p.locator('input[autocomplete="one-time-code"]'),p.locator('p').filter({hasText:/Password demo:/})],maskColor:'#475569'});screenshots.push({file:'screenshots/'+name+'.png',scenario:current,viewport:p.viewportSize(),secretsMasked:true});save();return 'screenshots/'+name+'.png';}
+async function shot(name,p=page){
+ await settle(p);assert.ok(!/[#?].*(changeEmail|verifyEmail|Token)/.test(p.url()));
+ const viewport=p.viewportSize(),mobile=viewport.width<500;
+ const region=p.locator('section').filter({has:p.getByRole('heading',{name:'Mi identidad y contactos',exact:true})});
+ const options={path:'/evidence/screenshots/'+name+'.png',animations:'disabled',mask:[p.locator('input[type=password]'),p.locator('input[autocomplete="one-time-code"]'),p.locator('p').filter({hasText:/Password demo:/})],maskColor:'#475569'};
+ let captureViewport=viewport;
+ try {
+  if(mobile && await region.count()===1){
+   const height=Math.ceil((await region.boundingBox()).height)+240;
+   captureViewport={width:viewport.width,height:Math.max(viewport.height,height)};
+   await p.setViewportSize(captureViewport);await region.scrollIntoViewIfNeeded();await region.screenshot(options);
+  } else await p.screenshot({...options,fullPage:true});
+ } finally {if(mobile)await p.setViewportSize(viewport);}
+ screenshots.push({file:'screenshots/'+name+'.png',scenario:current,viewport,captureViewport,region:mobile?'complete identity section at mobile width':'page',secretsMasked:true});save();return 'screenshots/'+name+'.png';
+}
 async function scenario(id,description,fn,statuses=[]){current=id;allowed=new Set(statuses);try{await fn();results.push({id,description,status:'PASS'});}catch(error){results.push({id,description,status:'FAIL',error:clean(error.message).split('\n').slice(0,6).join(' ')});try{await shot(id+'-failure');}catch{}save();throw error;}save();console.log(id+' PASS');}
 async function login(p,email,password=pw){await p.goto(base);await settle(p);await button(p,'Iniciar sesion').click();const f=p.locator('form').filter({has:button(p,'Entrar')});await f.locator('[name=email]').fill(email);await f.locator('[name=password]').fill(password);await click(p,button(p,'Entrar'),'/api/auth/login');await panel(p).waitFor();await settle(p);}
 async function begin(p,channel,contact,name){await button(p,name||(channel==='email'?'Cambiar correo':'Cambiar teléfono')).click();await p.getByLabel(channel==='email'?'Nuevo correo':'Nuevo teléfono internacional',{exact:true}).fill(contact);await p.getByLabel('Contraseña para iniciar cambio',{exact:true}).fill(pw);return click(p,button(p,name?.startsWith('Sustituir')?'Sustituir expresamente':'Iniciar cambio seguro'),'/api/auth/contact-changes');}
@@ -57,7 +71,7 @@ async function main(){
  await scenario('C09','Login con nuevo correo conserva identidad y evidencia',async()=>{await login(page,newEmail);await page.getByText('Correo: '+newEmail,{exact:true}).waitFor();await shot('09-new-email-login');});
  const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,locale:'es-MX',timezoneId:'America/Mexico_City'}),m=await mobile.newPage();watch(m);
  await scenario('M01','Móvil: cancelar conserva contacto vigente',async()=>{
-  await login(m,newEmail);await begin(m,'sms','+525500998811');const q=await state(m);await shot('10-mobile-pending',m);await click(m,button(m,'Cancelar solicitud'),'/api/auth/contact-changes/'+q.id+'/cancel');await m.getByText('Solicitud cancelada.',{exact:false}).waitFor();await shot('11-mobile-cancelled',m);await layout(m,'mobile-cancel');
+  await login(m,newEmail);await begin(m,'sms','+525500998811');const q=await state(m);await shot('10-mobile-pending',m);await click(m,button(m,'Cancelar solicitud'),'/api/auth/contact-changes/'+q.id+'/cancel');await m.getByText('Solicitud cancelada.',{exact:false}).waitFor();await panel(m).getByText('Cancelado',{exact:true}).waitFor();await shot('11-mobile-cancelled',m);await m.reload();await panel(m).getByText('Cancelado',{exact:true}).waitFor();await shot('11b-mobile-cancelled-after-reload',m);await layout(m,'mobile-cancel');
  });
  await scenario('M02','Móvil: sustitución explícita invalida solicitud anterior',async()=>{
   await begin(m,'sms','+525500998822');const original=await state(m);await begin(m,'email','another@contact-review.invalid','Sustituir solicitud por correo');const next=await state(m);assert.notEqual(original.id,next.id);assert.equal(next.candidate,'another@contact-review.invalid');await shot('12-mobile-replaced',m);await click(m,button(m,'Cancelar solicitud'),'/api/auth/contact-changes/'+next.id+'/cancel');
