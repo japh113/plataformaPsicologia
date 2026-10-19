@@ -1,12 +1,14 @@
 # PsicoPanel
 
+PR #11/B integrado en main (5e549f5). C autorizado e implementado en rama para revisión: [cambio seguro de contactos](docs/contact-changes.md), [validación C](docs/contact-change-validation.md). Sin despliegue habitual ni D. Los estados anteriores de B en el texto siguiente son el corte documental previo a su merge.
+
 Plataforma para psicólogos independientes y pacientes: agenda, disponibilidad, espera manual asistida, tareas, objetivos, notas y seguimiento clínico, con backoffice separado.
 
 La aplicación activa es web (React/Vite + Express JavaScript + PostgreSQL). React Native/Expo y TypeScript son dirección futura, sin migración en curso por este encargo.
 
 ## Estado y fuentes
 
-PR #7 restringió el acceso clínico del backoffice; #8 integró fundamentos SQL de episodios sin activar sus permisos; #9 documentó identidad/directorio. PR A (#10, merge 0f2ebba) está integrado. PR B implementa en su rama el registro adulto, identidad propia y verificación simulada email/SMS, con bloqueo legacy aprobado AB-23. Revisión e integración de B pendientes; sin despliegue. Cambios de contacto (C) y directorio/revisión de credenciales (D) siguen pendientes.
+PR #7 restringió el acceso clínico del backoffice; #8 integró fundamentos SQL de episodios sin activar sus permisos; #9 documentó identidad/directorio. PR A (#10, merge 0f2ebba) está integrado. PR B (#11, 5e549f5) integra registro adulto, identidad propia y verificación simulada email/SMS, con bloqueo legacy aprobado AB-23. C implementa cambio seguro de contactos en rama, pendiente de revisión/integración; D sigue pendiente. Sin despliegue habitual.
 
 | Necesidad | Fuente |
 | --- | --- |
@@ -27,4 +29,4 @@ No ejecutar schema/seed o normalizadores como actualización de bases existentes
 
 Roles reales: patient, psychologist, support, admin y superadmin. Los tres administrativos no tienen acceso clínico global ordinario. Hoy todavía existe autorización legacy por paciente: ni registro, verificación o directorio autorizan clínica nueva por sí solos.
 
-A está integrado y B autorizado expresamente. Las altas unilaterales y nuevas vinculaciones legacy están temporalmente deshabilitadas para todas las cuentas. [Contratos, migración 004, demo y límites de B](docs/patient-identity-verification.md). C/D requieren autorización propia. Entrega por rama y PR hacia main, sin merge ni push directo a main.
+A y B están integrados; C autorizado expresamente en su rama. Las altas unilaterales y nuevas vinculaciones legacy están temporalmente deshabilitadas para todas las cuentas. [Contratos, migración 004, demo y límites de B](docs/patient-identity-verification.md). D requiere autorización propia; C no autoriza despliegue habitual. Entrega por rama y PR hacia main, sin merge ni push directo a main.

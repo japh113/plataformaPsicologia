@@ -1,5 +1,7 @@
 # Auditoria de autenticacion — 2026-10-16
 
+Actualización C: B integrado en #11. [Cambio seguro](contact-changes.md): contraseña reciente por sesión/versión, revocación global al confirmar y reset coordinado. Sucesora 005 en rama, sin modificar 001–004 ni desplegar en base habitual. [Validación C](contact-change-validation.md); no confundir con resultados históricos de abajo.
+
 ## Actualización B — identidad y verificación (18 de octubre de 2026)
 
 A integrado en #10; B implementado en rama, sin despliegue habitual. Ambos registros públicos usan 202 uniforme sin JWT/ID; login posterior conserva contrato y revocación 002. El profesional sigue pending_review hasta aprobación. Identity/verification requieren paciente titular; no admiten destinos/IDs del body ni exponen desafíos a backoffice. [Contratos, claves, adaptador y demo](patient-identity-verification.md); [validación nueva](patient-identity-validation.md). Lo que sigue conserva evidencia histórica y no es un resultado nuevo de B.

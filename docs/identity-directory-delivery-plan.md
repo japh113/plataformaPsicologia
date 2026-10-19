@@ -1,6 +1,8 @@
 # Identidad y directorio — plan de entregas A/B/C/D
 
-Fecha: 18 de octubre de 2026. Base B: 0f2ebba, PR #10 integrado. **A integrado; B autorizado y en ejecución/revisión.** Código, 004 y demo B implementados en rama; sin despliegue habitual. C/D requieren autorización propia. [Guía B](patient-identity-verification.md) y [evidencia](patient-identity-validation.md).
+Actualización C: B integrado en #11 (5e549f5). AB-25 resuelto expresamente y C autorizado/implementado en rama con 005 y validación aislada; revisión/integración pendientes, sin despliegue habitual. [Contrato](contact-changes.md), [evidencia](contact-change-validation.md). D y nuevas vinculaciones siguen pendientes.
+
+Fecha: 18 de octubre de 2026. Base B: 0f2ebba, PR #10 integrado. **A/B integrados; C autorizado y en revisión de rama.** Código, 004 y demo B implementados en rama; sin despliegue habitual. C/D requieren autorización propia. [Guía B](patient-identity-verification.md) y [evidencia](patient-identity-validation.md).
 
 Las letras de PR no son las subetapas del producto: **PR B no equivale a etapa 2B**. B/C/D entregan partes de 2A sin completarla. Fuente de requisitos: [ADR-023–028](product/decisions.md) y [RN-41–58](product/business-rules.md); [diseño técnico](stage2a-identity-directory-intake.md) y [matriz legacy](stage2a-legacy-mutations.md) conservan propuestas pendientes.
 
@@ -28,7 +30,7 @@ Cada PR funcional actualiza su documentación de estado; A no obliga a mantener 
 | Referencia orientativa | Posible contenido | PR |
 | --- | --- | --- |
 | 004_patient_identity_verification.sql | DOB global nullable, evidencia/desafíos, cuotas y revocación de evidencia ante cambio de contacto; probada solo aisladamente | B |
-| 005 | Contactos candidatos y evidencia de reautenticación/cambio | C |
+| 005_secure_contact_changes.sql | Solicitudes privadas, propósito C, autorización por sesión, eventos mínimos y avisos durables; implementada y ensayada solo aisladamente | C |
 | 006 | Perfil público, versiones y revisiones profesionales | D |
 
 La cantidad, nombres, tablas y distribución pueden cambiar tras diseño revisado. No existen nuevas migraciones por efecto de A. No modificar 001–003 ni sus checksums. El runner acepta 003/004 explícitos; valida huella previa y registra nueva huella, sin reescribir ledger/checksums históricos. Se probaron upgrade, replay, carreras, rollback, checksum/deriva y rechazo de downgrade.

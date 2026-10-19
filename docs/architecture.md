@@ -1,5 +1,7 @@
 # Arquitectura vigente de PsicoPanel
 
+Corte actual C: B integrado en #11 (5e549f5). [Cambio seguro de contactos C](contact-changes.md) implementado en rama: servicio específico, candidato cifrado, autorización por sesión, confirmación atómica y avisos durables. La aplicación C requiere sucesora 005; sin despliegue habitual, D ni episodios activados. Las secciones siguientes describen la base B salvo esta ampliación.
+
 Corte B: base 0f2ebba (#10), implementación en rama, sin integración ni despliegue habitual. [Producto](product/vision.md), [reglas](product/business-rules.md) y [decisiones](product/decisions.md) definen objetivos; esta página describe la implementación y sus límites.
 
 ## Aplicación implementada
@@ -52,6 +54,7 @@ La política de día clínico aún usa America/Los_Angeles en partes de aplicaci
 | [002](../backend/sql/migrations/002_auth_session_version.sql) | Revocación persistente JWT por session_version y estados | Cambios de contacto todavía no incorporados; no modificar el archivo. |
 | [003](../backend/sql/migrations/003_clinical_episode_foundation.sql) | clinical_episodes independiente, active/paused/finalized, uno active/paused por paciente, identidad/terminalidad y referencias compuestas opcionales episode_id en citas/notas/tareas/espera | Backend actual escribe sin atribución; sin backfill histórico, nuevas rutas ni autorización por episodio. Tenerla integrada no acredita ejecución en entorno habitual. |
 | [004](../backend/sql/migrations/004_patient_identity_verification.sql) | DOB global nullable, evidencia/desafíos privados, cuotas e invalidación por contacto | Solo B; sin backfill, acceso clínico nuevo o despliegue habitual. |
+| [005](../backend/sql/migrations/005_secure_contact_changes.sql) | Solicitud privada cifrada, desafío por propósito, autorización por sesión, eventos mínimos y avisos durables; confirmación C revoca todas las sesiones | C en rama, pendiente de integración; sin backfill ni despliegue habitual. |
 
 [Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) reconocen 001–004 y targets explícitos 003/004; conservan destino, checksums históricos, ledger, lock, transacción y huella de la última versión. No admiten downgrade ni adopción de estructuras no registradas. Procedimiento en [fundamentos 003](clinical-episodes-foundation.md); evidencia histórica en [validación #8](clinical-episodes-validation.md).
 

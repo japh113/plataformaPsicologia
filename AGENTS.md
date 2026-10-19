@@ -1,15 +1,17 @@
 # AGENTS
 
+Corte C, 19 de octubre de 2026: B integrado en #11 (5e549f5). El usuario autorizó específicamente C, sucesora 005 y pruebas/demo en sandboxes nuevos, con PR hacia main sin merge. [Contrato C](docs/contact-changes.md). Mantener sin autorización D, nuevas vinculaciones y despliegue habitual; las referencias previas a B en rama son históricas.
+
 ## Contexto y fuentes
 
 PsicoPanel es hoy una web-app React/Vite + Express JavaScript + PostgreSQL. La dirección futura es React Native/Expo y TypeScript, sin migración ahora. Preservar lógica reutilizable, contratos claros y estilo existente. Leer [README](README.md), [índice](docs/README.md), [arquitectura](docs/architecture.md), [decisiones](docs/product/decisions.md), [reglas](docs/product/business-rules.md) y [roadmap](docs/product/roadmap.md).
 
-Distinguir producto aprobado, propuesta técnica e implementación. PR #7 aisló backoffice; #8 integró fundamentos 003, sin activar permisos por episodio ni acreditar despliegue; #9 documentó identidad/directorio. ADR-023–028 recogen acuerdos posteriores. [Plan A/B/C/D](docs/identity-directory-delivery-plan.md): A integrado (#10, 0f2ebba); B autorizado e implementado en su rama, pendiente de revisión/integración. AB-23 aprueba el bloqueo legacy global. [Guía B](docs/patient-identity-verification.md). No iniciar C/D ni nuevas vinculaciones.
+Distinguir producto aprobado, propuesta técnica e implementación. PR #7 aisló backoffice; #8 integró fundamentos 003, sin activar permisos por episodio ni acreditar despliegue; #9 documentó identidad/directorio. ADR-023–028 recogen acuerdos posteriores. [Plan A/B/C/D](docs/identity-directory-delivery-plan.md): A integrado (#10, 0f2ebba) y B integrado (#11, 5e549f5). C autorizado e implementado en su rama, pendiente de revisión/integración. AB-23 aprueba el bloqueo legacy global. [Guía B](docs/patient-identity-verification.md). No iniciar D ni nuevas vinculaciones.
 
 ## Límites operativos
 
 - Revisar estado/diff antes de editar; preservar cambios ajenos. Usar rama de la tarea, commits pequeños/descriptivos y PR hacia main sin merge cuando así se encargue. No push directo a main ni merge por costumbre; respetar autorización del encargo.
-- No ejecutar schema/seed, normalizadores o migraciones sobre bases existentes/habitual; no borrar datos ni alterar contenedores/volúmenes existentes. No modificar 001/002/003 ni checksums. 004 es la sucesora aditiva de B, sin despliegue habitual; 005–006 siguen estimadas. Su ejecución exige destino y autorización explícitos.
+- No ejecutar schema/seed, normalizadores o migraciones sobre bases existentes/habitual; no borrar datos ni alterar contenedores/volúmenes existentes. No modificar 001/002/003 ni checksums. 004 es la sucesora aditiva de B; 005 es la sucesora de C en rama, ambas sin despliegue habitual; 006 sigue estimada. Su ejecución exige destino y autorización explícitos.
 - Desarrollo Docker/WSL, herramientas y pruebas: [development.md](docs/development.md). No instalar herramientas en host o reconstruir entorno habitual para suplir npm sin autorización. Ensayos futuros solo en PostgreSQL nuevo y aislado, destino explícito y recursos propios verificados. No inferir despliegue por tener SQL en Git.
 - No atribuir DOB/identidad/verificación/episodio/autoría históricos desde edad, entrevista, contactos, vínculos o aprobación. No fusionar identidades ni habilitar altas de menores por vías alternativas.
 - Antes de B, revalidar [todas las mutaciones legacy](docs/stage2a-legacy-mutations.md) para cuentas nuevas y existentes. AB-23 autoriza bloquear las cinco entradas identificadas y adaptar identidad; no resolver ni borrar pendientes antiguos. No activar permisos por episodio sin retirar coordinadamente fallback y probar aislamiento completo.

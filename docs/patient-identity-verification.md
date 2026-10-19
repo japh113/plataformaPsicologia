@@ -1,5 +1,7 @@
 # PR B — identidad adulta y verificación de contactos
 
+Continuidad C: B integrado en #11 (5e549f5). [Contrato C](contact-changes.md) amplía contactos seguros, comparte cuotas B y distingue propósitos. Aplicación C requiere 005; el contrato B de abajo conserva su corte original y sus evidencias no sustituyen [validación C](contact-change-validation.md).
+
 Implementado en rama sobre 0f2ebba (#10); revisión/integración pendientes. Sin despliegue habitual, proveedores reales, C/D o nueva vinculación clínica. Decisiones: ADR-012/019/023/024/028, RN-41–48/57–58 y AB-23. [Evidencia](patient-identity-validation.md), [matriz legacy](stage2a-legacy-mutations.md).
 
 ## Registro, titularidad y fuentes

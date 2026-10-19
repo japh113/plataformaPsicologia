@@ -1,5 +1,7 @@
 # Etapa 2A — Identidad, directorio básico y vinculación inicial
 
+Actualización C: main 5e549f5 incorpora B. AB-25 cerrado para el alcance autorizado de C; [contrato C](contact-changes.md) prevalece sobre candidatos anteriores de cambios de contacto. 005 implementada en rama, solo ensayo aislado, sin despliegue habitual ni D/nuevas vinculaciones.
+
 Fecha: 18 de octubre de 2026. Base inspeccionada: `main`/`origin/main` en `0077f46` (#9 integrado).
 
 **Estado: diseño completo de 2A, mayoritariamente PROPUESTO; B implementa solo la porción autorizada.** A integrado en #10 (0f2ebba); B en ejecución/revisión, sin despliegue habitual. La [guía B](patient-identity-verification.md) define el contrato implementado y sus límites; prevalece sobre candidatos antiguos de este documento. [Evidencia B](patient-identity-validation.md).
