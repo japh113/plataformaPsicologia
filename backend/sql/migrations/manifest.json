@@ -18,5 +18,10 @@
     "version": "004",
     "file": "004_patient_identity_verification.sql",
     "sha256": "893fb7c6c63ba3431649b5277d62e0afc672113dc4bec10831c72113e3096da0"
+  },
+  {
+    "version": "005",
+    "file": "005_secure_contact_changes.sql",
+    "sha256": "fde80fcdd7d9277343888bf91ef2b8fccb4a7d9949ddc919494805d8df38c62c"
   }
 ]
