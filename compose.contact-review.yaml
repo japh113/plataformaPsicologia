@@ -1,0 +1,4 @@
+# Only new contact-review UUID sandboxes: browser/API/frontend cannot reach the Internet.
+networks:
+  app:
+    internal: true

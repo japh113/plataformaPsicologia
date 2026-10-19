@@ -8,7 +8,7 @@ try {
   client = await createSandboxDatabase(control, name);
   await installBaseline(client);
   await syntheticFixture(client);
-  await migrate(client, { expectedDatabase: name, target: '004' });
+  await migrate(client, { expectedDatabase: name, target: '005' });
   const hash = await bcrypt.hash('Episode-Demo-Only-284!', 10);
   // Explicit fictional adult, unverified and without relationship/access/episode.
   await client.query("INSERT INTO patients(id,first_name,last_name,full_name,email,phone,global_birth_date) VALUES ('r','Renata','Demo','Renata Demo','r@episodes.invalid','+525500000003','1990-01-01')");
