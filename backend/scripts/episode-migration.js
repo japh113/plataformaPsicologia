@@ -12,7 +12,7 @@ export async function loadMigrations(root = sqlRoot) {
     if (sha256(sql) !== entry.sha256) throw new Error('Incompatible file checksum: ' + entry.version);
     migrations.push({ ...entry, sql });
   }
-  if (migrations.map(m => m.version).join(',') !== '001,002,003,004') throw new Error('Incompatible migration versions');
+  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005') throw new Error('Incompatible migration versions');
   return migrations;
 }
 
@@ -150,7 +150,7 @@ export async function catalogChecksum(client) {
 }
 
 export async function migrate(client, { expectedDatabase, target = '003' } = {}) {
-  if (!['003', '004'].includes(target)) throw new Error('Unsupported target version');
+  if (!['003', '004', '005'].includes(target)) throw new Error('Unsupported target version');
   const migrations = await loadMigrations();
   await client.query('BEGIN');
   try {
@@ -169,7 +169,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
         throw new Error('Incompatible recorded migration version/checksum: ' + row.version);
       }
     }
-    if (ledgerExists && !['001,002,003', '001,002,003,004'].includes(ledger.map(r => r.version).join(','))) {
+    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005'].includes(ledger.map(r => r.version).join(','))) {
       throw new Error('Incompatible or incomplete migration ledger');
     }
     if (ledger.length) {
@@ -183,14 +183,19 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
         await client.query('COMMIT');
         return { status: 'already-applied', version: target };
       }
-      await client.query("SET LOCAL psicopanel.migration_target = '004'");
-      await client.query(migrations[3].sql);
-      await client.query(`INSERT INTO psicopanel_schema_migrations(version,file_name,file_sha256,catalog_sha256,server_major)
-        VALUES ($1,$2,$3,$4,$5)`, ['004', migrations[3].file, migrations[3].sha256, await catalogChecksum(client), major]);
+      for (const next of migrations.filter(m => m.version>applied.version && m.version<=target)) {
+        await client.query("SELECT set_config('psicopanel.migration_target',$1,true)", [next.version]);
+        await client.query(next.sql);
+        await client.query(`INSERT INTO psicopanel_schema_migrations(version,file_name,file_sha256,catalog_sha256,server_major)
+          VALUES ($1,$2,$3,$4,$5)`, [next.version,next.file,next.sha256,await catalogChecksum(client),major]);
+      }
       await client.query('COMMIT');
       return { status: 'applied', version: target };
     }
     const footprints = (await client.query(`SELECT
+      to_regclass('public.contact_change_requests') IS NOT NULL OR
+      to_regclass('public.contact_change_notices') IS NOT NULL OR
+      to_regclass('public.contact_change_events') IS NOT NULL OR
       to_regclass('public.contact_verification_challenges') IS NOT NULL OR
       to_regclass('public.contact_verification_state') IS NOT NULL OR
       EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='patients' AND column_name='global_birth_date') OR
@@ -217,11 +222,11 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
         VALUES ($1,$2,$3,$4,$5)`, [migration.version, migration.file, migration.sha256,
         migration.version === '003' ? catalog : null, major]);
     }
-    if (target === '004') {
-      await client.query("SET LOCAL psicopanel.migration_target = '004'");
-      await client.query(migrations[3].sql);
+    for (const next of migrations.filter(m => m.version>'003' && m.version<=target)) {
+      await client.query("SELECT set_config('psicopanel.migration_target',$1,true)", [next.version]);
+      await client.query(next.sql);
       await client.query(`INSERT INTO psicopanel_schema_migrations(version,file_name,file_sha256,catalog_sha256,server_major)
-        VALUES ($1,$2,$3,$4,$5)`, ['004', migrations[3].file, migrations[3].sha256, await catalogChecksum(client), major]);
+        VALUES ($1,$2,$3,$4,$5)`, [next.version,next.file,next.sha256,await catalogChecksum(client),major]);
     }
     await client.query('COMMIT');
     return { status: 'applied', version: target };

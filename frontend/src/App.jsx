@@ -487,6 +487,22 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    const endSession = () => {
+      setCurrentUser(null);
+      resetSessionState();
+    };
+    const storageChanged = event => {
+      if (event.key === 'psicopanel_auth_token' && !event.newValue) endSession();
+    };
+    window.addEventListener('storage', storageChanged);
+    window.addEventListener('psicopanel-session-ended', endSession);
+    return () => {
+      window.removeEventListener('storage', storageChanged);
+      window.removeEventListener('psicopanel-session-ended', endSession);
+    };
+  }, []);
+
   const handleLogout = () => {
     logout();
     setCurrentUser(null);

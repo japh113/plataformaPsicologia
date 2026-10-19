@@ -1,5 +1,7 @@
 # Roadmap de producto y arquitectura
 
+Corte C: B integrado en #11 (5e549f5). AB-25 resuelto y C autorizado/en rama: [contactos seguros](../contact-changes.md), [validación](../contact-change-validation.md). 005 no desplegada habitualmente. D, recuperación excepcional, nuevas vinculaciones y activación de episodios siguen pendientes; RN-59–61 intactas.
+
 Fecha: 18 de octubre de 2026. Base B: 0f2ebba, merge PR #10. Requisitos de producto acordados y mecanismos pendientes se distinguen en [decisions.md](decisions.md). A integrado; B implementado y validado en rama, pendiente de revisión/integración, sin despliegue habitual.
 
 ## Antecedentes y alcance documental actual

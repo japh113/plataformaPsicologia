@@ -1,5 +1,7 @@
 # Registro de decisiones de producto y arquitectura
 
+Corte actual, 19 de octubre de 2026: B integrado en #11 (5e549f5). C autorizado e implementado en rama bajo la resolución AB-25 siguiente, pendiente de revisión/integración. Los alcances de encargos anteriores que aparecen abajo son históricos y no revocan esta autorización específica. No hay autorización para D, despliegue habitual o nuevas vinculaciones.
+
 Fecha: 18 de octubre de 2026. Base auditada: `main`/`origin/main` en `0077f46`, merge de PR #9; #7 y #8 integrados. Esto no acredita ejecución de 003 en la base habitual ni autorización clínica por episodio.
 
 A documental fue integrado en #10 (0f2ebba). El encargo posterior autoriza exclusivamente B, incluida la deshabilitación global AB-23 y la sucesora 004. B está implementado en rama, con revisión/integración pendientes; no acredita despliegue. C/D y nueva vinculación siguen sin autorización. [Guía B](../patient-identity-verification.md), [evidencia](../patient-identity-validation.md).
@@ -252,13 +254,21 @@ Entrega configurable mediante adaptadores y simuladores seguros de desarrollo/pr
 
 ## ADR-025 — Cambio de contacto, reautenticación y revocación
 
-**Estado: APROBADA como producto; implementación pendiente en PR C. Reglas: RN-49–50.**
+**Estado: APROBADA como producto; implementación C autorizada y en rama. Reglas: RN-49–50.**
 
 Cambiar email o teléfono exige reautenticación reciente con contraseña, notificación al contacto anterior, verificación del nuevo e invalidación de la evidencia anterior del canal correspondiente. La confirmación debe ser consistente y revocar todas las sesiones mediante `session_version`, incluida la que hizo el cambio. El aviso no da veto al contacto anterior ni exige conservar acceso a él.
 
 No modificar episodios, citas, notas ni historial clínico. La recuperación excepcional de identidad permanece pendiente y no se sustituye por un cambio inseguro de contacto.
 
 Mantener el contacto candidato separado del vigente hasta confirmar, usar una prueba temporal de reautenticación y coordinar notificación/commit mediante entrega durable son recomendaciones técnicas, no decisiones de producto ya aprobadas. Vigencia exacta de reautenticación, tratamiento de fallos y carreras: AB-25.
+
+### Resolución AB-25 — PR C, 19 de octubre de 2026
+
+El usuario aprobó expresamente las ocho decisiones del análisis y autorizó implementar C desde main 5e549f5 (#11/B integrado), con pruebas y demos solo en destinos nuevos aislados y PR sin merge. Reautenticación 10 minutos ligada a cuenta/sesión/versión; candidato separado, verificado antes de sustitución explícita; una pendiente total, cancelación/sustitución e idempotencia; solicitud 24 horas sin extensión, verificación completada conservada hasta vencer solicitud. Email 24 horas acotadas por solicitud; SMS 10 minutos.
+
+Avisos anterior al iniciar y completar, sin veto, con intención durable y reintentos máximos de 72 horas. No exigir acceso/verificación anterior; teléfono exige email vigente verificado. Cinco contraseñas incorrectas/15 minutos, cinco inicios/24 horas y diez cancelaciones/sustituciones/24 horas por cuenta; cuotas B compartidas y sin suspensión automática de login/clínica. Cifrado autenticado temporal, claves externas versionadas/rotables; purga de contenido operativo de avisos tras entrega/agotar reintentos y de solicitudes vencidas en máximo 24 horas mediante procesador. Auditoría mínima sin secretos y sin política definitiva de retención inventada. [Contrato y límites operativos](../contact-changes.md).
+
+Esto autoriza C y 005 en sandboxes nuevos; no despliegue habitual, proveedores, recuperación excepcional, D, vinculaciones legacy ni activación de episodios. La protección no demuestra identidad física si se compromete también la contraseña. La entrevista previa ADR-029/RN-59–61 permanece pendiente e intacta.
 
 ## ADR-026 — Campos públicos y revisión selectiva profesional
 
@@ -334,7 +344,7 @@ Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen de
 | AB-22 | ¿Qué retención, acceso, cifrado/llaves y tratamiento de mensajes/tokens/evidencia en historial, copias y eliminación se aprueban? | Guardar datos sensibles de vinculación 2A; revisión jurídica aplicable |
 | AB-23 | APROBADO e implementado en B: cinco rutas legacy bloqueadas globalmente; pendientes conservados sin respuesta; clínica establecida preservada sin exigir verificaciones adicionales. Nuevas vinculaciones futuras exigirán ambas; no implementadas. | Cerrado para B; integración pendiente |
 | AB-24 | ¿Cómo clasificar especialidades/enfoque con credenciales verificables y controlar cambios de nombre profesional? ¿Qué mecanismo se usa para fotografía y para credenciales que requieran nueva revisión al rehabilitar? | PR D, antes del flujo correspondiente |
-| AB-25 | ¿Cuánto dura la reautenticación reciente? ¿Cómo expira/cancela un cambio, maneja fallos de aviso/entrega y confirma bajo concurrencia? | PR C |
+| AB-25 | APROBADO para C: resolución del 19 de octubre de 2026 y contrato de cambio seguro. Implementación en rama, revisión/integración pendientes, sin despliegue habitual. | Cerrado para el alcance C; retención definitiva de auditoría y operación productiva pendientes |
 | AB-26 | Segunda revisión B: APROBADA referencia civil America/Mexico_City obtenida del reloj servidor, independiente del host/cliente, solo para registro mexicano B; DOB gregoriana y cumpleaños exacto, con 29/02 elegible el 01/03 en año no bisiesto. No define todas las zonas mexicanas ni cambia agenda 2E; cuotas 60 s/5 por 24 h tanto por cuenta como destino, 5 intentos SMS por código y email previo aprobado. Abuso multicuenta aún puede agotar teléfono compartido; límites por red/costo, mecanismos antiautomatización de producción y revisión siguen pendientes antes de envíos reales. | B parcial; endurecimiento antes de producción |
 | AB-27 | ¿Cómo se muestran revisión/rechazo y estado propio a un profesional no aprobado sin conceder sesión clínica? Login actual deniega pendiente/rechazado/suspendido. | PR D si se modifica esa experiencia |
 

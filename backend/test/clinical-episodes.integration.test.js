@@ -97,7 +97,7 @@ test('003: isolated PostgreSQL installation, integrity, races, drift and rollbac
       assert.equal(result.status, 0, result.stderr);
       assert.equal(JSON.parse(result.stdout).episodeFoundationInstalled, true);
       for (const result of [cli('migrate.js', ['--target=003','--database=wrong']),
-        cli('migrate.js', args, ''), cli('migrate.js', ['--target=005','--database=' + name])]) {
+        cli('migrate.js', args, ''), cli('migrate.js', ['--target=006','--database=' + name])]) {
         assert.notEqual(result.status, 0);
       }
       assert.deepEqual(await snapshot(client), before);

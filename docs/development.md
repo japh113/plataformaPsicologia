@@ -1,5 +1,7 @@
 # Desarrollo, Docker/WSL y validación
 
+C autorizado en rama tras #11/B integrado. [Contrato C](contact-changes.md), [validación](contact-change-validation.md). El wrapper añade contact-demo y contact-review (red interna para Chromium); sucesora 005 explícita solo en destinos nuevos. No reconstruir ni reparar recursos habituales.
+
 Corte: 18 de octubre de 2026. Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile backend](../backend/Dockerfile), [Dockerfile frontend](../frontend/Dockerfile) y [package.json backend](../backend/package.json)/[frontend](../frontend/package.json). Documentar un comando no autoriza ejecutarlo.
 
 **Estado B:** A fue documental y ya está integrado; B autoriza pruebas/demo exclusivamente en recursos nuevos aislados. No levantar/reconstruir el Compose habitual ni alterar bases, imágenes o volúmenes existentes. [Guía B](patient-identity-verification.md) y [evidencia nueva](patient-identity-validation.md). C/D no están autorizados.
