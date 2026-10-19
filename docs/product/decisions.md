@@ -209,7 +209,7 @@ Cualquier visitante consulta perfiles públicos sin registrarse. Solo pacientes 
 
 **Estado: APROBADA como decisión de producto; implementación pendiente. Reglas: RN-29/34–RN-36/40.**
 
-**Decisión:** invitación profesional a paciente conocido: este se registra si hace falta, verifica datos y acepta expresamente; la invitación sola no crea episodio ni acceso. Solicitud del paciente: consulta perfil público que admite nuevos pacientes y envía petición, con mensaje breve opcional y sin exigir motivo de consulta. El profesional acepta o rechaza; si acepta, el paciente debe confirmar finalmente. Solo al completar confirmaciones y verificaciones pertinentes se crea el episodio transaccionalmente.
+**Decisión:** invitación profesional a paciente conocido: este se registra si hace falta, verifica datos y acepta expresamente; la invitación sola no crea episodio ni acceso. Solicitud del paciente: consulta perfil público que admite nuevos pacientes y envía petición, con mensaje breve opcional y sin exigir motivo de consulta. El profesional acepta o rechaza; si acepta, el paciente debe confirmar finalmente. Las confirmaciones y verificaciones completan la vinculación; la activación del episodio es una operación distinta, transaccional y sujeta además a la entrevista validada de ADR-029/RN-59.
 
 El mensaje es privado y sensible: no aparece en directorio ni auditoría administrativa. Ninguna solicitud pendiente concede acceso clínico. PostgreSQL conserva máximo un episodio activo o pausado por paciente; no revelar vínculos con otros consultorios. Si existe episodio vigente, corresponde cambio 2B, sin reutilizar este flujo como atajo. Permisos clínicos por episodio, nunca por aparecer en directorio.
 
@@ -290,6 +290,20 @@ B implementa registro adulto, nombre propio, estados y verificación email/SMS, 
 
 No activar permisos por episodio ni retirar parcialmente fallback. C (contactos) y D (directorio/perfiles) requieren autorización propia. Solicitudes/invitaciones nuevas y recuperación excepcional siguen fuera. No modificar 001–003 ni la base habitual. B se revisa mediante PR sin merge; ensayos solo en PostgreSQL nuevo aislado y demo ficticia ADR-019.
 
+## ADR-029 — Entrevista previa a la activación y autonomía de la cuenta
+
+**Estado: APROBADA tras la revisión visual de PR #11. Reglas: RN-59–61. Precondición backend/base de datos PENDIENTE; fuera de PR B.**
+
+La entrevista inicial es obligatoria antes de activar cualquier episodio terapéutico nuevo. El paciente puede aportar sus respuestas; el psicólogo responsable debe validar explícitamente que está completada y es suficiente para ese episodio. Una entrevista histórica de otro profesional o episodio no satisface automáticamente esta condición. No puede existir un episodio nuevo en estado active sin la validación previa correspondiente.
+
+Vinculación bilateral y activación son operaciones distintas: vincular no activa por sí mismo el episodio. El ciclo de vida futuro deberá hacer cumplir esta precondición tanto en backend como en base de datos, con atribución de la validación al profesional y episodio correspondientes. Contratos, almacenamiento, transición y concurrencia se diseñarán en la entrega de episodios; no se crean ahora tablas, migraciones o un motor nuevo, ni se modifica 003/004.
+
+La cuenta puede registrarse, iniciar sesión, administrar identidad y verificar contactos sin entrevista, psicólogo o episodio. Una entrevista pendiente no bloquea globalmente las funciones personales. B retira la apertura automática del modal: los pacientes con atención legacy pueden abrir y cerrar explícitamente su entrevista pendiente, sin marcarla completa por consultar/cerrar.
+
+Se conservan los permisos y reglas concretas legacy: el paciente solo puede guardar por primera vez una entrevista; su edición posterior corresponde al profesional autorizado. Guardar una entrevista legacy conserva su significado actual y NO constituye la nueva validación de activación. No se crean entrevistas ficticias ni se marca completitud automáticamente. Las relaciones care_relationships con status=active no se reinterpretan como episodios activos ni se les aplica retroactivamente la nueva precondición.
+
+Esta decisión precisa ADR-016/021 y los efectos de activación de RN-34/35/40: las aceptaciones de vinculación no bastan para activar. Solicitudes/invitaciones, atribución y permisos por episodio siguen pendientes, con fallback legacy intacto y nuevas vinculaciones bloqueadas.
+
 ## Asuntos abiertos y momento de resolución
 
 Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen decisiones de producto aprobadas explícitas arriba; solo sus detalles indicados siguen pendientes:
@@ -297,7 +311,7 @@ Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen de
 | ID | Pregunta a resolver | Antes de |
 | --- | --- | --- |
 | AB-01 | ¿Seleccionar antecedentes por categorías, por registros o una combinación? ¿Cómo confirmar y mostrar el alcance final al paciente? | Especificar 2C |
-| AB-02 | Entrevista por episodio, respuestas propias históricas separadas de valoración profesional, trazabilidad y no divulgación automática: APROBADO en ADR-016. Pendiente: clasificar campos restantes y representar metadatos, adjuntos, versiones y alcance compartible. | Modelo/permisos 2A; divulgación 2C |
+| AB-02 | Entrevista por episodio, respuestas propias históricas separadas de valoración profesional, trazabilidad y no divulgación automática: APROBADO en ADR-016. Pendiente: clasificar campos restantes y representar metadatos, adjuntos, versiones y alcance compartible. ADR-029 agrega la validación profesional explícita antes de activar un episodio nuevo, sin implementarla en B. | Modelo/permisos 2A; divulgación 2C |
 | AB-03 | ¿Qué procedimiento separado atenderá solicitudes de acceso clínico/ARCO sin bloqueo arbitrario? La visibilidad ordinaria está decidida en RN-24; notas no visibles automáticamente. | Diseño aplicable y revisión de 5; no limitar derechos por UI |
 | AB-04 | ¿Quién verifica identidad y firma presencial, con qué evidencia, independencia, estados y controles? ¿Cómo tratar evidencia incompleta o impugnada? | Consentimiento presencial de 2C |
 | AB-05 | ¿Qué duración tendrá el permiso, cuál será la metodología de autorización/verificación y qué ocurre al ampliar alcance, corregir versiones, caducar o revocar? | Contratos de 2C |

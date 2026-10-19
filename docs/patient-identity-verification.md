@@ -85,7 +85,7 @@ Contraseña común exclusivamente ficticia: Episode-Demo-Only-284!
 
    Es una entrega privada intencional para demo, no logs. No adjuntar su salida a incidencias. Pegar token en el campo privado o añadir linkFragment a la URL UI. Abrir enlace no confirma; confirmar explícitamente con la cuenta destinataria.
 3. Solicitar SMS y consultar el mismo buzón local. Confirmar seis dígitos; ambos estados cambian a verificados. Otra sesión de la misma cuenta ve el estado al recargar. Reutilizar un código falla. Cinco códigos erróneos agotan ese desafío; pedir otro respeta reenvío/cuota y no suspende login. Nuevo envío invalida el anterior; SMS caduca a los 10 min. Cuotas máximas y expiración email se ejercitan automáticamente sin esperar un día en UI.
-4. Nombre editable; DOB solo lectura o desconocida. Contactos sin editor. Entrevista clínica no cambia identidad global. Las acciones de alta/vinculación están retiradas/deshabilitadas y los pendientes se muestran conservados.
+4. Nombre editable y sincronizado con saludo/sidebar; DOB solo lectura o desconocida. Contactos sin editor. Entrevista clínica no cambia identidad global. Las acciones de alta/vinculación están retiradas/deshabilitadas y los pendientes se muestran conservados.
 5. Entrar como A: conservar lectura y trabajo clínico sobre P; sin acceso al nuevo registro. Backoffice sin clínica ni secretos. No hay solicitudes/episodios funcionales ni directorio público nuevo.
 
 Comprobación HTTP reproducible del mismo destino (crea otra cuenta ficticia, sin imprimir tokens):
@@ -98,8 +98,16 @@ Limpieza opcional exclusivamente del UUID propio, verificado antes de down/elimi
 
 No se reconstruye ni borra la demo habitual. La condición ficticia de sus datos no se usó para conciliación o backfill.
 
+## Entrevista y funciones personales tras revisión visual
+
+[ADR-029/RN-59–61](product/decisions.md#adr-029--entrevista-previa-a-la-activación-y-autonomía-de-la-cuenta) exige validación profesional explícita de la entrevista antes de activar cualquier episodio nuevo. Es producto aprobado con implementación futura backend/DB pendiente, fuera de B. No hay nuevas tablas, migraciones, vinculaciones ni activación.
+
+Una cuenta sin vínculo no recibe una obligación clínica de registro. En atención legacy, entrevista pendiente se avisa sin bloquear identidad: puede abrirse/cerrarse desde dashboard o pestaña Entrevista. Abrir/cerrar no guarda ni completa; después del primer guardado el paciente conserva lectura y solo el profesional autorizado puede editar, según la regla backend existente. No se alteran permisos clínicos ni entrevistas previas.
+
+Los enlaces email se importan al montar y al cambiar el fragmento en la misma pestaña; se retira solo verifyEmail de la URL y la confirmación sigue siendo explícita, ligada a la cuenta autenticada. Sin sesión, el fragmento se conserva hasta el login para importarlo; no se persiste el secreto en localStorage ni se registra. Esperas visuales redondeadas hacia arriba; Retry-After y límites backend intactos.
+
 ## Pendientes y límites de entrega
 
 Corrección/alta histórica de DOB, contacto seguro C, directorio D, solicitudes/invitaciones y permisos por episodio siguen pendientes. No hay recovery excepcional, fusión, menores alternativos, proveedores reales o despliegue. Nuevos vínculos futuros exigirán ambos contactos; B no los implementa. La clínica ya establecida conserva sus permisos actuales sin exigir verificaciones adicionales. Retención/limpieza/rotación y antiautomatización antes de producción siguen abiertas.
 
-El recorrido HTTP y los checks se ejecutaron; la herramienta de navegador no ofreció ninguna sesión, por lo que la inspección visual interactiva queda para la revisión de la demo, sin atribuirla como prueba ejecutada.
+La evidencia vigente y sus límites están en [validación](patient-identity-validation.md); no atribuir la indisponibilidad histórica de navegador a las revisiones posteriores con Chromium real.

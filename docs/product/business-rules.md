@@ -1,6 +1,6 @@
 # Reglas de negocio y permisos
 
-Referencia: 18 de octubre de 2026; base auditada `main` en `0077f46` (PR #9 integrado). Son requisitos APROBADOS de producto, no capacidades ya implementadas. Se preservan RN-01–40 y se agregan RN-41–58 para decisiones posteriores. Mecanismos pendientes en [decisions.md](decisions.md); secuencia A/B/C/D en el [plan](../identity-directory-delivery-plan.md). A integrado y B autorizado; implementación en rama, sin despliegue habitual. #7 cubre aislamiento administrativo y #8 fundamentos SQL; no acreditan permisos por episodio ni despliegue de 003.
+Referencia: 18 de octubre de 2026; base auditada `main` en `0077f46` (PR #9 integrado). Son requisitos APROBADOS de producto, no capacidades ya implementadas. Se preservan RN-01–40 y se agregan RN-41–61 para decisiones posteriores. Mecanismos pendientes en [decisions.md](decisions.md); secuencia A/B/C/D en el [plan](../identity-directory-delivery-plan.md). A integrado y B autorizado; implementación en rama, sin despliegue habitual. #7 cubre aislamiento administrativo y #8 fundamentos SQL; no acreditan permisos por episodio ni despliegue de 003.
 
 ## Conceptos
 
@@ -55,7 +55,7 @@ Referencia: 18 de octubre de 2026; base auditada `main` en `0077f46` (PR #9 inte
 | RN-32 | Cualquier visitante puede consultar perfiles públicos e información profesional mínima sin registro. El directorio básico pertenece a 2A; reseñas, reputación, filtros avanzados y funciones de red quedan en 6 y requieren diseño posterior de privacidad. |
 | RN-33 | Solo pacientes autenticados y con las verificaciones exigidas pueden solicitar atención desde un perfil público que acepte nuevos pacientes. |
 | RN-34 | El psicólogo invita a un paciente conocido; este se registra si es necesario, verifica sus datos y acepta expresamente. La invitación sola no crea episodio ni permisos clínicos: se requieren las confirmaciones y validaciones pertinentes. |
-| RN-35 | El paciente puede enviar solicitud inicial con mensaje breve OPCIONAL; no se exige explicar motivo de consulta. El psicólogo acepta o rechaza; si acepta, el paciente debe confirmar finalmente antes de crear episodio y completar las verificaciones correspondientes. |
+| RN-35 | El paciente puede enviar solicitud inicial con mensaje breve OPCIONAL; no se exige explicar motivo de consulta. El psicólogo acepta o rechaza; si acepta, el paciente debe confirmar finalmente la vinculación y completar las verificaciones correspondientes. La activación es distinta y exige RN-59. |
 | RN-36 | El mensaje opcional es privado y sensible; no aparece en directorio ni auditoría administrativa. Su existencia no habilita lectura del expediente. |
 | RN-37 | Cada paciente tiene como máximo UNA solicitud inicial pendiente iniciada por él. Ocupa el cupo esperando respuesta profesional o confirmación final del paciente. Este cupo es distinto de RN-19 (cambio). |
 | RN-38 | El paciente puede cancelar su solicitud inicial y las solicitudes caducan. Plazos, límites de frecuencia y políticas de bloqueo requieren diseño y aprobación; no se fijan aquí. |
@@ -84,6 +84,9 @@ Referencia: 18 de octubre de 2026; base auditada `main` en `0077f46` (PR #9 inte
 | RN-56 | Suspendido/inactivo/sin aprobación desaparece y no recibe nuevas solicitudes públicas. Rehabilitar exige reconfirmar publicación y recepción; conserva información aprobada salvo revisión necesaria. Sin motivo público ni cambios automáticos de historia clínica. |
 | RN-57 | Auditar todas las mutaciones legacy de vínculos y acceso para cuentas nuevas y existentes; bloqueo/adaptación y pérdida funcional requieren aprobación expresa. Registro, verificación y directorio no habilitan clínica; no activar permisos por episodio con fallback sin retirar coordinadamente. |
 | RN-58 | A/B/C/D es la división aprobada; A integrado y B autorizado expresamente, sin inicio de C/D. B/C/D con pruebas y demo aislada por entrega, sin nuevas solicitudes/invitaciones ni recuperación excepcional. 004 creada y validada aisladamente, 005/006 estimadas; sin modificar 001–003 ni tocar base habitual/recursos existentes. |
+| RN-59 | Antes de activar cualquier episodio terapéutico nuevo debe existir entrevista inicial completada y validada expresamente por el psicólogo responsable para ese episodio. El paciente puede aportar información; el profesional determina completitud y suficiencia. Una entrevista de otro profesional/episodio no autoriza automáticamente el nuevo. Ningún episodio nuevo active sin validación previa; la futura implementación debe imponerlo en backend y base de datos. Precondición técnica pendiente, fuera de PR B, sin nuevas tablas/migraciones ahora. |
+| RN-60 | Registro, login, identidad y verificación de contactos no dependen de entrevista ni vínculo/episodio. Una entrevista pendiente no bloquea globalmente funciones personales; se ofrece acceso explícito y cerrable cuando corresponda, sin completarla automáticamente ni alterar clínica existente. Conservar reglas específicas de escritura/edición autorizada. |
+| RN-61 | Vinculación bilateral y activación del episodio son operaciones distintas; vincular no activa ni valida entrevista por sí mismo. No inferir episodios nuevos activos desde care_relationships.status=active ni aplicar RN-59 retroactivamente a legacy. Conservar datos y permisos históricos; no entrevistas ficticias ni completitud/validaciones automáticas. |
 
 ## Matriz breve de actores y permisos objetivo
 
@@ -114,11 +117,12 @@ Lo aprobado son las condiciones siguientes y los estados de episodio `activo`, `
 | --- | --- | --- |
 | Registro independiente | Cuenta del paciente sin vínculo confirmado | Sin episodio ni acceso clínico profesional |
 | Solicitud inicial pendiente | Espera respuesta profesional o confirmación final del paciente | Ocupa cupo RN-37; no concede expediente |
-| Solicitud inicial lista | Profesional acepta y paciente confirma finalmente, con verificaciones y sin episodio vigente | Crear episodio atómicamente sin revelar consultorios ajenos |
-| Invitación inicial | Paciente conocido se registra si hace falta, verifica y acepta expresamente; restantes validaciones cumplidas | La invitación sola no habilita expediente; episodio solo al completar condiciones |
+| Solicitud inicial lista | Profesional acepta y paciente confirma finalmente, con verificaciones | Completar vinculación sin activar por sí sola un episodio; activación posterior con RN-59, exclusividad y atomicidad |
+| Activación de episodio nuevo | Entrevista completada y validada expresamente por el psicólogo responsable para ese episodio, además de RN-02/40 | Activación solo después de la validación, impuesta en backend y DB futuros; implementación fuera de B |
+| Invitación inicial | Paciente conocido se registra si hace falta, verifica y acepta expresamente; restantes validaciones cumplidas | La invitación sola no habilita expediente ni activa episodio; activación separada con RN-59 y restantes condiciones |
 | Derivación profesional pendiente | Falta aceptación de paciente/B o aprobación exacta del resumen | A sigue responsable; sin resumen aprobado no completar ni comunicarlo a B |
-| Derivación profesional lista | A inicia, paciente acepta cambio y versión exacta del resumen, B acepta, paciente confirma cancelación de citas futuras | Cambio atómico, episodio nuevo, cancelaciones consistentes e histórico íntegro; solo contenido aprobado |
-| Cambio directo listo | Paciente con identidad verificada solicita, B acepta y paciente confirma cancelación de citas futuras con A | No exige consentimiento/resumen de A; cambio atómico y notificación a A, sin historial automático |
+| Derivación profesional lista | A inicia, paciente acepta cambio y versión exacta del resumen, B acepta, paciente confirma cancelación de citas futuras; entrevista del destino validada según RN-59 antes de activar | Cambio atómico, episodio nuevo, cancelaciones consistentes e histórico íntegro; solo contenido aprobado |
+| Cambio directo listo | Paciente con identidad verificada solicita, B acepta y paciente confirma cancelación de citas futuras con A; entrevista del destino validada según RN-59 antes de activar | No exige consentimiento/resumen de A; cambio atómico y notificación a A, sin historial automático |
 | Rechazo o cancelación de solicitud | No se cumplen condiciones o se cancela la solicitud pendiente | No completar ese cambio; no transferir responsabilidad por aceptación parcial |
 | Pausa | Cualquiera inicia, con confirmación/motivo apropiado, aviso y citas futuras resueltas | Mismo episodio, conserva responsabilidad vigente, sin citas nuevas |
 | Reanudación | Paciente Y psicólogo confirman | Mismo episodio vuelve a activo; una confirmación sola no basta |
