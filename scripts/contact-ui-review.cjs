@@ -15,7 +15,7 @@ async function shot(name,p=page){
  await settle(p);assert.ok(!/[#?].*(changeEmail|verifyEmail|Token)/.test(p.url()));
  const viewport=p.viewportSize(),mobile=viewport.width<500;
  const region=p.locator('section').filter({has:p.getByRole('heading',{name:'Mi identidad y contactos',exact:true})});
- const options={path:'/evidence/screenshots/'+name+'.png',animations:'disabled',mask:[p.locator('input[type=password]'),p.locator('input[autocomplete="one-time-code"]'),p.locator('p').filter({hasText:/Password demo:/})],maskColor:'#475569'};
+ const options={path:'/evidence/screenshots/'+name+'.png',animations:'disabled',mask:[p.locator('input'),p.getByText(/@|\+\d[\d ()-]{6,}/),p.locator('p').filter({hasText:/Password demo:/})],maskColor:'#475569'};
  let captureViewport=viewport;
  try {
   if(mobile && await region.count()===1){

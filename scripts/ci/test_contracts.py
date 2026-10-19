@@ -30,8 +30,9 @@ class Contracts(unittest.TestCase):
     def test_artifact_missing_tamper_and_allowlist(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp);(path/'report.json').write_text('{"safe":true}')
-            seal(path);verify(path);(path/'report.json').write_text('{}')
+            seal(path);verify(path);original=(path/'SHA256SUMS').read_bytes();(path/'report.json').write_text('{}')
             with self.assertRaises(ValueError):verify(path)
+            self.assertEqual(original,(path/'SHA256SUMS').read_bytes())
             (path/'.env').write_text('fixture')
             with self.assertRaises(ValueError):seal(path)
     def test_external_existing_and_optin_destination(self):

@@ -1,13 +1,13 @@
 """Run one required component; retain only sanitized, integrity-bound evidence."""
 import json,os,shutil,signal,subprocess,sys,time,traceback
 from pathlib import Path
-from common import OUT,PRIVATE,command,identity,write,seal,SuiteFailure
+from common import OUT,PRIVATE,command,identity,write,seal,export_tap,SuiteFailure
 import docs
 from sandbox import Sandbox
 
 def main(job):
     started=time.monotonic();report={'job':job,'identity':identity(),'status':'failure','suites':[],
-      'startedUTC':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'isolation':[]}
+      'runner':{key:os.environ.get(key) for key in ['RUNNER_OS','RUNNER_ARCH','ImageOS','ImageVersion']},'startedUTC':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'isolation':[]}
     target=OUT/job;target.mkdir(parents=True,exist_ok=True)
     boxes=[];result=1
     def stop(*_):raise RuntimeError('Execution interrupted')
@@ -45,13 +45,20 @@ def main(job):
     except Exception as error:
         PRIVATE.mkdir(parents=True,exist_ok=True);(PRIVATE/'exception.log').write_text(traceback.format_exc())
         report['error']='Component failed: '+type(error).__name__
+        report['location']=[{'file':Path(frame.filename).name,'line':frame.lineno,'function':frame.name} for frame in traceback.extract_tb(error.__traceback__)]
     finally:
+        for box in boxes:
+            for file in (box.path/'browser'/'work').glob('*.json'):
+                if file.name not in ['results.json','review-data.json']:continue
+                data=json.loads(file.read_text())
+                report.setdefault('browserCases',[]).extend({'id':r['id'],'status':r['status']} for r in data.get('results',[]))
+                report.setdefault('browserEvents',[]).extend({'scenario':e.get('scenario'),'kind':e.get('kind',e.get('type')),'expected':bool(e.get('expected')),'status':e.get('status')} for e in data.get('events',[]))
         for box in boxes:
             try:box.cleanup()
             except Exception:report['status']='failure';report['cleanupError']=True;result=1
             report['isolation'].append(box.isolation)
         report['seconds']=round(time.monotonic()-started,3)
-        write(target/'report.json',report);seal(target)
+        write(target/'report.json',report);export_tap(target,report['suites']);seal(target)
         print(json.dumps({'component':job,'status':report['status'],'seconds':report['seconds']}))
     return result
 

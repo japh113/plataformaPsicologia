@@ -1,5 +1,5 @@
 """Offline repository documentation contracts; no network, database or Docker."""
-import re, subprocess, urllib.parse
+import hashlib,json,re,subprocess,urllib.parse
 from pathlib import Path
 
 def git(*args):
@@ -33,17 +33,24 @@ def run(base):
         for target in re.findall(r'\[[^\]\n]*\]\(([^)\n]+)\)',text):check_link(source,target);links+=1
     definitions={}
     for prefix,doc in [('ADR','docs/product/decisions.md'),('AB','docs/product/decisions.md'),('RN','docs/product/business-rules.md')]:
-        definitions[prefix]=set(re.findall(r'\b'+prefix+r'-\d+\b',Path(doc).read_text()))
+        definitions[prefix]=set(re.findall((r'^#{2,6} [^\n]*?\b('+prefix+r'-\d+)\b' if prefix=='ADR' else r'^\| ('+prefix+r'-\d+) \|'),Path(doc).read_text(),re.M))
     for name in files:
         for prefix,num in re.findall(r'\b(ADR|RN|AB)-(\d+)\b',Path(name).read_text()):
             if f'{prefix}-{num}' not in definitions[prefix]:raise ValueError(f'{name}: undefined {prefix}-{num}')
     changed=git('diff','--name-only',base,'HEAD').splitlines()
-    protected=[p for p in changed if p.startswith('backend/sql/migrations/')]
-    if protected:raise ValueError('Historical migrations/manifest changed: '+','.join(protected))
+    old_manifest=json.loads(git('show',base+':backend/sql/migrations/manifest.json'))
+    manifest=json.loads(Path('backend/sql/migrations/manifest.json').read_text())
+    if manifest[:len(old_manifest)]!=old_manifest:raise ValueError('Historical migration manifest entries changed')
+    for item in manifest:
+        path=Path('backend/sql/migrations')/item['file']
+        if path.name!=item['file'] or hashlib.sha256(path.read_bytes()).hexdigest()!=item['sha256']:raise ValueError('Migration checksum mismatch')
+    for item in old_manifest:
+        path='backend/sql/migrations/'+item['file']
+        if git('show',base+':'+path)!=Path(path).read_text().strip():raise ValueError('Historical SQL changed: '+path)
     for doc,ids in [('docs/product/decisions.md',['ADR-029','AB-25']),('docs/product/business-rules.md',['RN-59','RN-60','RN-61'])]:
         old=git('show',base+':'+doc);new=Path(doc).read_text()
         for identifier in ids:
-            pattern=r'(?ms)^#{2,6} [^\n]*\b'+identifier+r'\b.*?(?=^#{2,6} |\Z)'
-            if re.findall(pattern,old)!=re.findall(pattern,new):raise ValueError('Protected decision changed: '+identifier)
+            pattern=(r'(?m)^\| '+identifier+r' \|.*$' if identifier.startswith('RN') else r'(?ms)^#{2,6} [^\n]*\b'+identifier+r'\b.*?(?=^#{2,6} |\Z)')
+            if len(re.findall(pattern,old))!=1 or re.findall(pattern,old)!=re.findall(pattern,new):raise ValueError('Protected decision changed: '+identifier)
     subprocess.run(['git','diff','--check',base,'HEAD'],check=True)
     return {'markdownFiles':len(files),'localLinks':links,'changedFiles':changed,'protectedDecisions':'unchanged','migrations':'unchanged'}

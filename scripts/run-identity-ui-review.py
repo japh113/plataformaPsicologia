@@ -89,7 +89,7 @@ address=front['NetworkSettings']['Networks'][c['network']]['IPAddress']
 source=root/'scripts/identity-ui-review.cjs'
 assert source.is_file()
 revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-cmd=['docker','run','--rm','--init','-i','--name','psicopanel-ui-browser-'+c['run'],'--label','io.psicopanel.ui-review.run='+c['run'],'--user',str(os.getuid())+':'+str(os.getgid()),'--network',c['network'],'--add-host','frontend.localhost:'+address,'-e','REVIEW_FRONTEND_IP='+address,'--read-only','--tmpfs','/tmp:size=1g,mode=1777','--shm-size=1g','--cap-drop=ALL','--security-opt','no-new-privileges','-e','REVIEW_BASE='+c['base'],'-e','REVIEW_REVISION='+revision,'-v',c['work']+':/control','-v',c['out']+':/evidence','-v',str(source)+':/review/driver.cjs:ro',c['image'],'node','/review/driver.cjs']
+cmd=['docker','run','--rm','--init','-i','--name','psicopanel-ui-browser-'+c['run'],'--label','io.psicopanel.ui-review.run='+c['run'],'--user',str(os.getuid())+':'+str(os.getgid()),'--network',c['network'],'--add-host','frontend.localhost:'+address,'-e','REVIEW_FRONTEND_IP='+address,'--read-only','--tmpfs','/tmp:size=1g,mode=1777','--shm-size=1g','--cap-drop=ALL','--security-opt','no-new-privileges','-e','HOME=/tmp','-e','REVIEW_BASE='+c['base'],'-e','REVIEW_REVISION='+revision,'-v',c['work']+':/control','-v',c['out']+':/evidence','-v',str(source)+':/review/driver.cjs:ro',c['image'],'node','/review/driver.cjs']
 p=subprocess.Popen(cmd,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1)
 with open(c['work']+'/browser-progress.log','w')as log:
  for line in p.stdout:

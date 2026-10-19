@@ -60,14 +60,18 @@ def scan(data):
     patterns=[r'eyJ[\w-]+\.[\w-]+\.[\w-]+',r'(?i)bearer\s+\S+',r'(?i)"(?:secret|password|candidate|destination|authorization|otp|token)"\s*:',r'gh[pousr]_[A-Za-z0-9_]{15,}',r'PRIVATE KEY',r'CI_SENSITIVE_FIXTURE']
     if any(re.search(p,text) for p in patterns):raise ValueError('Sensitive evidence rejected')
 
-def seal(directory):
+def hashes(directory):
     directory=Path(directory);files={}
     for p in sorted(directory.rglob('*')):
         if p.is_file() and p.name!='SHA256SUMS':
-            if p.is_symlink() or p.suffix not in ['.json','.png']:raise ValueError('Artifact allowlist violation')
-            if p.suffix=='.json':scan(p.read_bytes())
+            if p.is_symlink() or p.suffix not in ['.json','.png','.tap']:raise ValueError('Artifact allowlist violation')
+            if p.suffix in ['.json','.tap']:scan(p.read_bytes())
             elif not p.read_bytes().startswith(b'\x89PNG\r\n\x1a\n'):raise ValueError('Invalid PNG')
             files[str(p.relative_to(directory))]=hashlib.sha256(p.read_bytes()).hexdigest()
+    return files
+
+def seal(directory):
+    directory=Path(directory);files=hashes(directory)
     (directory/'SHA256SUMS').write_text(''.join(v+'  '+k+'\n' for k,v in files.items()))
     return files
 
@@ -77,7 +81,7 @@ def verify(directory):
         digest,name=line.split('  ',1)
         if Path(name).is_absolute() or '..' in Path(name).parts:raise ValueError('Unsafe hash path')
         expected[name]=digest
-    actual=seal(directory)
+    actual=hashes(directory)
     if not expected or expected!=actual:raise ValueError('Artifact integrity mismatch')
     return actual
 
@@ -89,3 +93,13 @@ def accept(needs,reports):
     for job,r in reports.items():
         if r['job']!=job or r['identity']!=current or r['status']!='success' or not r['suites']:raise ValueError('Incomplete or stale evidence: '+job)
     return True
+
+def export_tap(directory,suites):
+    for i,suite in enumerate(suites):
+        cases=suite.get('tests',suite.get('cases',[]))
+        if not cases:continue
+        lines=['TAP version 13','1..'+str(len(cases))]
+        for n,case in enumerate(cases,1):
+            status=case.get('status');name=case.get('name',case.get('id','case')).replace('\n',' ').replace('\r',' ')
+            lines.append(('ok' if status in ['passed','PASS'] else 'not ok')+' '+str(n)+' - '+name)
+        path=Path(directory)/('suite-'+str(i+1)+'.tap');path.write_text('\n'.join(lines)+'\n')

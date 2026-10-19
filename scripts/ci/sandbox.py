@@ -29,6 +29,9 @@ class Sandbox:
         self.env=dict(os.environ,EPISODE_TEST_RUN_ID=self.run,IDENTITY_DEMO_MODE='true',EPISODE_DEMO_API_URL='http://api:5000/api')
         self.args=['docker','compose','-p',self.project,'-f','compose.episodes-test.yaml','-f',str(self.path/'compose.json')]
         self.prepared=False;self.isolation={};self.browser_tags=[]
+        self.save()
+    def save(self):
+        (self.path/'state.json').write_text(json.dumps({'run':self.run,'project':self.project,'path':str(self.path),'args':self.args,'env':{k:self.env[k] for k in ['EPISODE_TEST_RUN_ID','IDENTITY_DEMO_MODE','EPISODE_DEMO_API_URL']},'browser_tags':self.browser_tags}))
     def cmd(self,*args,**kwargs):
         saved=dict(os.environ);os.environ.update(self.env)
         try:return command(self.args+list(args),**kwargs)
@@ -54,7 +57,7 @@ class Sandbox:
         info=docker('inspect',cid)[0];network=docker('network','inspect',self.project+'_database')[0]
         validate(info,network,self.project)
         version=subprocess.check_output(self.args+['exec','-T','db','postgres','--version'],env=self.env,text=True).strip()
-        self.isolation={'uuid':self.run,'project':self.project,'run':os.environ.get('GITHUB_RUN_ID','local'),'attempt':os.environ.get('GITHUB_RUN_ATTEMPT','1'),'fresh':True,'tmpfs':True,'internal':True,'dbPorts':False,'persistentVolumes':False,'images':VERSIONS,'postgresVersion':version}
+        self.isolation={'uuid':self.run,'project':self.project,'run':os.environ.get('GITHUB_RUN_ID','local'),'attempt':os.environ.get('GITHUB_RUN_ATTEMPT','1'),'fresh':True,'tmpfs':True,'internal':True,'dbPorts':False,'persistentVolumes':False,'images':VERSIONS,'applicationImageIDs':{app:docker('image','inspect',self.project+'-'+app+':isolated')[0]['Id'] for app in ['backend','frontend']},'postgresVersion':version}
         return self
     def postgres(self):
         return [self.cmd('run','--rm','-T','backend','npm','run',suite,tap=True,timeout=900) for suite in ['test:episodes','test:integration']]
@@ -69,9 +72,9 @@ class Sandbox:
         work.mkdir();out.mkdir();(out/'screenshots').mkdir()
         (work/'baseline.json').write_text(json.dumps({'containers':[]}))
         dockerfile=self.path/'browser.Dockerfile'
-        dockerfile.write_text('FROM '+VERSIONS['nodeImage']+'\nWORKDIR /review\nCOPY scripts/ci/browser/package*.json ./\nRUN npm ci && npx playwright install --with-deps chromium\nLABEL '+label+'='+review+'\n')
+        dockerfile.write_text('FROM '+VERSIONS['browserImage']+'\nWORKDIR /review\nCOPY scripts/ci/browser/package*.json ./\nRUN npm ci --ignore-scripts\nLABEL '+label+'='+review+'\n')
+        self.browser_tags.append((tag,label,review));self.save()
         command(['docker','build','--no-cache','-t',tag,'-f',str(dockerfile),'.'],timeout=900)
-        self.browser_tags.append((tag,label,review))
         config={'work':str(work.resolve()),'out':str(out.resolve()),'baseline':str((work/'baseline.json').resolve()),'run':review,'demo':self.run,'project':self.project,'network':self.project+'_app','image':tag,'base':'http://frontend.localhost:5173'}
         file=self.path/'review.json';file.write_text(json.dumps(config))
         command(['python3','scripts/run-'+('contact' if kind=='C' else 'identity')+'-ui-review.py',str(file)],timeout=600)
@@ -83,10 +86,15 @@ class Sandbox:
         assert not [e for e in data['events'] if not e.get('expected')]
         shots=data.get('screenshots',data.get('shots',[]));assert shots and all(s['secretsMasked'] for s in shots)
         # Export case IDs and outcomes only: no candidate, destination, response or diagnostics.
-        return {'kind':kind,'cases':[{'id':r['id'],'status':r['status']} for r in cases],'runtime':json.loads((work/'runtime.json').read_text()),'screenshots':shots},out
+        return {'kind':kind,'cases':[{'id':r['id'],'status':r['status']} for r in cases],'runtime':json.loads((work/'runtime.json').read_text()),'imageID':docker('image','inspect',tag)[0]['Id'],'screenshots':shots},out
     def cleanup(self):
         if not self.prepared:return
         episode_images.read_state(self.project)
+        for tag,label,owner in self.browser_tags:
+            ids=subprocess.check_output(['docker','ps','-aq','--filter','label='+label+'='+owner],text=True).split()
+            for cid in ids:
+                assert docker('inspect',cid)[0]['Config']['Labels'][label]==owner
+                command(['docker','rm','-f',cid])
         # Check ownership of every resource BEFORE removal, including partial setup.
         for resource,ls in [('container',['ps','-aq']),('network',['network','ls','-q'])]:
             ids=subprocess.check_output(['docker',*ls,'--filter','label=com.docker.compose.project='+self.project],text=True).split()
@@ -96,7 +104,9 @@ class Sandbox:
                 assert labels['com.docker.compose.project']==self.project
         self.cmd('--profile','demo','down','--remove-orphans',timeout=90)
         for tag,label,owner in self.browser_tags:
-            assert docker('image','inspect',tag)[0]['Config']['Labels'][label]==owner
+            found=subprocess.run(['docker','image','inspect',tag],text=True,capture_output=True)
+            if found.returncode:continue
+            assert json.loads(found.stdout)[0]['Config']['Labels'][label]==owner
             command(['docker','image','rm','--no-prune',tag])
         episode_images.cleanup(self.project)
         assert not subprocess.check_output(['docker','ps','-aq','--filter','label=com.docker.compose.project='+self.project],text=True).strip()

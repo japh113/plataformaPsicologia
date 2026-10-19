@@ -33,6 +33,9 @@ jobs:
         env:
           CI_COMPONENT: ${{ matrix.component }}
           CI_BASE: ${{ github.event.before || '58c7b095be237b526d489152a0eab387da3d8d5d' }}
+      - name: Final cleanup of this job's registered resources
+        if: always()
+        run: python3 scripts/ci/cleanup.py
       - name: Upload allowlisted evidence, including failures
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

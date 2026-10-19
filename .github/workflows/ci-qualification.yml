@@ -1,0 +1,102 @@
+name: CI explicit qualification
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [synchronize, ready_for_review]
+permissions:
+  contents: read
+jobs:
+  fixtures:
+    name: qualification/fault-${{ matrix.scenario }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [test, lint, build, optin, artifact, docs, sensitive]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.22.0
+      - run: python3 scripts/ci/negative.py fixture "$SCENARIO"
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: negative-${{ matrix.scenario }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: tmp/ci-export/negative-${{ matrix.scenario }}/
+          if-no-files-found: error
+          retention-days: 14
+  omitted:
+    name: qualification/intentional-skip
+    if: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - run: exit 0
+  isolation:
+    name: qualification/isolation-${{ matrix.slot }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [one, two]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: python3 scripts/ci/negative.py isolation
+        env:
+          CI_SLOT: ${{ matrix.slot }}
+      - run: python3 scripts/ci/cleanup.py
+        if: always()
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: isolation-${{ matrix.slot }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: tmp/ci-export/isolation-${{ matrix.slot }}/
+          if-no-files-found: error
+          retention-days: 14
+  gate:
+    name: qualification/gate-must-reject
+    needs: [fixtures, omitted]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: python3 scripts/ci/negative.py gate
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+  observe:
+    name: qualification/verify-rejections
+    needs: [fixtures, omitted, gate, isolation]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: tmp/negative-download
+          pattern: "*-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}"
+      - run: python3 scripts/ci/negative.py observe
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qualification-results-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: tmp/ci-export/qualification/
+          retention-days: 14
+          if-no-files-found: error

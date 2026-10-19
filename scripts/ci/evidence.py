@@ -11,6 +11,17 @@ def collect(root):
         report=json.loads((directory/'report.json').read_text())
         assert report['job']==job and report['identity']==identity()
         assert report['status'] in ['success','failure'] and report['suites']
+        if report['status']=='success':
+            counts={'docs':2,'backend-unit':2,'frontend':4,'postgres':3,'browser':2}
+            assert len(report['suites'])==counts[job]
+            if job in ['backend-unit','frontend','postgres']:
+                tap=[s for s in report['suites'] if 'tests' in s]
+                assert len(tap)==(2 if job=='postgres' else 1)
+                assert all(s['tests'] and s['passed'] and not s['failed'] and not s['cancelled'] and not s['skipped'] and s['exit']==0 for s in tap)
+            if job=='frontend':assert [s['command'] for s in report['suites']]==[['npm','ci','--ignore-scripts'],['npm','test'],['npm','run','lint'],['npm','run','build']]
+            if job=='browser':
+                assert [s['kind'] for s in report['suites']]==['B','C']
+                assert all(s['cases'] and all(c['status']=='PASS' for c in s['cases']) and s['runtime']['revision']==identity()['sha'] for s in report['suites'])
         if job in ['postgres','browser'] and report['status']=='success':
             assert len(report['isolation'])==(2 if job=='browser' else 1)
             assert all(x.get('cleanupConfirmed') and x['fresh'] and x['tmpfs'] and x['internal'] and not x['dbPorts'] and not x['persistentVolumes'] for x in report['isolation'])
