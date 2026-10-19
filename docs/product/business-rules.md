@@ -1,6 +1,6 @@
 # Reglas de negocio y permisos
 
-Referencia: 18 de octubre de 2026; base auditada `main` en `0077f46` (PR #9 integrado). Son requisitos APROBADOS de producto, no capacidades ya implementadas. Se preservan RN-01–40 y se agregan RN-41–58 para decisiones posteriores. Mecanismos pendientes en [decisions.md](decisions.md); secuencia A/B/C/D en el [plan](../identity-directory-delivery-plan.md). Solo PR A documental está autorizado. #7 cubre aislamiento administrativo y #8 fundamentos SQL; no acreditan permisos por episodio ni despliegue de 003.
+Referencia: 18 de octubre de 2026; base auditada `main` en `0077f46` (PR #9 integrado). Son requisitos APROBADOS de producto, no capacidades ya implementadas. Se preservan RN-01–40 y se agregan RN-41–58 para decisiones posteriores. Mecanismos pendientes en [decisions.md](decisions.md); secuencia A/B/C/D en el [plan](../identity-directory-delivery-plan.md). A integrado y B autorizado; implementación en rama, sin despliegue habitual. #7 cubre aislamiento administrativo y #8 fundamentos SQL; no acreditan permisos por episodio ni despliegue de 003.
 
 ## Conceptos
 
@@ -73,7 +73,7 @@ Referencia: 18 de octubre de 2026; base auditada `main` en `0077f46` (PR #9 inte
 | RN-45 | SMS mediante código válido 10 min, mínimo 60 s entre solicitudes, máximo 5 SMS por número en ventana de 24 h y 5 intentos por código. Nuevo código invalida anterior; exceso restringe operación temporalmente, no toda la cuenta. |
 | RN-46 | Proteger contra enumeración de correo registrado, automatización, fuerza bruta, reenvíos concurrentes, múltiples cuentas, consumo abusivo y bloqueo provocado por terceros. Cuotas no se reinician por reenviar. |
 | RN-47 | Secretos almacenados de forma segura, sin tokens/códigos en logs, auditoría o respuestas públicas. Entrega configurable y simuladores seguros locales; sin habilitar proveedor real o credenciales de producción. |
-| RN-48 | Backend comprueba ambos contactos vigentes verificados en operaciones sensibles que lo requieran. Sesión, dato del cliente o verificación antigua no sustituyen la comprobación; catálogo de operaciones afectadas pendiente. |
+| RN-48 | Backend comprueba ambos contactos vigentes verificados en operaciones sensibles que lo requieran. Sesión, dato del cliente o verificación antigua no sustituyen la comprobación; catálogo B: nuevas vinculaciones bloqueadas; clínica ya establecida sin requisitos nuevos. Solicitar SMS exige email vigente verificado (aprobación del encargo B). |
 | RN-49 | Cambio de contacto: reautenticación reciente con contraseña, aviso al anterior sin veto ni exigir acceso antiguo, verificación del nuevo, invalidación de evidencia anterior del canal y confirmación consistente. Recuperación excepcional pendiente. |
 | RN-50 | Confirmar cambio de contacto invalida todas las sesiones por session_version, incluida la actual, sin modificar registros clínicos. Probar regresión JWT y concurrencia. |
 | RN-51 | Campos públicos: nombre profesional, foto opcional, formación, cédula, especialidades, enfoque, modalidad presencial/en línea/ambas, ciudad/estado, descripción breve y recepción de nuevos pacientes. Excluir precios, reseñas, agenda pública y contacto personal. |
@@ -83,7 +83,7 @@ Referencia: 18 de octubre de 2026; base auditada `main` en `0077f46` (PR #9 inte
 | RN-55 | Directorio anónimo mediante proyección explícita limitada, sin pacientes, relaciones, cuentas privadas, notas de revisión ni metadatos administrativos. Titular no modifica aprobación ni publica pendientes por otra ruta. |
 | RN-56 | Suspendido/inactivo/sin aprobación desaparece y no recibe nuevas solicitudes públicas. Rehabilitar exige reconfirmar publicación y recepción; conserva información aprobada salvo revisión necesaria. Sin motivo público ni cambios automáticos de historia clínica. |
 | RN-57 | Auditar todas las mutaciones legacy de vínculos y acceso para cuentas nuevas y existentes; bloqueo/adaptación y pérdida funcional requieren aprobación expresa. Registro, verificación y directorio no habilitan clínica; no activar permisos por episodio con fallback sin retirar coordinadamente. |
-| RN-58 | A/B/C/D es la división aprobada; solo A documental está autorizado ahora. B/C/D con pruebas y demo aislada por entrega, sin nuevas solicitudes/invitaciones ni recuperación excepcional. 004–006 estimadas; sin modificar 001–003 ni tocar base habitual/recursos existentes. |
+| RN-58 | A/B/C/D es la división aprobada; A integrado y B autorizado expresamente, sin inicio de C/D. B/C/D con pruebas y demo aislada por entrega, sin nuevas solicitudes/invitaciones ni recuperación excepcional. 004 creada y validada aisladamente, 005/006 estimadas; sin modificar 001–003 ni tocar base habitual/recursos existentes. |
 
 ## Matriz breve de actores y permisos objetivo
 

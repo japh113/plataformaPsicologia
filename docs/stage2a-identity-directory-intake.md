@@ -2,25 +2,25 @@
 
 Fecha: 18 de octubre de 2026. Base inspeccionada: `main`/`origin/main` en `0077f46` (#9 integrado).
 
-**Estado: diseño técnico PROPUESTO, actualizado en PR A.** ADR-012/020–028 y RN-29–58 contienen decisiones de producto aprobadas; los mecanismos D-01–D-12 siguen pendientes salvo lo expresamente resuelto por esos ADR. Este documento abarca el objetivo completo de 2A, no todo se implementa en B/C/D.
+**Estado: diseño completo de 2A, mayoritariamente PROPUESTO; B implementa solo la porción autorizada.** A integrado en #10 (0f2ebba); B en ejecución/revisión, sin despliegue habitual. La [guía B](patient-identity-verification.md) define el contrato implementado y sus límites; prevalece sobre candidatos antiguos de este documento. [Evidencia B](patient-identity-validation.md).
 
-La [división A/B/C/D](identity-directory-delivery-plan.md) y el inicio exclusivo de A están aprobados. A solo cambia Markdown y abre un PR sin merge: no crea código/SQL/migraciones, no ejecuta bases/demos ni altera contenedores/volúmenes. La deshabilitación funcional de rutas legacy no está aprobada. Arquitectura real en [architecture.md](architecture.md); inventario de mutaciones para cuentas nuevas y existentes en [stage2a-legacy-mutations.md](stage2a-legacy-mutations.md). La futura app móvil no se implementa ahora.
+AB-23 fue aprobado expresamente: alta unilateral y request/invite/respond/accept-code bloqueados para todas las cuentas, incluidos pendientes antiguos, sin sincronizar accesos. DOB posterior pendiente por confirmación del usuario; email vigente verificado antes de solicitar SMS. C/D, directorio público y nuevas vinculaciones no implementados ni autorizados.
 
 ## 1. Base existente y límites de confianza
 
 | Evidencia inspeccionada | Estado actual y consecuencia |
 | --- | --- |
-| [auth.service.js](../backend/src/modules/auth/auth.service.js), `registerPatientUser` | Inserta cuenta y `patients` sin psicólogo/episodio, pero no verifica correo/teléfono; admite edad/motivo y fija riesgo `none`/estado `active` globales. No equivale al alta objetivo ni a riesgo evaluado o episodio vigente. |
-| [schema.sql](../backend/sql/schema.sql), `users.patient_id` | Asociación única cuenta-paciente; `patients.id` sigue estable. Contactos duplicados en cuenta/paciente; DOB en entrevista. Hace falta autoridad explícita de básicos. |
+| [auth.service.js](../backend/src/modules/auth/auth.service.js), `registerPatientUser` | B exige DOB adulta y teléfono internacional; inserta cuenta/paciente sin psicólogo, episodio o entrevista. Acuse 202 y login posterior; defaults legacy no constituyen riesgo evaluado o responsabilidad. |
+| [schema.sql](../backend/sql/schema.sql), `users.patient_id` | Asociación única cuenta-paciente; `patients.id` sigue estable. Contactos duplicados en cuenta/paciente; DOB global nueva separada de entrevista. Autoridad y espejos legacy documentados en la guía B. |
 | `psychologist_profiles` | Título, cédula, aprobación y notas de revisión; sin elección de publicación/admisión independientes. Aprobación `active` no significa episodio activo. |
 | `listAvailablePsychologists` / `mapPsychologistDirectoryRow` | Lista autenticada de aprobados con email y sin opt-in. No es directorio público; no volverla anónima sin nueva proyección. |
-| `requestCareRelationship`, `inviteCareRelationship`, `respondToCareRelationship`, `acceptCareRelationshipInvite` | Reutilizan vínculos y pueden sincronizar acceso heredado. Invitación exige cuenta existente; código y plazo legacy no se adoptan como nueva política. |
+| `requestCareRelationship`, `inviteCareRelationship`, `respondToCareRelationship`, `acceptCareRelationshipInvite` | B deniega todas esas mutaciones antes de DB; no sincroniza acceso. Pendientes históricos permanecen conservados, sin aceptar/rechazar/canjear. |
 | [auth.permissions.js](../backend/src/modules/auth/auth.permissions.js), `buildPatientAccessScope` | Vínculo activo O `psychologist_patient_access`, filtrado por paciente. #7 excluye backoffice, pero falta autorización por episodio. |
 | [003](../backend/sql/migrations/003_clinical_episode_foundation.sql) y [fundamentos](clinical-episodes-foundation.md) | Episodios independientes `active`/`paused`/`finalized`; índice `clinical_episodes_one_current_patient_idx` por paciente active/paused; atribución compuesta opcional e inmutable en citas/notas/tareas/espera. No autoriza clínicamente ni atribuye legacy. |
-| [ejecutor](../backend/scripts/episode-migration.js) y [manifiesto](../backend/sql/migrations/manifest.json) | Versiones 001–003 y huella de catálogo. Una sucesora necesita evolucionar protocolo, sin DDL por fuera ni borrar evidencia de deriva. |
+| [ejecutor](../backend/scripts/episode-migration.js) y [manifiesto](../backend/sql/migrations/manifest.json) | B reconoce 001–004 y targets 003/004 con huella previa/nueva, ledger, lock y transacción; archivos/checksums 001–003 intactos. |
 | [auditoría](../backend/src/utils/audit.js) y preservación de 001 | Metadatos JSON e historial de filas. El filtro administrativo de #7 no protege un mensaje si primero se copia a auditoría/historial genéricos. |
 
-La [evidencia de #8](clinical-episodes-validation.md) es histórica; no se vuelve a ejecutar en este encargo. No se consultan bases para diseñar. Tener 003 en Git no acredita instalación en un entorno.
+La [evidencia de #8](clinical-episodes-validation.md) es histórica; no representa la ejecución de B; B aporta su propio reporte en destino nuevo aislado, sin consultar la base habitual. Tener 003 en Git no acredita instalación en un entorno.
 
 ## 2. Invariantes aprobadas y frontera con 2B/2C
 
@@ -73,9 +73,9 @@ Desafío candidato: cuenta, canal, propósito, versión de contacto, digest de s
 
 Normalización consistente (sin equivalencias asumidas de puntos/alias email; país explícito en teléfono). Restricciones DB resuelven carreras de registro, no prueban identidad. No imponer teléfono único sin resolver números familiares/reciclados. Respuestas de alta/reenvío/recuperación sin enumeración, con tiempos razonablemente comparables. Sin fusión por coincidencia; revisión excepcional por soporte autorizado no clínico, auditada y con evidencia según AB-13. Si métodos pendientes, mantener reconciliación bloqueada.
 
-### Parámetros aprobados y cambios pendientes de implementación
+### Parámetros de B implementados y cambios posteriores pendientes
 
-ADR-024 fija email por enlace de 24 h, SMS por código de 10 min, espera de 60 s y máximo 5 envíos por destino en ventana de 24 h; SMS máximo 5 intentos por código. Nuevo desafío invalida anterior. Proponer cuotas transaccionales compartidas y digest/HMAC según entropía, con pruebas de carreras y protección de destino sin bloqueo provocado por terceros. Longitud del código, secreto servidor, almacenamiento, retención y umbrales adicionales siguen pendientes; no usar TTL legacy de invitaciones ni preview de reset como especificación.
+ADR-024 fija email por enlace de 24 h, SMS por código de 10 min, espera de 60 s y máximo 5 envíos por destino en ventana de 24 h; SMS máximo 5 intentos por código. Nuevo desafío invalida anterior. B implementa cuotas transaccionales compartidas, HMAC, código SMS de seis dígitos y simulador privado, con pruebas entre procesos. Exigir email previo reduce abuso sin eliminar agotamiento deliberado de números compartidos. Retención/rotación y controles adicionales antes de producción siguen pendientes; no usar TTL legacy de invitaciones ni preview de reset como especificación.
 
 ADR-025 exige contraseña reciente, aviso al contacto anterior sin veto, verificar nuevo e invalidar evidencia previa y todas las sesiones al confirmar. Separar candidato/vigente y aplicar commit con incremento de session_version son recomendaciones para C; diseñar entrega durable/fallos e idempotencia, sin inventar un proveedor ni recuperación excepcional.
 
@@ -179,9 +179,7 @@ No confiar en headers de rol/IDs del body o flags frontend. Preservar revocació
 
 ## 9. Rutas legacy y barrera de activación (D-06/D-10)
 
-La [auditoría de mutaciones](stage2a-legacy-mutations.md) es el inventario canónico para B: rutas, funciones, auxiliares, SQL/scripts/fixtures, lectores laterales, clientes e impacto temporal. Incluye TODAS las cuentas y estados, no solo altas nuevas. Los bloqueos/adaptaciones son **PROPUESTOS y pendientes de aprobación funcional AB-23**, incluso tras aprobar A.
-
-Se propone bloquear alta unilateral `POST /api/patients`, solicitud/invitación legacy, aceptación/rechazo y canje de códigos; preservar denegaciones administrativas #7 y operación clínica existente; adaptar básicos y registro. No se implementa aquí ni se afirma continuidad de las funciones propuestas para bloqueo. Resolver pendientes anteriores y experiencia de indisponibilidad antes de B; no convertirlos ni borrar accesos históricos automáticamente.
+La [auditoría de mutaciones](stage2a-legacy-mutations.md) fue revalidada contra base 0f2ebba y servicios de B. AB-23 está aprobado e implementado para todas las cuentas: cinco mutaciones bloqueadas; 403 administrativos preservados; identidad profesional adaptada por allowlist; lectores/fallback sin cambios. No se borran ni resuelven pendientes antiguos, ni se revoca acceso al rechazar una operación.
 
 **Barrera verificable:** no habilitar episodio/expediente nuevo mientras lectores/escritores clínicos usen permisos solo por paciente o clínicos globales. 003 nullable no proporciona ese aislamiento. Verificar contactos no autoriza activar legacy. Futuro PR de permisos debe retirar fallback y coordinar propagación/lectores/escritores, incluidos agenda/notas/tareas/objetivos/disponibilidad/espera/series/recordatorios y derivados. B/C/D no activan ese modelo.
 
@@ -189,15 +187,15 @@ Sin atribución inequívoca, no inferir responsable/autor/DOB/verificación desd
 
 ## 10. Evolución posterior a 003 (D-11)
 
-En A no se crean migraciones. El [plan de entregas](identity-directory-delivery-plan.md) estima 004 para identidad/verificación, 005 para cambios de contacto y 006 para perfiles/revisión. Cantidad, tablas y números finales pendientes. Solicitudes/invitaciones y contexto/permisos por episodio pertenecen a entregas posteriores, no a esas estimaciones por implicación.
+A no creó migraciones. B crea 004 para identidad/verificación; 005 de contacto y 006 de perfiles continúan estimadas en el [plan](identity-directory-delivery-plan.md). Solicitudes/invitaciones y contexto/permisos por episodio pertenecen a entregas posteriores, no a esas estimaciones por implicación.
 
-El runner actual verifica versiones fijas y catálogo de 001–003. Evolución propuesta: validar huella previa, registrar sucesora/nueva huella y permitir verificar/repetir versión corriente sin confundir sucesora con deriva. No alterar checksum histórico, ignorar deriva, borrar registro o marcar versión sin validación. Conservar 001/002/003; runner/manifiesto solo se modifican con implementación autorizada y pruebas de upgrade/replay/fallo/compatibilidad.
+El runner de B ya verifica 001–004, catálogo corriente y destino explícito. Protocolo implementado: validar huella previa, registrar sucesora/nueva huella y permitir verificar/repetir versión corriente sin confundir sucesora con deriva. No alterar checksum histórico, ignorar deriva, borrar registro o marcar versión sin validación. Conservar 001/002/003; runner/manifiesto solo se modifican con implementación autorizada y pruebas de upgrade/replay/fallo/compatibilidad.
 
 Ensayos futuros en PostgreSQL nuevo aislado, fixtures ficticios, destino explícito y guardas. No ejecutar migraciones/schema/seed en la base habitual o bases existentes; no alterar contenedores/volúmenes existentes. Un despliegue real exige autorización separada, diagnóstico mínimo, respaldo/ensayo y coordinación de escritores. Git integrado no es despliegue. Recuperación propuesta mediante corrección aditiva conservando evidencia y revocaciones, sin borrar episodios ni reabrir fallback.
 
 ## 11. Pruebas automatizadas y demo ficticia (D-12 / ADR-019)
 
-Requisitos de la futura 2A completa; no se crean suites ni ejecutan bases/contenedores en A. La cobertura exigible a cada PR B/C/D y su demo están en el [plan](identity-directory-delivery-plan.md); no se anticipan solicitudes/episodios. Usar los límites exactos aprobados de ADR-024, DOB adulta ADR-023, cambio de contacto ADR-025 y revisión/suspensión ADR-026/027.
+La tabla siguiente describe la futura 2A completa. A fue documental; B crea suites y demo solo de identidad/verificación y barrera legacy, con reporte propio. La cobertura exigible a cada PR B/C/D y su demo están en el [plan](identity-directory-delivery-plan.md); no se anticipan solicitudes/episodios. Usar los límites exactos aprobados de ADR-024, DOB adulta ADR-023, cambio de contacto ADR-025 y revisión/suspensión ADR-026/027.
 
 | Área | Pruebas mínimas y resultado |
 | --- | --- |
@@ -227,9 +225,9 @@ Cada PR muestra solo alcance implementado: B de identidad/verificación no prese
 
 ## 12. Aprobaciones y siguiente implementación
 
-La secuencia aprobada es [A→B→C→D](identity-directory-delivery-plan.md), con revisión/aprobación de A antes de iniciar B. Solo A está autorizado ahora; no crear ramas ni implementar B/C/D. Campos/defaults, métodos/límites y comportamiento de contactos/revisión/suspensión están aprobados en ADR-023–027; esquemas, endpoints, identificador, locks, normalización, retención y mecanismos no pasan a aprobados por aparecer aquí.
+La secuencia sigue A→B→C→D. A integrado y B autorizado expresamente; implementación en rama con revisión/integración pendientes. AB-23 resuelto para B y aspectos técnicos aplicables de AB-21/26 documentados en la guía. El endurecimiento multicuenta/red/costo antes de envíos reales sigue pendiente.
 
-Antes de B, resolver AB-23 (matriz legacy e indisponibilidad explícita), AB-21/26 y decisiones técnicas aplicables. Antes de C, AB-25; antes de D, AB-18/24/27. AB-19/20 de solicitudes/invitaciones y permisos/segmentación por episodio corresponden a entregas posteriores. No exigir aprobar toda 2A para documentar o implementar una porción segura, ni usar esa porción para activar el resto.
+Antes de C, AB-25 y autorización propia; antes de D, AB-18/24/27 y autorización propia. AB-19/20 de nuevas solicitudes/invitaciones y segmentación por episodio corresponden a entregas posteriores. B no las habilita.
 
 ## 13. Evidencia documental
 

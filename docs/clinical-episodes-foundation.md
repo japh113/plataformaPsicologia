@@ -1,5 +1,10 @@
 # Fundamentos de episodios clínicos — migración 003
 
+## Sucesora B — compatibilidad del runner
+
+B incorpora 004_patient_identity_verification.sql sin modificar 001–003 ni activar permisos por episodio. El runner admite targets explícitos 003/004; después de 004, target 003 se rechaza como downgrade. Upgrade verifica la huella de 003 y agrega ledger/huella 004 sin modificar filas previas. Replay verifica la última versión; deriva/checksum/prerrequisitos y estructuras no registradas fallan cerrados. [Guía B](patient-identity-verification.md), [pruebas nuevas](patient-identity-validation.md). Los comandos 003 y la evidencia histórica de esta guía no acreditan despliegue habitual.
+
+
 Alcance del PR posterior a #7: ADR-006/009, RN-02/03/12/15 y fundamentos de 2A. No cierra 2A ni activa autorización por episodios, adendas, identidad excepcional, derivaciones 2B o consentimientos 2C. No cambia endpoints ni pantallas.
 
 ## Modelo e integridad

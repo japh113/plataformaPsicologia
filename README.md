@@ -6,13 +6,14 @@ La aplicación activa es web (React/Vite + Express JavaScript + PostgreSQL). Rea
 
 ## Estado y fuentes
 
-PR #7 restringió el acceso clínico del backoffice; #8 integró fundamentos SQL de episodios sin activar sus permisos; #9 documentó identidad/directorio. Las decisiones posteriores se incorporan en PR A, **solo documental**. Registro adulto verificado, cambios seguros de contacto y directorio público con revisión de credenciales todavía no están implementados.
+PR #7 restringió el acceso clínico del backoffice; #8 integró fundamentos SQL de episodios sin activar sus permisos; #9 documentó identidad/directorio. PR A (#10, merge 0f2ebba) está integrado. PR B implementa en su rama el registro adulto, identidad propia y verificación simulada email/SMS, con bloqueo legacy aprobado AB-23. Revisión e integración de B pendientes; sin despliegue. Cambios de contacto (C) y directorio/revisión de credenciales (D) siguen pendientes.
 
 | Necesidad | Fuente |
 | --- | --- |
 | Navegar documentación y distinguir estado actual/futuro | [docs/README.md](docs/README.md) |
 | Trabajar como agente en este repositorio | [AGENTS.md](AGENTS.md) |
 | Arquitectura implementada y fundamentos no activados | [docs/architecture.md](docs/architecture.md) |
+| Identidad y verificación B | [Guía y demo](docs/patient-identity-verification.md), [evidencia aislada](docs/patient-identity-validation.md) |
 | Desarrollo Docker/WSL, pruebas y demos aisladas | [docs/development.md](docs/development.md) |
 | Producto y reglas aprobadas | [Visión](docs/product/vision.md), [decisiones](docs/product/decisions.md), [reglas](docs/product/business-rules.md), [roadmap](docs/product/roadmap.md) |
 | Próximas entregas y decisiones pendientes | [Plan A/B/C/D](docs/identity-directory-delivery-plan.md), [diseño 2A](docs/stage2a-identity-directory-intake.md), [mutaciones legacy](docs/stage2a-legacy-mutations.md) |
@@ -26,4 +27,4 @@ No ejecutar schema/seed o normalizadores como actualización de bases existentes
 
 Roles reales: patient, psychologist, support, admin y superadmin. Los tres administrativos no tienen acceso clínico global ordinario. Hoy todavía existe autorización legacy por paciente: ni registro, verificación o directorio autorizan clínica nueva por sí solos.
 
-La división A→B→C→D está aprobada, pero **solo PR A está autorizado**. B espera revisión/aprobación de A y autorización de inicio; bloquear funciones legacy sigue siendo propuesta. Entrega por rama y PR hacia main, sin merge ni push directo a main.
+A está integrado y B autorizado expresamente. Las altas unilaterales y nuevas vinculaciones legacy están temporalmente deshabilitadas para todas las cuentas. [Contratos, migración 004, demo y límites de B](docs/patient-identity-verification.md). C/D requieren autorización propia. Entrega por rama y PR hacia main, sin merge ni push directo a main.

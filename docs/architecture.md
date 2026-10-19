@@ -1,6 +1,6 @@
 # Arquitectura vigente de PsicoPanel
 
-Corte: 18 de octubre de 2026, código `0077f46` (merge #9). PR A modifica documentación, no comportamiento. [Producto](product/vision.md), [reglas](product/business-rules.md) y [decisiones](product/decisions.md) definen objetivos; esta página describe la implementación y sus límites.
+Corte B: base 0f2ebba (#10), implementación en rama, sin integración ni despliegue habitual. [Producto](product/vision.md), [reglas](product/business-rules.md) y [decisiones](product/decisions.md) definen objetivos; esta página describe la implementación y sus límites.
 
 ## Aplicación implementada
 
@@ -21,13 +21,15 @@ Las APIs por dominio están en [frontend/src/api](../frontend/src/api), y los ma
 
 La autorización clínica **todavía es por paciente**: `buildPatientAccessScope` admite `care_relationships.status=active` O `psychologist_patient_access`. Existen JOIN directos a acceso heredado en citas, disponibilidad y recordatorios. El backend no usa clinical_episodes como fuente de permisos. Ese OR no debe retirarse parcialmente ni reutilizarse para habilitar nuevos episodios.
 
-El [servicio auth](../backend/src/modules/auth/auth.service.js) contiene registro, recuperación de contraseña, vínculos y revisión inicial. Registro independiente ya inserta cuenta/paciente sin vínculo, pero admite edad/motivo y fija riesgo none/estado active globales; no implementa DOB adulta ni verificaciones. Contactos/nombres se duplican en users/patients; DOB actual está en patient_intakes. Actualización profesional de pacientes todavía mezcla identidad y clínica. El [inventario legacy](stage2a-legacy-mutations.md) identifica escritores y riesgos para cuentas nuevas y existentes; sus bloqueos son propuestas, no cambios actuales.
+El [servicio auth](../backend/src/modules/auth/auth.service.js) mantiene login, recuperación y revisión profesional. Ambos registros públicos devuelven 202 uniforme sin sesión/ID para evitar enumeración de la tabla compartida; login posterior conserva JWT 002. Paciente exige DOB adulta global y teléfono internacional, sin entrevista/vínculo/acceso. Nombre propio y verificaciones residen en [identity.service](../backend/src/modules/auth/identity.service.js); [guía de contratos y autoridad de datos](patient-identity-verification.md).
+
+AB-23 bloquea las cinco mutaciones legacy en servicio antes de DB. No existe ya un llamador de syncLegacyRelationshipAccess en esos servicios; los lectores/fallback y la atención existente se conservan. Edición profesional limita campos a riesgo/estado/contexto/motivo clínicos. DOB de entrevista sigue como dato clínico separado, sin copiar a identidad. Corrección posterior de DOB y cambios de contacto no habilitados.
 
 ## Dominios y datos
 
 | Dominio | Tablas/servicios existentes y límites |
 | --- | --- |
-| Identidad y cuentas | patients, users (patient_id único opcional), password_reset_tokens. Paciente conserva ID global. No hay evidencia de email/SMS ni cambio seguro de contacto implementados. |
+| Identidad y cuentas | patients, users (patient_id único opcional), password_reset_tokens. Paciente conserva ID global. 004 añade patients.global_birth_date, contact_verification_state y contact_verification_challenges. Evidencia independiente por contacto, HMAC y cuotas compartidas PostgreSQL; sin cambio de contacto C. |
 | Profesional y vínculos | psychologist_profiles con título/cédula, aprobación y notas de revisión; care_relationships y psychologist_patient_access legacy. Sin versiones de credenciales, opt-in público o admisión independiente. Directorio autenticado existente expone email: no hacerlo público. |
 | Expediente | patient_intakes, patient_tasks (tareas/objetivos), patient_clinical_notes. Entrevista/riesgo/contexto se agregan por paciente; no están segmentados funcionalmente por episodio. Paciente tiene acciones limitadas de entrevista/actividades; no asumir toda la visión RN-24 implementada. |
 | Agenda | appointments, appointment_waitlist_entries; citas/recurrencias, cancelación conservadora, espera manual priorizada y retiro sin borrar. Reglas de 60 min/hora exacta y nota/cita en servicios y 001; no confundirlas con toda la concurrencia objetivo de etapa 2D. |
@@ -47,17 +49,18 @@ La política de día clínico aún usa America/Los_Angeles en partes de aplicaci
 | [001](../backend/sql/migrations/001_clinical_data_integrity.sql) | Conservación de registros, historial, integridad de nota/cita y restricciones históricas | No implementar adendas o consentimientos por implicación; no modificar el archivo. |
 | [002](../backend/sql/migrations/002_auth_session_version.sql) | Revocación persistente JWT por session_version y estados | Cambios de contacto todavía no incorporados; no modificar el archivo. |
 | [003](../backend/sql/migrations/003_clinical_episode_foundation.sql) | clinical_episodes independiente, active/paused/finalized, uno active/paused por paciente, identidad/terminalidad y referencias compuestas opcionales episode_id en citas/notas/tareas/espera | Backend actual escribe sin atribución; sin backfill histórico, nuevas rutas ni autorización por episodio. Tenerla integrada no acredita ejecución en entorno habitual. |
+| [004](../backend/sql/migrations/004_patient_identity_verification.sql) | DOB global nullable, evidencia/desafíos privados, cuotas e invalidación por contacto | Solo B; sin backfill, acceso clínico nuevo o despliegue habitual. |
 
-[Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) aceptan solo 001–003/target 003, con destino explícito, checksums, ledger y huella de catálogo. Nuevas sucesoras requieren evolución revisada, no DDL manual que borre la evidencia de deriva. Procedimiento en [fundamentos 003](clinical-episodes-foundation.md); evidencia histórica en [validación #8](clinical-episodes-validation.md).
+[Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) reconocen 001–004 y targets explícitos 003/004; conservan destino, checksums históricos, ledger, lock, transacción y huella de la última versión. No admiten downgrade ni adopción de estructuras no registradas. Procedimiento en [fundamentos 003](clinical-episodes-foundation.md); evidencia histórica en [validación #8](clinical-episodes-validation.md).
 
-## Diseño aprobado como producto, no implementado
+## Límites de B y diseño pendiente
 
-[Plan A/B/C/D](identity-directory-delivery-plan.md): B registro adulto/básicos/verificación; C cambio seguro de contactos; D perfiles/revisión/directorio y retiro público. Solo A está autorizado hoy. ADR-023–028 fija requisitos, no aprueba todos los mecanismos del [diseño 2A](stage2a-identity-directory-intake.md). 004–006 son estimaciones, no migraciones creadas.
+[Plan A/B/C/D](identity-directory-delivery-plan.md): B registro adulto/básicos/verificación; C cambio seguro de contactos; D perfiles/revisión/directorio y retiro público. A integrado; B autorizado e implementado en rama. 004 existe sin despliegue habitual; 005/006 estimadas. El resto del [diseño 2A](stage2a-identity-directory-intake.md) sigue propuesto. La [validación B](patient-identity-validation.md) distingue ejecución aislada de integración/despliegue.
 
 Solicitudes/invitaciones nuevas, permisos/activación por episodio, derivaciones, adendas, consentimientos de antecedentes, recuperación excepcional y menores siguen pendientes. No tratar una cuenta verificada o un perfil público como vínculo asistencial. No afirmar que los límites actuales por paciente ya aíslan episodios.
 
 ## Pruebas, documentación y dirección futura
 
-Existen unitarias Node y suites HTTP/PostgreSQL en [backend/test](../backend/test); frontend dispone de lint/build, sin script propio de tests. [Desarrollo](development.md) centraliza herramientas, Docker/WSL, pruebas y destinos aislados; los ensayos requieren alcance autorizado. PR A no ejecuta bases/demos o pruebas funcionales.
+Existen unitarias Node y suites HTTP/PostgreSQL en [backend/test](../backend/test); frontend dispone de lint/build, sin script propio de tests. [Desarrollo](development.md) centraliza herramientas, Docker/WSL, pruebas y destinos aislados; los ensayos requieren alcance autorizado. A fue documental. B ejecuta pruebas y demo en recursos UUID nuevos, sin Node/npm de host ni servicios habituales.
 
 Dirección futura: React Native/Expo, Node/TypeScript/Express, PostgreSQL, alojamiento Railway/Render, auth propia y Expo Notifications; R2 para archivos y Resend para emails son referencias futuras, **no proveedores contratados o autorizados para B/C/D**. Google Calendar/WhatsApp también son futuros. Mantener lógica en servicios y contratos reutilizables; no migrar stack ni incorporar estos servicios en PR A.
