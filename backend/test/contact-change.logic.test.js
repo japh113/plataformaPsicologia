@@ -25,3 +25,19 @@ test('candidate encryption authenticates context, ciphertext, version and suppor
     if(oldActive===undefined)delete process.env.CONTACT_CHANGE_ACTIVE_KEY_ID;else process.env.CONTACT_CHANGE_ACTIVE_KEY_ID=oldActive;
   }
 });
+
+
+test('notice deadline terminates the underlying non-resolving worker and its heartbeat',async()=>{
+  const {deliverContactNotice}=await import('../src/modules/auth/contact-change.delivery.js');
+  const observation=new SharedArrayBuffer(4),counter=new Int32Array(observation);
+  const start=Date.now();
+  await assert.rejects(deliverContactNotice({noticeId:'fictional'},
+    {workerUrl:new URL('./fixtures/contact-notice-worker.js',import.meta.url),workerData:{mode:'hang',observation},timeoutMs:700}),{code:'DELIVERY_TIMEOUT'});
+  assert.ok(Atomics.load(counter,0)>0);assert.ok(Date.now()-start<2500);
+  const stopped=Atomics.load(counter,0);await new Promise(resolve=>setTimeout(resolve,100));assert.equal(Atomics.load(counter,0),stopped);
+});
+test('notice deadline rejects non-finite/unbounded settings and successful worker is joined',async()=>{
+  const {deliverContactNotice}=await import('../src/modules/auth/contact-change.delivery.js');
+  for(const timeoutMs of [Infinity,NaN,0,-1,10001])await assert.rejects(deliverContactNotice({}, {timeoutMs}),{code:'INVALID_DELIVERY_DEADLINE'});
+  await deliverContactNotice({noticeId:'fictional'},{workerUrl:new URL('./fixtures/contact-notice-worker.js',import.meta.url),workerData:{mode:'success'}});
+});

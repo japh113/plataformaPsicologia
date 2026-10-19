@@ -1,10 +1,11 @@
+import {randomUUID} from 'node:crypto';
 import db from '../../config/db.js';
-import { resolveChange } from './contact-change.service.js';
-import { openContact,sealContact,activeContactKeyId } from './contact-change.crypto.js';
-import { deliverVerification } from './verification.delivery.js';
-// Each lease is a row lock: a crashed process rolls back and another instance resumes.
-// Delivery is at least once; a crash after external acceptance may repeat a harmless notice.
-export async function processContactChangeMaintenance({deliver=deliverVerification,batchSize=100}={}) {
+import {resolveChange} from './contact-change.service.js';
+import {openContact,sealContact,activeContactKeyId} from './contact-change.crypto.js';
+import {deliverContactNotice,NOTICE_DELIVERY_TIMEOUT_MS} from './contact-change.delivery.js';
+
+// No external delivery in this path: scheduled independently even while a batch runs.
+export async function maintainContactChangeData({batchSize=100}={}) {
   let keyUnavailable=false;
   const users=(await db.query(`SELECT DISTINCT user_id FROM contact_change_requests
     WHERE status='pending' ORDER BY user_id`)).rows;
@@ -39,38 +40,11 @@ export async function processContactChangeMaintenance({deliver=deliverVerificati
     AND secret_digest<>'' AND (consumed_at IS NOT NULL OR invalidated_at IS NOT NULL OR expires_at<=clock_timestamp())`);
   await db.query(`DELETE FROM contact_verification_challenges WHERE purpose='contact_change'
     AND created_at<=clock_timestamp()-INTERVAL '24 hours' AND (consumed_at IS NOT NULL OR invalidated_at IS NOT NULL OR expires_at<=clock_timestamp())`);
-  let processed=0;
-  for (let i=0;i<batchSize;i++) {
-    const client=await db.getClient();
-    try {
-      await client.query('BEGIN');
-      const row=(await client.query(`SELECT * FROM contact_change_notices WHERE status='pending'
-        AND (next_attempt_at<=clock_timestamp() OR retry_until<=clock_timestamp())
-        ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 1`)).rows[0];
-      if (!row) {await client.query('COMMIT');break;}
-      const now=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
-      if (row.retry_until<=now) {
-        await client.query("UPDATE contact_change_notices SET status='exhausted',destination_cipher=NULL WHERE id=$1",[row.id]);
-      } else {
-        try {
-          const context='notice:'+row.user_id+':'+row.id;
-          const contact=openContact(row.destination_cipher,context);
-          await deliver({userId:row.user_id,channel:row.channel,contact,purpose:'contact_change_notice',
-            noticeId:row.id,requestId:row.request_id,kind:row.kind,createdAt:row.created_at.toISOString()});
-          await client.query("UPDATE contact_change_notices SET status='delivered',destination_cipher=NULL,attempts=attempts+1 WHERE id=$1",[row.id]);
-        } catch {
-          const delay=Math.min(3600,60*2**Math.min(row.attempts,6));
-          await client.query(`UPDATE contact_change_notices SET attempts=attempts+1,
-            next_attempt_at=LEAST(retry_until,$2::timestamptz+($3*INTERVAL '1 second')) WHERE id=$1`,[row.id,now,delay]);
-        }
-      }
-      await client.query('COMMIT');processed++;
-    } catch(error) {await client.query('ROLLBACK');throw error;}
-    finally {client.release();}
-  }
+  await db.query(`UPDATE contact_change_notices SET status='exhausted',destination_cipher=NULL,
+    lease_token=NULL,lease_until=NULL WHERE status='pending' AND retry_until<=clock_timestamp()`);
   // Rewrap undelivered destinations independently of when their next retry is due.
   let activeKey;
-  try {activeKey=activeContactKeyId();} catch {return {processed,keyUnavailable:true};}
+  try {activeKey=activeContactKeyId();} catch {return {keyUnavailable:true};}
   const pending=(await db.query("SELECT id,user_id FROM contact_change_notices WHERE status='pending' AND destination_cipher->>'kid'<>$1 ORDER BY id LIMIT $2",[activeKey,batchSize])).rows;
   for (const row of pending) {
     const client=await db.getClient();
@@ -85,17 +59,93 @@ export async function processContactChangeMaintenance({deliver=deliverVerificati
     } catch(error) {await client.query('ROLLBACK');if(error.status!==503)throw error;keyUnavailable=true;}
     finally {client.release();}
   }
-  return {processed,keyUnavailable};
+  return {keyUnavailable};
 }
-export function startContactChangeProcessor() {
-  if (process.env.CONTACT_CHANGE_PROCESSOR!=='true') return;
-  let running=false;
-  const run=async()=>{
-    if(running)return;running=true;
-    try {const result=await processContactChangeMaintenance();if(result.keyUnavailable)console.error('Contact change key unavailable; expiry processing continues.');}
-    catch {console.error('Contact change maintenance unavailable; retry scheduled.');}
-    finally {running=false;}
+
+// Claim in a short transaction; ciphertext stays encrypted until locks are released.
+async function claimNotice() {
+  const client=await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const row=(await client.query(`SELECT * FROM contact_change_notices WHERE status='pending'
+      AND next_attempt_at<=clock_timestamp() AND retry_until>clock_timestamp()
+      AND (lease_until IS NULL OR lease_until<=clock_timestamp())
+      ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT 1`)).rows[0];
+    if(!row){await client.query('COMMIT');return null;}
+    const now=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+    if(row.retry_until<=now){
+      await client.query("UPDATE contact_change_notices SET status='exhausted',destination_cipher=NULL,lease_token=NULL,lease_until=NULL WHERE id=$1",[row.id]);
+      await client.query('COMMIT');return null;
+    }
+    const token=randomUUID();
+    const claimed=(await client.query(`UPDATE contact_change_notices SET lease_token=$2,
+      lease_until=LEAST(retry_until,clock_timestamp()+INTERVAL '30 seconds'),attempts=attempts+1
+      WHERE id=$1 RETURNING *`,[row.id,token])).rows[0];
+    await client.query('COMMIT');return {...claimed,claimedAt:now};
+  } catch(error){await client.query('ROLLBACK');throw error;}
+  finally{client.release();}
+}
+
+async function settleNotice(row,delivered) {
+  const client=await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const current=(await client.query(`SELECT id,retry_until,attempts FROM contact_change_notices
+      WHERE id=$1 AND status='pending' AND lease_token=$2 FOR UPDATE`,[row.id,row.lease_token])).rows[0];
+    if(!current){await client.query('COMMIT');return;}
+    // Fresh DB time AFTER the failure and AFTER reacquiring the lock, never claim time.
+    const now=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+    if(delivered || current.retry_until<=now){
+      await client.query(`UPDATE contact_change_notices SET status=$2,destination_cipher=NULL,
+        lease_token=NULL,lease_until=NULL WHERE id=$1`,[row.id,delivered?'delivered':'exhausted']);
+    } else {
+      const delay=Math.min(3600,60*2**Math.min(current.attempts-1,6));
+      await client.query(`UPDATE contact_change_notices SET next_attempt_at=LEAST(retry_until,
+        $2::timestamptz+($3*INTERVAL '1 second')),lease_token=NULL,lease_until=NULL WHERE id=$1`,[row.id,now,delay]);
+    }
+    await client.query('COMMIT');
+  } catch(error){await client.query('ROLLBACK');throw error;}
+  finally{client.release();}
+}
+
+export async function processContactChangeMaintenance({batchSize=100,deliveryWorker,deliveryWorkerData,deliveryTimeoutMs=NOTICE_DELIVERY_TIMEOUT_MS}={}) {
+  const maintenance=await maintainContactChangeData({batchSize});
+  let processed=0;
+  for(let i=0;i<batchSize;i++){
+    // Another account's expired destination is purged even during a slow batch.
+    await db.query(`UPDATE contact_change_notices SET status='exhausted',destination_cipher=NULL,
+      lease_token=NULL,lease_until=NULL WHERE status='pending' AND retry_until<=clock_timestamp()`);
+    const row=await claimNotice();if(!row)break;
+    let delivered=false;
+    try {
+      const contact=openContact(row.destination_cipher,'notice:'+row.user_id+':'+row.id);
+      await deliverContactNotice({userId:row.user_id,channel:row.channel,contact,purpose:'contact_change_notice',
+        noticeId:row.id,requestId:row.request_id,kind:row.kind,createdAt:row.created_at.toISOString()},
+      {workerUrl:deliveryWorker,workerData:deliveryWorkerData,
+        timeoutMs:Math.min(deliveryTimeoutMs,row.retry_until.getTime()-row.claimedAt.getTime())});
+      delivered=true;
+    } catch { /* Failed or terminated isolate: settle using a fresh database clock. */ }
+    await settleNotice(row,delivered);processed++;
+  }
+  return {processed,keyUnavailable:maintenance.keyUnavailable};
+}
+
+export function startContactChangeProcessor(){
+  if(process.env.CONTACT_CHANGE_PROCESSOR!=='true')return;
+  let cleaning=false,delivering=false;
+  const cleanup=async()=>{
+    if(cleaning)return;cleaning=true;
+    try {const result=await maintainContactChangeData();if(result.keyUnavailable)console.error('Contact change key unavailable; expiry processing continues.');}
+    catch {console.error('Contact change cleanup unavailable; retry scheduled.');}
+    finally{cleaning=false;}
   };
-  const timer=setInterval(run,60000);timer.unref();void run();
+  const delivery=async()=>{
+    if(delivering)return;delivering=true;
+    try {await processContactChangeMaintenance();}
+    catch {console.error('Contact change delivery unavailable; retry scheduled.');}
+    finally{delivering=false;}
+  };
+  const tick=()=>{void cleanup();void delivery();};
+  const timer=setInterval(tick,60000);timer.unref();tick();
   return ()=>clearInterval(timer);
 }

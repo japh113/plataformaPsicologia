@@ -21,6 +21,7 @@ test('005 secure contact changes: real PostgreSQL, HTTP, races and interrupted d
  const originalQuery=db.query,originalGetClient=db.getClient;
  let pool,server;
  const password='Disposable-Contact-Only-981!';
+ const failingWorker=new URL('./fixtures/contact-notice-worker.js',import.meta.url);
  try {
   await installBaseline(client);await syntheticFixture(client);await migrate(client,{expectedDatabase:name,target:'004'});
   const ledger=(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
@@ -215,12 +216,11 @@ test('005 secure contact changes: real PostgreSQL, HTTP, races and interrupted d
   });
   await t.test('durable notice failure/restart, concurrent processors, 72h exhaustion, immediate payload purge and rotation',async()=>{
    const a=await account(),row=await prepare(a);await op(a,row.id,'confirm');
-   await processContactChangeMaintenance({deliver:async()=>{throw Error('Synthetic delivery outage');}});
+   await processContactChangeMaintenance({deliveryWorker:failingWorker});
    const failed=(await client.query('SELECT * FROM contact_change_notices WHERE request_id=$1',[row.id])).rows;assert.equal(failed.length,2);assert.ok(failed.every(n=>n.status==='pending'&&n.attempts===1&&n.destination_cipher));
    await client.query("UPDATE contact_change_notices SET next_attempt_at=clock_timestamp() WHERE request_id=$1",[row.id]);
-   const delivered=[];const deliver=async m=>{assert.equal(m.secret,undefined);delivered.push(m.noticeId);};
-   await Promise.all([processContactChangeMaintenance({deliver}),processContactChangeMaintenance({deliver})]);
-   assert.equal(new Set(delivered).size,delivered.length);
+   await Promise.all([processContactChangeMaintenance(),processContactChangeMaintenance()]);
+   assert.ok((await client.query('SELECT attempts FROM contact_change_notices WHERE request_id=$1',[row.id])).rows.every(n=>n.attempts===2));
    assert.ok((await client.query('SELECT status,destination_cipher FROM contact_change_notices WHERE request_id=$1',[row.id])).rows.every(n=>n.status==='delivered'&&n.destination_cipher===null));
    const restarted=await account(),restartRow=(await start(restarted)).body.data.request;
    const restart=spawnSync(process.execPath,['--input-type=module','-e',"import db from './src/config/db.js';import {processContactChangeMaintenance} from './src/modules/auth/contact-change.processor.js';try{await processContactChangeMaintenance();}finally{await db.close();}"],{env:{...process.env,PGDATABASE:name},encoding:'utf8'});
@@ -228,7 +228,7 @@ test('005 secure contact changes: real PostgreSQL, HTTP, races and interrupted d
    assert.equal((await client.query('SELECT status FROM contact_change_notices WHERE request_id=$1',[restartRow.id])).rows[0].status,'delivered');
    const b=await account(),brow=(await start(b)).body.data.request;
    await client.query("UPDATE contact_change_notices SET retry_until=clock_timestamp()-INTERVAL '1 second' WHERE request_id=$1",[brow.id]);
-   await processContactChangeMaintenance({deliver:async()=>{throw Error('must not deliver expired');}});
+   await processContactChangeMaintenance({deliveryWorker:failingWorker});
    assert.equal((await client.query('SELECT destination_cipher FROM contact_change_notices WHERE request_id=$1',[brow.id])).rows[0].destination_cipher,null);
    const oldKeys=process.env.CONTACT_CHANGE_KEYS,oldActive=process.env.CONTACT_CHANGE_ACTIVE_KEY_ID;
    try {
@@ -236,10 +236,10 @@ test('005 secure contact changes: real PostgreSQL, HTTP, races and interrupted d
     const {verificationKey}=await import('../src/modules/auth/verification.delivery.js');const {createHash}=await import('node:crypto');
     const original=createHash('sha256').update(verificationKey()).update('contact-change-encryption').digest('base64');
     process.env.CONTACT_CHANGE_KEYS=JSON.stringify({'sandbox-v1':original,next:Buffer.alloc(32,9).toString('base64')});process.env.CONTACT_CHANGE_ACTIVE_KEY_ID='next';
-    await processContactChangeMaintenance({deliver:async()=>{throw Error('offline');}});
+    await processContactChangeMaintenance({deliveryWorker:failingWorker});
     assert.equal((await client.query('SELECT candidate_cipher FROM contact_change_requests WHERE id=$1',[brow.id])).rows[0].candidate_cipher.kid,'next');
     await op(b,brow.id,'cancel');
-   } finally{process.env.CONTACT_CHANGE_ACTIVE_KEY_ID='sandbox-v1';await processContactChangeMaintenance({deliver:async()=>{throw Error('offline');}});if(oldKeys===undefined)delete process.env.CONTACT_CHANGE_KEYS;else process.env.CONTACT_CHANGE_KEYS=oldKeys;if(oldActive===undefined)delete process.env.CONTACT_CHANGE_ACTIVE_KEY_ID;else process.env.CONTACT_CHANGE_ACTIVE_KEY_ID=oldActive;}
+   } finally{process.env.CONTACT_CHANGE_ACTIVE_KEY_ID='sandbox-v1';await processContactChangeMaintenance({deliveryWorker:failingWorker});if(oldKeys===undefined)delete process.env.CONTACT_CHANGE_KEYS;else process.env.CONTACT_CHANGE_KEYS=oldKeys;if(oldActive===undefined)delete process.env.CONTACT_CHANGE_ACTIVE_KEY_ID;else process.env.CONTACT_CHANGE_ACTIVE_KEY_ID=oldActive;}
   });
 
   await t.test('missing retiring key cannot prevent expiry and sensitive payload purge of other accounts',async()=>{
@@ -249,7 +249,7 @@ test('005 secure contact changes: real PostgreSQL, HTTP, races and interrupted d
    const oldKeys=process.env.CONTACT_CHANGE_KEYS,oldActive=process.env.CONTACT_CHANGE_ACTIVE_KEY_ID;
    try {
     process.env.CONTACT_CHANGE_KEYS=JSON.stringify({unknown:Buffer.alloc(32,11).toString('base64')});process.env.CONTACT_CHANGE_ACTIVE_KEY_ID='unknown';
-    const result=await processContactChangeMaintenance({deliver:async()=>{throw Error('offline');}});assert.equal(result.keyUnavailable,true);
+    const result=await processContactChangeMaintenance({deliveryWorker:failingWorker});assert.equal(result.keyUnavailable,true);
     const gone=(await client.query('SELECT status,candidate_cipher FROM contact_change_requests WHERE id=$1',[expired.id])).rows[0];assert.equal(gone.status,'expired');assert.equal(gone.candidate_cipher,null);
    } finally{if(oldKeys===undefined)delete process.env.CONTACT_CHANGE_KEYS;else process.env.CONTACT_CHANGE_KEYS=oldKeys;if(oldActive===undefined)delete process.env.CONTACT_CHANGE_ACTIVE_KEY_ID;else process.env.CONTACT_CHANGE_ACTIVE_KEY_ID=oldActive;}
    assert.equal((await op(a,row.id,'cancel')).status,200);

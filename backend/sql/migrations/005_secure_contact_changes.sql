@@ -50,6 +50,9 @@ CREATE TABLE contact_change_notices (
   retry_until TIMESTAMPTZ NOT NULL,
   next_attempt_at TIMESTAMPTZ NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts>=0),
+  lease_token UUID, lease_until TIMESTAMPTZ,
+  CHECK ((lease_token IS NULL) = (lease_until IS NULL)),
+  CHECK (status='pending' OR lease_token IS NULL),
   UNIQUE(request_id,kind),
   CHECK (status<>'pending' OR destination_cipher IS NOT NULL)
 );
@@ -77,7 +80,12 @@ BEGIN
     AND c.invalidated_at IS NULL AND c.consumed_at IS NULL;
   RETURN NEW;
 END $$;
-CREATE TRIGGER invalidate_pending_account_changes AFTER UPDATE OF session_version,email,patient_id,role ON users
-  FOR EACH ROW EXECUTE FUNCTION invalidate_pending_contact_changes();
+-- AFTER observes the final row, including session_version changed by 002's BEFORE trigger.
+-- UPDATE OF would miss a password_hash-only statement whose version changes indirectly.
+CREATE TRIGGER invalidate_pending_account_changes AFTER UPDATE ON users
+  FOR EACH ROW WHEN (OLD.session_version IS DISTINCT FROM NEW.session_version
+    OR OLD.email IS DISTINCT FROM NEW.email OR OLD.patient_id IS DISTINCT FROM NEW.patient_id
+    OR OLD.role IS DISTINCT FROM NEW.role)
+  EXECUTE FUNCTION invalidate_pending_contact_changes();
 CREATE TRIGGER invalidate_pending_phone_changes AFTER UPDATE OF phone ON patients
   FOR EACH ROW EXECUTE FUNCTION invalidate_pending_contact_changes();
