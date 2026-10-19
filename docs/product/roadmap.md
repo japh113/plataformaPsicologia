@@ -1,14 +1,25 @@
 # Roadmap de producto y arquitectura
 
-Fecha: 18 de octubre de 2026. Base revisada: `main`/`origin/main` en `b3bfd40`, con PR #7 y #8 integrados. Las etapas y requisitos de producto están acordados; sus mecanismos técnicos pendientes de aprobación siguen como PROPUESTAS y asuntos ABIERTOS en [decisions.md](decisions.md).
+Fecha: 18 de octubre de 2026. Base auditada: `main`/`origin/main` en `0077f46`, merge PR #9. Requisitos de producto acordados y mecanismos pendientes se distinguen en [decisions.md](decisions.md). PR A actualiza documentación; no acredita despliegue ni nuevas capacidades.
 
 ## Antecedentes y alcance documental actual
 
-#5 fijó la base documental de producto. El PR [#7](https://github.com/japh113/plataformaPsicologia/pull/7) integró aislamiento clínico del backoffice y bloqueó cambios administrativos de vínculos. El PR [#8](https://github.com/japh113/plataformaPsicologia/pull/8) integró `clinical_episodes`, 003, atribución opcional consistente, ejecutor explícito y pruebas/demo aisladas. Véanse [fundamentos](../clinical-episodes-foundation.md) y [evidencia histórica](../clinical-episodes-validation.md). No implica despliegue de 003 en la base habitual ni activación de autorización por episodio.
+#5 fijó la base de producto; #7 restringió backoffice; #8 integró fundamentos 003 con pruebas/demo aisladas, sin activar permisos por episodio. #9 integró diseño propuesto de identidad/directorio/vinculación. Sus evidencias y autorizaciones históricas no autorizan operaciones nuevas.
 
-Esta entrega actualiza los cuatro documentos de producto y añade el [diseño propuesto de identidad, directorio básico y vinculación inicial](../stage2a-identity-directory-intake.md), pendiente de revisión y aprobación. Solo documentación, commit y PR sin merge; sin backend/frontend, SQL/migraciones, base habitual, contenedores o volúmenes. Las autorizaciones de los PR históricos no permiten ejecutar sus procedimientos ahora.
+Las decisiones posteriores a #9 figuran en ADR-023–028 y RN-41–58. Se aprobó dividir el encargo en cuatro PR y ejecutar **solo A**: documentación de producto/diseño, instrucciones operativas y reorganización. Sin backend/frontend, SQL, nuevas migraciones, bases, contenedores/volúmenes ni merge. La retirada funcional de rutas legacy aún requiere aprobación expresa.
 
-Los documentos son contexto durable. Cada encargo futuro cita etapa, RN/ADR, decisiones técnicas aprobadas, exclusiones, aceptación y evidencia esperada. Documentar una propuesta no autoriza implementarla.
+## Entregas aprobadas A/B/C/D — ejecución pendiente de B/C/D
+
+El [plan canónico de entregas](../identity-directory-delivery-plan.md) contiene funcionalidades, dependencias, pruebas, demos y límites intermedios. Las letras no equivalen a etapas: PR B y PR C son partes de 2A, no las etapas 2B/2C.
+
+| Entrega | Alcance | Estado |
+| --- | --- | --- |
+| A | Decisiones, documentación técnica, reorganización y auditoría de mutaciones legacy | Única ejecución autorizada; PR hacia main sin merge |
+| B | Registro adulto/DOB global, básicos, verificación email/SMS y simuladores | Espera revisión/aprobación de A y autorización; AB-23 y diseño aplicable pendientes |
+| C | Reautenticación, cambios de contacto y revocación total de sesiones | Después de B, con autorización propia |
+| D | Perfil, revisión/versiones de credenciales y directorio anónimo, suspensión/rehabilitación | Después de C según orden acordado; depende técnicamente del protocolo de B |
+
+004–006 son solo estimaciones. B no puede habilitar activación legacy para cuentas existentes mientras la niega a nuevas; [matriz y pérdidas temporales propuestas](../stage2a-legacy-mutations.md) pendientes de aprobación. D no incorpora solicitudes públicas funcionales. El registro de menores, invitaciones/solicitudes nuevas, episodios/permisos, derivaciones y recuperación excepcional no se habilitan en B/C/D.
 
 ## Estado de partida y evidencia
 
@@ -16,8 +27,8 @@ Los documentos son contexto durable. Cada encargo futuro cita etapa, RN/ADR, dec
 | --- | --- | --- |
 | 0. Docker de desarrollo | Completada para su alcance | PR [#1](https://github.com/japh113/plataformaPsicologia/pull/1), merge `9dbc305`; [README.md](../../README.md), [compose.yaml](../../compose.yaml) y [docker/postgres/init.sh](../../docker/postgres/init.sh). No es despliegue de producción. |
 | 1. Integridad, autenticación y dependencias de producción | Completada para su alcance | PR [#2](https://github.com/japh113/plataformaPsicologia/pull/2), merge `6a23ac8`; [#3](https://github.com/japh113/plataformaPsicologia/pull/3), merge `0e8b13f`; [#4](https://github.com/japh113/plataformaPsicologia/pull/4), merge `3a1f0d7`. No certifica el estado de una base desplegada ni elimina deuda de desarrollo/hardening. |
-| Documentación de producto | Base y decisiones posteriores integradas; ampliación documental de 2A en este PR | PR [#5](https://github.com/japh113/plataformaPsicologia/pull/5), merge `7380e80`; no implementó etapas 2. |
-| 2A–2E | 2A parcial; 2B–2E pendientes | #7 integra backoffice y #8 fundamentos 003 con evidencia aislada, sin despliegue ni permisos por episodio. Identidad verificada, directorio básico, vinculación y segmentación siguen pendientes. |
+| Documentación de producto | #5 y #9 integrados; PR A documenta decisiones posteriores y reorganiza | PR [#5](https://github.com/japh113/plataformaPsicologia/pull/5), merge `7380e80`; no implementó etapas 2. |
+| 2A–2E | 2A parcial; 2B–2E pendientes; B/C/D aún no implementados | #7 integra backoffice y #8 fundamentos 003 con evidencia aislada, sin despliegue ni permisos por episodio. Identidad verificada, directorio básico, vinculación y segmentación siguen pendientes. |
 | 3. Pruebas y confiabilidad | Pendiente como etapa de ampliación | Ya hay tests unitarios e integración; no se parte de cero. Cada etapa 2 debe traer sus propias pruebas. |
 | 4. Experiencia y refactor gradual | Pendiente | La UI funcional mínima de 2B y 2C se entrega en esas etapas. |
 | 5. Preparación para producción | Pendiente | Incluye revisión legal, privacidad, restauración, monitoreo y despliegue. |
@@ -49,7 +60,7 @@ Los escenarios deben permitir iniciar sesión como distintos psicólogos y pacie
 
 | Subetapa | Cobertura demo conforme se implemente su alcance |
 | --- | --- |
-| 2A | Registro independiente, verificación, perfil privado/público y admisión independiente, consulta anónima, solicitud con confirmación final, invitación previa a cuenta, cancelación/caducidad y denegaciones sin acceso prematuro; separación de datos globales/clínicos, episodios y permisos entre distintos psicólogos y pacientes, incluido archivo propio y límites de acceso disponibles. |
+| 2A (objetivo completo; PR B/C/D solo su porción) | Registro independiente, verificación, perfil privado/público y admisión independiente, consulta anónima, solicitud con confirmación final, invitación previa a cuenta, cancelación/caducidad y denegaciones sin acceso prematuro; separación de datos globales/clínicos, episodios y permisos entre distintos psicólogos y pacientes, incluido archivo propio y límites de acceso disponibles. |
 | 2B | Derivación con resumen revisable, cambio directo, citas y avisos del cambio, pausa/reanudación/cierre y suspensión según los flujos entregados. |
 | 2C | Antecedentes adicionales opcionales, autorización limitada, negativa, revocación y nueva autorización de adendas posteriores, sin herencia de permisos. |
 | 2D | Agenda, conflictos de reserva y su resolución visible desde cuentas distintas; las garantías de concurrencia también se prueban automáticamente. |
@@ -75,7 +86,7 @@ Los datos y cuentas demo son **exclusivamente de desarrollo**, en un entorno ais
 
 ## Etapa 2A — Identidad, directorio básico, vinculación inicial, episodios y permisos
 
-**Estado:** parcial: backoffice integrado en #7 y fundamentos 003 en #8, sin despliegue autorizado en base habitual ni autorización por episodio. El presente diseño es documental y PROPUESTO. **Dependencia:** 1 y cierre de propuestas aplicables ADR-006–ADR-009/AB-02/06/08/13–AB-22. **Requisitos aprobados:** RN-01–RN-03/10/15–RN-17/21–RN-40; ADR-002/005/012–ADR-022 según alcance. **Entregables pendientes:** identidad global verificada y registro independiente, perfil público optativo y directorio mínimo, solicitud e invitación inicial separadas de episodio, permisos por episodio/archivo, datos globales frente a clínicos, inventario de rutas/derivados y rollout seguro posterior a 003. Las propuestas técnicas se revisan antes del siguiente encargo de código.
+**Estado:** parcial: backoffice integrado en #7 y fundamentos 003 en #8, sin despliegue autorizado en base habitual ni autorización por episodio. PR A es documental; B/C/D todavía no están autorizados para implementación. **Dependencia:** 1 y cierre de propuestas aplicables ADR-006–ADR-009/AB-02/06/08/13–AB-27, según la entrega. **Requisitos aprobados:** RN-01–RN-03/10/15–RN-17/21–RN-58; ADR-002/005/012–ADR-028 según alcance. **Entregables pendientes:** identidad global verificada y registro independiente, perfil público optativo y directorio mínimo, solicitud e invitación inicial separadas de episodio, permisos por episodio/archivo, datos globales frente a clínicos, inventario de rutas/derivados y rollout seguro posterior a 003. Las propuestas técnicas se revisan antes del siguiente encargo de código.
 
 **Criterios de aceptación:**
 
@@ -91,7 +102,7 @@ Los datos y cuentas demo son **exclusivamente de desarrollo**, en un entorno ais
 
 **Aceptación adicional de directorio/vinculación (ADR-020–ADR-022):** registro sin episodio; perfiles privados por defecto, públicos solo por elección del aprobado; publicar y recibir solicitudes independientes; consulta anónima mínima sin datos de pacientes; solicitudes autenticadas/verificadas con mensaje opcional privado y confirmación final; una pendiente iniciada por paciente en ambas esperas; cancelación/caducidad y protección de abuso; invitación profesional incluso sin cuenta previa, sin política de simultaneidad inventada. Ningún pendiente habilita expediente ni rutas legacy. PostgreSQL arbitra confirmaciones concurrentes, sin exponer otro consultorio ni sustituir cambio 2B. Plazos, estados y límites técnicos necesitan aprobación.
 
-**Secuencia recomendada, aún sin autorización de código:** (1) identidad/verificación, perfil y directorio básico sin habilitar vínculo clínico; (2) solicitudes/invitaciones y controles aprobados, sin habilitar creación de episodios hasta satisfacer permisos; (3) activación atómica con segmentación y retirada coordinada de rutas legacy. Si se revisa como un solo PR, conserva estas barreras verificables. Dependencias, decisiones D-01–D-12, pruebas y demo están en el [diseño técnico](../stage2a-identity-directory-intake.md). Cada PR incluye UI mínima de su alcance, pruebas automatizadas y demo ADR-019; la secuencia no posterga esas comprobaciones hasta 3/4.
+**Secuencia A/B/C/D aprobada; solo A autorizado:** [plan de entregas](../identity-directory-delivery-plan.md). No sigue vigente la recomendación anterior de agrupar identidad y directorio en el primer PR funcional. B verifica identidad; C protege cambios de contacto; D publica perfiles con revisión de credenciales. Solicitudes/invitaciones y activación por episodio requieren entregas posteriores. Ninguna división autoriza perder funcionalidad legacy sin aprobación expresa.
 
 ADR-006/009 sustituyen la propuesta de `care_relationships` como episodios: fundamentos en tabla independiente `clinical_episodes`, índice active/paused por paciente y referencias `episode_id` aprobados para 003. La activación de autorización y retirada del fallback heredado siguen pendientes.
 

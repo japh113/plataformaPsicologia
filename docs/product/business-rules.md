@@ -1,6 +1,6 @@
 # Reglas de negocio y permisos
 
-Referencia: 18 de octubre de 2026; base revisada `main` en `b3bfd40` (PR #7 y #8 integrados). Este documento describe requisitos APROBADOS de producto, no afirma que el código actual ya los cumpla. Las propuestas de almacenamiento y transacciones y los asuntos ABIERTOS están separados en [decisions.md](decisions.md). Se conservan los IDs RN-01–RN-28; esta ampliación añade RN-29–RN-40. #7 cubre el aislamiento administrativo y #8 los fundamentos SQL, sin acreditar permisos por episodio ni despliegue de 003 en la base habitual.
+Referencia: 18 de octubre de 2026; base auditada `main` en `0077f46` (PR #9 integrado). Son requisitos APROBADOS de producto, no capacidades ya implementadas. Se preservan RN-01–40 y se agregan RN-41–58 para decisiones posteriores. Mecanismos pendientes en [decisions.md](decisions.md); secuencia A/B/C/D en el [plan](../identity-directory-delivery-plan.md). Solo PR A documental está autorizado. #7 cubre aislamiento administrativo y #8 fundamentos SQL; no acreditan permisos por episodio ni despliegue de 003.
 
 ## Conceptos
 
@@ -61,6 +61,29 @@ Referencia: 18 de octubre de 2026; base revisada `main` en `b3bfd40` (PR #7 y #8
 | RN-38 | El paciente puede cancelar su solicitud inicial y las solicitudes caducan. Plazos, límites de frecuencia y políticas de bloqueo requieren diseño y aprobación; no se fijan aquí. |
 | RN-39 | Debe haber protección frente a solicitudes/cancelaciones masivas, automatización y acoso. Los rechazos no habilitan acoso repetitivo ni bloquean injustificadamente acceso a atención. Invitaciones profesionales se gestionan separadamente: no hay política definitiva aprobada sobre simultáneas de distintos profesionales. |
 | RN-40 | Solicitudes pendientes no conceden acceso clínico. Crear episodio es transaccional, conserva la garantía PostgreSQL de uno activo o pausado por paciente y no revela otros consultorios. Con episodio vigente corresponde cambio 2B; los permisos clínicos son por episodio, nunca por directorio o aceptación parcial. |
+
+## Requisitos adicionales posteriores a PR #9
+
+| ID | Regla inequívoca |
+| --- | --- |
+| RN-41 | Registro independiente solo con edad >=18 y DOB global obligatoria, validada en backend: fechas reales, no futuras y bordes de edad. Menores, incluidos invitados, necesitan política pendiente; no abrir altas alternativas. |
+| RN-42 | Registrar no exige motivo, entrevista, riesgo, CURP o documento oficial y no crea vínculo, episodio ni permisos. Puede registrarse y consultar directorio sin terminar verificaciones. |
+| RN-43 | No deducir DOB de edad/entrevista, identidad de contactos, verificación de cuenta previa ni episodios/responsable del vínculo actual. No fusionar coincidencias ni reatribuir historia. |
+| RN-44 | Email mediante enlace impredecible, único y de un uso, válido 24 h. Mínimo 60 s entre solicitudes y máximo 5 enlaces por dirección en ventana de 24 h; nuevo enlace invalida anterior. |
+| RN-45 | SMS mediante código válido 10 min, mínimo 60 s entre solicitudes, máximo 5 SMS por número en ventana de 24 h y 5 intentos por código. Nuevo código invalida anterior; exceso restringe operación temporalmente, no toda la cuenta. |
+| RN-46 | Proteger contra enumeración de correo registrado, automatización, fuerza bruta, reenvíos concurrentes, múltiples cuentas, consumo abusivo y bloqueo provocado por terceros. Cuotas no se reinician por reenviar. |
+| RN-47 | Secretos almacenados de forma segura, sin tokens/códigos en logs, auditoría o respuestas públicas. Entrega configurable y simuladores seguros locales; sin habilitar proveedor real o credenciales de producción. |
+| RN-48 | Backend comprueba ambos contactos vigentes verificados en operaciones sensibles que lo requieran. Sesión, dato del cliente o verificación antigua no sustituyen la comprobación; catálogo de operaciones afectadas pendiente. |
+| RN-49 | Cambio de contacto: reautenticación reciente con contraseña, aviso al anterior sin veto ni exigir acceso antiguo, verificación del nuevo, invalidación de evidencia anterior del canal y confirmación consistente. Recuperación excepcional pendiente. |
+| RN-50 | Confirmar cambio de contacto invalida todas las sesiones por session_version, incluida la actual, sin modificar registros clínicos. Probar regresión JWT y concurrencia. |
+| RN-51 | Campos públicos: nombre profesional, foto opcional, formación, cédula, especialidades, enfoque, modalidad presencial/en línea/ambas, ciudad/estado, descripción breve y recepción de nuevos pacientes. Excluir precios, reseñas, agenda pública y contacto personal. |
+| RN-52 | Perfil privado y recepción desactivada inicialmente; controles independientes. Solo aprobado publica, sin publicar existentes automáticamente. Público sin admisión válido; futuras invitaciones directas independientes. |
+| RN-53 | Foto/descripción/modalidad/ubicación editables directamente. Formación/cédula/credenciales verificables requieren revisión administrativa; especialidad/enfoque también cuando declaren credencial verificable. |
+| RN-54 | Mientras se revisa, público ve última versión aprobada; pendiente solo titular y administradores revisores autorizados. Aprobación actualiza versión pública si elegible/pública; rechazo conserva anterior y comunica razón. Eventos sin acceso clínico. |
+| RN-55 | Directorio anónimo mediante proyección explícita limitada, sin pacientes, relaciones, cuentas privadas, notas de revisión ni metadatos administrativos. Titular no modifica aprobación ni publica pendientes por otra ruta. |
+| RN-56 | Suspendido/inactivo/sin aprobación desaparece y no recibe nuevas solicitudes públicas. Rehabilitar exige reconfirmar publicación y recepción; conserva información aprobada salvo revisión necesaria. Sin motivo público ni cambios automáticos de historia clínica. |
+| RN-57 | Auditar todas las mutaciones legacy de vínculos y acceso para cuentas nuevas y existentes; bloqueo/adaptación y pérdida funcional requieren aprobación expresa. Registro, verificación y directorio no habilitan clínica; no activar permisos por episodio con fallback sin retirar coordinadamente. |
+| RN-58 | A/B/C/D es la división aprobada; solo A documental está autorizado ahora. B/C/D con pruebas y demo aislada por entrega, sin nuevas solicitudes/invitaciones ni recuperación excepcional. 004–006 estimadas; sin modificar 001–003 ni tocar base habitual/recursos existentes. |
 
 ## Matriz breve de actores y permisos objetivo
 
@@ -136,7 +159,7 @@ Falta decidir la duración, metodología presencial exacta, momento de activaci�
 
 ## Reglas existentes que se conservan
 
-Según [AGENTS.md](../../AGENTS.md), [NOTES.md](../../NOTES.md) y [clinical-data-integrity.md](../clinical-data-integrity.md): citas de 60 minutos por hora exacta, sin solapamientos y sin múltiples citas activas del paciente en el mismo día; no completar citas futuras; nota vinculada a cita completada, no futura; una cita con nota no vuelve a pendiente ni cancelada. Se conserva histórico; la regla objetivo de corrección de notas finalizadas es RN-23 (adendas sin sobrescritura), aunque el código previo permita edición versionada. No modificar 001/002.
+Según [arquitectura vigente](../architecture.md), [ADR de producto](decisions.md) y [clinical-data-integrity.md](../clinical-data-integrity.md): citas de 60 minutos por hora exacta, sin solapamientos y sin múltiples citas activas del paciente en el mismo día; no completar citas futuras; nota vinculada a cita completada, no futura; una cita con nota no vuelve a pendiente ni cancelada. Se conserva histórico; la regla objetivo de corrección de notas finalizadas es RN-23 (adendas sin sobrescritura), aunque el código previo permita edición versionada. No modificar 001/002.
 
 La espera sigue siendo manual: sugerencia a prioridad 1 y decisión final del psicólogo. La disponibilidad conserva múltiples bloques, excepciones y bloqueos, y no debe dejar citas futuras fuera de cobertura. Las reglas actuales de negocio no garantizan por sí solas seguridad ante reservas concurrentes: eso corresponde a 2D.
 

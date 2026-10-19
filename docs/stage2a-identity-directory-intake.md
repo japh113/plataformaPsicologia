@@ -1,10 +1,10 @@
 # Etapa 2A — Identidad, directorio básico y vinculación inicial
 
-Fecha: 18 de octubre de 2026. Base inspeccionada: `main`/`origin/main` en `b3bfd40` (PR #7 y #8 integrados).
+Fecha: 18 de octubre de 2026. Base inspeccionada: `main`/`origin/main` en `0077f46` (#9 integrado).
 
-**Estado: ESPECIFICACIÓN TÉCNICA PROPUESTA, pendiente de revisión y aprobación.** Las decisiones de producto de [ADR-012/020–022](product/decisions.md) y [RN-29–RN-40](product/business-rules.md) sí están aprobadas. Nombres de datos, estados, operaciones API, parámetros y mecanismos aquí descritos son candidatos. Su documentación no autoriza implementarlos.
+**Estado: diseño técnico PROPUESTO, actualizado en PR A.** ADR-012/020–028 y RN-29–58 contienen decisiones de producto aprobadas; los mecanismos D-01–D-12 siguen pendientes salvo lo expresamente resuelto por esos ADR. Este documento abarca el objetivo completo de 2A, no todo se implementa en B/C/D.
 
-Este PR solo cambia Markdown. No crea SQL, migraciones, endpoints, componentes ni datos. No ejecuta 003, schema o seed; no modifica 001/002/003, base habitual, contenedores o volúmenes. Se entrega con commit y PR hacia main sin merge. Las operaciones son contratos para revisión, no rutas disponibles. La aplicación activa sigue siendo web React/Vite y Express JavaScript; se favorecen contratos reutilizables por la futura app Expo, sin migrar ahora a móvil/TypeScript.
+La [división A/B/C/D](identity-directory-delivery-plan.md) y el inicio exclusivo de A están aprobados. A solo cambia Markdown y abre un PR sin merge: no crea código/SQL/migraciones, no ejecuta bases/demos ni altera contenedores/volúmenes. La deshabilitación funcional de rutas legacy no está aprobada. Arquitectura real en [architecture.md](architecture.md); inventario de mutaciones para cuentas nuevas y existentes en [stage2a-legacy-mutations.md](stage2a-legacy-mutations.md). La futura app móvil no se implementa ahora.
 
 ## 1. Base existente y límites de confianza
 
@@ -30,19 +30,19 @@ La [evidencia de #8](clinical-episodes-validation.md) es histórica; no se vuelv
 - Invitación a conocido: admite registro posterior, exige verificación y aceptación expresa; sola no abre episodio. Invitaciones separadas, sin política definitiva de simultaneidad aprobada.
 - Ningún pendiente concede expediente. Creación de episodio transaccional y máximo uno activo/pausado garantizado por PostgreSQL, sin revelar otros consultorios.
 
-Con episodio activo o pausado, alta inicial no lo cierra, pausa ni transfiere: corresponde 2B. Solo al paciente en su ámbito puede indicarse que requiere cambio; al profesional, indisponibilidad genérica sin identidad ni existencia explícita de otro consultorio. Si 2B no existe, no simular éxito. Regreso tras finalización requiere nuevo ID (RN-03); elegibilidad exacta de readmisión en este PR requiere D-06/D-10.
+Con episodio activo o pausado, alta inicial no lo cierra, pausa ni transfiere: corresponde 2B. Solo al paciente en su ámbito puede indicarse que requiere cambio; al profesional, indisponibilidad genérica sin identidad ni existencia explícita de otro consultorio. Si 2B no existe, no simular éxito. Regreso tras finalización requiere nuevo ID (RN-03); elegibilidad exacta de readmisión en la futura vinculación requiere D-06/D-10.
 
 Se conservan derivación con resumen por versión exacta, cambio directo, agenda y responsabilidad anterior de 2B; antecedentes adicionales, consentimiento/revocación de 2C; archivo propio, adendas, respuestas históricas y ARCO. Alta inicial no copia clínicos globales o de otros episodios.
 
 ## 3. Decisiones técnicas propuestas
 
-Todas las recomendaciones D-01–D-12 requieren aprobación explícita antes del código correspondiente; ninguna es una nueva decisión de producto aprobada.
+Las alternativas de mecanismo D-01–D-12 requieren revisión/aprobación antes del código correspondiente. Los requisitos de producto ya resueltos en ADR-023–028 prevalecen sobre alternativas antiguas; la tabla indica qué partes siguen pendientes.
 
 | ID / asunto | Alternativas | Recomendación propuesta | Riesgos | Aprobación necesaria |
 | --- | --- | --- | --- | --- |
-| D-01 Perfil/directorio | Ampliar perfil o catálogo duplicado; ID interno o público | Perfil existente, proyección pública explícita, ID opaco público independiente y dos flags inicialmente apagados | Publicación accidental, enumeración, caché y contactos sensibles | Campos, identificador, default de admisión, retiro y caché (AB-18) |
-| D-02 Identidad/básicos | Reemplazar `patients` o preservar ID; inferir identidad por contactos o vínculo verificado | Preservar `patients.id`, asociación única de cuenta y básicos bajo control del paciente; separar clínicos | Duplicados, teléfonos compartidos/reciclados y fuentes contradictorias | Normalización/unicidad, DOB, cambios y revisión excepcional (AB-13/14/21) |
-| D-03 Verificación | Enlace/código email; SMS/voz; proveedor único o adaptadores | Desafíos por cuenta, propósito y versión de contacto, de un uso; adaptadores de entrega | Fuerza bruta, SIM swap, replay, enumeración, fallas y costo | Métodos/proveedores, TTL, intentos, reenvíos y recuperación (AB-21) |
+| D-01 Perfil/directorio | Ampliar perfil o catálogo duplicado; ID interno o público | Perfil existente, proyección pública explícita, ID opaco público independiente y dos flags inicialmente apagados | Publicación accidental, enumeración, caché y contactos sensibles | Campos/defaults resueltos ADR-026/027; pendientes identificador, persistencia, retiro/caché (AB-18) |
+| D-02 Identidad/básicos | Reemplazar `patients` o preservar ID; inferir identidad por contactos o vínculo verificado | Preservar `patients.id`, asociación única de cuenta y básicos bajo control del paciente; separar clínicos | Duplicados, teléfonos compartidos/reciclados y fuentes contradictorias | DOB adulta/global resuelta ADR-023; pendientes normalización/unicidad y revisión excepcional (AB-13/14/21/26) |
+| D-03 Verificación | Métodos resueltos: enlace email y código SMS; pendiente proveedor y mecanismo | Desafíos por cuenta, propósito y versión de contacto, de un uso; adaptadores de entrega | Fuerza bruta, SIM swap, replay, enumeración, fallas y costo | Métodos/TTL/reenvíos/cuotas/intentos SMS resueltos ADR-024; proveedores reales, controles adicionales y recuperación pendientes (AB-21/26) |
 | D-04 Persistencia | Reutilizar `care_relationships`, tabla polimórfica o dos agregados | Solicitudes e invitaciones separadas, previas a episodio y sin sincronizar acceso legacy | Estados duplicados, joins que filtran datos y destinatario aún sin cuenta | Entidades/campos, evidencia y relación con episodio (AB-14/19/22) |
 | D-05 Estados/cupo | Solo servicio o restricción DB; worker o vencimiento en operación | Índice parcial de pendientes del paciente y locks; caducidad materializada por worker y operaciones | Cupo ocupado por worker caído, carreras y cambios de admisión | Estados, transiciones, plazos y pendientes ante cambios (AB-18/19) |
 | D-06 Confirmación | Solo índice, serializable o locks + índice | Transacción, locks ordenados, revalidación final y unicidad de 003 | Deadlocks, permisos legacy y cambios concurrentes de cuenta/aprobación | Protocolo de escritores, errores/reintentos, readmisión y activación (AB-14/15/17) |
@@ -57,21 +57,29 @@ Todas las recomendaciones D-01–D-12 requieren aprobación explícita antes del
 
 ### Perfil profesional (D-01)
 
-Configuración sugerida: ID público, `is_public=false`, `accepts_new_patients=false`, versión y fechas. Solo el default privado está aprobado; default de admisión es recomendación pendiente. Publicación efectiva exige opt-in, cuenta activa, rol psicólogo y `approval_status='active'`: comprobar al guardar, leer y solicitar. Suspensión/inactivación retira exposición sin motivo privado. Rehabilitar no publica sin opt-in; reconfirmación tras suspensión pendiente AB-18.
+Configuración sugerida: ID público, `is_public=false`, `accepts_new_patients=false`, versión y fechas. Ambos defaults apagados y su independencia están aprobados en ADR-026; persistencia/ID/versionado siguen propuestos. Publicación efectiva exige opt-in, cuenta activa, rol psicólogo y `approval_status='active'`: comprobar al guardar, leer y solicitar. Suspensión/inactivación retira exposición sin motivo privado. Rehabilitar no publica sin opt-in; reconfirmación de publicación y recepción tras rehabilitación aprobada en ADR-027; mecanismo técnico pendiente.
 
-DTO público mínimo: ID público, nombre profesional, título y `acceptsNewPatients`. Biografía breve/cédula solo si se aprueban expresamente. Excluir email de cuenta, teléfono personal, DOB, notas/fechas de revisión, IDs internos, pacientes, solicitudes/conteos, episodios, agenda y riesgo. Listado paginado acotado y orden estable; sin ranking, reseñas o filtros avanzados.
+Campos públicos aprobados en ADR-026: nombre profesional, foto opcional, formación académica, cédula, especialidades, enfoque, modalidad presencial/en línea/ambas, ciudad/estado, descripción breve y recepción. ID público y forma exacta del DTO siguen propuestos. Excluir email de cuenta, teléfono personal, DOB, notas/fechas de revisión, IDs internos, pacientes, solicitudes/conteos, episodios, agenda y riesgo. Listado paginado acotado y orden estable; sin ranking, reseñas o filtros avanzados.
 
 Recomendar sin caché compartida inicialmente; si se añade, aprobar invalidación de lista/detalle al despublicar/suspender y exposición obsoleta máxima. Privado/inactivo/inexistente indistinguibles. Cerrar admisión no oculta perfil ni impide invitación directa; tratamiento de solicitudes en curso al cambiar flags pendiente AB-18/19.
 
 ### Cuenta y verificaciones (D-02/D-03)
 
-Registro candidato: nombre, apellidos, email, teléfono y contraseña; DOB global con momento de exigencia por aprobar. Sin motivo, entrevista o riesgo. Cuenta/identidad en una transacción; contactos sin verificar. Sesión no acredita verificaciones ni permisos clínicos: comprobar servidor. Cuenta puede verificarse sin profesional. Correo y teléfono vigentes antes de solicitar y antes de abrir episodio.
+Registro candidato: nombre, apellidos, email, teléfono y contraseña; DOB global obligatoria en registro adulto (>=18) aprobada en ADR-023; no inferir históricos. Sin motivo, entrevista o riesgo. Cuenta/identidad en una transacción; contactos sin verificar. Sesión no acredita verificaciones ni permisos clínicos: comprobar servidor. Cuenta puede verificarse sin profesional. Correo y teléfono vigentes antes de solicitar y antes de abrir episodio.
 
 Resolver autoridad de email/nombre entre `users` y `patients` mediante servicio de básicos consistente; psicólogo no cambia identidad por PUT legacy. No promover DOB desde entrevista ni reclamar una identidad legacy por conocer contacto. El riesgo `none` legacy no acredita evaluación: nuevo contexto de episodio debe representar NO EVALUADO con almacenamiento aún pendiente AB-02/14.
 
-Desafío candidato: cuenta, canal, propósito, versión de contacto, digest de secreto, caducidad, intentos y consumo. Nunca código/token en auditoría ni preview remoto. Para códigos cortos, digest autenticado con secreto servidor y cuotas compartidas. Invalidar ante cambio de destino; reenvíos según política aprobada. Verificar email no verifica teléfono. Cambio de contacto invalida evidencia correspondiente; decidir revocación de sesión con 002 sin cerrar episodios.
+Desafío candidato: cuenta, canal, propósito, versión de contacto, digest de secreto, caducidad, intentos y consumo. Nunca código/token en auditoría ni preview remoto. Para códigos cortos, digest autenticado con secreto servidor y cuotas compartidas. Invalidar ante cambio de destino; reenvíos según política aprobada. Verificar email no verifica teléfono. Cambio de contacto invalida evidencia correspondiente; revocar todas las sesiones por session_version al confirmar cambio, incluida la actual (ADR-025), sin cerrar episodios. Vigencia de reautenticación y mecanismo de confirmación pendientes.
 
 Normalización consistente (sin equivalencias asumidas de puntos/alias email; país explícito en teléfono). Restricciones DB resuelven carreras de registro, no prueban identidad. No imponer teléfono único sin resolver números familiares/reciclados. Respuestas de alta/reenvío/recuperación sin enumeración, con tiempos razonablemente comparables. Sin fusión por coincidencia; revisión excepcional por soporte autorizado no clínico, auditada y con evidencia según AB-13. Si métodos pendientes, mantener reconciliación bloqueada.
+
+### Parámetros aprobados y cambios pendientes de implementación
+
+ADR-024 fija email por enlace de 24 h, SMS por código de 10 min, espera de 60 s y máximo 5 envíos por destino en ventana de 24 h; SMS máximo 5 intentos por código. Nuevo desafío invalida anterior. Proponer cuotas transaccionales compartidas y digest/HMAC según entropía, con pruebas de carreras y protección de destino sin bloqueo provocado por terceros. Longitud del código, secreto servidor, almacenamiento, retención y umbrales adicionales siguen pendientes; no usar TTL legacy de invitaciones ni preview de reset como especificación.
+
+ADR-025 exige contraseña reciente, aviso al contacto anterior sin veto, verificar nuevo e invalidar evidencia previa y todas las sesiones al confirmar. Separar candidato/vigente y aplicar commit con incremento de session_version son recomendaciones para C; diseñar entrega durable/fallos e idempotencia, sin inventar un proveedor ni recuperación excepcional.
+
+ADR-026/027 requieren versión aprobada separada de pendiente, revisión administrativa selectiva y retiro/reconfirmación pública. Proponer snapshot aprobado + propuesta versionada y decisión transaccional, sin permitir que edición directa de campos, registro profesional o review genérico publiquen pendientes. El DTO de cuenta actual contiene reviewNotes: no reutilizarlo públicamente. Especialidades/enfoque verificables y nombre profesional/foto requieren cerrar AB-24; consulta de estado para cuentas no aprobadas AB-27.
 
 ### Agregados de vinculación (D-04)
 
@@ -171,45 +179,30 @@ No confiar en headers de rol/IDs del body o flags frontend. Preservar revocació
 
 ## 9. Rutas legacy y barrera de activación (D-06/D-10)
 
-Rutas existentes verificadas en [auth.routes.js](../backend/src/modules/auth/auth.routes.js), [patients.routes.js](../backend/src/modules/patients/patients.routes.js) y [app.js](../backend/src/app.js). Tratamiento siguiente PROPUESTO, sin aplicar ahora.
+La [auditoría de mutaciones](stage2a-legacy-mutations.md) es el inventario canónico para B: rutas, funciones, auxiliares, SQL/scripts/fixtures, lectores laterales, clientes e impacto temporal. Incluye TODAS las cuentas y estados, no solo altas nuevas. Los bloqueos/adaptaciones son **PROPUESTOS y pendientes de aprobación funcional AB-23**, incluso tras aprobar A.
 
-| Ruta/servicio legacy | Tratamiento propuesto para implementación |
-| --- | --- |
-| `POST /api/auth/register/patient` | Alta independiente verificada, sin IDs ajenos/profesional/episodio impuesto, sin recolectar clínica o conceder acceso por campos antiguos. |
-| `GET /api/auth/psychologists/available` | Restringir/descontinuar o adaptar a opt-in/proyección pública, sin emails ni privados solo por aprobación. |
-| `POST /api/auth/care-relationships/request` y `/invite` | Bloquear escrituras legacy o adaptar solo a comandos aprobados; no reutilizar vínculos ni sincronizar permisos. Invitación admite registro posterior sin enumeración. |
-| `POST /api/auth/care-relationships/accept-code` y `PATCH /api/auth/care-relationships/:relationshipId/respond` | Bloquear activación legacy; no convertir códigos previos automáticamente. Adaptador exige verificaciones, confirmación final según vía y transacción, no solo rol. |
-| `POST /api/auth/care-relationships` y `PATCH /api/auth/care-relationships/:relationshipId` | Mantener 403 administrativo de #7 en todo estado, sin atajo pending/ended/rejected. |
-| `GET /api/auth/care-relationships` | Preservar proyección administrativa #7 y revisar vistas clínicas para no exponer códigos, notas libres o relaciones ajenas. No buscador global. |
-| `POST /api/patients`, `createPatient` | Sustituir alta clínica unilateral por flujo de invitación o denegar concesión de acceso; sin inserción heredada ni duplicar identidad para evadir cupo. |
-| `PUT /api/patients/:id` y entrevista | Básicos del paciente bajo su control; separar clínicos por episodio y respuestas/valoración. Sin bypass por payload genérico. |
-| `buildPatientAccessScope`, `syncLegacyRelationshipAccess` y consultas directas | Retirar como fuente de permisos al activar; sin OR fallback cuando falta episodio ni JOIN opcional manteniendo la rama anterior. |
-| Pacientes/expediente/notas/tareas/objetivos; citas/series; disponibilidad/espera/recordatorios | Propagar episodio y filtrar por paciente + episodio + actor/autor/alcance, incluidos listados, agregados, exportaciones y secundarios. Mantener espera manual/prioridad 1 y cobertura de citas futuras. |
+Se propone bloquear alta unilateral `POST /api/patients`, solicitud/invitación legacy, aceptación/rechazo y canje de códigos; preservar denegaciones administrativas #7 y operación clínica existente; adaptar básicos y registro. No se implementa aquí ni se afirma continuidad de las funciones propuestas para bloqueo. Resolver pendientes anteriores y experiencia de indisponibilidad antes de B; no convertirlos ni borrar accesos históricos automáticamente.
 
-**Barrera verificable:** no habilitar episodio/expediente nuevo mientras lectores/escritores clínicos usen permisos solo por paciente o clínicos globales. 003 nullable no proporciona ese aislamiento. Sin atribución inequívoca, denegar acceso nuevo al legacy, sin copiarlo ni inferir responsable del vínculo actual. Inventariar todos los usos directos de `psychologist_patient_access`/`care_relationships` y clientes frontend al implementar; test por cada adaptador.
+**Barrera verificable:** no habilitar episodio/expediente nuevo mientras lectores/escritores clínicos usen permisos solo por paciente o clínicos globales. 003 nullable no proporciona ese aislamiento. Verificar contactos no autoriza activar legacy. Futuro PR de permisos debe retirar fallback y coordinar propagación/lectores/escritores, incluidos agenda/notas/tareas/objetivos/disponibilidad/espera/series/recordatorios y derivados. B/C/D no activan ese modelo.
 
-Transición sugerida: identidad/directorio sin vínculo; solicitudes/invitaciones deshabilitadas hasta aprobar políticas y datos sensibles; activación clínica en PR dependiente o PR completo con segmentación probada. Ventana coordinada sin escritores/versiones antiguas, bandera de servidor apagada inicialmente y rechazo explícito de clientes legacy. La bandera no sanea datos reales ni sustituye restricciones de rutas. Legacy ambiguo requiere AB-06/17; sin eliminación/backfill por comodidad ni acceso de emergencia.
+Sin atribución inequívoca, no inferir responsable/autor/DOB/verificación desde vínculo, edad, entrevista o contacto. Bloquear nuevas altas de menores por vías alternativas cuando se implemente el alcance aprobado; no reinterpretar pacientes históricos ni retirar atención por inferencia. No mantener bypass silencioso si no se aprueba el bloqueo: revisar alternativa antes de código.
 
 ## 10. Evolución posterior a 003 (D-11)
 
-No se crean migraciones ahora. `004+` es secuencia orientativa, no archivos o versiones definitivos:
+En A no se crean migraciones. El [plan de entregas](identity-directory-delivery-plan.md) estima 004 para identidad/verificación, 005 para cambios de contacto y 006 para perfiles/revisión. Cantidad, tablas y números finales pendientes. Solicitudes/invitaciones y contexto/permisos por episodio pertenecen a entregas posteriores, no a esas estimaciones por implicación.
 
-1. Identidad/verificación y configuración pública, básicos consistentes, sin auto-publicar/verificar cuentas previas o inferir DOB/dueño por contacto.
-2. Solicitudes/invitaciones, índice único de los dos estados pendientes del paciente, evidencia mínima, payload privado e idempotencia. Resolver interacción de historial de 001 con secretos/texto/retención sin desactivar preservación clínica global.
-3. Contexto/entrevista/riesgo por episodio aún faltantes, propagación y permisos coordinados. Sin cambiar autoría, atribuir por psicólogo actual o implementar consentimientos/adendas completos 2B/2C por implicación.
+El runner actual verifica versiones fijas y catálogo de 001–003. Evolución propuesta: validar huella previa, registrar sucesora/nueva huella y permitir verificar/repetir versión corriente sin confundir sucesora con deriva. No alterar checksum histórico, ignorar deriva, borrar registro o marcar versión sin validación. Conservar 001/002/003; runner/manifiesto solo se modifican con implementación autorizada y pruebas de upgrade/replay/fallo/compatibilidad.
 
-El runner actual verifica versiones fijas y catálogo de 001–003. Aprobar evolución que valide huella previa, registre sucesora/nueva huella y permita verificar/reaplicar versión corriente sin llamar deriva a cambios legítimos. No alterar checksum histórico de 003, ignorar deriva, borrar registro o marcar versión sin validación. Conservar 001/002/003; cambios de runner/manifiesto solo en código autorizado con upgrade/replay/fallo comprobados.
-
-Rollout futuro por entorno: destino explícito, diagnóstico autorizado mínimo no clínico, respaldo restaurable, ensayo aislado, cálculo de bloqueos/espacio y coordinación de escritores. Git integrado no es despliegue. Recuperación: detener nuevas mutaciones y corrección aditiva revisada, preservando episodios/evidencia; no reactivar fallback o borrar episodios para volver a 003. Probar en sandbox futuro no autoriza base habitual ni reinicializar demo actual.
+Ensayos futuros en PostgreSQL nuevo aislado, fixtures ficticios, destino explícito y guardas. No ejecutar migraciones/schema/seed en la base habitual o bases existentes; no alterar contenedores/volúmenes existentes. Un despliegue real exige autorización separada, diagnóstico mínimo, respaldo/ensayo y coordinación de escritores. Git integrado no es despliegue. Recuperación propuesta mediante corrección aditiva conservando evidencia y revocaciones, sin borrar episodios ni reabrir fallback.
 
 ## 11. Pruebas automatizadas y demo ficticia (D-12 / ADR-019)
 
-Requisitos de futura implementación; no se crean suites ni ejecutan bases/contenedores ahora.
+Requisitos de la futura 2A completa; no se crean suites ni ejecutan bases/contenedores en A. La cobertura exigible a cada PR B/C/D y su demo están en el [plan](identity-directory-delivery-plan.md); no se anticipan solicitudes/episodios. Usar los límites exactos aprobados de ADR-024, DOB adulta ADR-023, cambio de contacto ADR-025 y revisión/suspensión ADR-026/027.
 
 | Área | Pruebas mínimas y resultado |
 | --- | --- |
 | Identidad/verificación | Alta sin episodio/acceso; correo/teléfono independientes; desafío vencido/usado/ajeno/contacto cambiado; concurrencia y cuotas; duplicado sin fusión; recuperación no revela otro consultorio. |
-| Directorio/perfil | Anónimo solo ve público/aprobado/activo; privado/inexistente indistinguibles; flags independientes; público sin admisión puede invitar; DTO sin clínicos/contactos/revisión. Retiro/caché y pendientes según política aprobada. |
+| Directorio/perfil | Anónimo solo ve público/aprobado/activo; privado/inexistente indistinguibles; flags independientes; público sin admisión puede invitar; DTO sin clínicos/contactos personales/notas administrativas de revisión. Retiro/caché y pendientes según política aprobada. |
 | Estados | Cada arista válida/inválida por actor/versión; aceptar profesional no abre episodio; paciente confirma finalmente; sin mensaje/motivo obligatorio; terminal no reabre. |
 | Cupo/caducidad | Dos creaciones a distintos destinatarios: solo una pendiente; confirmación ocupa cupo; cancelar/expirar libera sin resetear cuotas; worker caído, límite temporal y aceptación tardía. |
 | Invitación | Sin cuenta previa, acuse uniforme y registro posterior; token ajeno/replay; abrir no acepta; simultaneidad/colisiones según AB-20 aprobado. |
@@ -217,7 +210,7 @@ Requisitos de futura implementación; no se crean suites ni ejecutan bases/conte
 | Exclusividad/2B | Active/paused impide alta nueva sin cierre/transferencia ni filtración al profesional. Tras finalizado, nuevo ID cuando autorizado, sin herencia de contenido. |
 | Permisos/API | IDOR, IDs/rol inyectados y cada ruta legacy/adaptador; pendientes y administradores sin clínica; episodio nuevo sin legacy/otros episodios. Cubrir agenda/notas/tareas/objetivos/disponibilidad/espera/series/recordatorios y derivados. |
 | Mensajes/secretos | Solo partes autorizadas, render seguro y límites; sin texto/token en logs/audit/historial genérico/avisos/API pública/idempotencia/backoffice; retención/backup según aprobación. |
-| Abuso | Cuotas atómicas multiinstancia; cancelar/rechazar/reenvío no elude; cuenta/red/destinatario, cooldown/revisión sin bloqueo indiscriminado de red compartida. Valores después de aprobación. |
+| Abuso | Cuotas atómicas multiinstancia; cancelar/rechazar/reenvío no elude; cuenta/red/destinatario, cooldown/revisión sin bloqueo indiscriminado de red compartida. Valores de verificación aprobados en ADR-024; límites adicionales AB-26 y los de solicitudes siguen pendientes. |
 | Sucesoras/regresión | Upgrade sintético 001–003, checksums intactos, replay/deriva/fallo transaccional; invariantes/autoría/historia y JWT conservados; lint/build frontend y pruebas backend pertinentes. |
 
 Demo propuesta: A/B aprobados, C pendiente y D suspendido; P sin cuenta al invitar, Q registrado sin vínculo, R no verificado, S con episodio pausado y T con histórico de otro profesional. Solo contactos `.invalid` y entrega simulada para demostrar verificaciones sin SMS/email reales ni secretos en API pública.
@@ -230,20 +223,14 @@ Recorridos con estado inicial, cuentas, URL local, pasos y resultado documentado
 4. Cancelación/rechazo/caducidad liberan cupo según política, conservando contadores. Mensaje solo para partes; no backoffice/visitantes.
 5. S no obtiene segundo responsable por estar pausado; T demuestra que vínculo nuevo no revela historia previa y archivo propio queda aislado cuando implementado. Carreras se prueban automáticamente además de UI.
 
-Cada PR muestra solo alcance implementado: el primero de identidad/directorio no presenta solicitudes/episodios funcionales. Destino nuevo verificado development con UUID e imágenes/etiquetas propias conforme corrección #8; detenerse si existe o no es desarrollo. Sin copiar datos reales, compartir volúmenes, reutilizar etiquetas de app o autocargar cuentas en producción. Restablecer creando otro destino nuevo; limpieza solo de recursos propios comprobados, sin volúmenes/etiquetas ajenos o prune. Credenciales demo restringidas a ese destino. Procedimientos se autorizan/ejecutan con implementación, nunca en este PR.
+Cada PR muestra solo alcance implementado: B de identidad/verificación no presenta solicitudes/episodios funcionales. Destino nuevo verificado development con UUID e imágenes/etiquetas propias conforme corrección #8; detenerse si existe o no es desarrollo. Sin copiar datos reales, compartir volúmenes, reutilizar etiquetas de app o autocargar cuentas en producción. Restablecer creando otro destino nuevo; limpieza solo de recursos propios comprobados, sin volúmenes/etiquetas ajenos o prune. Credenciales demo restringidas a ese destino. Procedimientos se autorizan/ejecutan con implementación, nunca en este PR.
 
-## 12. Aprobaciones y siguiente implementación recomendada
+## 12. Aprobaciones y siguiente implementación
 
-Revisar D-01–D-12 antes de código. Cerrar AB-18 campos/flags/pendientes; AB-21 contactos/métodos/proveedores/recuperación; AB-19 estados/plazos; AB-20 abuso e invitaciones simultáneas; AB-22 cifrado/retención/historial; AB-14/15/17 permisos/locks/sucesoras/rollout. Los demás [asuntos abiertos](product/decisions.md), especialmente AB-06 legacy real, conservan estado. No se resuelven por cerrar este PR documental.
+La secuencia aprobada es [A→B→C→D](identity-directory-delivery-plan.md), con revisión/aprobación de A antes de iniciar B. Solo A está autorizado ahora; no crear ramas ni implementar B/C/D. Campos/defaults, métodos/límites y comportamiento de contactos/revisión/suspensión están aprobados en ADR-023–027; esquemas, endpoints, identificador, locks, normalización, retención y mecanismos no pasan a aprobados por aparecer aquí.
 
-**Siguiente PR recomendado tras aprobación: identidad verificada y directorio básico sin activación clínica.** Básicos globales/alta independiente, desafíos por medios aprobados, perfil privado por defecto, DTO público mínimo, consulta anónima y UI mínima con estilo actual. Sucesoras/runner solo con diseño autorizado; pruebas y demo ADR-019 en destinos nuevos. Restringir rutas legacy afectadas que evadan verificaciones/publicación; explicar cualquier flujo deshabilitado y alternativa futura sin conservar bypass silencioso.
+Antes de B, resolver AB-23 (matriz legacy e indisponibilidad explícita), AB-21/26 y decisiones técnicas aplicables. Antes de C, AB-25; antes de D, AB-18/24/27. AB-19/20 de solicitudes/invitaciones y permisos/segmentación por episodio corresponden a entregas posteriores. No exigir aprobar toda 2A para documentar o implementar una porción segura, ni usar esa porción para activar el resto.
 
-Después: (a) solicitudes/invitaciones separadas con políticas y payload aprobados, inicialmente sin activación clínica; (b) permisos/propagación por episodio y confirmación atómica retirando fallback coordinadamente. Pueden agruparse si permisos/concurrencia son revisables integralmente. No habilitar envío público sin TTL/antiabuso aprobados ni prometer atención con confirmación deshabilitada. Cada PR incluye pruebas, UI mínima y demo de su alcance sin esperar etapas 3/4; el primero no cierra 2A. 2B/2C y etapa 6 conservan fronteras.
+## 13. Evidencia documental
 
-Aprobar este documento requiere acuerdo explícito por alcance registrado posteriormente. No autoriza despliegue en base habitual, backfill real, ejecución de 003/schema/seed, migración móvil, merge automático o resolver asuntos abiertos por defecto.
-
-## 13. Verificación de esta entrega documental
-
-Se revisaron el diff, tablas, referencias RN/ADR/AB y 77 enlaces Markdown locales. RN-01–RN-28 conserva numeración y contenido, salvo aclaración de estado histórico en RN-27 tras #7. Solo se modifican los cuatro documentos de producto y esta especificación; backend/frontend, 001/002/003, manifiesto, schema y seed permanecen intactos.
-
-Se intentaron `npm run lint` y `npm run build` desde frontend en WSL: ambos terminaron con `npm: command not found` (127). No se instalaron herramientas ni se crearon contenedores para suplirlo. No se ejecutaron migraciones, suites que accedan a bases, demos o comandos Docker. La evidencia de #8 se cita únicamente como antecedente.
+PR #9 revisó 77 enlaces locales e intentó lint/build en WSL sin npm; es evidencia histórica, no validación de A. Su restricción a cinco Markdown no rige la reorganización expresamente autorizada ahora. Resultados nuevos, inventario y límites de PR A se registran en [documentation-audit.md](documentation-audit.md), sin afirmar que se ejecutaron pruebas funcionales o bases.
