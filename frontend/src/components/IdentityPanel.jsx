@@ -1,3 +1,4 @@
+import ContactChangePanel from './ContactChangePanel';
 import { useEffect, useState } from 'react';
 import { apiRequest } from '../api/client';
 import { formatRetryAfter } from '../utils/identityFeedback';
@@ -72,7 +73,6 @@ export default function IdentityPanel({ onIdentityUpdated }) {
         <button disabled={busy} className="rounded-xl bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50">Guardar nombre</button>
       </form>
       <p className="mt-3 text-sm text-slate-600">Fecha de nacimiento: {identity.birthDate || 'Desconocida en el registro histórico'}. Las correcciones posteriores están pendientes.</p>
-      <p className="text-xs text-slate-500">Los cambios de correo y teléfono estarán disponibles en una entrega posterior.</p>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         {['email','sms'].map(channel => {
           const verified = channel === 'email' ? identity.emailVerifiedAt : identity.phoneVerifiedAt;
@@ -94,6 +94,7 @@ export default function IdentityPanel({ onIdentityUpdated }) {
           </div>;
         })}
       </div>
+      <ContactChangePanel />
     </>}
   </section>;
 }

@@ -21,6 +21,7 @@ export const setAuthToken = (token) => window.localStorage.setItem(AUTH_TOKEN_ST
 export const clearAuthToken = () => window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
 
 export const apiRequest = async (path, options = {}) => {
+  const requestToken = getAuthToken();
   const hasBody = typeof options.body !== 'undefined';
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
@@ -31,6 +32,10 @@ export const apiRequest = async (path, options = {}) => {
   const responseBody = contentType.includes('application/json') ? await response.json() : null;
 
   if (!response.ok) {
+    if (response.status === 401 && requestToken && getAuthToken() === requestToken) {
+      clearAuthToken();
+      window.dispatchEvent(new Event('psicopanel-session-ended'));
+    }
     const errorMessage = responseBody?.message || 'No se pudo completar la solicitud.';
     const error = new Error([errorMessage, ...(Array.isArray(responseBody?.details) ? responseBody.details : [])].join(' '));
     error.status = response.status;
