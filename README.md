@@ -1,6 +1,6 @@
 # PsicoPanel
 
-Corte documental: 19 de octubre de 2026, después del merge de PR #12 en `543442ea634e5977bc887ace1db5457eee2ebf8c`. A, B y C están integrados; D no está iniciado. Integración en Git no acredita despliegue habitual. GitHub Actions/CI sigue como [plan propuesto](docs/ci-plan.md), sin workflows implementados en este corte.
+Corte documental: 19 de octubre de 2026, después del merge de PR #12 en `543442ea634e5977bc887ace1db5457eee2ebf8c`. A, B y C están integrados; D no está iniciado. Integración en Git no acredita despliegue habitual. GitHub Actions/CI tiene [implementaci?n t?cnica en revisi?n](docs/ci-implementation.md), conforme al [plan](docs/ci-plan.md); su aceptaci?n requiere ejecuciones reales y revisi?n.
 
 Plataforma para psicólogos independientes y pacientes: agenda, disponibilidad, espera manual asistida, tareas, objetivos, notas y seguimiento clínico, con backoffice separado.
 

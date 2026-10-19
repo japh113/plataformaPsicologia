@@ -1,0 +1,104 @@
+name: PsicoPanel CI
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    name: ci/${{ matrix.component }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [docs, backend-unit, frontend, postgres, browser]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, verified upstream
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.22.0
+      - name: Execute component with sanitized report
+        run: python3 scripts/ci/run.py "$CI_COMPONENT"
+        env:
+          CI_COMPONENT: ${{ matrix.component }}
+          CI_BASE: ${{ github.event.before || '58c7b095be237b526d489152a0eab387da3d8d5d' }}
+      - name: Upload allowlisted evidence, including failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ci-${{ matrix.component }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: tmp/ci-export/${{ matrix.component }}/
+          if-no-files-found: error
+          retention-days: 14
+  evidence:
+    name: ci/evidence
+    needs: [checks]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: ci-*-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: tmp/download
+      - name: Require every component artifact
+        run: |
+          mkdir -p tmp/ci-download
+          for job in docs backend-unit frontend postgres browser; do
+            mv "tmp/download/ci-$job-$RUN-$ATTEMPT-$SHA" "tmp/ci-download/$job"
+          done
+          python3 scripts/ci/evidence.py evidence
+        env:
+          RUN: ${{ github.run_id }}
+          ATTEMPT: ${{ github.run_attempt }}
+          SHA: ${{ github.sha }}
+          CI_BASE: ${{ github.event.before || '58c7b095be237b526d489152a0eab387da3d8d5d' }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ci-results-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: tmp/ci-export/evidence/
+          if-no-files-found: error
+          retention-days: 14
+  required:
+    name: ci/required
+    needs: [checks, evidence]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: ci-*-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: tmp/download
+      - name: Reject failure, cancellation, omission and incomplete evidence
+        run: |
+          mkdir -p tmp/ci-download
+          for job in docs backend-unit frontend postgres browser; do
+            mv "tmp/download/ci-$job-$RUN-$ATTEMPT-$SHA" "tmp/ci-download/$job"
+          done
+          mv "tmp/download/ci-results-$RUN-$ATTEMPT-$SHA" tmp/ci-download/evidence
+          python3 scripts/ci/evidence.py required
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+          RUN: ${{ github.run_id }}
+          ATTEMPT: ${{ github.run_attempt }}
+          SHA: ${{ github.sha }}
+          CI_BASE: ${{ github.event.before || '58c7b095be237b526d489152a0eab387da3d8d5d' }}

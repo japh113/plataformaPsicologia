@@ -2,7 +2,7 @@
 
 Corte documental: 19 de octubre de 2026, main `543442ea634e5977bc887ace1db5457eee2ebf8c` tras #12. A/B/C integrados; D no iniciado. [Cambio seguro de contactos C](contact-changes.md): servicio específico, candidato cifrado, autorización por sesión, confirmación atómica y avisos durables. La aplicación C requiere sucesora 005; sin despliegue habitual acreditado ni episodios activados.
 
-[Producto](product/vision.md), [reglas](product/business-rules.md) y [decisiones](product/decisions.md) definen objetivos; esta página describe la implementación y sus límites. [GitHub Actions/CI](ci-plan.md) sigue propuesto, sin workflows implementados en este corte.
+[Producto](product/vision.md), [reglas](product/business-rules.md) y [decisiones](product/decisions.md) definen objetivos; esta página describe la implementación y sus límites. [GitHub Actions/CI](ci-implementation.md) tiene implementaci?n t?cnica en revisi?n; sus resultados no acreditan capacidades cl?nicas pendientes.
 
 ## Aplicación implementada
 
