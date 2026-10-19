@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { apiRequest } from '../api/client';
+import { formatRetryAfter } from '../utils/identityFeedback';
 
 const initialEmailSecret = () => {
   const params = new URLSearchParams(window.location.hash.slice(1));
   const token = params.get('verifyEmail') || '';
   return token;
 };
-export default function IdentityPanel() {
+export default function IdentityPanel({ onIdentityUpdated }) {
   const [identity, setIdentity] = useState(null);
   const [form, setForm] = useState({ firstName: '', lastName: '' });
   const [emailSecret, setEmailSecret] = useState(initialEmailSecret);
@@ -15,14 +16,23 @@ export default function IdentityPanel() {
   const [notice, setNotice] = useState('');
   const [wait, setWait] = useState({ email: 0, sms: 0 });
   useEffect(() => {
-    if (new URLSearchParams(window.location.hash.slice(1)).has('verifyEmail')) {
-      window.history.replaceState({}, '', window.location.pathname + window.location.search);
-    }
+    const readEmailLink = () => {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      if (!params.has('verifyEmail')) return;
+      const token = params.get('verifyEmail') || '';
+      setEmailSecret(token);
+      // Preserve unrelated fragment parameters and remove the secret immediately.
+      params.delete('verifyEmail');
+      const remaining = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + window.location.search + (remaining ? '#' + remaining : ''));
+    };
+    readEmailLink();
+    window.addEventListener('hashchange', readEmailLink);
     let live = true;
     apiRequest('/auth/identity').then(response => {
       if (live) { setIdentity(response.data); setForm({ firstName: response.data.firstName, lastName: response.data.lastName }); }
     }).catch(error => { if (live) setNotice(error.message); });
-    return () => { live = false; };
+    return () => { live = false; window.removeEventListener('hashchange', readEmailLink); };
   }, []);
   useEffect(() => {
     const timer = setInterval(() => setWait(current => ({
@@ -40,6 +50,7 @@ export default function IdentityPanel() {
         setNotice(channel === 'email' ? 'Enlace solicitado. Caduca en 24 horas; solo funciona el más reciente.' : 'Código solicitado. Caduca en 10 minutos; tienes cinco intentos.');
       } else {
         setIdentity(response.data);
+        if (path === '/auth/identity') onIdentityUpdated?.(response.data);
         setNotice('Datos actualizados.');
         if (channel === 'email') setEmailSecret('');
         if (channel === 'sms') setSmsSecret('');
@@ -70,7 +81,7 @@ export default function IdentityPanel() {
             <span className={verified ? 'text-sm text-emerald-700' : 'text-sm text-amber-700'}>{verified ? 'Verificado' : 'Sin verificar'}</span>
             {!verified && <>
               <button type="button" disabled={busy || wait[channel] > 0} className="my-2 block rounded-xl border px-3 py-2 text-sm disabled:opacity-50" onClick={() => action('/auth/verification/' + channel + '/request', {}, channel)}>
-                {wait[channel] ? 'Reintenta en ' + wait[channel] + ' s' : channel === 'email' ? 'Solicitar enlace' : 'Solicitar SMS'}
+                {wait[channel] ? 'Reintenta en ' + formatRetryAfter(wait[channel]) : channel === 'email' ? 'Solicitar enlace' : 'Solicitar SMS'}
               </button>
               {channel === 'email' ? <p className="mb-2 text-xs text-slate-500">Abre el enlace recibido y confirma aquí. Requiere la sesión de esta cuenta.</p> : <p className="mb-2 text-xs text-slate-500">Verifica primero tu correo. Después ingresa el código SMS recibido; el más reciente sustituye al anterior.</p>}
               <form className="flex flex-wrap gap-2" onSubmit={event => { event.preventDefault(); action('/auth/verification/' + channel + '/confirm', { secret: channel === 'email' ? emailSecret : smsSecret }, channel); }}>

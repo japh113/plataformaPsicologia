@@ -5,8 +5,8 @@ import InlineNotice from '../components/shared/InlineNotice';
 const demoAccounts = import.meta.env.DEV && import.meta.env.VITE_IDENTITY_DEMO === 'true' ? [
   { role: 'Paciente sin vínculo', email: 'r@episodes.invalid', password: 'Episode-Demo-Only-284!' },
   { role: 'Paciente histórico', email: 'p@episodes.invalid', password: 'Episode-Demo-Only-284!' },
-  { role: 'Psic?logo A', email: 'a@episodes.invalid', password: 'Episode-Demo-Only-284!' },
-  { role: 'Psic?logo B', email: 'b@episodes.invalid', password: 'Episode-Demo-Only-284!' },
+  { role: 'Psicólogo A', email: 'a@episodes.invalid', password: 'Episode-Demo-Only-284!' },
+  { role: 'Psicólogo B', email: 'b@episodes.invalid', password: 'Episode-Demo-Only-284!' },
   { role: 'Admin', email: 'admin@identity.invalid', password: 'Episode-Demo-Only-284!' },
   { role: 'Soporte', email: 'support@identity.invalid', password: 'Episode-Demo-Only-284!' },
 ] : import.meta.env.DEV ? [
@@ -167,17 +167,19 @@ export default function LoginScreen({
 
   const renderTextField = ({ label, name, value, onChange, type = 'text', placeholder, disabled = false, required = false }) => (
     <div>
-      <label className="mb-1 block text-sm font-semibold text-slate-700">{label}</label>
-      <input
-        type={type}
-        name={name}
-        value={value}
-        onChange={onChange}
-        disabled={disabled}
-        required={required}
-        placeholder={placeholder}
-        className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50"
-      />
+      <label className="block text-sm font-semibold text-slate-700">
+        <span className="mb-1 block">{label}</span>
+        <input
+          type={type}
+          name={name}
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          required={required}
+          placeholder={placeholder}
+          className="w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-slate-50"
+        />
+      </label>
     </div>
   );
 

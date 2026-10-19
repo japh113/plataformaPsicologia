@@ -1,4 +1,5 @@
 import IdentityPanel from './components/IdentityPanel';
+import { patientRegistrationError } from './utils/identityFeedback';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import Sidebar from './components/layout/Sidebar';
@@ -167,6 +168,7 @@ export default function App() {
   const [backofficeActionError, setBackofficeActionError] = useState('');
   const [relationshipActionError, setRelationshipActionError] = useState('');
   const [relationshipInvitePreview, setRelationshipInvitePreview] = useState(null);
+  const [showPatientInterview, setShowPatientInterview] = useState(false);
   const [patientInterviewForm, setPatientInterviewForm] = useState(buildInterviewDraftForm(null, ''));
   const [uiFeedback, setUiFeedback] = useState(null);
 
@@ -232,6 +234,7 @@ export default function App() {
     setBackofficeActionError('');
     setRelationshipActionError('');
     setRelationshipInvitePreview(null);
+    setShowPatientInterview(false);
     setMostrarModalNuevoPaciente(false);
     setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
     setPasswordResetError('');
@@ -405,7 +408,7 @@ export default function App() {
       setRegistrationSuccess('Si los datos permiten el registro, ya puedes iniciar sesión. Si tienes cuenta, utiliza tu acceso habitual.');
       return true;
     } catch (error) {
-      setRegistrationError(error.message || 'No se pudo crear la cuenta de paciente.');
+      setRegistrationError(patientRegistrationError(error));
       return false;
     } finally {
       setRegisteringAccount(false);
@@ -836,6 +839,14 @@ export default function App() {
     }
   };
 
+  const handleIdentityUpdated = ({ firstName, lastName }) => {
+    if (currentUser?.role !== 'patient') return;
+    const nombre = (firstName + ' ' + lastName).trim();
+    setCurrentUser(current => ({ ...current, firstName, lastName, fullName: nombre }));
+    setPacientes(current => current.map(patient => patient.id === currentUser.patientId ? { ...patient, nombre } : patient));
+    setPacienteSeleccionado(current => current?.id === currentUser.patientId ? { ...current, nombre } : current);
+  };
+
   const handleInterviewFieldChange = (field, value) => {
     setPatientInterviewForm((currentForm) => ({
       ...currentForm,
@@ -885,7 +896,7 @@ export default function App() {
       return;
     }
 
-    await saveInterview(patientProfile.id, patientInterviewForm);
+    if (await saveInterview(patientProfile.id, patientInterviewForm)) setShowPatientInterview(false);
   };
 
   const toggleTask = async (taskId) => {
@@ -1442,6 +1453,7 @@ export default function App() {
           careRelationships={careRelationships}
           relationshipInvitePreview={relationshipInvitePreview}
           onOpenPatient={abrirNotas}
+          onCompleteInterview={() => setShowPatientInterview(true)}
           onNewPatient={() => setMostrarModalNuevoPaciente(true)}
           onViewAppointments={() => abrirAgenda(isPsychologist ? todayDate : '')}
           onToggleTask={toggleTask}
@@ -1572,6 +1584,7 @@ export default function App() {
           onCreateSession={createSession}
           onUpdateSession={updateSession}
           onSaveInterview={saveInterview}
+          onStartPatientInterview={careRelationships.some(r => r.status === 'active') ? () => setShowPatientInterview(true) : null}
           sessionActionError={sessionActionError}
           onDismissSessionActionError={() => setSessionActionError('')}
           isSavingNotes={guardandoNotas}
@@ -1657,12 +1670,12 @@ export default function App() {
 
       <main className="flex-1 flex flex-col h-screen overflow-auto bg-slate-50/50 w-full">
         <div className="p-4 md:p-8">
-          {currentUser?.role === 'patient' && <IdentityPanel />}
+          {currentUser?.role === 'patient' && <IdentityPanel onIdentityUpdated={handleIdentityUpdated} />}
           {renderMainContent()}
         </div>
       </main>
 
-      {currentUser?.role === 'patient' && patientProfile && !patientProfile.entrevistaCompleta && careRelationships.some(r => r.status === 'active') && (
+      {showPatientInterview && currentUser?.role === 'patient' && patientProfile && !patientProfile.entrevistaCompleta && careRelationships.some(r => r.status === 'active') && (
         <PatientInterviewModal
           patient={patientProfile}
           form={patientInterviewForm}
@@ -1671,8 +1684,9 @@ export default function App() {
           onSubmit={handleSaveRequiredInterview}
           isSubmitting={guardandoEntrevista}
           title="Entrevista inicial"
-          description="Antes de continuar, necesitamos que completes esta entrevista una sola vez. Despues quedara visible para ti y editable solo para tu psicologo."
-          allowClose={false}
+          description="Puedes completar la entrevista de tu atención histórica y volver a tus funciones personales en cualquier momento. Guardarla no activa un episodio nuevo."
+          allowClose
+          onClose={() => setShowPatientInterview(false)}
         />
       )}
     </div>

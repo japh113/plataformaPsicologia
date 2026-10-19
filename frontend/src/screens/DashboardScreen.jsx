@@ -223,6 +223,7 @@ export default function DashboardScreen({
   careRelationships = [],
   relationshipInvitePreview = null,
   onOpenPatient,
+  onCompleteInterview,
   onViewAppointments,
   onToggleTask,
   onRequestCareRelationship,
@@ -256,6 +257,7 @@ export default function DashboardScreen({
   const totalTasks = patientProfile?.tareas?.length || 0;
   const totalClinicalNotes = patientProfile?.sesiones?.length || 0;
   const interviewCompleted = Boolean(patientProfile?.entrevistaCompleta);
+  const hasLegacyRelationship = careRelationships.some(relationship => relationship.status === 'active');
   const patientTaskGroups = groupTasksByClinicalNote(patientProfile?.tareas || []);
 
   if (!isPsychologist) {
@@ -268,14 +270,14 @@ export default function DashboardScreen({
           </div>
         </div>
 
-        {patientProfile && !interviewCompleted && (
+        {patientProfile && hasLegacyRelationship && !interviewCompleted && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Entrevista inicial pendiente</p>
-                <p className="mt-2 text-sm text-amber-900">Necesitas completar tu entrevista para dejar tu expediente inicial al dia.</p>
+                <p className="mt-2 text-sm text-amber-900">Puedes completar la entrevista de tu atención histórica. Tu identidad y tus funciones personales siguen disponibles.</p>
               </div>
-              <button onClick={() => onOpenPatient(patientProfile)} className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-amber-700">
+              <button onClick={onCompleteInterview} className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-amber-700">
                 Completar entrevista
               </button>
             </div>
@@ -286,10 +288,15 @@ export default function DashboardScreen({
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
               <p className="text-xs uppercase tracking-[0.18em] text-indigo-600 font-black">Tu siguiente paso</p>
-              {!interviewCompleted ? (
+              {!hasLegacyRelationship ? (
+                <>
+                  <h3 className="mt-2 text-xl font-black text-slate-900">Tu cuenta está registrada</h3>
+                  <p className="mt-2 text-sm text-slate-500">Puedes verificar tus contactos y administrar tu identidad. Todavía no tienes psicólogo vinculado. La entrevista inicial será necesaria antes de activar un episodio terapéutico, con validación del psicólogo responsable; no es un requisito de registro.</p>
+                </>
+              ) : !interviewCompleted ? (
                 <>
                   <h3 className="mt-2 text-xl font-black text-slate-900">Completar tu entrevista inicial</h3>
-                  <p className="mt-2 text-sm text-slate-500">Es el requisito para dejar tu expediente clinico listo y compartir mejor contexto con tu psicologo.</p>
+                  <p className="mt-2 text-sm text-slate-500">Puedes aportar tu información cuando estés listo. La entrevista pendiente no bloquea tus funciones personales ni activa un episodio nuevo.</p>
                 </>
               ) : nextAppointment ? (
                 <>
@@ -334,13 +341,21 @@ export default function DashboardScreen({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className={`p-4 md:p-5 rounded-xl shadow-sm border transition hover:shadow-md ${interviewCompleted ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
-            <div className="flex items-center justify-between">
-              <h3 className={`font-medium text-sm md:text-base ${interviewCompleted ? 'text-emerald-700' : 'text-amber-700'}`}>Entrevista</h3>
-              <AlertCircle className={interviewCompleted ? 'text-emerald-500' : 'text-amber-500'} size={24} />
+          {!hasLegacyRelationship ? (
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4 md:p-5 shadow-sm">
+              <h3 className="text-sm font-medium text-indigo-700">Cuenta personal</h3>
+              <p className="mt-2 text-2xl font-bold text-indigo-700">Registrada</p>
+              <p className="mt-2 text-sm text-indigo-700">Sin episodio terapéutico nuevo</p>
             </div>
-            <p className={`text-2xl md:text-3xl font-bold mt-2 ${interviewCompleted ? 'text-emerald-700' : 'text-amber-700'}`}>{interviewCompleted ? 'Lista' : 'Pendiente'}</p>
-          </div>
+          ) : (
+            <div className={`p-4 md:p-5 rounded-xl shadow-sm border transition hover:shadow-md ${interviewCompleted ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
+              <div className="flex items-center justify-between">
+                <h3 className={`font-medium text-sm md:text-base ${interviewCompleted ? 'text-emerald-700' : 'text-amber-700'}`}>Entrevista</h3>
+                <AlertCircle className={interviewCompleted ? 'text-emerald-500' : 'text-amber-500'} size={24} />
+              </div>
+              <p className={`text-2xl md:text-3xl font-bold mt-2 ${interviewCompleted ? 'text-emerald-700' : 'text-amber-700'}`}>{interviewCompleted ? 'Lista' : 'Pendiente'}</p>
+            </div>
+          )}
           <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-gray-100 transition hover:shadow-md">
             <div className="flex items-center justify-between">
               <h3 className="text-gray-500 font-medium text-sm md:text-base">Proxima cita</h3>
@@ -650,7 +665,7 @@ export default function DashboardScreen({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <RemindersPanel reminders={reminders} patients={patients} isPsychologist={isPsychologist} onOpenPatient={onOpenPatient} onViewAppointments={onViewAppointments} />
-            <PsychologistRelationshipPanel
+            <PsychologistCareRelationshipPanel
               relationships={careRelationships}
               relationshipInvitePreview={relationshipInvitePreview}
               onInviteCareRelationship={onInviteCareRelationship}

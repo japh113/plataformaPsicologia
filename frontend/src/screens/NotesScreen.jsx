@@ -182,6 +182,7 @@ export default function NotesScreen({
   onCreateSession,
   onUpdateSession,
   onSaveInterview,
+  onStartPatientInterview,
   sessionActionError = '',
   onDismissSessionActionError,
   isSavingNotes = false,
@@ -1148,6 +1149,8 @@ export default function NotesScreen({
           >
             {hasCompletedInterview ? 'Editar entrevista' : 'Registrar entrevista'}
           </button>
+        ) : !hasCompletedInterview && onStartPatientInterview ? (
+          <button type="button" onClick={onStartPatientInterview} className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700">Completar entrevista</button>
         ) : null
       }
     >
@@ -1256,7 +1259,7 @@ export default function NotesScreen({
         <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50 px-4 py-8 text-sm text-amber-700">
           {isPsychologist
             ? 'Este paciente aun no ha completado la entrevista inicial. Puedes registrarla desde aqui si hace falta.'
-            : 'Tu entrevista inicial sigue pendiente. Debes completarla para continuar usando la plataforma.'}
+            : 'Aún no hay una entrevista registrada. Tu identidad y tus funciones personales siguen disponibles; la entrevista será necesaria antes de activar un episodio nuevo, con validación profesional.'}
         </div>
       )}
     </SectionCard>
@@ -1314,7 +1317,7 @@ export default function NotesScreen({
               {hasCompletedInterview ? `Completada el ${formatInterviewDate(patientInterview?.fechaEntrevista)}` : 'Todavia pendiente'}
             </p>
             <p className={`mt-2 text-sm leading-6 ${hasCompletedInterview ? 'text-emerald-800' : 'text-amber-800'}`}>
-              {hasCompletedInterview ? 'Puedes revisarla en la pestaña de Entrevista cuando necesites recordar tu informacion de ingreso.' : 'Necesitas completarla para dejar tu expediente inicial listo.'}
+              {hasCompletedInterview ? 'Puedes revisarla en la pestaña de Entrevista cuando necesites recordar tu informacion de ingreso.' : 'Puedes aportar la información de tu entrevista sin bloquear tus funciones personales.'}
             </p>
           </div>
 
