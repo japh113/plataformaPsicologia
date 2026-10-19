@@ -1,5 +1,7 @@
 # PR #12 — validación de correcciones P2
 
+Este informe corresponde al HEAD `112d01b` y conserva evidencia histórica. No acredita la corrección del P2 adicional de vencimiento; véase la [validación nueva del deadline](contact-change-deadline-validation.md).
+
 19 de octubre de 2026. Misma rama `feat/stage2a-secure-contact-changes`, PR #12 contra main `5e549f51bc7fa3e2535db023b4f9bca3d383a7c5`. HEAD revisado: `6e3a81dbd1d116e95cf40c95408220f0d39fbec6`. Corrección funcional: `e3fb6d63302a3fc6454da5617088865f2cd52a0f`. Harness y revisión Chromium: `5681b4584b17c28f180f64c4c02cc24d85834289`; documentación posterior. Sin merge, despliegue ni cambio de política de producto. Se requiere segunda revisión independiente antes de integrar.
 
 La [validación inicial](contact-change-validation.md) es histórica. Las ejecuciones siguientes son nuevas; el paquete conserva también los fallos intermedios, identificados como tales.

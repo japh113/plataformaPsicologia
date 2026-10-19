@@ -1,6 +1,6 @@
 # Documentación de PsicoPanel
 
-Corte C: B integrado en #11 (5e549f5); C autorizado en rama, pendiente de revisión/integración. [Contrato C](contact-changes.md) y [validación C](contact-change-validation.md). Sin despliegue habitual. Las referencias siguientes al corte B conservan su contexto anterior al merge. [Correcciones P2 y evidencia nueva](contact-change-review-validation.md).
+Corte C: B integrado en #11 (5e549f5); C autorizado en rama, pendiente de revisión/integración. [Contrato C](contact-changes.md) y [validación C](contact-change-validation.md). Sin despliegue habitual. Las referencias siguientes al corte B conservan su contexto anterior al merge. [Primera revisión P2](contact-change-review-validation.md). [Revisión del deadline y pruebas nuevas](contact-change-deadline-validation.md).
 
 Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AGENTS](../AGENTS.md). A integrado en #10 (0f2ebba). B autorizado e implementado en su rama, con pruebas y demo aisladas; revisión/integración pendientes, sin despliegue habitual ni C/D.
 

@@ -1,6 +1,6 @@
 # PsicoPanel
 
-PR #11/B integrado en main (5e549f5). C autorizado e implementado en rama para revisión: [cambio seguro de contactos](docs/contact-changes.md), [validación C](docs/contact-change-validation.md). Sin despliegue habitual ni D. Los estados anteriores de B en el texto siguiente son el corte documental previo a su merge. [Correcciones P2 y evidencia nueva](docs/contact-change-review-validation.md).
+PR #11/B integrado en main (5e549f5). C autorizado e implementado en rama para revisión: [cambio seguro de contactos](docs/contact-changes.md), [validación C](docs/contact-change-validation.md). Sin despliegue habitual ni D. Los estados anteriores de B en el texto siguiente son el corte documental previo a su merge. [Primera revisión P2](docs/contact-change-review-validation.md). [Revisión del deadline y pruebas nuevas](docs/contact-change-deadline-validation.md).
 
 Plataforma para psicólogos independientes y pacientes: agenda, disponibilidad, espera manual asistida, tareas, objetivos, notas y seguimiento clínico, con backoffice separado.
 
