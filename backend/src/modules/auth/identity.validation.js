@@ -1,12 +1,23 @@
-// Gregorian civil dates; eligibility uses the UTC server date, never browser age.
+// Product reference for Mexican patient registration B only; not the clinical agenda.
+// Civil date comes from the server instant in this zone, never host/client timezone.
+const registrationDateFormatter = new Intl.DateTimeFormat('en', {
+  timeZone: 'America/Mexico_City', calendar: 'gregory', numberingSystem: 'latn',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+});
+const registrationCivilDate = now => {
+  const parts = registrationDateFormatter.formatToParts(now);
+  const part = type => parts.find(value => value.type === type).value;
+  return [part('year').padStart(4, '0'), part('month'), part('day')].join('-');
+};
 export function adultBirthDateError(value, now = new Date()) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return 'birthDate must be YYYY-MM-DD';
-  const [year, month, day] = value.split('-').map(Number);
+  const year = Number(value.slice(0, 4));
   const date = new Date(value + 'T00:00:00Z');
   if (year < 1 || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) return 'birthDate must be a real date';
-  const today = now.toISOString().slice(0, 10);
+  const today = registrationCivilDate(now);
   if (value > today) return 'birthDate cannot be in the future';
-  const age = now.getUTCFullYear() - year - (today.slice(5) < value.slice(5) ? 1 : 0);
+  // On a non-leap year, 02-29 remains ineligible through 02-28; eligible on 03-01.
+  const age = Number(today.slice(0, 4)) - year - (today.slice(5) < value.slice(5) ? 1 : 0);
   return age < 18 ? 'Independent registration requires age 18 or older' : null;
 }
 // Explicit international input only. No inferred country and no global uniqueness.
