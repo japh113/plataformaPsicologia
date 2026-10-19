@@ -32,11 +32,11 @@ export default function PatientInterviewModal({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-                <FileText size={14} className="mr-2" /> Entrevista obligatoria
+                <FileText size={14} className="mr-2" /> Entrevista inicial
               </div>
               <h2 className="mt-3 text-2xl font-black text-slate-900">{title}</h2>
               <p className="mt-2 text-sm text-slate-500">
-                {description || 'Completa esta entrevista para continuar con tu seguimiento dentro de la plataforma.'}
+                {description || 'Puedes completar la entrevista y regresar a tus funciones personales.'}
               </p>
             </div>
 
@@ -44,6 +44,7 @@ export default function PatientInterviewModal({
               <button
                 type="button"
                 onClick={onClose}
+                aria-label="Cerrar entrevista"
                 className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
               >
                 <X size={16} />
@@ -63,7 +64,7 @@ export default function PatientInterviewModal({
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-slate-700">Fecha de nacimiento</label>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700">Fecha de nacimiento registrada en esta entrevista (no modifica identidad global)</label>
               <input
                 type="date"
                 value={form.fechaNacimiento}

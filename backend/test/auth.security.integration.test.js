@@ -73,7 +73,7 @@ test('authentication security with disposable PostgreSQL and real HTTP', {
       const migrationClient = await db.getClient();
       try {
         const name = (await migrationClient.query('SELECT current_database() AS name')).rows[0].name;
-        await migrateEpisodes(migrationClient, { expectedDatabase: name });
+        await migrateEpisodes(migrationClient, { expectedDatabase: name, target: '004' });
       } finally { migrationClient.release(); }
     }
     server = app.listen(0, '127.0.0.1');
@@ -191,20 +191,22 @@ test('authentication security with disposable PostgreSQL and real HTTP', {
       assert.ok(localReset.body.data.preview.resetToken);
     });
 
-    await t.test('patient registration issues a versioned JWT and psychologist approval enables a fresh login', async () => {
+    await t.test('patient registration permits login with a versioned JWT and psychologist approval enables a fresh login', async () => {
       const patient = await request('/auth/register/patient', null, 'POST', {
-        firstName: 'New', email: 'new-patient@auth.invalid', password,
+        firstName: 'New', email: 'new-patient@auth.invalid', password, birthDate: '1990-01-01', phone: '+525500000001',
       });
-      assert.equal(patient.status, 201);
-      assert.equal(jwt.decode(patient.body.data.token).sv, 0);
-      assert.equal((await request('/auth/me', patient.body.data.token)).status, 200);
+      assert.equal(patient.status, 202);
+      const session = await request('/auth/login', null, 'POST', { email: 'new-patient@auth.invalid', password });
+      assert.equal(jwt.decode(session.body.data.token).sv, 0);
+      assert.equal((await request('/auth/me', session.body.data.token)).status, 200);
       const psychologist = await request('/auth/register/psychologist', null, 'POST', {
         firstName: 'New', professionalTitle: 'Psychologist', email: 'new-psychologist@auth.invalid', password,
       });
-      assert.equal(psychologist.status, 201);
+      assert.equal(psychologist.status, 202);
+      const psychologistId = (await db.query("SELECT id FROM users WHERE email='new-psychologist@auth.invalid'")).rows[0].id;
       const credentials = { email: 'new-psychologist@auth.invalid', password };
       assert.equal((await request('/auth/login', null, 'POST', credentials)).status, 403);
-      assert.equal((await request(`/auth/psychologists/${psychologist.body.data.id}/review`, tokens.admin,
+      assert.equal((await request(`/auth/psychologists/${psychologistId}/review`, tokens.admin,
         'PATCH', { approvalStatus: 'active' })).status, 200);
       const approved = await request('/auth/login', null, 'POST', credentials);
       assert.equal(approved.status, 200);

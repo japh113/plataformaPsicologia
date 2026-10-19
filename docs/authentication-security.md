@@ -1,5 +1,10 @@
 # Auditoria de autenticacion — 2026-10-16
 
+## Actualización B — identidad y verificación (18 de octubre de 2026)
+
+A integrado en #10; B implementado en rama, sin despliegue habitual. Ambos registros públicos usan 202 uniforme sin JWT/ID; login posterior conserva contrato y revocación 002. El profesional sigue pending_review hasta aprobación. Identity/verification requieren paciente titular; no admiten destinos/IDs del body ni exponen desafíos a backoffice. [Contratos, claves, adaptador y demo](patient-identity-verification.md); [validación nueva](patient-identity-validation.md). Lo que sigue conserva evidencia histórica y no es un resultado nuevo de B.
+
+
 > Evidencia histórica conservada. PR #7 restringió después el backoffice: support/admin/superadmin no tienen acceso clínico global ordinario (RN-27). La frase histórica sobre conservar permisos no describe una autorización clínica vigente. Arquitectura actual en [architecture.md](architecture.md); desarrollo en [development.md](development.md). Decisiones de verificación/contactos de [ADR-024/025](product/decisions.md) aún no implementadas. Resultados npm de este reporte no son una auditoría nueva de dependencias.
 
 Rama `fix/authentication-security`, desde `origin/main` en `6a23ac8`.

@@ -13,5 +13,10 @@
     "version": "003",
     "file": "003_clinical_episode_foundation.sql",
     "sha256": "98180bd12d2f014663a3ee1feedee61b8e2cd21fc2b1e5f441ed756d13ad13b7"
+  },
+  {
+    "version": "004",
+    "file": "004_patient_identity_verification.sql",
+    "sha256": "893fb7c6c63ba3431649b5277d62e0afc672113dc4bec10831c72113e3096da0"
   }
 ]

@@ -36,7 +36,7 @@ const getPatientsEmptyStateCopy = ({ isPsychologist, hasPatients, hasActiveFilte
   return isPsychologist
     ? {
       title: 'Aun no tienes pacientes registrados',
-      description: 'Cuando abras el primer expediente desde el flujo de alta, apareceran aqui con sus indicadores clinicos y administrativos.',
+      description: 'Las nuevas vinculaciones están temporalmente deshabilitadas. Tus expedientes existentes aparecer?n aquí.',
     }
     : {
       title: 'Tu seguimiento todavia no esta disponible aqui',

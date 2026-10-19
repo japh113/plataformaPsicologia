@@ -513,80 +513,7 @@ export const __testables = {
 
 export const createPatient = async (payload, actor) => {
   ensurePsychologist(actor);
-
-  const patient = buildPatientEntity(payload, String(Date.now()));
-  const client = await db.getClient();
-
-  try {
-    await client.query('BEGIN');
-
-    await client.query(
-      `
-        INSERT INTO patients (
-          id,
-          first_name,
-          last_name,
-          full_name,
-          email,
-          phone,
-          risk_level,
-          status,
-          last_clinical_note_date,
-          notes,
-          age,
-          reason_for_consultation
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      `,
-      [
-        patient.id,
-        patient.firstName,
-        patient.lastName,
-        patient.fullName,
-        patient.email,
-        patient.phone,
-        patient.riskLevel,
-        patient.status,
-        patient.lastClinicalNoteDate,
-        patient.notes,
-        patient.age,
-        patient.reasonForConsultation,
-      ],
-    );
-
-    await client.query(
-      `
-        INSERT INTO psychologist_patient_access (
-          psychologist_user_id,
-          patient_id
-        )
-        VALUES ($1, $2)
-        ON CONFLICT (psychologist_user_id, patient_id) DO NOTHING
-      `,
-      [actor.id, patient.id],
-    );
-
-    await logAuditEvent(client, {
-      actorUserId: actor.id,
-      actorRole: actor.role,
-      action: 'patient_created',
-      entityType: 'patient',
-      entityId: patient.id,
-      patientId: patient.id,
-      metadata: {
-        status: patient.status,
-      },
-    });
-
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-
-  return getPatientById(patient.id, actor);
+  throw createForbiddenError('El alta unilateral está temporalmente deshabilitada. Las relaciones existentes se conservan.');
 };
 
 export const updatePatient = async (id, payload, actor) => {
@@ -598,40 +525,15 @@ export const updatePatient = async (id, payload, actor) => {
     return null;
   }
 
+  const allowed = ['riskLevel', 'status', 'notes', 'reasonForConsultation'];
+  if (Object.keys(payload).some(key => !allowed.includes(key))) {
+    throw createForbiddenError('Solo se pueden modificar datos clínicos; la identidad global pertenece al paciente.');
+  }
   const updatedPatient = buildPatientEntity({ ...currentPatient, ...payload }, id);
-
   await db.query(
-    `
-      UPDATE patients
-      SET
-        first_name = $2,
-        last_name = $3,
-        full_name = $4,
-        email = $5,
-        phone = $6,
-        risk_level = $7,
-        status = $8,
-        last_clinical_note_date = $9,
-        notes = $10,
-        age = $11,
-        reason_for_consultation = $12,
-        updated_at = NOW()
-      WHERE id = $1
-    `,
-    [
-      id,
-      updatedPatient.firstName,
-      updatedPatient.lastName,
-      updatedPatient.fullName,
-      updatedPatient.email,
-      updatedPatient.phone,
-      updatedPatient.riskLevel,
-      updatedPatient.status,
-      updatedPatient.lastClinicalNoteDate,
-      updatedPatient.notes,
-      updatedPatient.age,
-      updatedPatient.reasonForConsultation,
-    ],
+    `UPDATE patients SET risk_level=$2, status=$3, notes=$4,
+      reason_for_consultation=$5, updated_at=NOW() WHERE id=$1`,
+    [id, updatedPatient.riskLevel, updatedPatient.status, updatedPatient.notes, updatedPatient.reasonForConsultation],
   );
 
   await logAuditEvent(db, {

@@ -2,9 +2,9 @@
 
 Fecha: 18 de octubre de 2026. Base auditada: `main`/`origin/main` en `0077f46`, merge de PR #9; #7 y #8 integrados. Esto no acredita ejecución de 003 en la base habitual ni autorización clínica por episodio.
 
-PR A es exclusivamente documental. Incorpora las decisiones posteriores a #9 en ADR-023–028 y RN-41–58, sin renumerar ADR-001–022 ni RN-01–40. La división A/B/C/D está aprobada; solo A está autorizado para ejecución. B, C y D requieren revisión y autorización posterior, sin ramas ni implementación ahora. Véase el [plan de entregas](../identity-directory-delivery-plan.md).
+A documental fue integrado en #10 (0f2ebba). El encargo posterior autoriza exclusivamente B, incluida la deshabilitación global AB-23 y la sucesora 004. B está implementado en rama, con revisión/integración pendientes; no acredita despliegue. C/D y nueva vinculación siguen sin autorización. [Guía B](../patient-identity-verification.md), [evidencia](../patient-identity-validation.md).
 
-El [diseño de 2A](../stage2a-identity-directory-intake.md) distingue requisitos de producto aprobados de propuestas técnicas. Aprobar la secuencia no aprueba deshabilitar funcionalidades legacy, proveedores, políticas pendientes o despliegues.
+El diseño completo de 2A conserva propuestas fuera de B. El usuario confirmó para B nombre editable y DOB histórica desconocida sin alta/corrección posterior; también email verificado como requisito para solicitar SMS, con cuotas por cuenta/destino y limitación residual de abuso multicuenta.
 
 ## Estados y uso del registro
 
@@ -209,7 +209,7 @@ Cualquier visitante consulta perfiles públicos sin registrarse. Solo pacientes 
 
 **Estado: APROBADA como decisión de producto; implementación pendiente. Reglas: RN-29/34–RN-36/40.**
 
-**Decisión:** invitación profesional a paciente conocido: este se registra si hace falta, verifica datos y acepta expresamente; la invitación sola no crea episodio ni acceso. Solicitud del paciente: consulta perfil público que admite nuevos pacientes y envía petición, con mensaje breve opcional y sin exigir motivo de consulta. El profesional acepta o rechaza; si acepta, el paciente debe confirmar finalmente. Solo al completar confirmaciones y verificaciones pertinentes se crea el episodio transaccionalmente.
+**Decisión:** invitación profesional a paciente conocido: este se registra si hace falta, verifica datos y acepta expresamente; la invitación sola no crea episodio ni acceso. Solicitud del paciente: consulta perfil público que admite nuevos pacientes y envía petición, con mensaje breve opcional y sin exigir motivo de consulta. El profesional acepta o rechaza; si acepta, el paciente debe confirmar finalmente. Las confirmaciones y verificaciones completan la vinculación; la activación del episodio es una operación distinta, transaccional y sujeta además a la entrevista validada de ADR-029/RN-59.
 
 El mensaje es privado y sensible: no aparece en directorio ni auditoría administrativa. Ninguna solicitud pendiente concede acceso clínico. PostgreSQL conserva máximo un episodio activo o pausado por paciente; no revelar vínculos con otros consultorios. Si existe episodio vigente, corresponde cambio 2B, sin reutilizar este flujo como atajo. Permisos clínicos por episodio, nunca por aparecer en directorio.
 
@@ -227,9 +227,11 @@ Invitaciones profesionales se administran separadamente del cupo del paciente. N
 
 ## ADR-023 — Registro independiente exclusivamente adulto y DOB global
 
-**Estado: APROBADA como producto; implementación pendiente en PR B. Reglas: RN-41–43.**
+**Estado: APROBADA e implementada en rama B; sin despliegue habitual. Reglas: RN-41–43.**
 
 La primera versión del registro independiente exige fecha de nacimiento válida y edad de al menos 18 años, comprobadas en backend; cumplir exactamente 18 sí permite registrarse. Rechazar fechas inexistentes o futuras y probar los bordes de edad. DOB pertenece a la identidad global, bajo control del paciente conforme ADR-012, no al episodio ni a la entrevista clínica.
+
+**Aprobación en segunda revisión de B:** referencia única America/Mexico_City para calcular la fecha civil de registro desde el instante del servidor. No usar UTC ni zona del host/cliente para adelantar el cumpleaños. DOB 29/02 alcanza la elegibilidad el 01/03 en un año no bisiesto. Es política de producto para este alcance mexicano, sin conclusión jurídica ni política global/multizona; no afecta agenda 2E. Ambas decisiones fueron confirmadas expresamente antes de cambiar código.
 
 El registro no exige motivo de consulta, entrevista, evaluación de riesgo, CURP ni documento oficial. No crea episodio, vínculo asistencial ni acceso profesional. Registro y consulta del directorio no requieren terminar verificaciones. Los contactos no prueban identidad física única y nunca provocan fusiones automáticas.
 
@@ -237,7 +239,7 @@ El flujo de menores, incluidos invitados por profesionales, sigue pendiente; no 
 
 ## ADR-024 — Verificación normal de email y teléfono
 
-**Estado: APROBADA como producto; implementación pendiente en PR B. Reglas: RN-44–48.**
+**Estado: APROBADA e implementada en rama B mediante simulación local; sin proveedor real. Reglas: RN-44–48.**
 
 | Canal | Método | Vigencia | Reenvío mínimo | Cuota por destino en ventana de 24 h | Intentos |
 | --- | --- | --- | --- | --- | --- |
@@ -246,7 +248,7 @@ El flujo de menores, incluidos invitados por profesionales, sigue pendiente; no 
 
 Generar un desafío nuevo invalida el anterior del mismo flujo; no reinicia cuotas. Los tokens de email son impredecibles y los secretos de ambos canales se almacenan de forma segura, sin aparecer en logs, auditoría ni respuestas públicas. Proteger frente a automatización, fuerza bruta, reenvíos concurrentes, múltiples cuentas, consumo abusivo y bloqueo provocado por terceros. Exceder límites de SMS restringe temporalmente la operación, sin suspender toda la cuenta.
 
-Entrega configurable mediante adaptadores y simuladores seguros de desarrollo/pruebas, sin email/SMS reales. Ningún proveedor comercial ni credencial de producción queda seleccionado o habilitado. Las operaciones sensibles que requieran identidad verificada deben comprobar en backend que ambos contactos vigentes están verificados; una sesión o una marca enviada por frontend no bastan. La lista de operaciones existentes afectadas sigue pendiente en AB-23.
+Entrega configurable mediante adaptadores y simuladores seguros de desarrollo/pruebas, sin email/SMS reales. Ningún proveedor comercial ni credencial de producción queda seleccionado o habilitado. Las operaciones sensibles que requieran identidad verificada deben comprobar en backend que ambos contactos vigentes están verificados; una sesión o una marca enviada por frontend no bastan. AB-23 bloquea las nuevas vinculaciones; ninguna operación clínica ya establecida exige ahora ambos contactos. Solicitar SMS exige email vigente verificado por aprobación adicional del encargo B. Ambos canales conservan evidencia independiente; cambio de email no revoca SMS. No se activan solicitudes nuevas.
 
 ## ADR-025 — Cambio de contacto, reautenticación y revocación
 
@@ -282,13 +284,25 @@ Rehabilitar no republica ni reactiva recepción automáticamente: el profesional
 
 ## ADR-028 — Secuencia A/B/C/D y barrera legacy
 
-**Estado: APROBADA la división y el inicio exclusivo de A. Reglas: RN-57–58.**
+**Estado: APROBADA la secuencia y la ejecución exclusiva de B tras integrar A (#10). Reglas: RN-57–58.**
 
-A documenta decisiones y reorganiza; B aborda registro adulto, básicos y verificación; C cambios de contacto/sesiones; D perfiles, credenciales y directorio juntos. Cada implementación futura debe incluir sus pruebas y demo ficticia aislada conforme ADR-019. El [plan](../identity-directory-delivery-plan.md) delimita dependencias y aceptación.
+B implementa registro adulto, nombre propio, estados y verificación email/SMS, migración 004 y barrera legacy. El usuario aprobó AB-23: bloquear POST patients y request/invite/respond/accept-code para todas las cuentas, incluidos pendientes antiguos y rechazos. Se conservan los 403 administrativos de #7 y todos los accesos/pendientes existentes sin sync incidental. [Inventario revalidado](../stage2a-legacy-mutations.md).
 
-Antes de B, inventariar TODAS las mutaciones legacy que creen/modifiquen vínculos o concedan acceso, para cuentas nuevas y existentes. La [auditoría](../stage2a-legacy-mutations.md) propone bloquear, preservar o adaptar cada ruta y explica pérdidas temporales. **La deshabilitación funcional no está aprobada.** No basta restringir cuentas nuevas ni verificar contactos manteniendo otras puertas de activación.
+No activar permisos por episodio ni retirar parcialmente fallback. C (contactos) y D (directorio/perfiles) requieren autorización propia. Solicitudes/invitaciones nuevas y recuperación excepcional siguen fuera. No modificar 001–003 ni la base habitual. B se revisa mediante PR sin merge; ensayos solo en PostgreSQL nuevo aislado y demo ficticia ADR-019.
 
-No activar permisos por episodio mientras subsista el fallback por paciente sin retirada coordinada y aislamiento probado. No crear solicitudes/invitaciones nuevas, derivaciones, pagos, reseñas o recuperación excepcional en estas entregas. 004–006 son estimaciones; no archivos o migraciones aprobados. No ejecutar sobre la base habitual, modificar 001–003 o alterar contenedores/volúmenes existentes. A no crea SQL ni ejecuta pruebas de base o demos. Un PR se revisa sin merge; B espera revisión/aprobación de A y autorización de inicio.
+## ADR-029 — Entrevista previa a la activación y autonomía de la cuenta
+
+**Estado: APROBADA tras la revisión visual de PR #11. Reglas: RN-59–61. Precondición backend/base de datos PENDIENTE; fuera de PR B.**
+
+La entrevista inicial es obligatoria antes de activar cualquier episodio terapéutico nuevo. El paciente puede aportar sus respuestas; el psicólogo responsable debe validar explícitamente que está completada y es suficiente para ese episodio. Una entrevista histórica de otro profesional o episodio no satisface automáticamente esta condición. No puede existir un episodio nuevo en estado active sin la validación previa correspondiente.
+
+Vinculación bilateral y activación son operaciones distintas: vincular no activa por sí mismo el episodio. El ciclo de vida futuro deberá hacer cumplir esta precondición tanto en backend como en base de datos, con atribución de la validación al profesional y episodio correspondientes. Contratos, almacenamiento, transición y concurrencia se diseñarán en la entrega de episodios; no se crean ahora tablas, migraciones o un motor nuevo, ni se modifica 003/004.
+
+La cuenta puede registrarse, iniciar sesión, administrar identidad y verificar contactos sin entrevista, psicólogo o episodio. Una entrevista pendiente no bloquea globalmente las funciones personales. B retira la apertura automática del modal: los pacientes con atención legacy pueden abrir y cerrar explícitamente su entrevista pendiente, sin marcarla completa por consultar/cerrar.
+
+Se conservan los permisos y reglas concretas legacy: el paciente solo puede guardar por primera vez una entrevista; su edición posterior corresponde al profesional autorizado. Guardar una entrevista legacy conserva su significado actual y NO constituye la nueva validación de activación. No se crean entrevistas ficticias ni se marca completitud automáticamente. Las relaciones care_relationships con status=active no se reinterpretan como episodios activos ni se les aplica retroactivamente la nueva precondición.
+
+Esta decisión precisa ADR-016/021 y los efectos de activación de RN-34/35/40: las aceptaciones de vinculación no bastan para activar. Solicitudes/invitaciones, atribución y permisos por episodio siguen pendientes, con fallback legacy intacto y nuevas vinculaciones bloqueadas.
 
 ## Asuntos abiertos y momento de resolución
 
@@ -297,7 +311,7 @@ Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen de
 | ID | Pregunta a resolver | Antes de |
 | --- | --- | --- |
 | AB-01 | ¿Seleccionar antecedentes por categorías, por registros o una combinación? ¿Cómo confirmar y mostrar el alcance final al paciente? | Especificar 2C |
-| AB-02 | Entrevista por episodio, respuestas propias históricas separadas de valoración profesional, trazabilidad y no divulgación automática: APROBADO en ADR-016. Pendiente: clasificar campos restantes y representar metadatos, adjuntos, versiones y alcance compartible. | Modelo/permisos 2A; divulgación 2C |
+| AB-02 | Entrevista por episodio, respuestas propias históricas separadas de valoración profesional, trazabilidad y no divulgación automática: APROBADO en ADR-016. Pendiente: clasificar campos restantes y representar metadatos, adjuntos, versiones y alcance compartible. ADR-029 agrega la validación profesional explícita antes de activar un episodio nuevo, sin implementarla en B. | Modelo/permisos 2A; divulgación 2C |
 | AB-03 | ¿Qué procedimiento separado atenderá solicitudes de acceso clínico/ARCO sin bloqueo arbitrario? La visibilidad ordinaria está decidida en RN-24; notas no visibles automáticamente. | Diseño aplicable y revisión de 5; no limitar derechos por UI |
 | AB-04 | ¿Quién verifica identidad y firma presencial, con qué evidencia, independencia, estados y controles? ¿Cómo tratar evidencia incompleta o impugnada? | Consentimiento presencial de 2C |
 | AB-05 | ¿Qué duración tendrá el permiso, cuál será la metodología de autorización/verificación y qué ocurre al ampliar alcance, corregir versiones, caducar o revocar? | Contratos de 2C |
@@ -316,15 +330,15 @@ Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen de
 | AB-18 | Campos, defaults y reconfirmación tras rehabilitación: aprobados en ADR-026/027. Pendientes identificador público, caché/retiro y tratamiento futuro de solicitudes en curso. | Directorio PR D; pendientes de solicitudes en entrega posterior |
 | AB-19 | ¿Qué estados técnicos, plazos de respuesta/confirmación, caducidad, versión de aceptación, cancelación y eventos terminales se aprueban para alta inicial? | Habilitar solicitudes/invitaciones 2A |
 | AB-20 | ¿Qué cuotas/ventanas, cooldown, bloqueo y revisión evitan abuso sin exclusión injustificada? ¿Qué política rige invitaciones simultáneas y colisiones entre vías? | Habilitar solicitudes/invitaciones 2A |
-| AB-21 | Métodos y límites normales aprobados en ADR-024. Pendientes normalización/país de teléfono, números compartidos o reciclados, unicidad y entrega comercial. Sin fusión automática; recuperación excepcional AB-13 no habilitada. | Identidad PR B; proveedor antes de producción |
+| AB-21 | B requiere prefijo internacional explícito y normalización sintáctica (sin inferir país); permite teléfonos compartidos sin unicidad/fusión. Política definitiva de números reciclados/unicidad y entrega comercial pendientes; recuperación AB-13 no habilitada. | Identidad PR B; proveedor antes de producción |
 | AB-22 | ¿Qué retención, acceso, cifrado/llaves y tratamiento de mensajes/tokens/evidencia en historial, copias y eliminación se aprueban? | Guardar datos sensibles de vinculación 2A; revisión jurídica aplicable |
-| AB-23 | ¿Qué mutaciones legacy bloquear/preservar/adaptar para TODAS las cuentas y qué operaciones existentes requieren ambas verificaciones? Aprobar expresamente la pérdida temporal de funcionalidad y tratamiento de pendientes; la matriz es propuesta. | Antes de implementar PR B |
+| AB-23 | APROBADO e implementado en B: cinco rutas legacy bloqueadas globalmente; pendientes conservados sin respuesta; clínica establecida preservada sin exigir verificaciones adicionales. Nuevas vinculaciones futuras exigirán ambas; no implementadas. | Cerrado para B; integración pendiente |
 | AB-24 | ¿Cómo clasificar especialidades/enfoque con credenciales verificables y controlar cambios de nombre profesional? ¿Qué mecanismo se usa para fotografía y para credenciales que requieran nueva revisión al rehabilitar? | PR D, antes del flujo correspondiente |
 | AB-25 | ¿Cuánto dura la reautenticación reciente? ¿Cómo expira/cancela un cambio, maneja fallos de aviso/entrega y confirma bajo concurrencia? | PR C |
-| AB-26 | ¿Qué límites adicionales por cuenta/red/costo y duración de restricciones complementan los valores de ADR-024 sin permitir bloqueo por terceros? ¿Qué normalización y reloj gobiernan bordes de DOB? | PR B |
+| AB-26 | Segunda revisión B: APROBADA referencia civil America/Mexico_City obtenida del reloj servidor, independiente del host/cliente, solo para registro mexicano B; DOB gregoriana y cumpleaños exacto, con 29/02 elegible el 01/03 en año no bisiesto. No define todas las zonas mexicanas ni cambia agenda 2E; cuotas 60 s/5 por 24 h tanto por cuenta como destino, 5 intentos SMS por código y email previo aprobado. Abuso multicuenta aún puede agotar teléfono compartido; límites por red/costo, mecanismos antiautomatización de producción y revisión siguen pendientes antes de envíos reales. | B parcial; endurecimiento antes de producción |
 | AB-27 | ¿Cómo se muestran revisión/rechazo y estado propio a un profesional no aprobado sin conceder sesión clínica? Login actual deniega pendiente/rechazado/suspendido. | PR D si se modifica esa experiencia |
 
-Los fundamentos integrados en #8 están delimitados en ADR-006/009; AB-06 no autoriza atribución legacy. Antes de activar el resto de 2A deben cerrarse las propuestas y asuntos bloqueantes aplicables, especialmente AB-02/06/08/13–AB-22. Los mecanismos técnicos D-01–D-12 permanecen PROPUESTOS salvo los requisitos de producto expresamente resueltos en ADR-023–028. AB-23 no está aprobado por aceptar la división. Los requisitos de producto aprobados no aprueban todos los detalles técnicos de 2A. No inventar respuestas de 2C para cerrar este PR documental; dividir encargos y dependencias según [roadmap.md](roadmap.md).
+Los fundamentos integrados en #8 están delimitados en ADR-006/009; AB-06 no autoriza atribución legacy. Antes de activar el resto de 2A deben cerrarse las propuestas y asuntos bloqueantes aplicables, especialmente AB-02/06/08/13–AB-22. Los mecanismos técnicos D-01–D-12 permanecen PROPUESTOS salvo los requisitos de producto expresamente resueltos en ADR-023–028. AB-23 fue aprobado expresamente en el encargo B; el resto de propuestas no se aprueba por aceptar la división. Los requisitos de producto aprobados no aprueban todos los detalles técnicos de 2A. No inventar respuestas de 2C para cerrar este PR documental; dividir encargos y dependencias según [roadmap.md](roadmap.md).
 
 ## Acciones y supuestos no aprobados
 

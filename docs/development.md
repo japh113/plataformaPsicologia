@@ -2,7 +2,7 @@
 
 Corte: 18 de octubre de 2026. Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile backend](../backend/Dockerfile), [Dockerfile frontend](../frontend/Dockerfile) y [package.json backend](../backend/package.json)/[frontend](../frontend/package.json). Documentar un comando no autoriza ejecutarlo.
 
-**PR A es solo Markdown:** no levantar/reconstruir contenedores, crear demos o ejecutar SQL/migraciones/tests de integración. No alterar bases, contenedores, imágenes o volúmenes habituales. Las implementaciones B/C/D requieren autorización futura. La preparación local siguiente se conserva para un entorno nuevo expresamente autorizado, no como checklist para A.
+**Estado B:** A fue documental y ya está integrado; B autoriza pruebas/demo exclusivamente en recursos nuevos aislados. No levantar/reconstruir el Compose habitual ni alterar bases, imágenes o volúmenes existentes. [Guía B](patient-identity-verification.md) y [evidencia nueva](patient-identity-validation.md). C/D no están autorizados.
 
 ## Preparación de entorno local nuevo (solo con autorización)
 
@@ -119,18 +119,19 @@ En arranques posteriores ejecutar solamente `npm run dev` en cada carpeta.
 
 WSL puede no tener node/npm; en la auditoría de A ninguno estaba en PATH. No instalar en host por defecto ni usar contenedores habituales para integrar cambios. Las imágenes existentes de desarrollo usan Node 24 y lockfiles; verificar disponibilidad del motor y elegir ejecución autorizada antes de ensayar.
 
-El proyecto ya dispone de [scripts/clinical-episodes.sh](../scripts/clinical-episodes.sh) y [compose.episodes-test.yaml](../compose.episodes-test.yaml). El wrapper genera proyecto UUID, comprueba recursos nuevos, usa DB tmpfs sin puerto público en red privada y verifica propiedad de imágenes. El modo test ejecuta pruebas 003, unitarias, integración auth/clínica/backoffice y lint/build. La demo usa puertos loopback dinámicos y datos ficticios. No significa que incluya las funcionalidades futuras B/C/D.
+El proyecto ya dispone de [scripts/clinical-episodes.sh](../scripts/clinical-episodes.sh) y [compose.episodes-test.yaml](../compose.episodes-test.yaml). El wrapper genera proyecto UUID, comprueba recursos nuevos, usa DB tmpfs sin puerto público en red privada y verifica propiedad de imágenes. El modo test ejecuta 003, unitarias, integración auth/clínica/backoffice/identidad 004 y lint/build. La demo usa puertos loopback dinámicos y datos ficticios. identity-demo incluye únicamente B y clínica legacy sintética preexistente, sin activar episodios o solicitudes nuevas.
 
 Solo con alcance de pruebas/demos autorizado, desde raíz:
 
 ```bash
 bash scripts/clinical-episodes.sh test
 bash scripts/clinical-episodes.sh demo
+bash scripts/clinical-episodes.sh identity-demo
 ```
 
-El modo demo muestra URL/cuentas ficticias y deja únicamente sus recursos propios para inspección. Restablecer significa crear otro destino nuevo; no reutilizar bases ni volúmenes. Limpieza solo del proyecto UUID propio y verificado según el procedimiento de [fundamentos 003](clinical-episodes-foundation.md); nunca prune o limpieza de recursos habituales. No ejecutar el wrapper en PR A.
+El modo demo muestra URL/cuentas ficticias y deja únicamente sus recursos propios para inspección. Restablecer significa crear otro destino nuevo; no reutilizar bases ni volúmenes. Limpieza solo del proyecto UUID propio y verificado según el procedimiento de [fundamentos 003](clinical-episodes-foundation.md); nunca prune o limpieza de recursos habituales. A no ejecutó el wrapper; B sí lo ejecuta con autorización y destinos nuevos.
 
-`npm test` en backend selecciona unitarias; `npm run test:integration` requiere entorno opt-in aislado y `test:episodes` prueba 003. Ejecutarlos fuera del destino verificado puede omitir integración por flags: registrar cuántas pruebas se ejecutaron/omitieron y entorno. No confundir un comando verde con validación de B/C/D inexistentes.
+`npm test` en backend selecciona unitarias; `npm run test:integration` requiere entorno opt-in aislado y `test:episodes` prueba 003. Ejecutarlos fuera del destino verificado puede omitir integración por flags: registrar cuántas pruebas se ejecutaron/omitieron y entorno. No confundir un comando verde con validación de C/D o permisos por episodio todavía inexistentes.
 
 ## Inicialización, migraciones y evidencia
 
@@ -138,7 +139,7 @@ El modo demo muestra URL/cuentas ficticias y deja únicamente sus recursos propi
 - `db:schema` ejecuta baseline más 001/002 y `db:seed` datos demo; **no son upgrades**. No repetirlos sobre bases existentes ni ejecutarlos por un cambio documental.
 - `db:init:production` rechaza base no vacía y no carga demo. Instala schema/001/002, no 003. No ejecutarlo ahora ni confundirlo con despliegue.
 - 003 tiene runner de destino explícito, checksums/ledger/huella, y no se aplica por reiniciar Docker. Procedimientos específicos en [clinical-episodes-foundation.md](clinical-episodes-foundation.md); 001/002 en [integridad](clinical-data-integrity.md) y [autenticación](authentication-security.md).
-- No modificar 001–003, asumir que están desplegadas, inferir históricos ni ejecutar normalizadores como reparación. 004–006 siguen estimadas en el [plan](identity-directory-delivery-plan.md).
+- No modificar 001–003, asumir que están desplegadas, inferir históricos ni ejecutar normalizadores como reparación. 004 de B está implementada y validada solo aisladamente; 005/006 siguen estimadas en el [plan](identity-directory-delivery-plan.md).
 - Mantener secretos fuera de logs/commits/frontend. Las cuentas demo se restringen al modo local explícito; nunca copiarlas o habilitarlas en producción.
 
 ## Validaciones según tipo de cambio

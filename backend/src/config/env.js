@@ -59,6 +59,8 @@ const env = {
   jwtSecret: resolveJwtSecret(process.env),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   passwordResetTokenTtlMinutes: parsePort(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES, 30),
+  verificationDelivery: process.env.VERIFICATION_DELIVERY || 'disabled',
+  verificationSecret: process.env.VERIFICATION_SECRET || '',
   appBaseUrl: process.env.APP_BASE_URL || 'http://localhost:5173',
 };
 

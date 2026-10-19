@@ -4,11 +4,11 @@ cd "$(dirname "$0")/.."
 mode="${1:-test}"
 if [[ "$mode" == cleanup && "$#" == 2 ]]; then
   export EPISODE_TEST_RUN_ID="$2"
-elif [[ ( "$mode" == test || "$mode" == demo ) && "$#" -le 1 ]]; then
+elif [[ ( "$mode" == test || "$mode" == demo || "$mode" == identity-demo ) && "$#" -le 1 ]]; then
   export EPISODE_TEST_RUN_ID
   EPISODE_TEST_RUN_ID="$(cat /proc/sys/kernel/random/uuid)"
 else
-  echo "Usage: bash scripts/clinical-episodes.sh [test|demo|cleanup RUN_UUID]" >&2
+  echo "Usage: bash scripts/clinical-episodes.sh [test|demo|identity-demo|cleanup RUN_UUID]" >&2
   exit 1
 fi
 [[ "$EPISODE_TEST_RUN_ID" =~ ^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$ ]]
@@ -53,15 +53,22 @@ if [[ "$mode" == test ]]; then
   "${compose[@]}" --profile demo run --rm --no-deps frontend sh -c 'npm run lint && npm run build'
   python3 scripts/episode_images.py verify "$project"
 else
-  "${compose[@]}" run --rm -e NODE_ENV=development backend node scripts/create-episode-demo.js
+  if [[ "$mode" == identity-demo ]]; then
+    "${compose[@]}" run --rm -e NODE_ENV=development backend node scripts/create-identity-demo.js
+  else
+    "${compose[@]}" run --rm -e NODE_ENV=development backend node scripts/create-episode-demo.js
+  fi
   "${compose[@]}" --profile demo up -d api
   api_address="$("${compose[@]}" port api 5000)"
+  export IDENTITY_DEMO_MODE=false
+  if [[ "$mode" == identity-demo ]]; then export IDENTITY_DEMO_MODE=true; fi
   export EPISODE_DEMO_API_URL="http://$api_address/api"
   "${compose[@]}" --profile demo up -d frontend
   python3 scripts/episode_images.py verify "$project"
   echo "Demo UI: http://$("${compose[@]}" port frontend 5173)"
   echo "API: $EPISODE_DEMO_API_URL"
   echo "Accounts: a@episodes.invalid, b@episodes.invalid, p@episodes.invalid, q@episodes.invalid"
+  if [[ "$mode" == identity-demo ]]; then echo "Identity demo accounts: r@episodes.invalid, admin@identity.invalid, support@identity.invalid"; fi
   echo "Password (all demo accounts): Episode-Demo-Only-284!"
   echo "Cleanup ONLY this new project: bash scripts/clinical-episodes.sh cleanup $EPISODE_TEST_RUN_ID"
   trap - EXIT

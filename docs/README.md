@@ -1,6 +1,6 @@
 # Documentación de PsicoPanel
 
-Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AGENTS](../AGENTS.md). Corte de PR A: código `0077f46`, #9 integrado. Solo documentación autorizada, sin implementación/despliegue de B/C/D.
+Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AGENTS](../AGENTS.md). A integrado en #10 (0f2ebba). B autorizado e implementado en su rama, con pruebas y demo aisladas; revisión/integración pendientes, sin despliegue habitual ni C/D.
 
 ## Fuentes canónicas
 
@@ -9,9 +9,10 @@ Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AG
 | Arquitectura | [architecture.md](architecture.md): implementación, fundamentos no activados y futuro separados |
 | Desarrollo y pruebas | [development.md](development.md): Docker/WSL, inicialización nueva, seguridad y destinos aislados |
 | Producto | [Visión](product/vision.md), [decisiones/abiertos](product/decisions.md), [reglas](product/business-rules.md), [roadmap](product/roadmap.md): aprobado no equivale a implementado |
-| Plan de entregas | [identity-directory-delivery-plan.md](identity-directory-delivery-plan.md): A/B/C/D aprobado; solo A en ejecución |
+| Plan de entregas | [identity-directory-delivery-plan.md](identity-directory-delivery-plan.md): A integrado, B en ejecución/revisión; C/D pendientes |
 | Diseño 2A | [stage2a-identity-directory-intake.md](stage2a-identity-directory-intake.md): mecanismos propuestos y requisitos aprobados diferenciados |
-| Mutaciones legacy | [stage2a-legacy-mutations.md](stage2a-legacy-mutations.md): inventario completo por ruta/escritor e impacto; bloqueos pendientes de aprobación |
+| Mutaciones legacy | [stage2a-legacy-mutations.md](stage2a-legacy-mutations.md): inventario revalidado por ruta/escritor; bloqueo AB-23 implementado en B |
+| Identidad/verificación B | [Guía](patient-identity-verification.md), [validación](patient-identity-validation.md): código y demo aislada, sin despliegue habitual |
 | Reorganización A | [documentation-audit.md](documentation-audit.md): inventario, clasificación, instrucciones sustituidas y validación |
 
 ## Seguridad, procedimientos y evidencia conservados

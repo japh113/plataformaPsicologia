@@ -17,9 +17,7 @@ export const registerPatient = async (payload) => {
     body: JSON.stringify(payload),
   });
 
-  const session = response.data;
-  setAuthToken(session.token);
-  return session;
+  return response.data;
 };
 
 export const registerPsychologist = async (payload) => {
@@ -56,11 +54,6 @@ export const getCurrentUser = async () => {
 
 export const getBackofficeUsers = async () => {
   const response = await apiRequest('/auth/users');
-  return response.data;
-};
-
-export const getAvailablePsychologists = async () => {
-  const response = await apiRequest('/auth/psychologists/available');
   return response.data;
 };
 

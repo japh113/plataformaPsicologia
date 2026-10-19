@@ -1,25 +1,25 @@
 # Roadmap de producto y arquitectura
 
-Fecha: 18 de octubre de 2026. Base auditada: `main`/`origin/main` en `0077f46`, merge PR #9. Requisitos de producto acordados y mecanismos pendientes se distinguen en [decisions.md](decisions.md). PR A actualiza documentación; no acredita despliegue ni nuevas capacidades.
+Fecha: 18 de octubre de 2026. Base B: 0f2ebba, merge PR #10. Requisitos de producto acordados y mecanismos pendientes se distinguen en [decisions.md](decisions.md). A integrado; B implementado y validado en rama, pendiente de revisión/integración, sin despliegue habitual.
 
 ## Antecedentes y alcance documental actual
 
 #5 fijó la base de producto; #7 restringió backoffice; #8 integró fundamentos 003 con pruebas/demo aisladas, sin activar permisos por episodio. #9 integró diseño propuesto de identidad/directorio/vinculación. Sus evidencias y autorizaciones históricas no autorizan operaciones nuevas.
 
-Las decisiones posteriores a #9 figuran en ADR-023–028 y RN-41–58. Se aprobó dividir el encargo en cuatro PR y ejecutar **solo A**: documentación de producto/diseño, instrucciones operativas y reorganización. Sin backend/frontend, SQL, nuevas migraciones, bases, contenedores/volúmenes ni merge. La retirada funcional de rutas legacy aún requiere aprobación expresa.
+Las decisiones ADR-023–028 y RN-41–58 se entregan A→B→C→D. A se integró en #10. El encargo B autoriza registro adulto/identidad/verificación y barrera AB-23, sin nuevas vinculaciones ni C/D. [Guía](../patient-identity-verification.md) y [validación B](../patient-identity-validation.md).
 
-## Entregas aprobadas A/B/C/D — ejecución pendiente de B/C/D
+## Entregas aprobadas A/B/C/D — B en ejecución/revisión
 
 El [plan canónico de entregas](../identity-directory-delivery-plan.md) contiene funcionalidades, dependencias, pruebas, demos y límites intermedios. Las letras no equivalen a etapas: PR B y PR C son partes de 2A, no las etapas 2B/2C.
 
 | Entrega | Alcance | Estado |
 | --- | --- | --- |
-| A | Decisiones, documentación técnica, reorganización y auditoría de mutaciones legacy | Única ejecución autorizada; PR hacia main sin merge |
-| B | Registro adulto/DOB global, básicos, verificación email/SMS y simuladores | Espera revisión/aprobación de A y autorización; AB-23 y diseño aplicable pendientes |
+| A | Decisiones, documentación técnica, reorganización y auditoría de mutaciones legacy | Integrado en #10, 0f2ebba |
+| B | Registro adulto/DOB global, básicos, verificación email/SMS y simuladores | Autorizado e implementado en rama; 004 y demo aislada validadas, revisión/integración pendientes |
 | C | Reautenticación, cambios de contacto y revocación total de sesiones | Después de B, con autorización propia |
 | D | Perfil, revisión/versiones de credenciales y directorio anónimo, suspensión/rehabilitación | Después de C según orden acordado; depende técnicamente del protocolo de B |
 
-004–006 son solo estimaciones. B no puede habilitar activación legacy para cuentas existentes mientras la niega a nuevas; [matriz y pérdidas temporales propuestas](../stage2a-legacy-mutations.md) pendientes de aprobación. D no incorpora solicitudes públicas funcionales. El registro de menores, invitaciones/solicitudes nuevas, episodios/permisos, derivaciones y recuperación excepcional no se habilitan en B/C/D.
+004 creada y validada aisladamente; 005/006 estimadas. B no puede habilitar activación legacy para cuentas existentes mientras la niega a nuevas; [matriz y pérdidas temporales aprobadas AB-23](../stage2a-legacy-mutations.md) implementadas en B. D no incorpora solicitudes públicas funcionales. El registro de menores, invitaciones/solicitudes nuevas, episodios/permisos, derivaciones y recuperación excepcional no se habilitan en B/C/D.
 
 ## Estado de partida y evidencia
 
@@ -28,7 +28,7 @@ El [plan canónico de entregas](../identity-directory-delivery-plan.md) contiene
 | 0. Docker de desarrollo | Completada para su alcance | PR [#1](https://github.com/japh113/plataformaPsicologia/pull/1), merge `9dbc305`; [README.md](../../README.md), [compose.yaml](../../compose.yaml) y [docker/postgres/init.sh](../../docker/postgres/init.sh). No es despliegue de producción. |
 | 1. Integridad, autenticación y dependencias de producción | Completada para su alcance | PR [#2](https://github.com/japh113/plataformaPsicologia/pull/2), merge `6a23ac8`; [#3](https://github.com/japh113/plataformaPsicologia/pull/3), merge `0e8b13f`; [#4](https://github.com/japh113/plataformaPsicologia/pull/4), merge `3a1f0d7`. No certifica el estado de una base desplegada ni elimina deuda de desarrollo/hardening. |
 | Documentación de producto | #5 y #9 integrados; PR A documenta decisiones posteriores y reorganiza | PR [#5](https://github.com/japh113/plataformaPsicologia/pull/5), merge `7380e80`; no implementó etapas 2. |
-| 2A–2E | 2A parcial; 2B–2E pendientes; B/C/D aún no implementados | #7 integra backoffice y #8 fundamentos 003 con evidencia aislada, sin despliegue ni permisos por episodio. Identidad verificada, directorio básico, vinculación y segmentación siguen pendientes. |
+| 2A–2E | 2A parcial; 2B–2E pendientes; B implementado en rama; C/D pendientes | #7 integra backoffice y #8 fundamentos 003 con evidencia aislada, sin despliegue ni permisos por episodio. B añade identidad/verificación simulada; directorio, nuevas vinculaciones y segmentación siguen pendientes. |
 | 3. Pruebas y confiabilidad | Pendiente como etapa de ampliación | Ya hay tests unitarios e integración; no se parte de cero. Cada etapa 2 debe traer sus propias pruebas. |
 | 4. Experiencia y refactor gradual | Pendiente | La UI funcional mínima de 2B y 2C se entrega en esas etapas. |
 | 5. Preparación para producción | Pendiente | Incluye revisión legal, privacidad, restauración, monitoreo y despliegue. |
@@ -42,7 +42,7 @@ La corrección de dependencias de producción es el estado de alcance acordado t
 | --- | --- |
 | [schema.sql](../../backend/sql/schema.sql): unicidad legacy por par; [003](../../backend/sql/migrations/003_clinical_episode_foundation.sql): índice por paciente active/paused | 003 garantiza exclusividad de episodios donde esté instalada; la aplicación aún usa vínculos legacy. No deducir que ya controla su autorización ni eliminar duplicados. |
 | [auth.permissions.js](../../backend/src/modules/auth/auth.permissions.js): `buildPatientAccessScope` admite relación activa **o** `psychologist_patient_access` | El vínculo heredado puede seguir concediendo acceso sin responsable activo. 2A debe cubrir todas las rutas, no solo el expediente. |
-| [patients.service.js](../../backend/src/modules/patients/patients.service.js): `createPatient` inserta acceso heredado; [auth.service.js](../../backend/src/modules/auth/auth.service.js) sincroniza ese acceso y reutiliza relaciones | Crear pacientes y cambiar vínculos exige revisión conjunta. Reactivar/sobrescribir relaciones impide conservar episodios distintos. |
+| [patients.service.js](../../backend/src/modules/patients/patients.service.js): `createPatient` deniega ahora el alta unilateral; [auth.service.js](../../backend/src/modules/auth/auth.service.js) deniega request/invite/respond/accept-code antes de DB | AB-23 implementado sin sincronizar, revocar o convertir relaciones anteriores. El flujo bilateral sigue pendiente. |
 | #8 añade `episode_id` opcional a citas, notas, tareas/objetivos y espera; escritores actuales siguen usando NULL | Falta activación coordinada de atribución y permisos. Una relación nueva puede exponer operación previa si solo se filtra por paciente. |
 | `patient_clinical_notes.created_by_user_id` es nullable; [patients.service.js](../../backend/src/modules/patients/patients.service.js) lee/edita notas por paciente y nota | Autor informado al crear no equivale a autorización por autor. Se necesita segmentación y tratamiento de autoría legacy desconocida. |
 | `patientSelectColumns` reúne entrevista, riesgo, contexto, tareas y objetivos; notas se agregan por paciente | El aislamiento debe incluir datos globales, metadatos y derivados, no solo la colección de notas. |
@@ -102,7 +102,7 @@ Los datos y cuentas demo son **exclusivamente de desarrollo**, en un entorno ais
 
 **Aceptación adicional de directorio/vinculación (ADR-020–ADR-022):** registro sin episodio; perfiles privados por defecto, públicos solo por elección del aprobado; publicar y recibir solicitudes independientes; consulta anónima mínima sin datos de pacientes; solicitudes autenticadas/verificadas con mensaje opcional privado y confirmación final; una pendiente iniciada por paciente en ambas esperas; cancelación/caducidad y protección de abuso; invitación profesional incluso sin cuenta previa, sin política de simultaneidad inventada. Ningún pendiente habilita expediente ni rutas legacy. PostgreSQL arbitra confirmaciones concurrentes, sin exponer otro consultorio ni sustituir cambio 2B. Plazos, estados y límites técnicos necesitan aprobación.
 
-**Secuencia A/B/C/D aprobada; solo A autorizado:** [plan de entregas](../identity-directory-delivery-plan.md). No sigue vigente la recomendación anterior de agrupar identidad y directorio en el primer PR funcional. B verifica identidad; C protege cambios de contacto; D publica perfiles con revisión de credenciales. Solicitudes/invitaciones y activación por episodio requieren entregas posteriores. Ninguna división autoriza perder funcionalidad legacy sin aprobación expresa.
+**Secuencia A/B/C/D aprobada; A integrado y B autorizado:** [plan de entregas](../identity-directory-delivery-plan.md). No sigue vigente la recomendación anterior de agrupar identidad y directorio en el primer PR funcional. B verifica identidad; C protege cambios de contacto; D publica perfiles con revisión de credenciales. Solicitudes/invitaciones y activación por episodio requieren entregas posteriores. AB-23 aprobó expresamente la indisponibilidad temporal legacy; no autoriza otras pérdidas funcionales.
 
 ADR-006/009 sustituyen la propuesta de `care_relationships` como episodios: fundamentos en tabla independiente `clinical_episodes`, índice active/paused por paciente y referencias `episode_id` aprobados para 003. La activación de autorización y retirada del fallback heredado siguen pendientes.
 
@@ -110,7 +110,7 @@ ADR-006/009 sustituyen la propuesta de `care_relationships` como episodios: fund
 
 **Primer PR de 2A, integrado como #7 — RN-27 / ADR-017:** denegación clínica de `superadmin`, `admin` y `support` en rutas y servicios; proyecciones operativas de vínculos/cuentas; auditoría administrativa limitada a eventos de cuentas y metadatos permitidos, sin exponer eventos clínicos por filtros o límites. Se conservan registros históricos, consulta operativa, gestión de cuentas y aprobación/suspensión de psicólogos. La creación y cualquier cambio de estado de vínculos administrativos quedan temporalmente bloqueados hasta un mecanismo seguro de autorización bilateral; no pueden sincronizar acceso heredado ni alterar responsabilidad clínica. Las pruebas cubren denegaciones, proyecciones, pacientes/psicólogos y regresión JWT en PostgreSQL aislado. #7 no cerró 2A ni implementó AB-02/13.
 
-**Dependencias pendientes tras los fundamentos:** segmentar por episodio, quitar el fallback heredado de psicólogos y resolver atribución histórica necesita el diseño y la autorización posteriores de ADR-006/009/AB-14/17. 003 ya se creó y ensayó en destinos desechables en #8; no se despliega en la base habitual, no se cambian 001/002 ni se usa schema/seed sobre bases pobladas. La revisión de identidad excepcional y el nuevo flujo de entrevista siguen sin implementarse.
+**Dependencias pendientes tras los fundamentos:** segmentar por episodio, quitar el fallback heredado de psicólogos y resolver atribución histórica necesita el diseño y la autorización posteriores de ADR-006/009/AB-14/17. 003 ya se creó y ensayó en destinos desechables en #8; no se despliega en la base habitual, no se cambian 001/002 ni se usa schema/seed sobre bases pobladas. La revisión de identidad excepcional y el nuevo flujo de entrevista siguen sin implementarse. ADR-029/RN-59–61 exigen entrevista completada y validada expresamente por el profesional responsable antes de activar todo episodio nuevo, con garantía futura en backend y DB. Vinculación y activación son distintas; una relación legacy activa no prueba episodio. La identidad personal no depende de entrevista. B solo retira el bloqueo global de UI; no implementa la precondición ni añade migraciones.
 
 ## Etapa 2B — Derivación con resumen, cambio directo y pausas/cierre
 

@@ -32,7 +32,11 @@ export const apiRequest = async (path, options = {}) => {
 
   if (!response.ok) {
     const errorMessage = responseBody?.message || 'No se pudo completar la solicitud.';
-    throw new Error(errorMessage);
+    const error = new Error([errorMessage, ...(Array.isArray(responseBody?.details) ? responseBody.details : [])].join(' '));
+    error.status = response.status;
+    error.details = Array.isArray(responseBody?.details) ? responseBody.details : [];
+    error.retryAfter = Number(response.headers.get('Retry-After')) || 0;
+    throw error;
   }
 
   return responseBody;

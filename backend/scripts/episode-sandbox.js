@@ -42,8 +42,8 @@ export async function installBaseline(client) {
   await client.query(await fs.readFile(new URL('../sql/schema.sql', import.meta.url), 'utf8'));
   for (const migration of (await loadMigrations()).slice(0, 2)) await client.query(migration.sql);
 }
-export async function installFoundation(client, name) {
-  return migrate(client, { expectedDatabase: name });
+export async function installFoundation(client, name, target = '003') {
+  return migrate(client, { expectedDatabase: name, target });
 }
 export async function syntheticFixture(client) {
   await client.query("INSERT INTO patients(id,first_name,full_name) VALUES ('p','Demo P','Demo P'),('q','Demo Q','Demo Q')");
