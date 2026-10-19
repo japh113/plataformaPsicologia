@@ -79,9 +79,9 @@ class Sandbox:
         work.mkdir();out.mkdir();(out/'screenshots').mkdir()
         (work/'baseline.json').write_text(json.dumps({'containers':[{'id':cid} for cid in self.container_baseline]}))
         dockerfile=self.path/'browser.Dockerfile'
-        dockerfile.write_text('FROM '+VERSIONS['browserImage']+'\nWORKDIR /review\nCOPY scripts/ci/browser/package*.json ./\nRUN npm ci --ignore-scripts\nLABEL '+label+'='+review+'\n')
+        dockerfile.write_text('FROM '+VERSIONS['browserImage']+'\nWORKDIR /review\nCOPY package*.json ./\nRUN npm ci --ignore-scripts\nLABEL '+label+'='+review+'\n')
         self.browser_tags.append((tag,label,review));self.save()
-        command(['docker','build','--no-cache','-t',tag,'-f',str(dockerfile),'.'],timeout=900)
+        command(['docker','build','--no-cache','-t',tag,'-f',str(dockerfile),'scripts/ci/browser'],timeout=900)
         config={'work':str(work.resolve()),'out':str(out.resolve()),'baseline':str((work/'baseline.json').resolve()),'run':review,'demo':self.run,'project':self.project,'network':self.project+'_app','image':tag,'base':'http://frontend.localhost:5173'}
         file=self.path/'review.json';file.write_text(json.dumps(config))
         command(['python3','scripts/run-'+('contact' if kind=='C' else 'identity')+'-ui-review.py',str(file)],timeout=600)
