@@ -1181,7 +1181,7 @@ export default function NotesScreen({
             <h4 className="text-base font-bold text-slate-900">Datos personales y contexto</h4>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Fecha de nacimiento</p>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Fecha de nacimiento en entrevista (dato clínico histórico)</p>
                 <p className="mt-2 text-sm text-slate-700">{formatInterviewDate(patientInterview.fechaNacimiento)}</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

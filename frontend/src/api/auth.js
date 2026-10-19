@@ -17,9 +17,7 @@ export const registerPatient = async (payload) => {
     body: JSON.stringify(payload),
   });
 
-  const session = response.data;
-  setAuthToken(session.token);
-  return session;
+  return response.data;
 };
 
 export const registerPsychologist = async (payload) => {

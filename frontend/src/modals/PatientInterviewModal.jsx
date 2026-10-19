@@ -63,7 +63,7 @@ export default function PatientInterviewModal({
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1.5 block text-sm font-semibold text-slate-700">Fecha de nacimiento</label>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700">Fecha de nacimiento registrada en esta entrevista (no modifica identidad global)</label>
               <input
                 type="date"
                 value={form.fechaNacimiento}

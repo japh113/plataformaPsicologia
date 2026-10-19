@@ -1,8 +1,7 @@
 import React from 'react';
-import { Activity, AlertCircle, ArrowRight, Bell, Calendar, CheckSquare, ClipboardList, FileText, Plus, User } from 'lucide-react';
+import { Activity, AlertCircle, ArrowRight, Bell, Calendar, CheckSquare, ClipboardList, FileText, User } from 'lucide-react';
 import { getRiskColor, sortPatientsByRisk } from '../utils/risk';
 import { getAppointmentDisplayStatus } from '../mappers/appointments';
-import InlineNotice from '../components/shared/InlineNotice';
 
 const getPatientSummary = (patient) => {
   const reason = patient.motivo || 'Motivo no registrado';
@@ -124,36 +123,6 @@ const getAppointmentStatusBadge = (appointment) => {
   return 'border-indigo-200 bg-indigo-50 text-indigo-700';
 };
 
-const RELATIONSHIP_STATUS_LABELS = {
-  pending: 'Pendiente',
-  active: 'Activa',
-  ended: 'Finalizada',
-  rejected: 'Rechazada',
-};
-
-const getRelationshipStatusBadge = (status) => {
-  if (status === 'active') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  if (status === 'ended') return 'border-slate-200 bg-slate-100 text-slate-700';
-  if (status === 'rejected') return 'border-rose-200 bg-rose-50 text-rose-700';
-  return 'border-amber-200 bg-amber-50 text-amber-700';
-};
-
-const formatRelationshipDate = (value) => {
-  if (!value) return 'Sin fecha';
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return 'Sin fecha';
-  }
-
-  return new Intl.DateTimeFormat('es-MX', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
-};
-
 const getRemindersEmptyCopy = (isPsychologist) => (
   isPsychologist
     ? {
@@ -229,340 +198,22 @@ function RemindersPanel({ reminders, patients, isPsychologist, onOpenPatient, on
   );
 }
 
-function PatientCareRelationshipPanel({
-  relationships,
-  availablePsychologists,
-  onRequestCareRelationship,
-  onRespondToCareRelationship,
-  onAcceptCareRelationshipByCode,
-  processingRelationshipId,
-  relationshipActionError,
-  onDismissRelationshipError,
-}) {
-  const initialInviteCode = typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search).get('inviteCode') || ''
-    : '';
-  const activeRelationships = relationships.filter((relationship) => relationship.status === 'active');
-  const requestedPsychologistIds = new Set(
-    relationships
-      .filter((relationship) => ['active', 'pending'].includes(relationship.status))
-      .map((relationship) => relationship.psychologist.id),
-  );
-  const requestablePsychologists = availablePsychologists.filter((psychologist) => !requestedPsychologistIds.has(psychologist.id));
-  const [form, setForm] = React.useState({
-    psychologistUserId: availablePsychologists[0]?.id || '',
-    notes: '',
-  });
-  const [inviteCode, setInviteCode] = React.useState(initialInviteCode);
-
-  React.useEffect(() => {
-    setForm((currentForm) => ({
-      ...currentForm,
-      psychologistUserId: requestablePsychologists.some((psychologist) => psychologist.id === currentForm.psychologistUserId)
-        ? currentForm.psychologistUserId
-        : requestablePsychologists[0]?.id || '',
-    }));
-  }, [requestablePsychologists]);
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    const wasCreated = await onRequestCareRelationship?.(form);
-
-    if (wasCreated) {
-      setForm((currentForm) => ({
-        ...currentForm,
-        notes: '',
-        psychologistUserId: requestablePsychologists[0]?.id || currentForm.psychologistUserId,
-      }));
-    }
-  };
-
-  const handleAcceptCode = async (event) => {
-    event.preventDefault();
-    const wasAccepted = await onAcceptCareRelationshipByCode?.({ inviteCode });
-
-    if (wasAccepted) {
-      setInviteCode('');
-      if (typeof window !== 'undefined') {
-        const nextUrl = new URL(window.location.href);
-        nextUrl.searchParams.delete('inviteCode');
-        window.history.replaceState({}, '', nextUrl.toString());
-      }
-    }
-  };
-
+function ExistingRelationships({ relationships = [], patient = false }) {
+  const active = relationships.filter(r => r.status === 'active');
   return (
-    <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg md:text-xl font-bold flex items-center text-slate-900">
-            <User className="mr-2 text-indigo-500" /> Mi vinculo clinico
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">Consulta con quien ya tienes seguimiento activo y solicita un nuevo vinculo cuando haga falta.</p>
-        </div>
-        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">
-          {activeRelationships.length} activa(s)
-        </span>
-      </div>
-
-      {relationshipActionError ? (
-        <div className="mt-4">
-          <InlineNotice tone="error" title="No pudimos actualizar el vinculo" message={relationshipActionError} onDismiss={onDismissRelationshipError} />
-        </div>
-      ) : null}
-
-      <div className="mt-5 space-y-3">
-        {relationships.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
-            <p className="text-sm font-semibold text-slate-900">Todavia no tienes un psicologo vinculado.</p>
-            <p className="mt-2 text-sm text-slate-500">Puedes solicitar uno desde aqui y el profesional recibira la peticion para revisarla.</p>
-          </div>
-        ) : relationships.map((relationship) => (
-          <article key={relationship.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="font-semibold text-slate-900">{relationship.psychologist.fullName}</p>
-              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${getRelationshipStatusBadge(relationship.status)}`}>
-                {RELATIONSHIP_STATUS_LABELS[relationship.status] || relationship.status}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-slate-600">{relationship.psychologist.professionalTitle || 'Psicologo'}</p>
-            <p className="mt-1 text-xs text-slate-500">Actualizado: {formatRelationshipDate(relationship.approvedAt || relationship.createdAt)}</p>
-            {relationship.notes ? <p className="mt-2 text-sm text-slate-600">{relationship.notes}</p> : null}
-            {relationship.status === 'pending' && relationship.requestedByRole === 'psychologist' ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  disabled={processingRelationshipId === relationship.id}
-                  onClick={() => onRespondToCareRelationship?.(relationship.id, { status: 'active' })}
-                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {processingRelationshipId === relationship.id ? 'Guardando...' : 'Aceptar invitacion'}
-                </button>
-                <button
-                  type="button"
-                  disabled={processingRelationshipId === relationship.id}
-                  onClick={() => onRespondToCareRelationship?.(relationship.id, { status: 'rejected' })}
-                  className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Rechazar
-                </button>
-              </div>
-            ) : null}
-          </article>
-        ))}
-      </div>
-
-      <form onSubmit={handleSubmit} className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <p className="text-sm font-semibold text-slate-900">Solicitar nuevo psicologo</p>
-        <p className="mt-1 text-sm text-slate-500">El vinculo quedara pendiente hasta que el profesional lo confirme.</p>
-
-        {requestablePsychologists.length === 0 ? (
-          <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500">
-            Ya agotaste las opciones disponibles o todas tus solicitudes activas siguen en revision.
-          </div>
-        ) : (
-          <>
-            <div className="mt-4">
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Psicologo</label>
-              <select
-                value={form.psychologistUserId}
-                onChange={(event) => setForm((currentForm) => ({ ...currentForm, psychologistUserId: event.target.value }))}
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
-              >
-                {requestablePsychologists.map((psychologist) => (
-                  <option key={psychologist.id} value={psychologist.id}>
-                    {psychologist.fullName} · {psychologist.professionalTitle}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="mt-4">
-              <label className="mb-2 block text-sm font-semibold text-slate-700">Mensaje opcional</label>
-              <textarea
-                rows={3}
-                value={form.notes}
-                onChange={(event) => setForm((currentForm) => ({ ...currentForm, notes: event.target.value }))}
-                placeholder="Ej. Me gustaria iniciar seguimiento contigo durante las proximas semanas."
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
-              />
-            </div>
-
-            <div className="mt-4 flex justify-end">
-              <button
-                type="submit"
-                disabled={processingRelationshipId === 'request' || !form.psychologistUserId}
-                className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {processingRelationshipId === 'request' ? 'Enviando...' : 'Solicitar vinculo'}
-              </button>
-            </div>
-          </>
-        )}
-      </form>
-
-      <form onSubmit={handleAcceptCode} className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50/60 p-4">
-        <p className="text-sm font-semibold text-slate-900">Aceptar con codigo o enlace</p>
-        <p className="mt-1 text-sm text-slate-500">Si recibiste un enlace directo o un codigo compartido por tu psicologo, puedes activarlo aqui.</p>
-        <div className="mt-4 flex flex-col gap-3 md:flex-row">
-          <input
-            type="text"
-            value={inviteCode}
-            onChange={(event) => setInviteCode(event.target.value.toUpperCase())}
-            placeholder="Ej. A1B2C3D4"
-            className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm uppercase tracking-[0.16em] text-slate-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
-          />
-          <button
-            type="submit"
-            disabled={processingRelationshipId === 'accept-code' || !inviteCode.trim()}
-            className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {processingRelationshipId === 'accept-code' ? 'Activando...' : 'Aceptar codigo'}
-          </button>
-        </div>
-      </form>
-    </div>
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
+      <h3 className="font-bold text-slate-900">Vinculación clínica</h3>
+      <p className="text-sm text-slate-600">Las nuevas vinculaciones y la respuesta a pendientes están temporalmente deshabilitadas. Las relaciones existentes se conservan.</p>
+      {patient && !active.length && <p className="text-sm font-semibold text-indigo-700">Todavía no tienes psicólogo vinculado.</p>}
+      {relationships.map(r => <div key={r.id} className="rounded-xl border border-slate-200 p-3 text-sm">
+        <span className="font-semibold">{patient ? r.psychologist.fullName : r.patient.fullName}</span>
+        <span className="ml-2 text-slate-500">{r.status === 'active' ? 'Activa' : r.status === 'pending' ? 'Pendiente conservada; sin acciones disponibles' : r.status}</span>
+      </div>)}
+    </section>
   );
 }
-
-function PsychologistRelationshipPanel({
-  relationships,
-  relationshipInvitePreview,
-  onInviteCareRelationship,
-  onRespondToCareRelationship,
-  processingRelationshipId,
-  relationshipActionError,
-  onDismissRelationshipError,
-}) {
-  const [form, setForm] = React.useState({ patientEmail: '', notes: '' });
-  const activeRelationships = relationships.filter((relationship) => relationship.status === 'active');
-  const pendingRequests = relationships.filter((relationship) => relationship.status === 'pending' && relationship.requestedByRole === 'patient');
-  const pendingInvitations = relationships.filter((relationship) => relationship.status === 'pending' && relationship.requestedByRole === 'psychologist');
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    const wasInvited = await onInviteCareRelationship?.(form);
-
-    if (wasInvited) {
-      setForm({ patientEmail: '', notes: '' });
-    }
-  };
-
-  return (
-    <div className="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-gray-100">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg md:text-xl font-bold flex items-center text-slate-900">
-            <User className="mr-2 text-indigo-500" /> Vinculos clinicos
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">Administra solicitudes de pacientes e invitaciones para cuentas ya registradas.</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-right">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">Resumen</p>
-          <p className="mt-1 text-sm font-semibold text-slate-900">{activeRelationships.length} activa(s) · {pendingRequests.length + pendingInvitations.length} pendiente(s)</p>
-        </div>
-      </div>
-
-      {relationshipActionError ? (
-        <div className="mt-4">
-          <InlineNotice tone="error" title="No pudimos actualizar los vinculos" message={relationshipActionError} onDismiss={onDismissRelationshipError} />
-        </div>
-      ) : null}
-
-      {relationshipInvitePreview ? (
-        <div className="mt-4 rounded-2xl border border-violet-200 bg-violet-50 p-4">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-violet-700">Invitacion lista para compartir</p>
-          <p className="mt-2 text-sm text-slate-700">Codigo: <span className="font-bold tracking-[0.18em] text-violet-800">{relationshipInvitePreview.inviteCode}</span></p>
-          <p className="mt-2 break-all rounded-xl border border-violet-100 bg-white px-3 py-2 text-sm text-slate-600">{relationshipInvitePreview.inviteLink}</p>
-          <p className="mt-2 text-xs text-slate-500">Expira: {formatRelationshipDate(relationshipInvitePreview.expiresAt)}</p>
-        </div>
-      ) : null}
-
-      <form onSubmit={handleSubmit} className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <p className="text-sm font-semibold text-slate-900">Invitar paciente existente</p>
-        <p className="mt-1 text-sm text-slate-500">Por ahora la invitacion funciona con pacientes que ya tengan cuenta creada en la plataforma.</p>
-        <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-          <input
-            type="email"
-            value={form.patientEmail}
-            onChange={(event) => setForm((currentForm) => ({ ...currentForm, patientEmail: event.target.value }))}
-            placeholder="correo@paciente.com"
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
-          />
-          <input
-            type="text"
-            value={form.notes}
-            onChange={(event) => setForm((currentForm) => ({ ...currentForm, notes: event.target.value }))}
-            placeholder="Mensaje opcional"
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
-          />
-          <button
-            type="submit"
-            disabled={processingRelationshipId === 'invite' || !form.patientEmail.trim()}
-            className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {processingRelationshipId === 'invite' ? 'Enviando...' : 'Invitar'}
-          </button>
-        </div>
-      </form>
-
-      <div className="mt-5 space-y-3">
-        {pendingRequests.length === 0 && pendingInvitations.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
-            <p className="text-sm font-semibold text-slate-900">No tienes solicitudes ni invitaciones pendientes.</p>
-            <p className="mt-2 text-sm text-slate-500">Cuando un paciente solicite seguimiento o envíes una invitacion, el estado aparecera aqui.</p>
-          </div>
-        ) : (
-          <>
-            {pendingRequests.map((relationship) => (
-              <article key={relationship.id} className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold text-slate-900">{relationship.patient.fullName}</p>
-                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${getRelationshipStatusBadge(relationship.status)}`}>
-                    {RELATIONSHIP_STATUS_LABELS[relationship.status]}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-slate-600">Solicitud enviada por el paciente · {relationship.patient.email || 'Sin correo'}</p>
-                {relationship.notes ? <p className="mt-2 text-sm text-slate-600">{relationship.notes}</p> : null}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={processingRelationshipId === relationship.id}
-                    onClick={() => onRespondToCareRelationship?.(relationship.id, { status: 'active' })}
-                    className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {processingRelationshipId === relationship.id ? 'Guardando...' : 'Aceptar'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={processingRelationshipId === relationship.id}
-                    onClick={() => onRespondToCareRelationship?.(relationship.id, { status: 'rejected' })}
-                    className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Rechazar
-                  </button>
-                </div>
-              </article>
-            ))}
-
-            {pendingInvitations.map((relationship) => (
-              <article key={relationship.id} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold text-slate-900">{relationship.patient.fullName}</p>
-                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${getRelationshipStatusBadge(relationship.status)}`}>
-                    Invitacion pendiente
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-slate-600">{relationship.patient.email || 'Sin correo'} · enviada el {formatRelationshipDate(relationship.createdAt)}</p>
-                {relationship.notes ? <p className="mt-2 text-sm text-slate-600">{relationship.notes}</p> : null}
-              </article>
-            ))}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
+const PatientCareRelationshipPanel = ({ relationships }) => <ExistingRelationships relationships={relationships} patient />;
+const PsychologistCareRelationshipPanel = ({ relationships }) => <ExistingRelationships relationships={relationships} />;
 
 export default function DashboardScreen({
   currentUser,
@@ -573,7 +224,6 @@ export default function DashboardScreen({
   availablePsychologists = [],
   relationshipInvitePreview = null,
   onOpenPatient,
-  onNewPatient,
   onViewAppointments,
   onToggleTask,
   onRequestCareRelationship,
@@ -891,8 +541,8 @@ export default function DashboardScreen({
           <h2 className="text-xl md:text-2xl font-bold text-gray-800">Hola, {currentUser?.firstName}</h2>
           <p className="text-sm md:text-base text-gray-500">Aqui tienes el resumen de tu consulta hoy.</p>
         </div>
-        <button onClick={onNewPatient} className="flex bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium items-center transition shadow-sm">
-          <Plus size={18} className="mr-2" /> Nuevo Paciente
+        <button disabled title="Alta unilateral temporalmente deshabilitada" className="flex bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium items-center transition shadow-sm">
+          Nuevas altas temporalmente deshabilitadas
         </button>
       </div>
 

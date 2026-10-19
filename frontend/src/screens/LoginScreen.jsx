@@ -2,7 +2,14 @@ import React, { useMemo, useState } from 'react';
 import { LockKeyhole, Sparkles, UserPlus2, UserRoundCheck } from 'lucide-react';
 import InlineNotice from '../components/shared/InlineNotice';
 
-const demoAccounts = import.meta.env.DEV ? [
+const demoAccounts = import.meta.env.DEV && import.meta.env.VITE_IDENTITY_DEMO === 'true' ? [
+  { role: 'Paciente sin vínculo', email: 'r@episodes.invalid', password: 'Episode-Demo-Only-284!' },
+  { role: 'Paciente histórico', email: 'p@episodes.invalid', password: 'Episode-Demo-Only-284!' },
+  { role: 'Psic?logo A', email: 'a@episodes.invalid', password: 'Episode-Demo-Only-284!' },
+  { role: 'Psic?logo B', email: 'b@episodes.invalid', password: 'Episode-Demo-Only-284!' },
+  { role: 'Admin', email: 'admin@identity.invalid', password: 'Episode-Demo-Only-284!' },
+  { role: 'Soporte', email: 'support@identity.invalid', password: 'Episode-Demo-Only-284!' },
+] : import.meta.env.DEV ? [
   { role: 'Psicologo', email: 'doctor@psicopanel.com', password: 'Demo12345!' },
   { role: 'Paciente', email: 'juan@example.com', password: 'Demo12345!' },
   { role: 'Admin', email: 'admin@psicopanel.com', password: 'Demo12345!' },
@@ -13,8 +20,8 @@ const demoAccounts = import.meta.env.DEV ? [
 const buildEmptyPatientRegisterForm = () => ({
   firstName: '',
   lastName: '',
-  age: '',
-  reasonForConsultation: '',
+  birthDate: '',
+  phone: '',
   email: '',
   password: '',
 });
@@ -130,6 +137,7 @@ export default function LoginScreen({
     const wasRegistered = await onRegisterPatient(patientForm);
 
     if (wasRegistered) {
+      setLoginForm({ email: patientForm.email, password: '' });
       setPatientForm(buildEmptyPatientRegisterForm());
     }
   };
@@ -238,25 +246,16 @@ export default function LoginScreen({
         })}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-[0.35fr_1fr]">
-        {renderTextField({
-          label: 'Edad',
-          name: 'age',
-          value: patientForm.age,
-          onChange: handlePatientChange,
-          type: 'number',
-          placeholder: '29',
-          disabled: isRegistering,
-        })}
-        {renderTextField({
-          label: 'Motivo de consulta',
-          name: 'reasonForConsultation',
-          value: patientForm.reasonForConsultation,
-          onChange: handlePatientChange,
-          placeholder: 'Ansiedad, duelo, habitos de sueno...',
-          disabled: isRegistering,
-        })}
-      </div>
+      <p className="text-sm text-slate-600">Registro independiente para personas de 18 años o más. No necesitas entrevista ni motivo de consulta.</p>
+      {renderTextField({
+        label: 'Fecha de nacimiento', name: 'birthDate', value: patientForm.birthDate,
+        onChange: handlePatientChange, type: 'date', disabled: isRegistering, required: true,
+      })}
+      {renderTextField({
+        label: 'Teléfono con prefijo internacional', name: 'phone', value: patientForm.phone,
+        onChange: handlePatientChange, type: 'tel', placeholder: '+525512345678', disabled: isRegistering, required: true,
+      })}
+      {registrationSuccess && <InlineNotice tone="success" title="Solicitud recibida" message={registrationSuccess} />}
 
       {renderTextField({
         label: 'Correo',
@@ -501,7 +500,7 @@ export default function LoginScreen({
       ? {
           icon: UserPlus2,
           title: 'Crear cuenta paciente',
-          subtitle: 'La cuenta queda activa al instante para completar entrevista, revisar agenda y seguimiento.',
+          subtitle: 'Puedes iniciar sesión antes de verificar tus contactos. El registro no te vincula con un psicólogo.',
         }
       : activeTab === 'psychologist'
         ? {

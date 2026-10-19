@@ -1,3 +1,4 @@
+import IdentityPanel from './components/IdentityPanel';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
 import Sidebar from './components/layout/Sidebar';
@@ -409,9 +410,8 @@ export default function App() {
     setPasswordResetPreview(null);
 
     try {
-      const session = await registerPatient(payload);
-      setCurrentUser(session.user);
-      resetSessionState();
+      await registerPatient(payload);
+      setRegistrationSuccess('Si los datos permiten el registro, ya puedes iniciar sesión. Si tienes cuenta, utiliza tu acceso habitual.');
       return true;
     } catch (error) {
       setRegistrationError(error.message || 'No se pudo crear la cuenta de paciente.');
@@ -802,10 +802,7 @@ export default function App() {
     try {
       const updatedApiPatient = await updatePatient(
         patientToUpdate.id,
-        mapUiPatientToBackendPatient({
-          ...patientToUpdate,
-          notas: notasTemp,
-        }),
+        { notes: notasTemp },
       );
 
       const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
@@ -830,10 +827,10 @@ export default function App() {
     try {
       const updatedApiPatient = await updatePatient(
         patientToUpdate.id,
-        mapUiPatientToBackendPatient({
-          ...patientToUpdate,
-          ...changes,
-        }),
+        (() => {
+          const mapped = mapUiPatientToBackendPatient({ ...patientToUpdate, ...changes });
+          return { riskLevel: mapped.riskLevel, status: mapped.status, reasonForConsultation: mapped.reasonForConsultation };
+        })(),
       );
 
       const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
@@ -1669,10 +1666,13 @@ export default function App() {
       <MobileNav currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} />
 
       <main className="flex-1 flex flex-col h-screen overflow-auto bg-slate-50/50 w-full">
-        <div className="p-4 md:p-8">{renderMainContent()}</div>
+        <div className="p-4 md:p-8">
+          {currentUser?.role === 'patient' && <IdentityPanel />}
+          {renderMainContent()}
+        </div>
       </main>
 
-      {currentUser?.role === 'patient' && patientProfile && !patientProfile.entrevistaCompleta && (
+      {currentUser?.role === 'patient' && patientProfile && !patientProfile.entrevistaCompleta && careRelationships.some(r => r.status === 'active') && (
         <PatientInterviewModal
           patient={patientProfile}
           form={patientInterviewForm}

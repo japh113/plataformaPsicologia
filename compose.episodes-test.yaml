@@ -28,6 +28,8 @@ services:
       PGUSER: integrity_test
       PGPASSWORD: disposable_test_password
       JWT_SECRET: disposable_episode_test_secret
+      VERIFICATION_SECRET: disposable_identity_test_secret_of_at_least_32_bytes
+      VERIFICATION_DELIVERY: simulated
       RUN_EPISODE_INTEGRATION: "true"
       RUN_AUTH_INTEGRATION: "true"
       RUN_CLINICAL_INTEGRATION: "true"
@@ -62,6 +64,7 @@ services:
       - ./frontend/src:/app/src:ro
       - ./frontend/eslint.config.js:/app/eslint.config.js:ro
     environment:
+      VITE_IDENTITY_DEMO: ${IDENTITY_DEMO_MODE:-false}
       VITE_API_URL: ${EPISODE_DEMO_API_URL:-http://localhost:5000/api}
     networks: [app]
 networks:
