@@ -4,7 +4,7 @@ Implementado en rama sobre 0f2ebba (#10); revisión/integración pendientes. Sin
 
 ## Registro, titularidad y fuentes
 
-POST /api/auth/register/patient admite únicamente firstName, lastName opcional, email, password, birthDate YYYY-MM-DD y phone internacional explícito. Nombre hasta 100 caracteres, contraseña de 8 caracteres hasta 72 bytes por bcrypt; DOB real/no futura y edad al menos 18. El servidor usa fecha civil UTC, sin depender de reloj/edad del cliente; 29/02 alcanza cumpleaños 01/03 en año no bisiesto. No inferir edad/DOB desde entrevista. Teléfono: quitar espacios/paréntesis/guiones, conservar + y 2–15 dígitos con primer dígito no cero; validación sintáctica, sin adivinar país ni afirmar que el número existe.
+POST /api/auth/register/patient admite únicamente firstName, lastName opcional, email, password, birthDate YYYY-MM-DD y phone internacional explícito. Nombre hasta 100 caracteres, contraseña de 8 caracteres hasta 72 bytes por bcrypt; DOB real/no futura y edad al menos 18. Por aprobación de la segunda revisión de B, el servidor obtiene la fecha civil de America/Mexico_City como referencia única de esta primera versión mexicana, sin depender de la zona del host, ubicación o reloj/edad del cliente. Cumplir 18 se permite desde las 00:00 de esa referencia, aunque UTC ya haya cambiado antes. Para DOB 29/02 se aprobó esperar hasta 01/03 en año no bisiesto. Es una política de elegibilidad de B, sin afirmar criterio jurídico ni extenderla a todas las zonas de México; otros ámbitos requieren decisión propia. No cambia la zona ni las reglas de agenda 2E. No inferir edad/DOB desde entrevista. Teléfono: quitar espacios/paréntesis/guiones, conservar + y 2–15 dígitos con primer dígito no cero; validación sintáctica, sin adivinar país ni afirmar que el número existe.
 
 Se crean cuenta y paciente en una transacción, sin entrevista, relación, acceso profesional o episodio. Los defaults legacy risk_level=none/status=active de patients no son evaluación clínica ni responsabilidad asistencial. El registro rechaza campos clínicos/IDs/rol/verificaciones del cliente. No hay alta delegada alternativa de menores. No exige motivo, riesgo, CURP o documento.
 
@@ -20,6 +20,10 @@ Ambos registros públicos (paciente y profesional) devuelven 202 con accepted=tr
 | Evidencia | contact_verification_state por cuenta/canal/contacto vigente; nunca una marca enviada por cliente, cuenta previa o relación. |
 
 GET /api/auth/identity devuelve solo firstName/lastName/birthDate/email/phone/emailVerifiedAt/phoneVerifiedAt de la cuenta paciente titular. PATCH admite exclusivamente nombre/apellido. El usuario confirmó dejar pendiente cualquier captura o corrección posterior de DOB, también para históricos desconocidos. Cambios de email/teléfono requieren PR C y se rechazan aquí. El profesional solo puede escribir riskLevel/status/notes/reasonForConsultation mediante PUT patients; se preservan sus capacidades clínicas autorizadas.
+
+## Selector legacy y correos profesionales
+
+GET /api/auth/psychologists/available está temporalmente deshabilitado: 401 sin sesión y 403 para cualquier cuenta autenticada antes de consultar DB. App no lo solicita ni conserva su estado/cliente. El DTO clínico de vínculos omite email profesional, conservando nombre/ID/estado para el panel y relaciones existentes; no altera permisos o filas. La proyección operativa del backoffice continúa bajo sus roles autorizados, sin acceso para pacientes. D sigue pendiente, sin DTO/directorio público nuevo.
 
 ## Verificación y contratos
 

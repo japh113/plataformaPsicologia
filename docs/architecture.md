@@ -30,13 +30,15 @@ AB-23 bloquea las cinco mutaciones legacy en servicio antes de DB. No existe ya 
 | Dominio | Tablas/servicios existentes y límites |
 | --- | --- |
 | Identidad y cuentas | patients, users (patient_id único opcional), password_reset_tokens. Paciente conserva ID global. 004 añade patients.global_birth_date, contact_verification_state y contact_verification_challenges. Evidencia independiente por contacto, HMAC y cuotas compartidas PostgreSQL; sin cambio de contacto C. |
-| Profesional y vínculos | psychologist_profiles con título/cédula, aprobación y notas de revisión; care_relationships y psychologist_patient_access legacy. Sin versiones de credenciales, opt-in público o admisión independiente. Directorio autenticado existente expone email: no hacerlo público. |
+| Profesional y vínculos | psychologist_profiles con título/cédula, aprobación y notas de revisión; care_relationships y psychologist_patient_access legacy. Sin versiones de credenciales, opt-in público o admisión independiente. Selector legacy deshabilitado (403 sin consulta) y sin carga frontend; DTO clínico de vínculos sin email profesional. Backoffice conserva proyección operativa autorizada. Directorio D pendiente. |
 | Expediente | patient_intakes, patient_tasks (tareas/objetivos), patient_clinical_notes. Entrevista/riesgo/contexto se agregan por paciente; no están segmentados funcionalmente por episodio. Paciente tiene acciones limitadas de entrevista/actividades; no asumir toda la visión RN-24 implementada. |
 | Agenda | appointments, appointment_waitlist_entries; citas/recurrencias, cancelación conservadora, espera manual priorizada y retiro sin borrar. Reglas de 60 min/hora exacta y nota/cita en servicios y 001; no confundirlas con toda la concurrencia objetivo de etapa 2D. |
 | Disponibilidad | psychologist_availability y bloques, excepciones y bloques por fecha, controles de cobertura de citas futuras. Lecturas operativas dependen de accesos legacy. |
 | Auditoría | audit_logs y clinical_record_history (001). Proyección operativa limitada por #7; historia de filas no es mecanismo seguro para copiar secretos o mensajes nuevos. Recordatorios se calculan en reminders, sin proveedor externo implementado. |
 
 Servicios: [patients](../backend/src/modules/patients/patients.service.js), [appointments](../backend/src/modules/appointments/appointments.service.js), [availability](../backend/src/modules/availability/availability.service.js), [reminders](../backend/src/modules/reminders/reminders.service.js). Cancelar citas conserva filas; notas requieren cita completada y no futura; no se permite borrar expediente/nota. Edición actual de notas conserva versiones; **adendas e inmutabilidad finalizada de RN-23 aún no están implementadas**.
+
+La elegibilidad adulta del registro B usa exclusivamente la referencia civil America/Mexico_City aprobada en su segunda revisión, independiente de la zona del host/cliente. No es una configuración global de zonas.
 
 La política de día clínico aún usa America/Los_Angeles en partes de aplicación/001; etapa 2E sigue pendiente. No cambiar zona ni interpretar histórico por efecto de esta documentación.
 

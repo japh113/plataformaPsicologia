@@ -27,7 +27,7 @@ Prefijo /api. Denegaciones en servicio antes de adquirir cliente/transacción; n
 | POST /auth/login y /password-reset/request, /confirm | Autenticación/recuperación anteriores preservadas. B no reutiliza previews de reset para verificación ni amplía recuperación remota. |
 | POST /auth/verification/:channel/request, /confirm | Solo titular; sin destinos/IDs del cliente. SMS exige correo vigente verificado. Verificar nunca concede clínica. |
 
-La UI retira selector/solicitud/invitación/canje/respuesta; muestra indisponibilidad temporal y relaciones existentes. El botón de alta unilateral está deshabilitado. GET /auth/care-relationships conserva lectura autorizada, sin inviteCode/invitePreview; no se borran los códigos de DB. GET /auth/psychologists/available sigue siendo una lectura autenticada legacy, sin hacerlo directorio público D.
+La UI retira selector/solicitud/invitación/canje/respuesta; muestra indisponibilidad temporal y relaciones existentes. El botón de alta unilateral está deshabilitado. GET /auth/care-relationships conserva lectura autorizada, sin inviteCode/invitePreview; no se borran los códigos de DB. GET /auth/psychologists/available devuelve 403 para toda cuenta autenticada, antes de consultar DB; no existe cliente/carga frontend del selector. El DTO clínico de vínculos también omite email profesional; nombres/IDs/estados se conservan. El backoffice mantiene solo su proyección operativa autorizada, inaccesible a pacientes. No se implementa directorio D.
 
 ## Escritores fuera de HTTP
 

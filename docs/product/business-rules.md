@@ -66,7 +66,7 @@ Referencia: 18 de octubre de 2026; base auditada `main` en `0077f46` (PR #9 inte
 
 | ID | Regla inequívoca |
 | --- | --- |
-| RN-41 | Registro independiente solo con edad >=18 y DOB global obligatoria, validada en backend: fechas reales, no futuras y bordes de edad. Menores, incluidos invitados, necesitan política pendiente; no abrir altas alternativas. |
+| RN-41 | Registro independiente solo con edad >=18 y DOB global obligatoria, validada en backend: fechas reales, no futuras y bordes de edad. B usa referencia civil America/Mexico_City del reloj servidor, sin zona cliente/host; para DOB 29/02 espera al 01/03 en año no bisiesto (aprobado en segunda revisión). Solo elegibilidad de registro, sin política global o cambio de agenda. Menores, incluidos invitados, necesitan política pendiente; no abrir altas alternativas. |
 | RN-42 | Registrar no exige motivo, entrevista, riesgo, CURP o documento oficial y no crea vínculo, episodio ni permisos. Puede registrarse y consultar directorio sin terminar verificaciones. |
 | RN-43 | No deducir DOB de edad/entrevista, identidad de contactos, verificación de cuenta previa ni episodios/responsable del vínculo actual. No fusionar coincidencias ni reatribuir historia. |
 | RN-44 | Email mediante enlace impredecible, único y de un uso, válido 24 h. Mínimo 60 s entre solicitudes y máximo 5 enlaces por dirección en ventana de 24 h; nuevo enlace invalida anterior. |
