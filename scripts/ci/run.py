@@ -1,7 +1,7 @@
 """Run one required component; retain only sanitized, integrity-bound evidence."""
 import json,os,shutil,signal,subprocess,sys,time,traceback
 from pathlib import Path
-from common import OUT,PRIVATE,command,identity,write,seal,export_tap,SuiteFailure
+from common import OUT,PRIVATE,command,identity,write,seal,export_tap,inventory,SuiteFailure
 import docs
 from sandbox import Sandbox
 
@@ -21,7 +21,8 @@ def main(job):
             report['runtime']={key:subprocess.check_output([key,'--version'],text=True).strip() for key in ['node','npm']}
             assert report['runtime']['node']=='v24.22.0'
             report['suites'].append(command(['npm','ci','--ignore-scripts'],cwd=app))
-            report['suites'].append(command(['npm','test'],cwd=app,tap=True))
+            files=sorted(p for p in Path(app+'/test').glob('*.test.js') if not p.name.endswith('.integration.test.js'))
+            report['suites'].append(inventory(command(['npm','test'],cwd=app,tap=True),files))
             if app=='frontend':
                 for task in ['lint','build']:report['suites'].append(command(['npm','run',task],cwd=app))
         elif job=='postgres':

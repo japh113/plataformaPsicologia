@@ -2,8 +2,8 @@ import copy,json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import docs
-from common import JOBS,accept,identity,parse_tap,scan,seal,verify
-from sandbox import destination,validate
+from common import JOBS,accept,identity,inventory,parse_tap,scan,seal,verify
+from sandbox import destination,validate,episode_images
 
 class Contracts(unittest.TestCase):
     def test_aggregator_rejects_every_non_success_and_missing_or_stale_evidence(self):
@@ -45,3 +45,29 @@ class Contracts(unittest.TestCase):
         validate(info,network,'own')
         with self.assertRaises(AssertionError):validate(info,network,'existing-other-project')
         with self.assertRaises(AssertionError):validate(info,dict(network,Internal=False),'own')
+
+    def test_protected_decision_blocks_and_rule_rows(self):
+        for doc,identifiers in [('docs/product/decisions.md',['ADR-029','AB-25']),('docs/product/business-rules.md',['RN-59','RN-60','RN-61'])]:
+            original=Path(doc).read_text()
+            for identifier in identifiers:
+                docs.protect(original,original,identifier)
+                changed=original.replace('| '+identifier+' |','| '+identifier+'-injected |') if identifier.startswith('RN') else original.replace('## '+identifier,'## CI-INJECTED-'+identifier)
+                if identifier=='AB-25':changed=original.replace('### Resoluci'+chr(243)+'n AB-25','### CI-INJECTED')
+                with self.subTest(identifier=identifier),self.assertRaises(ValueError):docs.protect(original,changed,identifier)
+
+    def test_partial_tap_or_declared_case_omission_is_rejected(self):
+        self.assertFalse(parse_tap('ok 1 - first')['complete'])
+        self.assertFalse(parse_tap('ok 1 - first\n# tests 2\n# duration_ms 1')['complete'])
+        self.assertTrue(parse_tap('ok 1 - first\n# tests 1\n# duration_ms 1')['complete'])
+        with tempfile.TemporaryDirectory() as tmp:
+            source=Path(tmp)/'declared.test.js';source.write_text("test('first',()=>{});test('second',()=>{});")
+            with self.assertRaises(ValueError):inventory({'tests':[{'name':'first','status':'passed'}]},[source])
+
+    def test_ci_names_are_bound_to_run_attempt_and_uuid(self):
+        run='12345678-1234-1234-1234-123456789abc'
+        with patch.dict('os.environ',{'GITHUB_RUN_ID':'12345','GITHUB_RUN_ATTEMPT':'2'}):
+            suffix=episode_images.execution_suffix(run)
+            self.assertEqual(suffix,'ci-12345-2-'+run)
+            self.assertEqual(len(episode_images.expected_images('psicopanel-episodes-'+suffix)),2)
+        with patch.dict('os.environ',{'GITHUB_RUN_ID':'external','GITHUB_RUN_ATTEMPT':'2'}):
+            with self.assertRaises(ValueError):episode_images.execution_suffix(run)

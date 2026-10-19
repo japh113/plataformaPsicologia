@@ -36,7 +36,7 @@ def command(args,cwd=None,timeout=600,tap=False):
     report={'command':args,'cwd':cwd or '.','exit':p.returncode,'seconds':round(time.monotonic()-start,3)}
     if tap:
         report.update(parse_tap(p.stdout))
-    if p.returncode or (tap and (not report['tests'] or report['failed'] or report['skipped'] or report['cancelled'])):
+    if p.returncode or (tap and (not report['tests'] or not report['complete'] or report['failed'] or report['skipped'] or report['cancelled'])):
         raise SuiteFailure(report)
     return report
 
@@ -53,7 +53,9 @@ def parse_tap(text):
             cases.append({'name':name,'status':'skipped' if re.search(r'# (SKIP|TODO)',line,re.I) else ('passed' if m[1]=='ok' else 'failed')})
     counts={k:sum(x['status']==k for x in cases) for k in ['passed','failed','skipped']}
     cancelled=sum(int(x) for x in re.findall(r'^# cancelled (\d+)',text,re.M))
-    return {'tests':cases,**counts,'cancelled':cancelled}
+    summary=re.findall(r'^# tests (\d+)$',text,re.M)
+    complete=bool(re.search(r'^# duration_ms \d',text,re.M)) and len(summary)==1 and int(summary[0])==len(cases)
+    return {'tests':cases,**counts,'cancelled':cancelled,'complete':complete}
 
 def scan(data):
     text=data.decode('utf-8')
@@ -103,3 +105,15 @@ def export_tap(directory,suites):
             status=case.get('status');name=case.get('name',case.get('id','case')).replace('\n',' ').replace('\r',' ')
             lines.append(('ok' if status in ['passed','PASS'] else 'not ok')+' '+str(n)+' - '+name)
         path=Path(directory)/('suite-'+str(i+1)+'.tap');path.write_text('\n'.join(lines)+'\n')
+
+def inventory(report,files):
+    expected=set()
+    for file in files:
+        source=Path(file).read_text()
+        for match in re.finditer(r"\btest\(\s*(['\"])((?:\\.|(?!\1).)*)\1",source,re.S):
+            expected.add(match[2].replace("\\'","'").replace('\\"','"'))
+    actual={t['name'] for t in report['tests']}
+    if not expected or expected-actual:raise ValueError('Declared test cases did not execute: '+str(sorted(expected-actual)))
+    report['sourceFiles']=[str(p) for p in files]
+    report['declaredCases']=sorted(expected)
+    return report

@@ -7,9 +7,19 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
-PROJECT_PATTERN = r"psicopanel-episodes-[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}"
+PROJECT_PATTERN = r"psicopanel-episodes-(?:ci-[0-9]+-[0-9]+-)?[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}"
 OWNER_LABEL = "io.psicopanel.episodes.project"
 
+
+def execution_suffix(run):
+    if not re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',run):
+        raise ValueError('Invalid execution UUID')
+    ci_run=os.environ.get('GITHUB_RUN_ID')
+    if not ci_run:return run
+    attempt=os.environ.get('GITHUB_RUN_ATTEMPT','')
+    if not re.fullmatch(r'[0-9]+',ci_run) or not re.fullmatch(r'[0-9]+',attempt):
+        raise ValueError('Invalid CI run/attempt')
+    return 'ci-'+ci_run+'-'+attempt+'-'+run
 
 def docker(*args):
     return subprocess.check_output(["docker", *args], cwd=ROOT, text=True).strip()

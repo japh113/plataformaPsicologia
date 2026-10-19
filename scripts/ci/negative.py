@@ -47,6 +47,7 @@ def gate():
     reports={j:{'job':j,'identity':identity(),'status':'success','suites':[{'qualification':True}]} for j in JOBS}
     conclusions={j:{'result':needs['fixtures']['result']} for j in JOBS}
     conclusions['docs']={'result':needs['omitted']['result']}
+    conclusions['postgres']={'result':needs['isolation']['result']}
     accept(conclusions,reports)
     return 0
 

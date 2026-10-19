@@ -1,7 +1,7 @@
 """Provision ONLY fresh, owned CI resources. Never invoke normal Compose."""
 import json,os,re,subprocess,uuid
 from pathlib import Path
-from common import command,PRIVATE
+from common import command,PRIVATE,inventory
 import sys
 sys.path.insert(0,str(Path('scripts').resolve()))
 import episode_images
@@ -24,14 +24,15 @@ def destination(env):
 
 class Sandbox:
     def __init__(self):
-        self.run=str(uuid.uuid4());self.project='psicopanel-episodes-'+self.run
+        self.run=str(uuid.uuid4());self.project='psicopanel-episodes-'+episode_images.execution_suffix(self.run)
         self.path=PRIVATE/self.run;self.path.mkdir(parents=True)
         self.env=dict(os.environ,EPISODE_TEST_RUN_ID=self.run,IDENTITY_DEMO_MODE='true',EPISODE_DEMO_API_URL='http://api:5000/api')
         self.args=['docker','compose','-p',self.project,'-f','compose.episodes-test.yaml','-f',str(self.path/'compose.json')]
         self.prepared=False;self.isolation={};self.browser_tags=[]
+        self.container_baseline=subprocess.check_output(['docker','ps','-aq','--no-trunc'],text=True).split()
         self.save()
     def save(self):
-        (self.path/'state.json').write_text(json.dumps({'run':self.run,'project':self.project,'path':str(self.path),'args':self.args,'env':{k:self.env[k] for k in ['EPISODE_TEST_RUN_ID','IDENTITY_DEMO_MODE','EPISODE_DEMO_API_URL']},'browser_tags':self.browser_tags}))
+        (self.path/'state.json').write_text(json.dumps({'run':self.run,'project':self.project,'path':str(self.path),'args':self.args,'env':{k:self.env[k] for k in ['EPISODE_TEST_RUN_ID','IDENTITY_DEMO_MODE','EPISODE_DEMO_API_URL']},'browser_tags':self.browser_tags,'container_baseline':self.container_baseline}))
     def cmd(self,*args,**kwargs):
         saved=dict(os.environ);os.environ.update(self.env)
         try:return command(self.args+list(args),**kwargs)
@@ -60,17 +61,23 @@ class Sandbox:
         self.isolation={'uuid':self.run,'project':self.project,'run':os.environ.get('GITHUB_RUN_ID','local'),'attempt':os.environ.get('GITHUB_RUN_ATTEMPT','1'),'fresh':True,'tmpfs':True,'internal':True,'dbPorts':False,'persistentVolumes':False,'images':VERSIONS,'applicationImageIDs':{app:docker('image','inspect',self.project+'-'+app+':isolated')[0]['Id'] for app in ['backend','frontend']},'postgresVersion':version}
         return self
     def postgres(self):
-        return [self.cmd('run','--rm','-T','backend','npm','run',suite,tap=True,timeout=900) for suite in ['test:episodes','test:integration']]
+        reports=[]
+        scripts=json.loads(Path('backend/package.json').read_text())['scripts']
+        for suite in ['test:episodes','test:integration']:
+            files=[Path('backend')/name for name in scripts[suite].split() if name.endswith('.test.js')]
+            reports.append(inventory(self.cmd('run','--rm','-T','backend','npm','run',suite,tap=True,timeout=900),files))
+        return reports
     def review(self,kind):
         self.cmd('run','--rm','-T','-e','NODE_ENV=development','backend','node','scripts/create-identity-demo.js')
         self.cmd('--profile','demo','up','-d','api','frontend')
         review=str(uuid.uuid4());stem='contact' if kind=='C' else 'ui'
         label='io.psicopanel.'+stem+'-review.run'
-        tag='psicopanel-'+stem+'-review-'+review+'-chromium:isolated'
+        tag='psicopanel-'+stem+'-review-'+episode_images.execution_suffix(review)+'-chromium:isolated'
+        assert not subprocess.check_output(['docker','ps','-aq','--filter','label='+label+'='+review],text=True).strip()
         assert subprocess.run(['docker','image','inspect',tag],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode!=0
         directory=self.path/'browser';directory.mkdir();work=directory/'work';out=directory/'out'
         work.mkdir();out.mkdir();(out/'screenshots').mkdir()
-        (work/'baseline.json').write_text(json.dumps({'containers':[]}))
+        (work/'baseline.json').write_text(json.dumps({'containers':[{'id':cid} for cid in self.container_baseline]}))
         dockerfile=self.path/'browser.Dockerfile'
         dockerfile.write_text('FROM '+VERSIONS['browserImage']+'\nWORKDIR /review\nCOPY scripts/ci/browser/package*.json ./\nRUN npm ci --ignore-scripts\nLABEL '+label+'='+review+'\n')
         self.browser_tags.append((tag,label,review));self.save()
@@ -111,4 +118,7 @@ class Sandbox:
         episode_images.cleanup(self.project)
         assert not subprocess.check_output(['docker','ps','-aq','--filter','label=com.docker.compose.project='+self.project],text=True).strip()
         assert not subprocess.check_output(['docker','network','ls','-q','--filter','label=com.docker.compose.project='+self.project],text=True).strip()
+        current=subprocess.check_output(['docker','ps','-aq','--no-trunc'],text=True).split()
+        assert set(self.container_baseline).issubset(current)
+        self.isolation['preexistingContainersPreserved']=True
         self.isolation['cleanupConfirmed']=True

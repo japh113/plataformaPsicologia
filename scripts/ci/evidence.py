@@ -17,7 +17,7 @@ def collect(root):
             if job in ['backend-unit','frontend','postgres']:
                 tap=[s for s in report['suites'] if 'tests' in s]
                 assert len(tap)==(2 if job=='postgres' else 1)
-                assert all(s['tests'] and s['passed'] and not s['failed'] and not s['cancelled'] and not s['skipped'] and s['exit']==0 for s in tap)
+                assert all(s['tests'] and s.get('complete') and s.get('sourceFiles') and s.get('declaredCases') and s['passed'] and not s['failed'] and not s['cancelled'] and not s['skipped'] and s['exit']==0 for s in tap)
             if job=='frontend':assert [s['command'] for s in report['suites']]==[['npm','ci','--ignore-scripts'],['npm','test'],['npm','run','lint'],['npm','run','build']]
             if job=='browser':
                 assert [s['kind'] for s in report['suites']]==['B','C']

@@ -24,6 +24,10 @@ def check_link(source, target):
     if fragment and dest.suffix=='.md' and fragment not in anchors(dest.read_text()):
         raise ValueError(f'{source}: missing fragment {target}')
 
+def protect(old,new,identifier):
+    pattern=(r'(?m)^\| '+identifier+r' \|.*$' if identifier.startswith('RN') else r'(?ms)^#{2,6} [^\n]*\b'+identifier+r'\b.*?(?=^#{2,6} |\Z)')
+    if len(re.findall(pattern,old))!=1 or re.findall(pattern,old)!=re.findall(pattern,new):raise ValueError('Protected decision changed: '+identifier)
+
 def run(base):
     files=git('ls-files','*.md').splitlines();links=0
     for name in files:
@@ -50,7 +54,6 @@ def run(base):
     for doc,ids in [('docs/product/decisions.md',['ADR-029','AB-25']),('docs/product/business-rules.md',['RN-59','RN-60','RN-61'])]:
         old=git('show',base+':'+doc);new=Path(doc).read_text()
         for identifier in ids:
-            pattern=(r'(?m)^\| '+identifier+r' \|.*$' if identifier.startswith('RN') else r'(?ms)^#{2,6} [^\n]*\b'+identifier+r'\b.*?(?=^#{2,6} |\Z)')
-            if len(re.findall(pattern,old))!=1 or re.findall(pattern,old)!=re.findall(pattern,new):raise ValueError('Protected decision changed: '+identifier)
+            protect(old,new,identifier)
     subprocess.run(['git','diff','--check',base,'HEAD'],check=True)
     return {'markdownFiles':len(files),'localLinks':links,'changedFiles':changed,'protectedDecisions':'unchanged','migrations':'unchanged'}

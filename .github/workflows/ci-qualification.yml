@@ -66,7 +66,7 @@ jobs:
           retention-days: 14
   gate:
     name: qualification/gate-must-reject
-    needs: [fixtures, omitted]
+    needs: [fixtures, omitted, isolation]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 3

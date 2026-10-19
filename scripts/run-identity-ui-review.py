@@ -14,6 +14,7 @@ No traces, HAR, video or storage state. All credentials are fictional test value
 """
 import json,os,re,subprocess,sys
 from pathlib import Path
+from episode_images import execution_suffix
 if len(sys.argv)!=2: raise SystemExit('Usage: python3 scripts/run-identity-ui-review.py CONFIG_JSON')
 config_path=Path(sys.argv[1]).resolve()
 root=Path.cwd().resolve()
@@ -22,9 +23,9 @@ c=json.loads(config_path.read_text())
 for key in ['work','out']:
  if not Path(c[key]).resolve().is_relative_to(root/'tmp'): raise SystemExit('Review paths must stay in tmp/')
 baseline=json.loads(Path(c['work']+'/baseline.json').read_text())
-assert c['project']=='psicopanel-episodes-'+c['demo']
+assert c['project'] in ['psicopanel-episodes-'+c['demo'],'psicopanel-episodes-'+execution_suffix(c['demo'])]
 assert c['network']==c['project']+'_app'
-assert c['image']=='psicopanel-ui-review-'+c['run']+'-chromium:isolated'
+assert c['image'] in ['psicopanel-ui-review-'+c['run']+'-chromium:isolated','psicopanel-ui-review-'+execution_suffix(c['run'])+'-chromium:isolated']
 owned=json.loads(subprocess.check_output(['docker','image','inspect',c['image']],text=True))[0]
 assert owned['Config']['Labels']['io.psicopanel.ui-review.run']==c['run']
 network=json.loads(subprocess.check_output(['docker','network','inspect',c['network']],text=True))[0]
@@ -89,7 +90,7 @@ address=front['NetworkSettings']['Networks'][c['network']]['IPAddress']
 source=root/'scripts/identity-ui-review.cjs'
 assert source.is_file()
 revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-cmd=['docker','run','--rm','--init','-i','--name','psicopanel-ui-browser-'+c['run'],'--label','io.psicopanel.ui-review.run='+c['run'],'--user',str(os.getuid())+':'+str(os.getgid()),'--network',c['network'],'--add-host','frontend.localhost:'+address,'-e','REVIEW_FRONTEND_IP='+address,'--read-only','--tmpfs','/tmp:size=1g,mode=1777','--shm-size=1g','--cap-drop=ALL','--security-opt','no-new-privileges','-e','HOME=/tmp','-e','REVIEW_BASE='+c['base'],'-e','REVIEW_REVISION='+revision,'-v',c['work']+':/control','-v',c['out']+':/evidence','-v',str(source)+':/review/driver.cjs:ro',c['image'],'node','/review/driver.cjs']
+cmd=['docker','run','--rm','--init','-i','--name','psicopanel-ui-browser-'+execution_suffix(c['run']),'--label','io.psicopanel.ui-review.run='+c['run'],'--user',str(os.getuid())+':'+str(os.getgid()),'--network',c['network'],'--add-host','frontend.localhost:'+address,'-e','REVIEW_FRONTEND_IP='+address,'--read-only','--tmpfs','/tmp:size=1g,mode=1777','--shm-size=1g','--cap-drop=ALL','--security-opt','no-new-privileges','-e','HOME=/tmp','-e','REVIEW_BASE='+c['base'],'-e','REVIEW_REVISION='+revision,'-v',c['work']+':/control','-v',c['out']+':/evidence','-v',str(source)+':/review/driver.cjs:ro',c['image'],'node','/review/driver.cjs']
 p=subprocess.Popen(cmd,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1)
 with open(c['work']+'/browser-progress.log','w')as log:
  for line in p.stdout:
