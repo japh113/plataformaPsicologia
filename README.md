@@ -1,6 +1,6 @@
 # PsicoPanel
 
-PR #11/B integrado en main (5e549f5). C autorizado e implementado en rama para revisión: [cambio seguro de contactos](docs/contact-changes.md), [validación C](docs/contact-change-validation.md). Sin despliegue habitual ni D. Los estados anteriores de B en el texto siguiente son el corte documental previo a su merge. [Primera revisión P2](docs/contact-change-review-validation.md). [Revisión del deadline y pruebas nuevas](docs/contact-change-deadline-validation.md).
+Corte documental: 19 de octubre de 2026, después del merge de PR #12 en `543442ea634e5977bc887ace1db5457eee2ebf8c`. A, B y C están integrados; D no está iniciado. Integración en Git no acredita despliegue habitual. GitHub Actions/CI sigue como [plan propuesto](docs/ci-plan.md), sin workflows implementados en este corte.
 
 Plataforma para psicólogos independientes y pacientes: agenda, disponibilidad, espera manual asistida, tareas, objetivos, notas y seguimiento clínico, con backoffice separado.
 
@@ -8,7 +8,7 @@ La aplicación activa es web (React/Vite + Express JavaScript + PostgreSQL). Rea
 
 ## Estado y fuentes
 
-PR #7 restringió el acceso clínico del backoffice; #8 integró fundamentos SQL de episodios sin activar sus permisos; #9 documentó identidad/directorio. PR A (#10, merge 0f2ebba) está integrado. PR B (#11, 5e549f5) integra registro adulto, identidad propia y verificación simulada email/SMS, con bloqueo legacy aprobado AB-23. C implementa cambio seguro de contactos en rama, pendiente de revisión/integración; D sigue pendiente. Sin despliegue habitual.
+PR #7 restringió el acceso clínico del backoffice; #8 integró fundamentos SQL de episodios sin activar sus permisos; #9 documentó identidad/directorio. A (#10, `0f2ebba`) integró decisiones y documentación; B (#11, `5e549f5`), registro adulto, identidad propia y verificación simulada email/SMS con barrera legacy AB-23; C (#12, `543442e`), cambio seguro de contactos y revocación total de sesiones. D (perfil/directorio) requiere autorización propia. 2A sigue parcial: nuevas vinculaciones, activación y permisos por episodio no están implementados.
 
 | Necesidad | Fuente |
 | --- | --- |
@@ -17,6 +17,8 @@ PR #7 restringió el acceso clínico del backoffice; #8 integró fundamentos SQL
 | Arquitectura implementada y fundamentos no activados | [docs/architecture.md](docs/architecture.md) |
 | Identidad y verificación B | [Guía y demo](docs/patient-identity-verification.md), [evidencia aislada](docs/patient-identity-validation.md) |
 | Desarrollo Docker/WSL, pruebas y demos aisladas | [docs/development.md](docs/development.md) |
+| Contribuir por rama y PR; propuesta de CI y aceptación | [CONTRIBUTING.md](CONTRIBUTING.md), [docs/ci-plan.md](docs/ci-plan.md) |
+| Contrato C y evidencia histórica final | [Cambio seguro de contactos](docs/contact-changes.md), [deadline](docs/contact-change-deadline-validation.md); informes anteriores: [inicial](docs/contact-change-validation.md), [primera revisión P2](docs/contact-change-review-validation.md) |
 | Producto y reglas aprobadas | [Visión](docs/product/vision.md), [decisiones](docs/product/decisions.md), [reglas](docs/product/business-rules.md), [roadmap](docs/product/roadmap.md) |
 | Próximas entregas y decisiones pendientes | [Plan A/B/C/D](docs/identity-directory-delivery-plan.md), [diseño 2A](docs/stage2a-identity-directory-intake.md), [mutaciones legacy](docs/stage2a-legacy-mutations.md) |
 | Reorganización y notas históricas | [Inventario](docs/documentation-audit.md), [archivo de abril](docs/archive/notes-2026-04-13.md) |
@@ -29,4 +31,4 @@ No ejecutar schema/seed o normalizadores como actualización de bases existentes
 
 Roles reales: patient, psychologist, support, admin y superadmin. Los tres administrativos no tienen acceso clínico global ordinario. Hoy todavía existe autorización legacy por paciente: ni registro, verificación o directorio autorizan clínica nueva por sí solos.
 
-A y B están integrados; C autorizado expresamente en su rama. Las altas unilaterales y nuevas vinculaciones legacy están temporalmente deshabilitadas para todas las cuentas. [Contratos, migración 004, demo y límites de B](docs/patient-identity-verification.md). D requiere autorización propia; C no autoriza despliegue habitual. Entrega por rama y PR hacia main, sin merge ni push directo a main.
+A/B/C están integrados; 004 y 005 existen y fueron ensayadas aisladamente, sin acreditar aplicación habitual. Las altas unilaterales y nuevas vinculaciones legacy están temporalmente deshabilitadas para todas las cuentas. [Contratos y límites B](docs/patient-identity-verification.md), [contrato C](docs/contact-changes.md). ADR-029/RN-59–61 siguen vigentes con precondición backend/DB de activación pendiente. Entrega por rama nueva y PR hacia main; merge y cambios administrativos requieren autorización posterior.

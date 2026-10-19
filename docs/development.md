@@ -1,10 +1,10 @@
 # Desarrollo, Docker/WSL y validación
 
-C autorizado en rama tras #11/B integrado. [Contrato C](contact-changes.md), [validación](contact-change-validation.md). El wrapper añade contact-demo y contact-review (red interna para Chromium); sucesora 005 explícita solo en destinos nuevos. No reconstruir ni reparar recursos habituales.
+Corte documental: 19 de octubre de 2026, main `543442ea634e5977bc887ace1db5457eee2ebf8c`. A/B/C integrados; D no iniciado. [Contrato C](contact-changes.md), [evidencia histórica final](contact-change-deadline-validation.md). El wrapper incluye contact-demo y contact-review (red interna para Chromium); sucesora 005 explícita solo en destinos nuevos. No reconstruir ni reparar recursos habituales.
 
-Corte: 18 de octubre de 2026. Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile backend](../backend/Dockerfile), [Dockerfile frontend](../frontend/Dockerfile) y [package.json backend](../backend/package.json)/[frontend](../frontend/package.json). Documentar un comando no autoriza ejecutarlo.
+Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile backend](../backend/Dockerfile), [Dockerfile frontend](../frontend/Dockerfile) y [package.json backend](../backend/package.json)/[frontend](../frontend/package.json). Documentar un comando no autoriza ejecutarlo. Este encargo solo modifica Markdown: no opera Docker/PostgreSQL, migraciones, SMS ni emails.
 
-**Estado B:** A fue documental y ya está integrado; B autoriza pruebas/demo exclusivamente en recursos nuevos aislados. No levantar/reconstruir el Compose habitual ni alterar bases, imágenes o volúmenes existentes. [Guía B](patient-identity-verification.md) y [evidencia nueva](patient-identity-validation.md). C/D no están autorizados.
+**Pruebas y contribución:** [CONTRIBUTING](../CONTRIBUTING.md) define entrega por rama/PR; [CI propuesta](ci-plan.md) define automatización futura y aceptación. No hay workflows implementados en el corte #12. Las autorizaciones históricas B/C para ensayos aislados no autorizan nuevas ejecuciones por este PR documental. No levantar/reconstruir el Compose habitual ni alterar bases, imágenes o volúmenes existentes. [Guía B](patient-identity-verification.md), [evidencia histórica B](patient-identity-validation.md).
 
 ## Preparación de entorno local nuevo (solo con autorización)
 
@@ -79,12 +79,13 @@ Con el entorno ya autorizado y levantado, estas comprobaciones no ejecutan schem
 
 ```bash
 docker compose exec backend npm test
+docker compose exec frontend npm test
 docker compose exec frontend npm run lint
 docker compose exec frontend npm run build
 curl --fail http://localhost:5000/api/health
 ```
 
-En PowerShell puede usarse `Invoke-RestMethod http://localhost:5000/api/health`. El backend tiene tests automatizados de agenda, notas, entrevista, permisos y recuperacion de contrasena; el frontend dispone de lint y build, sin script de tests propio.
+En PowerShell puede usarse `Invoke-RestMethod http://localhost:5000/api/health`. El backend tiene tests automatizados de agenda, notas, entrevista, permisos, identidad/contactos y recuperación de contraseña; el frontend dispone de unitarias Node, lint y build. Salud comprueba DB; no usarla en un encargo sin autorización de conexión.
 
 Acceso manual a la base, sin publicar PostgreSQL:
 
@@ -121,7 +122,7 @@ En arranques posteriores ejecutar solamente `npm run dev` en cada carpeta.
 
 WSL puede no tener node/npm; en la auditoría de A ninguno estaba en PATH. No instalar en host por defecto ni usar contenedores habituales para integrar cambios. Las imágenes existentes de desarrollo usan Node 24 y lockfiles; verificar disponibilidad del motor y elegir ejecución autorizada antes de ensayar.
 
-El proyecto ya dispone de [scripts/clinical-episodes.sh](../scripts/clinical-episodes.sh) y [compose.episodes-test.yaml](../compose.episodes-test.yaml). El wrapper genera proyecto UUID, comprueba recursos nuevos, usa DB tmpfs sin puerto público en red privada y verifica propiedad de imágenes. El modo test ejecuta 003, unitarias, integración auth/clínica/backoffice/identidad 004 y lint/build. La demo usa puertos loopback dinámicos y datos ficticios. identity-demo incluye únicamente B y clínica legacy sintética preexistente, sin activar episodios o solicitudes nuevas.
+El proyecto ya dispone de [scripts/clinical-episodes.sh](../scripts/clinical-episodes.sh) y [compose.episodes-test.yaml](../compose.episodes-test.yaml). El wrapper genera proyecto UUID, comprueba recursos nuevos, usa DB tmpfs sin puerto público en red privada y verifica propiedad de imágenes. El modo test ejecuta SQL/runner de episodios, unitarias backend, integración auth/clínica/backoffice/identidad/contactos y lint/build. No ejecuta `frontend npm test` ni Chromium: deben cubrirse por separado en la futura CI. La demo usa puertos loopback dinámicos y datos ficticios; identity-demo no activa episodios o solicitudes nuevas. [Contrato C](contact-changes.md) describe contact-demo/contact-review y sus requisitos.
 
 Solo con alcance de pruebas/demos autorizado, desde raíz:
 
@@ -133,7 +134,7 @@ bash scripts/clinical-episodes.sh identity-demo
 
 El modo demo muestra URL/cuentas ficticias y deja únicamente sus recursos propios para inspección. Restablecer significa crear otro destino nuevo; no reutilizar bases ni volúmenes. Limpieza solo del proyecto UUID propio y verificado según el procedimiento de [fundamentos 003](clinical-episodes-foundation.md); nunca prune o limpieza de recursos habituales. A no ejecutó el wrapper; B sí lo ejecuta con autorización y destinos nuevos.
 
-`npm test` en backend selecciona unitarias; `npm run test:integration` requiere entorno opt-in aislado y `test:episodes` prueba 003. Ejecutarlos fuera del destino verificado puede omitir integración por flags: registrar cuántas pruebas se ejecutaron/omitieron y entorno. No confundir un comando verde con validación de C/D o permisos por episodio todavía inexistentes.
+`npm test` en backend selecciona unitarias; `npm run test:integration` requiere entorno opt-in aislado y `test:episodes` prueba SQL/runner y sucesoras. Ejecutarlos fuera del destino verificado puede omitir integración por flags: registrar ejecutadas/omitidas y entorno. En CI propuesta, cualquier omisión inesperada debe fallar el check. No confundir un comando verde con validación de D o permisos por episodio todavía inexistentes.
 
 ## Inicialización, migraciones y evidencia
 
@@ -141,12 +142,12 @@ El modo demo muestra URL/cuentas ficticias y deja únicamente sus recursos propi
 - `db:schema` ejecuta baseline más 001/002 y `db:seed` datos demo; **no son upgrades**. No repetirlos sobre bases existentes ni ejecutarlos por un cambio documental.
 - `db:init:production` rechaza base no vacía y no carga demo. Instala schema/001/002, no 003. No ejecutarlo ahora ni confundirlo con despliegue.
 - 003 tiene runner de destino explícito, checksums/ledger/huella, y no se aplica por reiniciar Docker. Procedimientos específicos en [clinical-episodes-foundation.md](clinical-episodes-foundation.md); 001/002 en [integridad](clinical-data-integrity.md) y [autenticación](authentication-security.md).
-- No modificar 001–003, asumir que están desplegadas, inferir históricos ni ejecutar normalizadores como reparación. 004 de B está implementada y validada solo aisladamente; 005/006 siguen estimadas en el [plan](identity-directory-delivery-plan.md).
+- No modificar 001–005/manifiesto en este encargo, asumir despliegue, inferir históricos ni ejecutar normalizadores como reparación. 004 de B y 005 de C están integradas y validadas aisladamente; 006 de D sigue estimada en el [plan](identity-directory-delivery-plan.md). Runner actual admite targets explícitos 003/004/005.
 - Mantener secretos fuera de logs/commits/frontend. Las cuentas demo se restringen al modo local explícito; nunca copiarlas o habilitarlas en producción.
 
 ## Validaciones según tipo de cambio
 
-Markdown: revisar diff, referencias a archivos/fragmentos, IDs y estados aprobado/propuesto/implementado. No ejecutar integración, SQL o demos para validar enlaces. La [auditoría documental A](documentation-audit.md) registra resultados actuales y límites.
+Markdown: revisar diff, referencias a archivos/fragmentos, IDs y estados aprobado/propuesto/implementado. No ejecutar integración, SQL o demos para validar enlaces. La [auditoría documental A](documentation-audit.md) conserva su corte histórico; la [propuesta CI](ci-plan.md) distingue las comprobaciones de esta entrega de las ejecuciones futuras.
 
 Código funcional: unitarias backend, integración HTTP/PostgreSQL pertinente en destino nuevo, lint/build frontend y demo ficticia ADR-019 del alcance, con evidencia reproducible. Si afecta agenda, revisar citas, disponibilidad y espera en frontend/backend; si afecta identidad, todos los escritores/lectores legacy y regresión JWT/backoffice. No retrasar pruebas hasta otra etapa.
 

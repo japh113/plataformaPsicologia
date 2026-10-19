@@ -1,10 +1,10 @@
 # Registro de decisiones de producto y arquitectura
 
-Corte actual, 19 de octubre de 2026: B integrado en #11 (5e549f5). C autorizado e implementado en rama bajo la resolución AB-25 siguiente, pendiente de revisión/integración. Los alcances de encargos anteriores que aparecen abajo son históricos y no revocan esta autorización específica. No hay autorización para D, despliegue habitual o nuevas vinculaciones.
+Corte documental, 19 de octubre de 2026: A/B/C integrados en #10/#11/#12; main de referencia `543442ea634e5977bc887ace1db5457eee2ebf8c`. D no iniciado ni autorizado. La resolución AB-25 conserva los acuerdos de C; ADR-029 conserva íntegro su texto. No hay autorización para despliegue habitual o nuevas vinculaciones. [CI propuesta](../ci-plan.md): decisión técnica pendiente de implementación y aprobación administrativa, sin nuevo ADR de producto.
 
-Fecha: 18 de octubre de 2026. Base auditada: `main`/`origin/main` en `0077f46`, merge de PR #9; #7 y #8 integrados. Esto no acredita ejecución de 003 en la base habitual ni autorización clínica por episodio.
+Base histórica de la auditoría A: `0077f46`, merge #9, el 18 de octubre de 2026; #7 y #8 ya integrados. La actualización de estado posterior a #12 no acredita ejecución de 003–005 en la base habitual ni autorización clínica por episodio.
 
-A documental fue integrado en #10 (0f2ebba). El encargo posterior autoriza exclusivamente B, incluida la deshabilitación global AB-23 y la sucesora 004. B está implementado en rama, con revisión/integración pendientes; no acredita despliegue. C/D y nueva vinculación siguen sin autorización. [Guía B](../patient-identity-verification.md), [evidencia](../patient-identity-validation.md).
+A documental se integró en #10 (0f2ebba); B en #11 (5e549f5), incluida la deshabilitación global AB-23 y 004; C en #12 (543442e), con contactos seguros y 005. [Guía B](../patient-identity-verification.md), [contrato C](../contact-changes.md) y [evidencia histórica final C](../contact-change-deadline-validation.md). Integración no acredita despliegue; D y nueva vinculación siguen sin autorización.
 
 El diseño completo de 2A conserva propuestas fuera de B. El usuario confirmó para B nombre editable y DOB histórica desconocida sin alta/corrección posterior; también email verificado como requisito para solicitar SMS, con cuotas por cuenta/destino y limitación residual de abuso multicuenta.
 
@@ -229,7 +229,7 @@ Invitaciones profesionales se administran separadamente del cupo del paciente. N
 
 ## ADR-023 — Registro independiente exclusivamente adulto y DOB global
 
-**Estado: APROBADA e implementada en rama B; sin despliegue habitual. Reglas: RN-41–43.**
+**Estado: APROBADA e integrada en B (#11); sin despliegue habitual acreditado. Reglas: RN-41–43.**
 
 La primera versión del registro independiente exige fecha de nacimiento válida y edad de al menos 18 años, comprobadas en backend; cumplir exactamente 18 sí permite registrarse. Rechazar fechas inexistentes o futuras y probar los bordes de edad. DOB pertenece a la identidad global, bajo control del paciente conforme ADR-012, no al episodio ni a la entrevista clínica.
 
@@ -241,7 +241,7 @@ El flujo de menores, incluidos invitados por profesionales, sigue pendiente; no 
 
 ## ADR-024 — Verificación normal de email y teléfono
 
-**Estado: APROBADA e implementada en rama B mediante simulación local; sin proveedor real. Reglas: RN-44–48.**
+**Estado: APROBADA e integrada en B (#11) mediante simulación local; sin proveedor real. Reglas: RN-44–48.**
 
 | Canal | Método | Vigencia | Reenvío mínimo | Cuota por destino en ventana de 24 h | Intentos |
 | --- | --- | --- | --- | --- | --- |
@@ -254,13 +254,13 @@ Entrega configurable mediante adaptadores y simuladores seguros de desarrollo/pr
 
 ## ADR-025 — Cambio de contacto, reautenticación y revocación
 
-**Estado: APROBADA como producto; implementación C autorizada y en rama. Reglas: RN-49–50.**
+**Estado: APROBADA como producto; implementación C integrada en #12. Reglas: RN-49–50.**
 
 Cambiar email o teléfono exige reautenticación reciente con contraseña, notificación al contacto anterior, verificación del nuevo e invalidación de la evidencia anterior del canal correspondiente. La confirmación debe ser consistente y revocar todas las sesiones mediante `session_version`, incluida la que hizo el cambio. El aviso no da veto al contacto anterior ni exige conservar acceso a él.
 
 No modificar episodios, citas, notas ni historial clínico. La recuperación excepcional de identidad permanece pendiente y no se sustituye por un cambio inseguro de contacto.
 
-Mantener el contacto candidato separado del vigente hasta confirmar, usar una prueba temporal de reautenticación y coordinar notificación/commit mediante entrega durable son recomendaciones técnicas, no decisiones de producto ya aprobadas. Vigencia exacta de reautenticación, tratamiento de fallos y carreras: AB-25.
+La resolución AB-25 siguiente aprobó los acuerdos aplicables; C ya mantiene candidato separado del vigente, prueba temporal de reautenticación y avisos durables. Vigencia, tratamiento de fallos y carreras se detallan en el contrato C. Proveedor real, retención definitiva y operación productiva siguen pendientes; esta actualización no reabre los acuerdos aprobados.
 
 ### Resolución AB-25 — PR C, 19 de octubre de 2026
 
@@ -294,11 +294,11 @@ Rehabilitar no republica ni reactiva recepción automáticamente: el profesional
 
 ## ADR-028 — Secuencia A/B/C/D y barrera legacy
 
-**Estado: APROBADA la secuencia y la ejecución exclusiva de B tras integrar A (#10). Reglas: RN-57–58.**
+**Estado: APROBADA la secuencia; A/B/C integrados en #10/#11/#12. D no iniciado ni autorizado. Reglas: RN-57–58.**
 
 B implementa registro adulto, nombre propio, estados y verificación email/SMS, migración 004 y barrera legacy. El usuario aprobó AB-23: bloquear POST patients y request/invite/respond/accept-code para todas las cuentas, incluidos pendientes antiguos y rechazos. Se conservan los 403 administrativos de #7 y todos los accesos/pendientes existentes sin sync incidental. [Inventario revalidado](../stage2a-legacy-mutations.md).
 
-No activar permisos por episodio ni retirar parcialmente fallback. C (contactos) y D (directorio/perfiles) requieren autorización propia. Solicitudes/invitaciones nuevas y recuperación excepcional siguen fuera. No modificar 001–003 ni la base habitual. B se revisa mediante PR sin merge; ensayos solo en PostgreSQL nuevo aislado y demo ficticia ADR-019.
+No activar permisos por episodio ni retirar parcialmente fallback. C (contactos) fue autorizado e integrado; D (directorio/perfiles) requiere autorización propia. Solicitudes/invitaciones nuevas y recuperación excepcional siguen fuera. No modificar 001–003 ni la base habitual. La revisión de B/C se realizó en PR separados y ensayos nuevos aislados con demo ficticia ADR-019; esa autorización histórica no habilita operaciones en esta actualización documental.
 
 ## ADR-029 — Entrevista previa a la activación y autonomía de la cuenta
 
@@ -342,9 +342,9 @@ Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen de
 | AB-20 | ¿Qué cuotas/ventanas, cooldown, bloqueo y revisión evitan abuso sin exclusión injustificada? ¿Qué política rige invitaciones simultáneas y colisiones entre vías? | Habilitar solicitudes/invitaciones 2A |
 | AB-21 | B requiere prefijo internacional explícito y normalización sintáctica (sin inferir país); permite teléfonos compartidos sin unicidad/fusión. Política definitiva de números reciclados/unicidad y entrega comercial pendientes; recuperación AB-13 no habilitada. | Identidad PR B; proveedor antes de producción |
 | AB-22 | ¿Qué retención, acceso, cifrado/llaves y tratamiento de mensajes/tokens/evidencia en historial, copias y eliminación se aprueban? | Guardar datos sensibles de vinculación 2A; revisión jurídica aplicable |
-| AB-23 | APROBADO e implementado en B: cinco rutas legacy bloqueadas globalmente; pendientes conservados sin respuesta; clínica establecida preservada sin exigir verificaciones adicionales. Nuevas vinculaciones futuras exigirán ambas; no implementadas. | Cerrado para B; integración pendiente |
+| AB-23 | APROBADO e implementado en B: cinco rutas legacy bloqueadas globalmente; pendientes conservados sin respuesta; clínica establecida preservada sin exigir verificaciones adicionales. Nuevas vinculaciones futuras exigirán ambas; no implementadas. | Cerrado para B; integrado en #11 |
 | AB-24 | ¿Cómo clasificar especialidades/enfoque con credenciales verificables y controlar cambios de nombre profesional? ¿Qué mecanismo se usa para fotografía y para credenciales que requieran nueva revisión al rehabilitar? | PR D, antes del flujo correspondiente |
-| AB-25 | APROBADO para C: resolución del 19 de octubre de 2026 y contrato de cambio seguro. Implementación en rama, revisión/integración pendientes, sin despliegue habitual. | Cerrado para el alcance C; retención definitiva de auditoría y operación productiva pendientes |
+| AB-25 | APROBADO para C: resolución del 19 de octubre de 2026 y contrato de cambio seguro. Integrado en #12, sin despliegue habitual acreditado. | Cerrado para el alcance C; retención definitiva de auditoría y operación productiva pendientes |
 | AB-26 | Segunda revisión B: APROBADA referencia civil America/Mexico_City obtenida del reloj servidor, independiente del host/cliente, solo para registro mexicano B; DOB gregoriana y cumpleaños exacto, con 29/02 elegible el 01/03 en año no bisiesto. No define todas las zonas mexicanas ni cambia agenda 2E; cuotas 60 s/5 por 24 h tanto por cuenta como destino, 5 intentos SMS por código y email previo aprobado. Abuso multicuenta aún puede agotar teléfono compartido; límites por red/costo, mecanismos antiautomatización de producción y revisión siguen pendientes antes de envíos reales. | B parcial; endurecimiento antes de producción |
 | AB-27 | ¿Cómo se muestran revisión/rechazo y estado propio a un profesional no aprobado sin conceder sesión clínica? Login actual deniega pendiente/rechazado/suspendido. | PR D si se modifica esa experiencia |
 

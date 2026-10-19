@@ -1,6 +1,6 @@
 # PR C — cambio seguro de contactos
 
-Base: main `5e549f51bc7fa3e2535db023b4f9bca3d383a7c5`, PR #11/B integrado. Implementación C autorizada el 19 de octubre de 2026, en rama y pendiente de revisión/integración. 005 solo se ensaya en destinos nuevos aislados; no hay despliegue habitual. Fuentes: ADR-025, AB-25, RN-49–50 y [plan](identity-directory-delivery-plan.md). [Validación inicial](contact-change-validation.md) y [primera revisión P2](contact-change-review-validation.md) y [revisión del deadline](contact-change-deadline-validation.md).
+Integrado en PR #12 el 19 de octubre de 2026, merge `543442ea634e5977bc887ace1db5457eee2ebf8c`; HEAD revisado `c7f622608af4b7bc27a7c4e9dde49be23221b0ae`, base B `5e549f51bc7fa3e2535db023b4f9bca3d383a7c5`. 005 se ensayó solo en destinos nuevos aislados; no acredita despliegue habitual. Fuentes: ADR-025, AB-25, RN-49–50 y [plan](identity-directory-delivery-plan.md). Informes históricos: [inicial](contact-change-validation.md), [primera revisión P2](contact-change-review-validation.md) y [final del deadline](contact-change-deadline-validation.md). Sus resultados no son checks de GitHub ni nuevas ejecuciones de esta actualización documental; [CI propuesta](ci-plan.md) aún sin implementar.
 
 ## Acuerdos de producto aplicados
 

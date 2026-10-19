@@ -1,12 +1,12 @@
 # Etapa 2A — Identidad, directorio básico y vinculación inicial
 
-Actualización C: main 5e549f5 incorpora B. AB-25 cerrado para el alcance autorizado de C; [contrato C](contact-changes.md) prevalece sobre candidatos anteriores de cambios de contacto. 005 implementada en rama, solo ensayo aislado, sin despliegue habitual ni D/nuevas vinculaciones.
+Corte documental: 19 de octubre de 2026, main `543442ea634e5977bc887ace1db5457eee2ebf8c`. A/B/C integrados; D no iniciado. AB-25 cerrado para C; [contrato C](contact-changes.md) prevalece sobre candidatos anteriores de contactos. 004/005 integradas, solo ensayo aislado, sin despliegue habitual acreditado ni nuevas vinculaciones. [CI propuesta](ci-plan.md) sin implementar.
 
-Fecha: 18 de octubre de 2026. Base inspeccionada: `main`/`origin/main` en `0077f46` (#9 integrado).
+Base histórica del diseño: 18 de octubre de 2026, `0077f46` (#9 integrado); los contratos B/C y el estado posterior a #12 actualizan únicamente las porciones entregadas.
 
-**Estado: diseño completo de 2A, mayoritariamente PROPUESTO; B implementa solo la porción autorizada.** A integrado en #10 (0f2ebba); B en ejecución/revisión, sin despliegue habitual. La [guía B](patient-identity-verification.md) define el contrato implementado y sus límites; prevalece sobre candidatos antiguos de este documento. [Evidencia B](patient-identity-validation.md).
+**Estado: diseño completo de 2A, mayoritariamente PROPUESTO; B/C implementan solo sus porciones autorizadas.** A integrado en #10 (0f2ebba), B en #11 (5e549f5), C en #12 (543442e), sin despliegue habitual acreditado. La [guía B](patient-identity-verification.md) y el contrato C definen lo implementado y prevalecen sobre candidatos antiguos. [Evidencia histórica B](patient-identity-validation.md).
 
-AB-23 fue aprobado expresamente: alta unilateral y request/invite/respond/accept-code bloqueados para todas las cuentas, incluidos pendientes antiguos, sin sincronizar accesos. DOB posterior pendiente por confirmación del usuario; email vigente verificado antes de solicitar SMS. C/D, directorio público y nuevas vinculaciones no implementados ni autorizados.
+AB-23 fue aprobado expresamente: alta unilateral y request/invite/respond/accept-code bloqueados para todas las cuentas, incluidos pendientes antiguos, sin sincronizar accesos. DOB posterior pendiente por confirmación del usuario; email vigente verificado antes de solicitar SMS. D, directorio público y nuevas vinculaciones no implementados ni autorizados. ADR-029/RN-59–61 conservan precondición backend/DB pendiente antes de activar cualquier episodio nuevo.
 
 ## 1. Base existente y límites de confianza
 
@@ -71,7 +71,7 @@ Registro candidato: nombre, apellidos, email, teléfono y contraseña; DOB globa
 
 Resolver autoridad de email/nombre entre `users` y `patients` mediante servicio de básicos consistente; psicólogo no cambia identidad por PUT legacy. No promover DOB desde entrevista ni reclamar una identidad legacy por conocer contacto. El riesgo `none` legacy no acredita evaluación: nuevo contexto de episodio debe representar NO EVALUADO con almacenamiento aún pendiente AB-02/14.
 
-Desafío candidato: cuenta, canal, propósito, versión de contacto, digest de secreto, caducidad, intentos y consumo. Nunca código/token en auditoría ni preview remoto. Para códigos cortos, digest autenticado con secreto servidor y cuotas compartidas. Invalidar ante cambio de destino; reenvíos según política aprobada. Verificar email no verifica teléfono. Cambio de contacto invalida evidencia correspondiente; revocar todas las sesiones por session_version al confirmar cambio, incluida la actual (ADR-025), sin cerrar episodios. Vigencia de reautenticación y mecanismo de confirmación pendientes.
+Desafío candidato: cuenta, canal, propósito, versión de contacto, digest de secreto, caducidad, intentos y consumo. Nunca código/token en auditoría ni preview remoto. Para códigos cortos, digest autenticado con secreto servidor y cuotas compartidas. Invalidar ante cambio de destino; reenvíos según política aprobada. Verificar email no verifica teléfono. Cambio de contacto invalida evidencia correspondiente; revocar todas las sesiones por session_version al confirmar cambio, incluida la actual (ADR-025), sin cerrar episodios. Vigencia de reautenticación y confirmación ya definidas en el contrato C; no siguen abiertas para su alcance.
 
 Normalización consistente (sin equivalencias asumidas de puntos/alias email; país explícito en teléfono). Restricciones DB resuelven carreras de registro, no prueban identidad. No imponer teléfono único sin resolver números familiares/reciclados. Respuestas de alta/reenvío/recuperación sin enumeración, con tiempos razonablemente comparables. Sin fusión por coincidencia; revisión excepcional por soporte autorizado no clínico, auditada y con evidencia según AB-13. Si métodos pendientes, mantener reconciliación bloqueada.
 
@@ -79,7 +79,7 @@ Normalización consistente (sin equivalencias asumidas de puntos/alias email; pa
 
 ADR-024 fija email por enlace de 24 h, SMS por código de 10 min, espera de 60 s y máximo 5 envíos por destino en ventana de 24 h; SMS máximo 5 intentos por código. Nuevo desafío invalida anterior. B implementa cuotas transaccionales compartidas, HMAC, código SMS de seis dígitos y simulador privado, con pruebas entre procesos. Exigir email previo reduce abuso sin eliminar agotamiento deliberado de números compartidos. Retención/rotación y controles adicionales antes de producción siguen pendientes; no usar TTL legacy de invitaciones ni preview de reset como especificación.
 
-ADR-025 exige contraseña reciente, aviso al contacto anterior sin veto, verificar nuevo e invalidar evidencia previa y todas las sesiones al confirmar. Separar candidato/vigente y aplicar commit con incremento de session_version son recomendaciones para C; diseñar entrega durable/fallos e idempotencia, sin inventar un proveedor ni recuperación excepcional.
+ADR-025 exige contraseña reciente, aviso al contacto anterior sin veto, verificar nuevo e invalidar evidencia previa y todas las sesiones al confirmar. C ya separa candidato/vigente, confirma con incremento de session_version y usa avisos durables con entrega simulada al menos una vez. Preservar los límites de deadline, lease y limpieza del contrato C; proveedor real y recuperación excepcional siguen pendientes.
 
 ADR-026/027 requieren versión aprobada separada de pendiente, revisión administrativa selectiva y retiro/reconfirmación pública. Proponer snapshot aprobado + propuesta versionada y decisión transaccional, sin permitir que edición directa de campos, registro profesional o review genérico publiquen pendientes. El DTO de cuenta actual contiene reviewNotes: no reutilizarlo públicamente. Especialidades/enfoque verificables y nombre profesional/foto requieren cerrar AB-24; consulta de estado para cuentas no aprobadas AB-27.
 
@@ -189,9 +189,9 @@ Sin atribución inequívoca, no inferir responsable/autor/DOB/verificación desd
 
 ## 10. Evolución posterior a 003 (D-11)
 
-A no creó migraciones. B crea 004 para identidad/verificación; 005 de contacto y 006 de perfiles continúan estimadas en el [plan](identity-directory-delivery-plan.md). Solicitudes/invitaciones y contexto/permisos por episodio pertenecen a entregas posteriores, no a esas estimaciones por implicación.
+A no creó migraciones. B integró 004 para identidad/verificación y C integró 005 de contactos; 006 de perfiles sigue estimada en el [plan](identity-directory-delivery-plan.md). Solicitudes/invitaciones y contexto/permisos por episodio pertenecen a entregas posteriores, no a esas estimaciones por implicación.
 
-El runner de B ya verifica 001–004, catálogo corriente y destino explícito. Protocolo implementado: validar huella previa, registrar sucesora/nueva huella y permitir verificar/repetir versión corriente sin confundir sucesora con deriva. No alterar checksum histórico, ignorar deriva, borrar registro o marcar versión sin validación. Conservar 001/002/003; runner/manifiesto solo se modifican con implementación autorizada y pruebas de upgrade/replay/fallo/compatibilidad.
+El runner actual verifica 001–005, catálogo corriente y destino explícito, con targets 003/004/005. Protocolo implementado: validar huella previa, registrar sucesora/nueva huella y permitir verificar/repetir versión corriente sin confundir sucesora con deriva. No alterar checksum histórico, ignorar deriva, borrar registro o marcar versión sin validación. Conservar 001/002/003; runner/manifiesto solo se modifican con implementación autorizada y pruebas de upgrade/replay/fallo/compatibilidad.
 
 Ensayos futuros en PostgreSQL nuevo aislado, fixtures ficticios, destino explícito y guardas. No ejecutar migraciones/schema/seed en la base habitual o bases existentes; no alterar contenedores/volúmenes existentes. Un despliegue real exige autorización separada, diagnóstico mínimo, respaldo/ensayo y coordinación de escritores. Git integrado no es despliegue. Recuperación propuesta mediante corrección aditiva conservando evidencia y revocaciones, sin borrar episodios ni reabrir fallback.
 
@@ -227,9 +227,9 @@ Cada PR muestra solo alcance implementado: B de identidad/verificación no prese
 
 ## 12. Aprobaciones y siguiente implementación
 
-La secuencia sigue A→B→C→D. A integrado y B autorizado expresamente; implementación en rama con revisión/integración pendientes. AB-23 resuelto para B y aspectos técnicos aplicables de AB-21/26 documentados en la guía. El endurecimiento multicuenta/red/costo antes de envíos reales sigue pendiente.
+La secuencia sigue A→B→C→D. A/B/C integrados; D no iniciado ni autorizado. AB-23 resuelto para B, AB-25 para C y aspectos técnicos aplicables de AB-21/26 documentados en la guía. El endurecimiento multicuenta/red/costo antes de envíos reales sigue pendiente.
 
-Antes de C, AB-25 y autorización propia; antes de D, AB-18/24/27 y autorización propia. AB-19/20 de nuevas solicitudes/invitaciones y segmentación por episodio corresponden a entregas posteriores. B no las habilita.
+Antes de D, cerrar los aspectos aplicables de AB-18/24/27 y obtener autorización propia; no reabrir AB-25 ya resuelto para C. AB-19/20 de nuevas solicitudes/invitaciones y segmentación por episodio corresponden a entregas posteriores. B/C no las habilitan.
 
 ## 13. Evidencia documental
 
