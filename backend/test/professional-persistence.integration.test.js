@@ -134,7 +134,7 @@ test('006 private professional persistence: isolated upgrades, integrity, concur
       await client.query('BEGIN');
       await client.query("UPDATE professional_publication_profiles SET pending_credential_version=NULL,row_version=row_version+1 WHERE owner_user_id='a'");
       await decide(client,'a',5,'rejected');await client.query('COMMIT');
-      assert.equal((await client.query("SELECT approved_credential_version FROM professional_publication_profiles WHERE owner_user_id='a'")).rows[0].approved_credential_version,3);
+      assert.equal((await client.query("SELECT approved_credential_version FROM professional_publication_profiles WHERE owner_user_id='a'")).rows[0].approved_credential_version,'3');
       await version(client,'a',6);
       await client.query('BEGIN');
       await client.query("UPDATE professional_publication_profiles SET pending_credential_version=6,row_version=row_version+1 WHERE owner_user_id='a'");
