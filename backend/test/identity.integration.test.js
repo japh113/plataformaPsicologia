@@ -78,7 +78,7 @@ test('004: adult identity, private verification, concurrency and legacy barrier 
         await fs.appendFile(dir + '/004_patient_identity_verification.sql', '\n-- altered');
         await assert.rejects(loadMigrations(new URL('file://' + dir + '/')), /checksum/);
       } finally { await fs.rm(dir, { recursive: true }); }
-      await assert.rejects(migrate(client, { expectedDatabase: name, target: '006' }), /Unsupported/);
+      await assert.rejects(migrate(client, { expectedDatabase: name, target: '999' }), /Unsupported/);
     });
     await migrate(client, { expectedDatabase: name, target: '005' });
     pool = new pg.Pool({ host: 'db', database: name, user: env.dbUser, password: env.dbPassword });

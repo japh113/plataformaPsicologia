@@ -23,5 +23,10 @@
     "version": "005",
     "file": "005_secure_contact_changes.sql",
     "sha256": "02ccc7017f4a6ceb9af12fd42b159d37cc8e69b07c9b7480e2504bf4865ff420"
+  },
+  {
+    "version": "006",
+    "file": "006_professional_directory_foundation.sql",
+    "sha256": "5d22fb10ce1770bc2b66afa278feedac264aa3873dd6a1d0609e55fc078d1530"
   }
 ]

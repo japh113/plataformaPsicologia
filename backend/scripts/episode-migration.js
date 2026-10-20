@@ -12,7 +12,7 @@ export async function loadMigrations(root = sqlRoot) {
     if (sha256(sql) !== entry.sha256) throw new Error('Incompatible file checksum: ' + entry.version);
     migrations.push({ ...entry, sql });
   }
-  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005') throw new Error('Incompatible migration versions');
+  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006') throw new Error('Incompatible migration versions');
   return migrations;
 }
 
@@ -150,7 +150,7 @@ export async function catalogChecksum(client) {
 }
 
 export async function migrate(client, { expectedDatabase, target = '003' } = {}) {
-  if (!['003', '004', '005'].includes(target)) throw new Error('Unsupported target version');
+  if (!['003', '004', '005', '006'].includes(target)) throw new Error('Unsupported target version');
   const migrations = await loadMigrations();
   await client.query('BEGIN');
   try {
@@ -169,7 +169,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
         throw new Error('Incompatible recorded migration version/checksum: ' + row.version);
       }
     }
-    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005'].includes(ledger.map(r => r.version).join(','))) {
+    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006'].includes(ledger.map(r => r.version).join(','))) {
       throw new Error('Incompatible or incomplete migration ledger');
     }
     if (ledger.length) {
@@ -193,6 +193,8 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
       return { status: 'applied', version: target };
     }
     const footprints = (await client.query(`SELECT
+      EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND left(c.relname,13)='professional_') OR
+      EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('reserve_professional_public_id','protect_professional_snapshot','preserve_professional_data','enforce_professional_profile_update','enforce_professional_validity_update','enforce_professional_photo_update','check_professional_pending_version')) OR
       to_regclass('public.contact_change_requests') IS NOT NULL OR
       to_regclass('public.contact_change_notices') IS NOT NULL OR
       to_regclass('public.contact_change_events') IS NOT NULL OR
