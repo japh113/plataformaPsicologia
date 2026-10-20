@@ -2,6 +2,7 @@
 import json,sys
 from pathlib import Path
 from common import JOBS,OUT,identity,verify,write,seal,accept
+from browser_contract import validate_suites
 
 def collect(root):
     reports={};hashes={}
@@ -12,7 +13,7 @@ def collect(root):
         assert report['job']==job and report['identity']==identity()
         assert report['status'] in ['success','failure'] and report['suites']
         if report['status']=='success':
-            counts={'docs':2,'backend-unit':2,'frontend':4,'postgres':3,'browser':2}
+            counts={'docs':2,'backend-unit':2,'frontend':4,'postgres':3,'browser':3}
             assert len(report['suites'])==counts[job]
             if job in ['backend-unit','frontend','postgres']:
                 tap=[s for s in report['suites'] if 'tests' in s]
@@ -20,10 +21,14 @@ def collect(root):
                 assert all(s['tests'] and s.get('complete') and s.get('sourceFiles') and s.get('declaredCases') and s['passed'] and not s['failed'] and not s['cancelled'] and not s['skipped'] and s['exit']==0 for s in tap)
             if job=='frontend':assert [s['command'] for s in report['suites']]==[['npm','ci','--ignore-scripts'],['npm','test'],['npm','run','lint'],['npm','run','build']]
             if job=='browser':
-                assert [s['kind'] for s in report['suites']]==['B','C']
+                validate_suites(report['suites'],identity()['sha'])
+                assert [s['kind'] for s in report['suites']]==['B','C','D2']
                 assert all(s['cases'] and all(c['status']=='PASS' for c in s['cases']) and s['runtime']['revision']==identity()['sha'] for s in report['suites'])
+                expected=set(json.loads(Path('scripts/ci/browser-cases.json').read_text())['D2'])
+                actual=[case['id'] for case in report['suites'][2]['cases']]
+                assert set(actual)==expected and len(actual)==len(expected)
         if job in ['postgres','browser'] and report['status']=='success':
-            assert len(report['isolation'])==(2 if job=='browser' else 1)
+            assert len(report['isolation'])==(3 if job=='browser' else 1)
             assert all(x.get('cleanupConfirmed') and x['fresh'] and x['tmpfs'] and x['internal'] and not x['dbPorts'] and not x['persistentVolumes'] for x in report['isolation'])
         reports[job]=report
     return reports,hashes

@@ -71,3 +71,12 @@ class Contracts(unittest.TestCase):
             self.assertEqual(len(episode_images.expected_images('psicopanel-episodes-'+suffix)),2)
         with patch.dict('os.environ',{'GITHUB_RUN_ID':'external','GITHUB_RUN_ATTEMPT':'2'}):
             with self.assertRaises(ValueError):episode_images.execution_suffix(run)
+
+    def test_browser_requires_B_C_D2_each_case_once_and_current_revision(self):
+        from browser_contract import validate_suites
+        catalog=json.loads(Path('scripts/ci/browser-cases.json').read_text())
+        suites=[{'kind':kind,'cases':[{'id':case,'status':'PASS'} for case in catalog[kind]],'runtime':{'revision':'current'}} for kind in ['B','C','D2']]
+        validate_suites(suites,'current')
+        for mutate in [lambda s:s.pop(),lambda s:s[2]['cases'].pop(),lambda s:s[2]['cases'].append(s[2]['cases'][0]),lambda s:s[2]['runtime'].update(revision='old'),lambda s:s[2]['cases'][0].update(status='SKIP')]:
+            altered=copy.deepcopy(suites);mutate(altered)
+            with self.assertRaises(ValueError):validate_suites(altered,'current')
