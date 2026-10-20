@@ -39,6 +39,10 @@ La escritura documental inicial desde PowerShell perdió acentos; se reparó UTF
 
 El contrato documental valida enlaces/IDs, UTF-8 y bloques protegidos ADR-029/AB-25/RN-59–61. La aceptación del HEAD final depende de sus siete checks Actions y artifacts íntegros; la evidencia local anterior no se atribuye a un SHA documental posterior. PR/ejecución/merge sintético y hashes descargados se registrarán en el informe final y cuerpo del PR al verificar la ejecución correspondiente. Chromium B/C se conserva y se comprobará en esa matriz, sin adelantar D3.
 
+## Ejecuciones Actions conservadas
+
+Primera ejecución [39372360953](https://github.com/japh113/plataformaPsicologia/actions/runs/39372360953), intento 1, HEAD `337d35ecaf493a2479e45764e68212d168c8f804`, merge sintético `0dffe6cddecc3c8ce8cf9301cf3f6536f83af9e7`: cancelada. Docs, backend-unit, frontend y postgres aprobaron; browser quedó cancelado y required falló. Un cambio externo de Draft a ready_for_review generó una ejecución sucesora sobre el mismo HEAD/base; no se presenta la ejecución cancelada como aceptación. La siguiente corrección documental exige otra matriz vigente del HEAD final; el informe de cierre registra su URL y evidencia exactas.
+
 ## Riesgos y pendientes
 
 Sin exposición D1, sesiones nuevas o acceso clínico nuevo. P1 para D2/D3: no interpretar flags ni supported como autorización pública completa; implementar elegibilidad vigente, revisión, retiro y reconfirmación antes de montar lectores. P2: criterios operativos de evidencia, catálogo, tratamiento de declaraciones en texto libre, comunicaciones autorizadas y retención concreta siguen pendientes. No hay TTL/borrado automático ni garantía de calidad terapéutica. Despliegue, producción y recursos habituales fuera de alcance.
