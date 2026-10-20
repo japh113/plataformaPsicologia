@@ -4,17 +4,31 @@
 
 ## Resultados de GitHub
 
+### Última validación del HEAD auditado
+
+La [ejecución definitiva 39345674640](https://github.com/japh113/plataformaPsicologia/actions/runs/39345674640), intento 1, es la última validación del HEAD auditado `1882badac5adf1693cc4b0ccf94a6146216ec0c5`. Probó realmente el merge sintético `1c3b75cea2e08d648234688745580ec7a6b1c776` contra la base `58c7b095be237b526d489152a0eab387da3d8d5d`; el índice de evidencias distingue HEAD y commit probado.
+
+Los siete checks concluyeron **success**: `ci/docs`, `ci/backend-unit`, `ci/frontend`, `ci/postgres`, `ci/browser`, `ci/evidence` y `ci/required`. Backend: 94 casos; frontend: 3 más lint/build; PostgreSQL: 17 episodios y 78 casos de integración; Chromium: 51 B y 13 C. No hubo casos omitidos ni cancelados. Se descargaron los seis artifacts y se comprobaron sus hashes y procedencia, incluido el [índice definitivo](https://github.com/japh113/plataformaPsicologia/actions/runs/39345674640/artifacts/12230612804) `ci-results-39345674640-1-1c3b75cea2e08d648234688745580ec7a6b1c776`, con expiración el 3 de noviembre de 2026 y retención de 14 días.
+
+Tiempos observados del proceso: docs 0,192 s; backend 2,883 s; frontend 8,388 s; PostgreSQL 56,666 s; navegador 119,286 s. El 20 de octubre de 2026 UTC, la ejecución transcurrió de 00:06:44 a 00:09:42 (2 min 58 s, incluida cola); sus jobs, de 00:07:11 a 00:09:41 (2 min 30 s).
+
+La revisión independiente de PR #14 concluyó favorablemente, sin nuevos bloqueantes técnicos. El usuario aprobó la estrategia de integración controlada (*bootstrap*) con CI-02 y CI-07 pendientes en los términos de aceptación siguientes. Este cierre solo modifica documentación; su nuevo HEAD requiere su propia matriz en GitHub y no hereda la aprobación del HEAD auditado ni acredita el PR exclusivamente documental de CI-02.
+
+### Ejecuciones históricas
+
+Se conservan las ejecuciones anteriores, incluidos los fallos y cancelaciones; ninguna sustituye la validación definitiva anterior ni la del nuevo HEAD documental.
+
 | Ejecución | Revisión y resultado observado |
 | --- | --- |
 | [Primera matriz](https://github.com/japh113/plataformaPsicologia/actions/runs/39341052626) | HEAD `37df2985d4cca1db6d661364cfe2d89ec6b2ee97`, merge probado `b5f97068b03e68c9fe8337e82683aa81fc3918bb`. Docs/backend/frontend/PostgreSQL pasan; Chromium falla al arrancar con usuario no privilegiado; evidence conserva reporte y required falla. Primer fallo conservado, sin reintento silencioso. |
 | [Matriz corregida](https://github.com/japh113/plataformaPsicologia/actions/runs/39341855943) | HEAD `03d4e30c90a3119501a67436b6c55995c337634e`, merge probado `8d22b781182b298c1058a6eca7295a1233afd356`. Los siete checks pasan. Artifacts descargados y hashes verificados. |
-| [Código final: siete checks verdes](https://github.com/japh113/plataformaPsicologia/actions/runs/39343737051) | HEAD `cde886440078dd933174d335b57a155c2e6f17e8`, merge probado `2fe0196ccab54456969a674222d12772008cf5ea`. Incluye inventario de fuentes, TAP completo, A05 determinista/advertencia nativa y consola C estricta. Se descargaron los seis artifacts y se verificaron todos los hashes. |
+| [Matriz anterior: siete checks verdes](https://github.com/japh113/plataformaPsicologia/actions/runs/39343737051) | HEAD `cde886440078dd933174d335b57a155c2e6f17e8`, merge probado `2fe0196ccab54456969a674222d12772008cf5ea`. Incluye inventario de fuentes, TAP completo, A05 determinista/advertencia nativa y consola C estricta. Se descargaron los seis artifacts y se verificaron todos los hashes. |
 | [Cualificación, intento 1](https://github.com/japh113/plataformaPsicologia/actions/runs/39341855934/attempts/1) | Siete fallos reales inyectados: prueba Node, lint, build, flag opt-in, artifact ausente, enlace roto y fixture sensible. Jobs fallan como se espera; dependencia omitida es skipped; gate falla; verify-rejections pasa. El workflow global es failure deliberadamente, no una matriz aprobada. |
 | [Cancelación, intento 2](https://github.com/japh113/plataformaPsicologia/actions/runs/39341855934/attempts/2) | Cancelación explícita mientras los dos jobs de aislamiento estaban activos. Ambos concluyen cancelled; gate falla; verificador de evidencia incompleta falla. No se presenta como limpieza verificada ni ejecución aprobada. |
 
-En la matriz de código final: 94 casos backend; 3 frontend, más lint/build; 17 episodios y 78 integración PostgreSQL; 51 casos B y 13 C en Chromium real. Cero omisiones/cancelaciones inesperadas. Chromium 156.0.8078.4, Playwright 1.64.0, PostgreSQL 17.11. Los conteos reflejan esa ejecución; no son un techo fijo para futuros PR.
+En la matriz histórica `39343737051`: 94 casos backend; 3 frontend, más lint/build; 17 episodios y 78 integración PostgreSQL; 51 casos B y 13 C en Chromium real. Cero omisiones/cancelaciones inesperadas. Chromium 156.0.8078.4, Playwright 1.64.0, PostgreSQL 17.11. Los conteos reflejan esa ejecución; no son un techo fijo para futuros PR.
 
-Tiempos del proceso por componente en el código final, sin checkout/upload/cola: docs 0,224 s; backend 2,516 s; frontend 13,468 s; PostgreSQL 56,181 s; navegador 126,504 s. Los jobs de esa matriz transcurrieron entre 23:48:22 y 23:50:58 UTC: 2 minutos 36 segundos. La matriz corregida anterior también quedó registrada, sin reutilizar su aprobación para este HEAD. Se registran tiempos reales por comando y componente. Ningún timeout fue ampliado para ocultar un fallo.
+Tiempos históricos del proceso por componente en `39343737051`, sin checkout/upload/cola: docs 0,224 s; backend 2,516 s; frontend 13,468 s; PostgreSQL 56,181 s; navegador 126,504 s. Los jobs de esa matriz transcurrieron entre 23:48:22 y 23:50:58 UTC: 2 minutos 36 segundos. La matriz corregida anterior también quedó registrada, sin reutilizar su aprobación para este HEAD. Se registran tiempos reales por comando y componente. Ningún timeout fue ampliado para ocultar un fallo.
 
 ## Aislamiento y evidencia
 
@@ -22,7 +36,7 @@ La primera pareja de jobs concurrentes de cualificación usó UUID `d64e00fa-ff9
 
 Cancelación/corte abrupto: la conclusión cancelled está observada por API; no se puede inspeccionar el disco de la VM una vez retirada ni garantizar upload después del corte. El runner alojado estándar es nuevo por job; no se reutiliza como entorno habitual. Una falta de reporte o cleanup confirmado impide aprobar. La cancelación real y la prueba unitaria de conclusión cancelled se distinguen de la terminación SIGTERM controlada con limpieza verificada.
 
-Artifacts del código final: cinco componentes y un [índice descargable](https://github.com/japh113/plataformaPsicologia/actions/runs/39343737051/artifacts/12230231101) `ci-results-39343737051-1-2fe0196ccab54456969a674222d12772008cf5ea`, con JSON, TAP reconstruido sin diagnósticos, PNG enmascaradas y SHA256SUMS. Se descargaron todos y se verificaron hashes. API muestra expiración el 2 de noviembre de 2026, 14 días después; no es política clínica. Revisión visual local de capturas de login y candidato confirmó máscaras sobre inputs, secretos y contactos; la comprobación automatizada exige que cada captura esté declarada/enmascarada. No se exportan buzón, candidatos/destinos JSON, logs brutos, tokens, dumps, storage state, traces, HAR ni vídeo.
+Artifacts históricos de `39343737051`: cinco componentes y un [índice descargable](https://github.com/japh113/plataformaPsicologia/actions/runs/39343737051/artifacts/12230231101) `ci-results-39343737051-1-2fe0196ccab54456969a674222d12772008cf5ea`, con JSON, TAP reconstruido sin diagnósticos, PNG enmascaradas y SHA256SUMS. Se descargaron todos y se verificaron hashes. API muestra expiración el 2 de noviembre de 2026, 14 días después; no es política clínica. Revisión visual local de capturas de login y candidato confirmó máscaras sobre inputs, secretos y contactos; la comprobación automatizada exige que cada captura esté declarada/enmascarada. No se exportan buzón, candidatos/destinos JSON, logs brutos, tokens, dumps, storage state, traces, HAR ni vídeo.
 
 Los ensayos negativos de la [cualificación reforzada](https://github.com/japh113/plataformaPsicologia/actions/runs/39342629362/attempts/1) pasaron su verificador con nombres de recursos run/intento/UUID, inventario real previo y rechazo de fallos/omisiones. Su segundo intento prueba cancelación con aislamiento incluido directamente entre las dependencias del gate.
 
@@ -63,15 +77,15 @@ La [revisión con F06 sincronizado](https://github.com/japh113/plataformaPsicolo
 
 | Criterio | Estado y límite |
 | --- | --- |
-| CI-01 | Workflows/reportes y PR separado publicados, con ejecuciones reales enlazadas. Revisión independiente pendiente. |
-| CI-02 | **PARCIAL/PENDIENTE**: matriz funcional completa observada. El usuario rechazó expresamente acreditar el caso solo documental con una revisión Markdown del mismo PR. Falta un PR exclusivamente documental; este encargo autoriza un único PR y no se abre otro. Cada HEAD posterior requiere su matriz vigente. |
+| CI-01 | Workflows/reportes y PR separado publicados, con ejecuciones reales enlazadas. Revisión independiente favorable, sin nuevos bloqueantes técnicos. |
+| CI-02 | **PARCIAL/PENDIENTE**: matriz funcional completa observada. El usuario rechazó expresamente acreditar el caso solo documental con una revisión Markdown del mismo PR. La estrategia bootstrap aprobada deja pendiente comprobar un PR exclusivamente documental después de integrar los workflows en `main`; no se abre otro PR en este cierre. Cada HEAD posterior requiere su matriz vigente. |
 | CI-03 | Fallos de test/lint/build/flags/artifact/enlace/saneamiento rechazados en Actions; skipped real y cancelación real sin aprobación. Unitarias adicionales cubren neutral/desconocido y evidencia obsoleta. |
 | CI-04 | Dos destinos concurrentes independientes, rechazo previo de existente/externo, timeout y señal con limpieza; cancelación real y SIGKILL del worker propio observados, con evidencia previa y límite de observabilidad posterior del runner efímero. |
 | CI-05 | B/C, JWT, clínica, backoffice, frontend y Chromium ejecutados con fixtures ficticios y comunicaciones simuladas. No certifica D ni permisos por episodio pendientes. |
 | CI-06 | Artifacts descargables, hashes comprobados, fixtures sensibles rechazados, capturas enmascaradas y retención real 14 días. |
-| CI-07 | **PENDIENTE administrativo**: reglas leídas, sin modificarlas. Cero checks obligatorios; cero aprobaciones. Relectura final del Ruleset confirmó además cero bypass actors y configuración intacta. Revisor independiente y eventual configuración/rechazo administrativo requieren autorización separada. |
+| CI-07 | **PENDIENTE administrativo**: reglas leídas, sin modificarlas. Cero checks obligatorios; cero aprobaciones. Relectura final del Ruleset confirmó además cero bypass actors y configuración intacta. La activación y verificación de checks obligatorios mediante el Ruleset requieren autorización administrativa separada; permanecen pendientes. |
 
-No se declara terminada la aceptación obligatoria de CI mientras CI-02 permanezca pendiente. No se autoriza integración, despliegue, D ni nuevas vinculaciones. ADR-029/RN-59–61/AB-25 y SQL histórico/manifiesto permanecen intactos.
+**La aceptación de CI será completa solo después de ambas validaciones: el PR exclusivamente documental de CI-02 y la activación y verificación administrativa de checks obligatorios de CI-07.** El dictamen favorable permite la estrategia bootstrap aprobada con esos dos pendientes; no equivale a aceptación completa. Este cierre no ejecuta merge ni modifica la protección de `main`. No se autoriza despliegue, D ni nuevas vinculaciones. ADR-029/RN-59–61/AB-25 y SQL histórico/manifiesto permanecen intactos.
 
 ## Commits técnicos y revisión
 
@@ -90,4 +104,4 @@ Commits anteriores a las correcciones posteriores del cierre documental (el HEAD
 | `cdde158c9cf60f05aefffa2623f5c28602308634` | ci: classify the native warning from the invalid-date fixture |
 | `cde886440078dd933174d335b57a155c2e6f17e8` | ci: qualify abrupt loss of an isolated hosted job worker |
 
-El PR permanece en borrador: aceptación CI-02 incompleta por decisión expresa del usuario y CI-07 administrativo pendiente. Revisión independiente y eventual integración se decidirán después. No se hace merge ni se habilita auto-merge.
+El PR permanece en borrador y sin merge. La revisión independiente ya es favorable y la estrategia bootstrap está aprobada; CI-02 y CI-07 siguen pendientes y condicionan conjuntamente la aceptación completa. Este cierre documental no solicita otra auditoría completa, no activa checks obligatorios ni habilita auto-merge.
