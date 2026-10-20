@@ -59,6 +59,8 @@ El [runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/
 
 Los inicializadores Docker/producción siguen llegando a 002. Tener 006 en Git no instala nada al arrancar. En una instalación NUEVA autorizada se prepara baseline y 001/002; después se invoca el runner con URL y nombre explícitos. Jamás repetir schema/seed en una base existente.
 
+La huella histórica de catálogo se conserva sin cambios. Para 006, el runner valida además la vista de revisión antes de aceptar un replay y después de instalarla, dentro de la misma transacción y antes de registrar 006. Compara `pg_get_viewdef` con una vista temporal creada a partir del SELECT de 006 verificado por SHA-256, en el mismo servidor y search_path; exige únicamente `security_invoker=true` como opción y una sola regla habilitada. Así detecta cambios de expresión, joins, filtros y opciones de seguridad sin depender del formato SQL entre versiones PostgreSQL. No acepta una definición observada como referencia, no sustituye huellas y no repara la vista instalada. La referencia temporal se elimina; un rechazo revierte la transacción.
+
 Forma del comando, solo con destino nuevo propio ya verificado y autorización vigente:
 
 ```bash

@@ -45,4 +45,22 @@ Primera ejecución [39372360953](https://github.com/japh113/plataformaPsicologia
 
 ## Riesgos y pendientes
 
+## Corrección focalizada tras auditoría independiente de PR 17
+
+HEAD auditado y punto de partida: `90b392f1c18465a58bb5e8908a8648165922afea`; base remota comprobada: `3148c9124fb631ff57e2aedd46649182f087bde6`. Se preservaron cambios ajenos del workspace mediante un checkout aislado de la misma rama del PR, sin reutilizar CI-07.
+
+Hallazgo P2 confirmado: `catalogChecksum()` registra forma y privilegios de las vistas, pero no su SELECT ni `reloptions`. Cambiar `security_invoker` o la expresión de `review_status` conservaba la huella histórica. El runner ahora exige un contrato complementario de 006: definición de vista de referencia temporal construida desde el SQL verificado de 006 y deparseada en el mismo servidor, opciones exactamente `security_invoker=true`, una sola regla habilitada. Se verifica antes de aceptar 006 ya instalada y después del DDL nuevo, antes del ledger/commit. No repara objetos ni cambia/adopta huellas.
+
+Pruebas nuevas reales: security_invoker=false, opción eliminada, security_barrier adicional y COALESCE alterado manteniendo columnas/tipos; en cada fixture se comprueba instalación/replay inicial, huella histórica idéntica tras la alteración, rechazo explícito, vista alterada preservada y ledger intacto. Otro fixture bloquea el perfil con SELECT FOR UPDATE, inserta approved, promueve la versión, retira pendiente e incrementa row_version dentro de una transacción; verifica referencias, estado y terminalidad. El commit sin retirar pendiente falla y no persiste ni decisión ni cambios del perfil.
+
+Ensayo focalizado: proyecto nuevo `psicopanel-episodes-c3bfc727-0bf1-479d-9687-225221137bdb`, PostgreSQL 17.11, 17 casos D1 aprobados (16 subcasos y contenedor), sin fallos/omisiones/cancelaciones. Al intentar después test:episodes en ese cluster, su protección rechazó correctamente la reutilización con Refusing reused cluster; no se debilitó la protección. Limpieza confirmada, recursos preexistentes preservados. Este fallo de orquestación se conserva como evidencia y no se presenta como regresión aprobada.
+
+Repetición completa en otro proyecto nuevo `psicopanel-episodes-85877a06-3922-409f-bfcb-c84ab39e70d8`, PostgreSQL 17.11: test:episodes 17 aprobados; test:integration 95 aprobados, incluidos los 17 casos D1; cero fallos/omisiones/cancelaciones. Backend npm test, frontend npm run lint y npm run build terminaron con exit 0. Nueve contratos Python CI y contratos documentales (32 Markdown/439 enlaces, decisiones protegidas) aprobaron. Ambos sandboxes con DB tmpfs, red interna, sin puertos DB/volúmenes persistentes; imágenes propias eliminadas y recursos anteriores preservados. No se usaron bases habituales/reales.
+
+Comparación byte a byte contra la base: SQL 001–005 y sus entradas de manifiesto idénticos. Cuerpo histórico de catalogChecksum sin cambios. SQL 006 y su hash permanecen `5d22fb10ce1770bc2b66afa278feedac264aa3873dd6a1d0609e55fc078d1530`. La suite D1 permanece en test:integration, ejecutada e inventariada por Sandbox.postgres en ci/postgres. No hay cambios de workflows, protecciones, frontend, runtime clínico ni D2/D3.
+
+La aceptación remota de esta corrección requiere una nueva matriz completa del nuevo HEAD; los resultados de 90b392f1 no se heredan. El informe final identificará ejecución/intento/HEAD/base/merge sintético y comprobará los siete checks e integridad de artifacts. Como requisito operativo adicional, el rol del runner necesita privilegio TEMP para construir la referencia temporal; no se conceden privilegios automáticamente.
+
+## Riesgos y pendientes vigentes
+
 Sin exposición D1, sesiones nuevas o acceso clínico nuevo. P1 para D2/D3: no interpretar flags ni supported como autorización pública completa; implementar elegibilidad vigente, revisión, retiro y reconfirmación antes de montar lectores. P2: criterios operativos de evidencia, catálogo, tratamiento de declaraciones en texto libre, comunicaciones autorizadas y retención concreta siguen pendientes. No hay TTL/borrado automático ni garantía de calidad terapéutica. Despliegue, producción y recursos habituales fuera de alcance.

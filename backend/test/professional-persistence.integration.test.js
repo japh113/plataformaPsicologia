@@ -149,6 +149,38 @@ test('006 private professional persistence: isolated upgrades, integrity, concur
       assert.equal(waiting,true);await client.query('COMMIT');
       assert.match((await competing).error.message,/Pending version already decided/);
     });
+    await t.test('approval locks the profile and atomically promotes the pending version with a terminal decision',async()=>{
+      const {client,name}=await fresh({from:'005'});
+      await migrate(client,{expectedDatabase:name,target:'006'});
+      await client.query(`INSERT INTO users(id,first_name,email,password_hash,role)
+        VALUES ('reviewer','Fictional reviewer','reviewer@episodes.invalid','not-a-login','admin')`);
+      await profile(client,'a');await version(client,'a',1);
+      await client.query("UPDATE professional_publication_profiles SET pending_credential_version=1,row_version=row_version+1 WHERE owner_user_id='a'");
+      const before=await snapshot(client,['professional_publication_profiles','professional_credential_decisions']);
+      await client.query('BEGIN');
+      await client.query("SELECT * FROM professional_publication_profiles WHERE owner_user_id='a' FOR UPDATE");
+      await decide(client,'a',1);
+      await assert.rejects(client.query('COMMIT'),/Pending version already decided/);
+      await client.query('ROLLBACK');
+      assert.deepEqual(await snapshot(client,['professional_publication_profiles','professional_credential_decisions']),before);
+      await client.query('BEGIN');
+      const locked=(await client.query("SELECT * FROM professional_publication_profiles WHERE owner_user_id='a' FOR UPDATE")).rows[0];
+      await decide(client,'a',1);
+      await client.query(`UPDATE professional_publication_profiles SET approved_credential_version=1,
+        pending_credential_version=NULL,row_version=row_version+1 WHERE owner_user_id='a'`);
+      await client.query('COMMIT');
+      const persisted=(await client.query(`SELECT p.approved_credential_version,p.pending_credential_version,p.row_version,
+        d.outcome,d.reviewer_user_id,v.version,s.review_status FROM professional_publication_profiles p
+        JOIN professional_credential_versions v ON (v.owner_user_id,v.version)=(p.owner_user_id,p.approved_credential_version)
+        JOIN professional_credential_decisions d ON (d.owner_user_id,d.credential_version,d.outcome)=
+          (p.owner_user_id,p.approved_credential_version,p.approved_decision)
+        JOIN professional_credential_review_states s ON (s.owner_user_id,s.version)=(v.owner_user_id,v.version)
+        WHERE p.owner_user_id='a'`)).rows;
+      assert.deepEqual(persisted,[{approved_credential_version:'1',pending_credential_version:null,
+        row_version:String(BigInt(locked.row_version)+1n),outcome:'approved',reviewer_user_id:'reviewer',version:'1',review_status:'approved'}]);
+      await assert.rejects(decide(client,'a',1,'rejected'),/duplicate/);
+      await assert.rejects(client.query("UPDATE professional_credential_decisions SET outcome='rejected' WHERE owner_user_id='a'"),/immutable/);
+    });
     await t.test('optimistic edits have one winner and flags remain independent',async()=>{
       const expected=(await client.query("SELECT row_version FROM professional_publication_profiles WHERE owner_user_id='a'")).rows[0].row_version;
       const edit=c=>c.query("UPDATE professional_publication_profiles SET description='Fictional direct edit',row_version=row_version+1 WHERE owner_user_id='a' AND row_version=$1",[expected]);
@@ -219,6 +251,35 @@ test('006 private professional persistence: isolated upgrades, integrity, concur
         await next.client.query(mutation);const before=await catalogChecksum(next.client);
         await assert.rejects(migrate(next.client,{expectedDatabase:next.name,target:'006'}),/drift|checksum|Incompatible/);
         assert.equal(await catalogChecksum(next.client),before);
+      }
+    });
+    await t.test('006 review view definition and security drift are rejected without repair or ledger adoption',async()=>{
+      const readView=async c=>(await c.query(`SELECT pg_get_viewdef(oid,false) definition,reloptions
+        FROM pg_class WHERE oid='public.professional_credential_review_states'::regclass`)).rows;
+      for(const mutation of [
+        'ALTER VIEW public.professional_credential_review_states SET (security_invoker=false)',
+        'ALTER VIEW public.professional_credential_review_states RESET (security_invoker)',
+        'ALTER VIEW public.professional_credential_review_states SET (security_barrier=true)',
+        `CREATE OR REPLACE VIEW public.professional_credential_review_states WITH (security_invoker=true) AS
+          SELECT v.owner_user_id,v.version,COALESCE(d.outcome,'approved') AS review_status
+          FROM public.professional_credential_versions v LEFT JOIN public.professional_credential_decisions d
+            ON (d.owner_user_id,d.credential_version)=(v.owner_user_id,v.version)`,
+      ]) {
+        const {client,name}=await fresh({from:'005'});
+        assert.equal((await migrate(client,{expectedDatabase:name,target:'006'})).status,'applied');
+        const ledger=await snapshot(client,['psicopanel_schema_migrations']);
+        const initial=await catalogChecksum(client),view=await readView(client);
+        assert.equal(ledger.psicopanel_schema_migrations.at(-1).row.catalog_sha256,initial);
+        assert.equal((await migrate(client,{expectedDatabase:name,target:'006'})).status,'already-applied');
+        await client.query(mutation);
+        const altered=await readView(client);
+        assert.notDeepEqual(altered,view);
+        // Demonstrate the historical fingerprint's blind spot without changing it.
+        assert.equal(await catalogChecksum(client),initial);
+        await assert.rejects(migrate(client,{expectedDatabase:name,target:'006'}),/Schema drift: incompatible 006 review view/);
+        assert.deepEqual(await readView(client),altered);
+        assert.equal(await catalogChecksum(client),initial);
+        assert.deepEqual(await snapshot(client,['psicopanel_schema_migrations']),ledger);
       }
     });
     await t.test('untracked D1 structures are refused and partial DDL failure rolls back atomically',async()=>{
