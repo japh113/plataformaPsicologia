@@ -1,10 +1,12 @@
 # Desarrollo, Docker/WSL y validación
 
-Corte documental: 19 de octubre de 2026, main `543442ea634e5977bc887ace1db5457eee2ebf8c`. A/B/C integrados; D no iniciado. [Contrato C](contact-changes.md), [evidencia histórica final](contact-change-deadline-validation.md). El wrapper incluye contact-demo y contact-review (red interna para Chromium); sucesora 005 explícita solo en destinos nuevos. No reconstruir ni reparar recursos habituales.
+Estado tras el merge de PR #14: `main` en `3f51f09c525fa7a202bd57232637832dd2d036cd`, con GitHub Actions/CI integrado. A/B/C integrados; D no iniciado. [Contrato C](contact-changes.md), [evidencia histórica final](contact-change-deadline-validation.md). El wrapper incluye contact-demo y contact-review (red interna para Chromium); sucesora 005 explícita solo en destinos nuevos. No reconstruir ni reparar recursos habituales.
 
-Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile backend](../backend/Dockerfile), [Dockerfile frontend](../frontend/Dockerfile) y [package.json backend](../backend/package.json)/[frontend](../frontend/package.json). Documentar un comando no autoriza ejecutarlo. El corte documental anterior solo modificó Markdown. El encargo CI autoriza exclusivamente sandboxes nuevos y ensayos ficticios; [implementación y límites](ci-implementation.md).
+Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile backend](../backend/Dockerfile), [Dockerfile frontend](../frontend/Dockerfile) y [package.json backend](../backend/package.json)/[frontend](../frontend/package.json). Documentar un comando no autoriza ejecutarlo. La CI integrada usa exclusivamente runners estándar GitHub-hosted Ubuntu, sandboxes nuevos y ensayos ficticios; [implementación y límites](ci-implementation.md).
 
-**Pruebas y contribución:** [CONTRIBUTING](../CONTRIBUTING.md) define entrega por rama/PR; [CI propuesta](ci-plan.md) define automatización futura y aceptación. El corte #12 no contenía workflows; la [implementación CI posterior](ci-implementation.md) se revisa por separado. Las autorizaciones históricas B/C para ensayos aislados no autorizan nuevas ejecuciones por este PR documental. No levantar/reconstruir el Compose habitual ni alterar bases, imágenes o volúmenes existentes. [Guía B](patient-identity-verification.md), [evidencia histórica B](patient-identity-validation.md).
+**Pruebas y contribución:** [CONTRIBUTING](../CONTRIBUTING.md) define entrega por rama/PR; el [plan CI-01–07](ci-plan.md) conserva la propuesta histórica y sus criterios. La [implementación CI](ci-implementation.md) está integrada en `main` mediante #14; la [ejecución del merge 39363841602](https://github.com/japh113/plataformaPsicologia/actions/runs/39363841602) aprobó los siete checks. Los PR exclusivamente Markdown también ejecutan automáticamente toda la matriz en runners nuevos, con artifacts del commit realmente probado.
+
+CI-02 sigue pendiente de demostrar ese comportamiento en un PR documental independiente de #14; CI-07, de activar y verificar los checks obligatorios con autorización administrativa separada. La aceptación completa requiere ambas validaciones. Este PR solo modifica Markdown: validar localmente enlaces, IDs y diff, sin ejecutar manualmente Docker, PostgreSQL, SQL ni demos. Las autorizaciones históricas B/C no habilitan ensayos locales nuevos por este encargo. No levantar/reconstruir el Compose habitual ni alterar bases, imágenes o volúmenes existentes. [Guía B](patient-identity-verification.md), [evidencia histórica B](patient-identity-validation.md).
 
 ## Preparación de entorno local nuevo (solo con autorización)
 
@@ -134,7 +136,7 @@ bash scripts/clinical-episodes.sh identity-demo
 
 El modo demo muestra URL/cuentas ficticias y deja únicamente sus recursos propios para inspección. Restablecer significa crear otro destino nuevo; no reutilizar bases ni volúmenes. Limpieza solo del proyecto UUID propio y verificado según el procedimiento de [fundamentos 003](clinical-episodes-foundation.md); nunca prune o limpieza de recursos habituales. A no ejecutó el wrapper; B sí lo ejecuta con autorización y destinos nuevos.
 
-`npm test` en backend selecciona unitarias; `npm run test:integration` requiere entorno opt-in aislado y `test:episodes` prueba SQL/runner y sucesoras. Ejecutarlos fuera del destino verificado puede omitir integración por flags: registrar ejecutadas/omitidas y entorno. En la CI implementada en rama, cualquier omisión inesperada falla el check. No confundir un comando verde con validación de D o permisos por episodio todavía inexistentes.
+`npm test` en backend selecciona unitarias; `npm run test:integration` requiere entorno opt-in aislado y `test:episodes` prueba SQL/runner y sucesoras. Ejecutarlos fuera del destino verificado puede omitir integración por flags: registrar ejecutadas/omitidas y entorno. En la CI integrada en `main`, cualquier omisión inesperada falla el check. No confundir un comando verde con validación de D o permisos por episodio todavía inexistentes.
 
 ## Inicialización, migraciones y evidencia
 
@@ -147,7 +149,7 @@ El modo demo muestra URL/cuentas ficticias y deja únicamente sus recursos propi
 
 ## Validaciones según tipo de cambio
 
-Markdown: revisar diff, referencias a archivos/fragmentos, IDs y estados aprobado/propuesto/implementado. No ejecutar integración, SQL o demos para validar enlaces. La [auditoría documental A](documentation-audit.md) conserva su corte histórico; la [propuesta CI](ci-plan.md) distingue las comprobaciones de esta entrega de las ejecuciones futuras.
+Markdown: revisar diff, referencias a archivos/fragmentos, IDs y estados aprobado/propuesto/implementado. No ejecutar manualmente integración, SQL o demos para validar enlaces. La [auditoría documental A](documentation-audit.md) conserva su corte histórico. La CI integrada ejecuta automáticamente los siete checks también para PR documentales, sin filtros de paths; verificar su ejecución vigente y la procedencia de sus artifacts según el [plan y criterios](ci-plan.md).
 
 Código funcional: unitarias backend, integración HTTP/PostgreSQL pertinente en destino nuevo, lint/build frontend y demo ficticia ADR-019 del alcance, con evidencia reproducible. Si afecta agenda, revisar citas, disponibilidad y espera en frontend/backend; si afecta identidad, todos los escritores/lectores legacy y regresión JWT/backoffice. No retrasar pruebas hasta otra etapa.
 

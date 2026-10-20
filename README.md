@@ -1,6 +1,8 @@
 # PsicoPanel
 
-Corte documental: 19 de octubre de 2026, después del merge de PR #12 en `543442ea634e5977bc887ace1db5457eee2ebf8c`. A, B y C están integrados; D no está iniciado. Integración en Git no acredita despliegue habitual. GitHub Actions/CI tiene [implementación técnica en revisión](docs/ci-implementation.md), conforme al [plan](docs/ci-plan.md); hay [resultados reales](docs/ci-validation.md), con CI-02 y CI-07 pendientes.
+Estado tras el merge de PR #14 en `main`, commit `3f51f09c525fa7a202bd57232637832dd2d036cd`. A, B y C están integrados; D no está iniciado. Integración en Git no acredita despliegue habitual. GitHub Actions/CI está integrado en `main`: [implementación](docs/ci-implementation.md), [plan y criterios](docs/ci-plan.md) y [evidencia técnica histórica](docs/ci-validation.md). La [ejecución del merge 39363841602](https://github.com/japh113/plataformaPsicologia/actions/runs/39363841602) aprobó los siete checks.
+
+CI-02 sigue pendiente de comprobar un PR exclusivamente Markdown, independiente de #14, con los siete checks aprobados y artifacts del commit realmente probado. CI-07 sigue pendiente de activación y verificación administrativa de checks obligatorios, con autorización separada. La aceptación de CI será completa solo después de ambas validaciones; este PR documental no modifica la protección de `main`.
 
 Plataforma para psicólogos independientes y pacientes: agenda, disponibilidad, espera manual asistida, tareas, objetivos, notas y seguimiento clínico, con backoffice separado.
 
