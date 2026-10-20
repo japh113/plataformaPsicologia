@@ -43,8 +43,6 @@ El contrato documental valida enlaces/IDs, UTF-8 y bloques protegidos ADR-029/AB
 
 Primera ejecución [39372360953](https://github.com/japh113/plataformaPsicologia/actions/runs/39372360953), intento 1, HEAD `337d35ecaf493a2479e45764e68212d168c8f804`, merge sintético `0dffe6cddecc3c8ce8cf9301cf3f6536f83af9e7`: cancelada. Docs, backend-unit, frontend y postgres aprobaron; browser quedó cancelado y required falló. Un cambio externo de Draft a ready_for_review generó una ejecución sucesora sobre el mismo HEAD/base; no se presenta la ejecución cancelada como aceptación. La siguiente corrección documental exige otra matriz vigente del HEAD final; el informe de cierre registra su URL y evidencia exactas.
 
-## Riesgos y pendientes
-
 ## Corrección focalizada tras auditoría independiente de PR 17
 
 HEAD auditado y punto de partida: `90b392f1c18465a58bb5e8908a8648165922afea`; base remota comprobada: `3148c9124fb631ff57e2aedd46649182f087bde6`. Se preservaron cambios ajenos del workspace mediante un checkout aislado de la misma rama del PR, sin reutilizar CI-07.
