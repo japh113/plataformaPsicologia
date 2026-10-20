@@ -34,3 +34,7 @@ No ejecutar schema/seed o normalizadores como actualización de bases existentes
 Roles reales: patient, psychologist, support, admin y superadmin. Los tres administrativos no tienen acceso clínico global ordinario. Hoy todavía existe autorización legacy por paciente: ni registro, verificación o directorio autorizan clínica nueva por sí solos.
 
 A/B/C están integrados; 004 y 005 existen y fueron ensayadas aisladamente, sin acreditar aplicación habitual. Las altas unilaterales y nuevas vinculaciones legacy están temporalmente deshabilitadas para todas las cuentas. [Contratos y límites B](docs/patient-identity-verification.md), [contrato C](docs/contact-changes.md). ADR-029/RN-59–61 siguen vigentes con precondición backend/DB de activación pendiente. Entrega por rama nueva y PR hacia main; merge y cambios administrativos requieren autorización posterior.
+
+## Ensayo negativo controlado CI-07 — no integrar
+
+Este enlace inexistente es intencional y exclusivo del PR de prueba: [destino negativo de CI-07](docs/ci-07-negative-target-must-not-exist.md).
