@@ -12,7 +12,9 @@ export const privateRoot=async()=>{
   const root=env.professionalMediaRoot;
   if(!root||!path.isAbsolute(root))throw fail('Almacenamiento privado no configurado.',503);
   const stat=await fs.lstat(root);
-  if(!stat.isDirectory()||stat.isSymbolicLink()||await fs.realpath(root)!==path.resolve(root) || /(?:^|[\\/])(public|src)(?:[\\/]|$)/i.test(root))throw fail('Almacenamiento privado no disponible.',503);
+  if(!stat.isDirectory()||stat.isSymbolicLink()||await fs.realpath(root)!==path.resolve(root) ||
+    (process.getuid && (stat.uid!==process.getuid() || (stat.mode & 0o077)!==0)) ||
+    /(?:^|[\\/])(public|src)(?:[\\/]|$)/i.test(root))throw fail('Almacenamiento privado no disponible.',503);
   return root;
 };
 export const photoPath=(root,key)=>{if(!uuid.test(key))throw fail('Fotografía no disponible.',404);return path.join(root,key+'.webp');};

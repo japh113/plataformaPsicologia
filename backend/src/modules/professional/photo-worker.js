@@ -1,5 +1,9 @@
 // Dedicated process: no database, credentials, network requests or paths from input.
 import sharp from 'sharp';
+sharp.cache(false);
+sharp.concurrency(1);
+sharp.block({operation:['VipsForeignLoad']});
+sharp.unblock({operation:['VipsForeignLoadJpeg','VipsForeignLoadPng','VipsForeignLoadWebp']});
 const chunks=[];let size=0;
 try{
   for await(const chunk of process.stdin){size+=chunk.length;if(size>5*1024*1024)throw new Error('size');chunks.push(chunk);}
