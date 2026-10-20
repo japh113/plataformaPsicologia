@@ -1,6 +1,6 @@
 # Identidad y directorio — plan de entregas A/B/C/D
 
-Corte documental: 19 de octubre de 2026. **A/B/C integrados; D no iniciado ni autorizado.** Main de referencia `543442ea634e5977bc887ace1db5457eee2ebf8c`, merge #12. AB-25 resuelto para C. [Contrato](contact-changes.md), [evidencia histórica final](contact-change-deadline-validation.md). Sin despliegue habitual acreditado ni nuevas vinculaciones.
+Actualización D1 sobre main `3148c9124fb631ff57e2aedd46649182f087bde6`: A/B/C integrados; división D1/D2/D3 aprobada. Solo D1 autorizado en rama y ensayos nuevos aislados, PR Draft sin merge; sin despliegue habitual o nuevas vinculaciones. [Contrato D1](professional-persistence.md), [evidencia propia](professional-persistence-validation.md).
 
 | Entrega | Integración comprobada | Estado |
 | --- | --- | --- |
@@ -32,7 +32,17 @@ Cada PR funcional actualiza su documentación de estado; A no obliga a mantener 
 - D no expone solicitudes de atención: “acepta nuevos pacientes” es configuración e información pública para un flujo posterior. Invitaciones directas futuras no dependen de ese flag.
 - Solicitudes/invitaciones nuevas, confirmación bilateral/activación de episodios, derivaciones, antecedentes/consentimientos, reseñas, pagos/agenda pública, menores y recuperación excepcional siguen fuera de estas implementaciones.
 
-## Migraciones y compatibilidad — 004/005 integradas; 006 estimada
+## División interna aprobada de D
+
+| Subentrega | Alcance y aceptación | Permanece deshabilitado |
+| --- | --- | --- |
+| D1 | 006, persistencia privada, runner y pruebas de integridad/compatibilidad en PostgreSQL nuevo | API D, sesiones nuevas, archivos reales, publicación y clínica nueva |
+| D2 | Estado restringido, gestión privada, revisión y fotos, con autorización propia | Directorio y entrega anónima |
+| D3 | Directorio, preferencias optativas y retiro completo; Chromium B+C+D reales | Solicitudes/invitaciones y episodios |
+
+Solo D1 está autorizado. El esquema mantiene compatibilidad con la aplicación anterior; futuras sucesoras no reescriben 006 integrada.
+
+## Migraciones y compatibilidad — 004/005 integradas; 006 privada D1
 
 | Referencia orientativa | Posible contenido | PR |
 | --- | --- | --- |
@@ -40,7 +50,7 @@ Cada PR funcional actualiza su documentación de estado; A no obliga a mantener 
 | 005_secure_contact_changes.sql | Solicitudes privadas, propósito C, autorización por sesión, eventos mínimos y avisos durables; implementada y ensayada solo aisladamente | C |
 | 006 | Perfil público, versiones y revisiones profesionales | D |
 
-004/005 ya existen; únicamente 006 sigue como estimación de D, sujeta a diseño revisado. A y esta actualización no crean migraciones. Conservar 001–005 y manifiesto. El runner acepta targets explícitos 003/004/005; valida huella previa y registra nueva huella, sin reescribir ledger/checksums históricos. Las evidencias B/C registran upgrade, replay, carreras, rollback, checksum/deriva y rechazo de downgrade; no se reejecutan en este PR documental.
+004/005 integradas; D1 agrega 006 y conserva los SQL/entradas/hashes históricos. Runner con targets explícitos 003/004/005/006, huella previa/nueva, ledger y rollback. Ensayos D1 y límites en su contrato; resultados B/C anteriores son historia.
 
 Validar cada sucesora en PostgreSQL nuevo y aislado: instalación vacía; actualización con fixtures sintéticos legacy (incluidos datos ausentes); ejecución repetida; fallo transaccional; checksum alterado, versión desconocida y deriva rechazados; compatibilidad del diagnóstico/runner y regresión 001–003. Mantener vacíos los datos desconocidos; no convertir DOB de entrevista, edad, coincidencias, aprobación previa o relaciones en nueva evidencia.
 
@@ -48,7 +58,7 @@ No ejecutar schema/seed o migraciones sobre bases existentes ni la habitual. No 
 
 ## Revisión y reversión
 
-Documentación puede revertirse independientemente. Separar B de C limita el impacto de cambios de autenticación; email y SMS permanecen juntos por compartir desafíos/cuotas/abuso. Directorio y credenciales permanecen juntos para no publicar antes de proteger la versión aprobada.
+Documentación puede revertirse independientemente. Separar B de C limita el impacto de cambios de autenticación; email y SMS permanecen juntos por compartir desafíos/cuotas/abuso. La división D1/D2/D3 sustituye la recomendación anterior de un único PR D: D1/D2 no publican; D3 expone solo después de proteger credenciales.
 
 La estrategia técnica recomendada es revertir aplicación/funcionalidad conservando estructuras y evidencia, mediante corrección aditiva cuando proceda; no borrar datos ni bajar `session_version`. Revertir C no debe hacer válidos JWT revocados, y volver a una aplicación antigua no debe restablecer bypass legacy. Compatibilidad entre versiones, fallos de entrega, bloqueos DDL y recuperación se ensayan antes de cada implementación/despliegue. Ningún ensayo autoriza despliegue en la base habitual.
 

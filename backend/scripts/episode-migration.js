@@ -12,7 +12,7 @@ export async function loadMigrations(root = sqlRoot) {
     if (sha256(sql) !== entry.sha256) throw new Error('Incompatible file checksum: ' + entry.version);
     migrations.push({ ...entry, sql });
   }
-  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005') throw new Error('Incompatible migration versions');
+  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006') throw new Error('Incompatible migration versions');
   return migrations;
 }
 
@@ -149,8 +149,34 @@ export async function catalogChecksum(client) {
   return sha256(JSON.stringify(results));
 }
 
+// Complement 006 without changing installation fingerprints recorded by 003–005.
+// Deparse both views on the same server: formatting differences between supported
+// PostgreSQL releases never become a hard-coded, cross-version checksum.
+async function verifyProfessionalReviewView(client, migration) {
+  const match = migration.sql.match(/CREATE VIEW professional_credential_review_states WITH \(security_invoker=true\) AS\s+([\s\S]*?);/);
+  if (!match) throw new Error('Missing 006 review view specification');
+  const { rows: [actual] } = await client.query(`SELECT c.relkind, c.reloptions,
+    pg_get_viewdef(c.oid, false) AS definition,
+    (SELECT count(*)::int FROM pg_rewrite r WHERE r.ev_class=c.oid) AS rule_count,
+    NOT EXISTS (SELECT 1 FROM pg_rewrite r WHERE r.ev_class=c.oid AND r.ev_enabled<>'O') AS rules_enabled
+    FROM pg_class c WHERE c.oid=to_regclass('public.professional_credential_review_states')`);
+  if (!actual || actual.relkind !== 'v' || actual.rule_count !== 1 || !actual.rules_enabled ||
+      JSON.stringify(actual.reloptions) !== JSON.stringify(['security_invoker=true'])) {
+    throw new Error('Schema drift: incompatible 006 review view security/options/rules; no SQL applied');
+  }
+  // Never replace or repair the installed object. The expected view is private
+  // to this transaction/session, built only from checksum-verified migration SQL.
+  const select = match[1].replace(/\bprofessional_credential_(versions|decisions)\b/g, 'public.professional_credential_$1');
+  await client.query('CREATE TEMP VIEW psicopanel_expected_006_review_states AS ' + select);
+  const { rows: [expected] } = await client.query("SELECT pg_get_viewdef('pg_temp.psicopanel_expected_006_review_states'::regclass, false) AS definition");
+  await client.query('DROP VIEW pg_temp.psicopanel_expected_006_review_states');
+  if (actual.definition !== expected.definition) {
+    throw new Error('Schema drift: incompatible 006 review view definition; no SQL applied');
+  }
+}
+
 export async function migrate(client, { expectedDatabase, target = '003' } = {}) {
-  if (!['003', '004', '005'].includes(target)) throw new Error('Unsupported target version');
+  if (!['003', '004', '005', '006'].includes(target)) throw new Error('Unsupported target version');
   const migrations = await loadMigrations();
   await client.query('BEGIN');
   try {
@@ -169,7 +195,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
         throw new Error('Incompatible recorded migration version/checksum: ' + row.version);
       }
     }
-    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005'].includes(ledger.map(r => r.version).join(','))) {
+    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006'].includes(ledger.map(r => r.version).join(','))) {
       throw new Error('Incompatible or incomplete migration ledger');
     }
     if (ledger.length) {
@@ -179,6 +205,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
       if (applied.server_major !== major || applied.catalog_sha256 !== await catalogChecksum(client)) {
         throw new Error('Schema drift or incompatible PostgreSQL version; no SQL applied');
       }
+      if (applied.version === '006') await verifyProfessionalReviewView(client, migrations[5]);
       if (applied.version === target) {
         await client.query('COMMIT');
         return { status: 'already-applied', version: target };
@@ -186,6 +213,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
       for (const next of migrations.filter(m => m.version>applied.version && m.version<=target)) {
         await client.query("SELECT set_config('psicopanel.migration_target',$1,true)", [next.version]);
         await client.query(next.sql);
+        if (next.version === '006') await verifyProfessionalReviewView(client, next);
         await client.query(`INSERT INTO psicopanel_schema_migrations(version,file_name,file_sha256,catalog_sha256,server_major)
           VALUES ($1,$2,$3,$4,$5)`, [next.version,next.file,next.sha256,await catalogChecksum(client),major]);
       }
@@ -193,6 +221,8 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
       return { status: 'applied', version: target };
     }
     const footprints = (await client.query(`SELECT
+      EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND left(c.relname,13)='professional_') OR
+      EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('reserve_professional_public_id','protect_professional_snapshot','preserve_professional_data','enforce_professional_profile_update','enforce_professional_validity_update','enforce_professional_photo_update','check_professional_pending_version')) OR
       to_regclass('public.contact_change_requests') IS NOT NULL OR
       to_regclass('public.contact_change_notices') IS NOT NULL OR
       to_regclass('public.contact_change_events') IS NOT NULL OR
@@ -225,6 +255,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
     for (const next of migrations.filter(m => m.version>'003' && m.version<=target)) {
       await client.query("SELECT set_config('psicopanel.migration_target',$1,true)", [next.version]);
       await client.query(next.sql);
+      if (next.version === '006') await verifyProfessionalReviewView(client, next);
       await client.query(`INSERT INTO psicopanel_schema_migrations(version,file_name,file_sha256,catalog_sha256,server_major)
         VALUES ($1,$2,$3,$4,$5)`, [next.version,next.file,next.sha256,await catalogChecksum(client),major]);
     }
