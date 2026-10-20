@@ -28,5 +28,10 @@
     "version": "006",
     "file": "006_professional_directory_foundation.sql",
     "sha256": "5d22fb10ce1770bc2b66afa278feedac264aa3873dd6a1d0609e55fc078d1530"
+  },
+  {
+    "version": "007",
+    "file": "007_private_professional_management.sql",
+    "sha256": "d46b783a4ccc5a892f692b13ea03f68bc8b8a3a3e8b86c970d405fddf9a326d5"
   }
 ]

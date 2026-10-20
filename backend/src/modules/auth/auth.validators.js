@@ -84,6 +84,7 @@ export const validatePsychologistReviewPayload = (payload = {}) => {
   const errors = [];
   const allowedStatuses = ['active', 'rejected', 'suspended'];
   const nextStatus = normalizeString(payload.approvalStatus);
+  if(payload.ownerMessage!==undefined && (typeof payload.ownerMessage!=='string' || payload.ownerMessage.length>2000)) errors.push('ownerMessage must be text of at most 2000 characters');
 
   if (!nextStatus) {
     errors.push('approvalStatus is required');

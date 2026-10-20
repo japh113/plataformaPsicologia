@@ -1,6 +1,6 @@
 # Desarrollo, Docker/WSL y validación
 
-Estado D1 sobre main verificado `3148c9124fb631ff57e2aedd46649182f087bde6` (#15): A/B/C y CI integrados; D1 implementa persistencia privada/006 en rama, pendiente de integración, con [contrato y límites](professional-persistence.md). D2/D3 siguen pendientes y sin autorización de implementación. Sin despliegue habitual ni nuevas vinculaciones.
+Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](private-professional-management.md), [evidencia D2](private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
 
 Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile backend](../backend/Dockerfile), [Dockerfile frontend](../frontend/Dockerfile) y [package.json backend](../backend/package.json)/[frontend](../frontend/package.json). Documentar un comando no autoriza ejecutarlo. La CI integrada usa exclusivamente runners estándar GitHub-hosted Ubuntu, sandboxes nuevos y ensayos ficticios; [implementación y límites](ci-implementation.md).
 

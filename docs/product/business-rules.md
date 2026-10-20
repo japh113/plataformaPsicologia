@@ -1,6 +1,6 @@
 # Reglas de negocio y permisos
 
-Actualización D1: AB-18/24/27 y división D1/D2/D3 aprobados; únicamente persistencia privada/006 en implementación autorizada. [Contrato D1](../professional-persistence.md). A/B/C y CI integrados; sin despliegue ni permisos por episodio. ADR-029/RN-59–61 intactas.
+Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](../private-professional-management.md), [evidencia D2](../private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
 
 ## Conceptos
 

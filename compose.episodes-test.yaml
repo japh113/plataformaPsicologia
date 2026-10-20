@@ -50,6 +50,13 @@ services:
       PORT: "5000"
       CONTACT_CHANGE_PROCESSOR: "true"
       PGDATABASE: psicopanel_episode_demo
+      D2_ENABLED: ${D2_ENABLED:-false}
+      RESTRICTED_JWT_SECRET: ${RESTRICTED_JWT_SECRET:-}
+      PROFESSIONAL_MEDIA_ROOT: /var/lib/psicopanel-professional-media
+    mem_limit: 512m
+    cpus: 2
+    tmpfs:
+      - /var/lib/psicopanel-professional-media:size=80m,mode=0700,uid=1000,gid=1000
     ports: ["127.0.0.1::5000"]
     command: ["node", "src/server.js"]
     networks: [database, app]
@@ -66,6 +73,7 @@ services:
       - ./frontend/eslint.config.js:/app/eslint.config.js:ro
     environment:
       VITE_IDENTITY_DEMO: ${IDENTITY_DEMO_MODE:-false}
+      VITE_D2_ENABLED: ${D2_ENABLED:-false}
       VITE_API_URL: ${EPISODE_DEMO_API_URL:-http://localhost:5000/api}
     networks: [app]
 networks:

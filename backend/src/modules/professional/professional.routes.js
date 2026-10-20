@@ -1,0 +1,26 @@
+import {Router} from 'express';
+import {authenticate} from '../../middlewares/authMiddleware.js';
+import env from '../../config/env.js';
+import {safeHandler,fail} from './professional.core.js';
+import {exact} from './professional.validators.js';
+import * as service from './professional.service.js';
+import {getPhoto,uploadPhoto,retirePhoto,recoverUploads} from './professional.photos.js';
+export const profileRoutes=Router(),reviewRoutes=Router();
+const enabled=(req,res,next)=>env.d2Enabled?next():res.status(404).json({success:false,message:'Not found'});
+for(const router of [profileRoutes,reviewRoutes])router.use(enabled,authenticate,(req,res,next)=>{res.set('Cache-Control','private, no-store');next();});
+profileRoutes.get('/me',safeHandler(req=>service.getProfile(req.user)));
+profileRoutes.post('/me',safeHandler(req=>{exact(req.body||{},[]);return service.createProfile(req.user);}));
+profileRoutes.patch('/me',safeHandler(req=>service.updateProfile(req.user,req.body)));
+profileRoutes.get('/me/credentials',safeHandler(req=>service.getCredentials(req.user)));
+profileRoutes.post('/me/credential-proposals',safeHandler(req=>service.submitProposal(req.user,req.body)));
+profileRoutes.get('/me/photo',safeHandler(getPhoto));
+profileRoutes.post('/me/photo',safeHandler(uploadPhoto));
+profileRoutes.delete('/me/photo',safeHandler(req=>retirePhoto(req.user,req.body)));
+profileRoutes.post('/me/photo/recover',safeHandler(req=>recoverUploads(req.user,req.body)));
+reviewRoutes.use((req,res,next)=>['admin','superadmin'].includes(req.user.role)?next():res.status(403).json({success:false,message:'Operación no autorizada.'}));
+reviewRoutes.get('/pending',safeHandler(req=>service.listReviews(req.user)));
+reviewRoutes.get('/:owner/:version',safeHandler(req=>service.getReview(req.user,req.params.owner,req.params.version)));
+reviewRoutes.post('/:owner/:version/decision',safeHandler(req=>{
+  if(!req.body)throw fail('Decisión requerida.');
+  return service.decideCredential(req.user,req.params.owner,req.params.version,req.body);
+}));

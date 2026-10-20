@@ -12,7 +12,7 @@ export async function loadMigrations(root = sqlRoot) {
     if (sha256(sql) !== entry.sha256) throw new Error('Incompatible file checksum: ' + entry.version);
     migrations.push({ ...entry, sql });
   }
-  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006') throw new Error('Incompatible migration versions');
+  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007') throw new Error('Incompatible migration versions');
   return migrations;
 }
 
@@ -176,7 +176,7 @@ async function verifyProfessionalReviewView(client, migration) {
 }
 
 export async function migrate(client, { expectedDatabase, target = '003' } = {}) {
-  if (!['003', '004', '005', '006'].includes(target)) throw new Error('Unsupported target version');
+  if (!['003', '004', '005', '006', '007'].includes(target)) throw new Error('Unsupported target version');
   const migrations = await loadMigrations();
   await client.query('BEGIN');
   try {
@@ -195,7 +195,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
         throw new Error('Incompatible recorded migration version/checksum: ' + row.version);
       }
     }
-    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006'].includes(ledger.map(r => r.version).join(','))) {
+    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007'].includes(ledger.map(r => r.version).join(','))) {
       throw new Error('Incompatible or incomplete migration ledger');
     }
     if (ledger.length) {
@@ -205,7 +205,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
       if (applied.server_major !== major || applied.catalog_sha256 !== await catalogChecksum(client)) {
         throw new Error('Schema drift or incompatible PostgreSQL version; no SQL applied');
       }
-      if (applied.version === '006') await verifyProfessionalReviewView(client, migrations[5]);
+      if (applied.version >= '006') await verifyProfessionalReviewView(client, migrations[5]);
       if (applied.version === target) {
         await client.query('COMMIT');
         return { status: 'already-applied', version: target };

@@ -1,6 +1,6 @@
 # Registro de decisiones de producto y arquitectura
 
-Actualización D1 sobre main `3148c9124fb631ff57e2aedd46649182f087bde6`: A/B/C y CI integrados. División D1/D2/D3 y AB-18/24/27 aprobados; solo D1 autorizado para implementación y ensayos nuevos aislados, PR en borrador sin merge. [Contrato D1](../professional-persistence.md). AB-25 y ADR-029 conservan íntegro su texto; sin despliegue habitual ni nuevas vinculaciones.
+Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](../private-professional-management.md), [evidencia D2](../private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
 
 Base histórica de la auditoría A: `0077f46`, merge #9, el 18 de octubre de 2026; #7 y #8 ya integrados. La actualización de estado posterior a #12 no acredita ejecución de 003–005 en la base habitual ni autorización clínica por episodio.
 
@@ -321,6 +321,8 @@ Esta decisión precisa ADR-016/021 y los efectos de activación de RN-34/35/40: 
 AB-18/24/27 están resueltos como producto según sus filas. Retención específica de propuestas, versiones, observaciones y fotografías: aprobada su necesidad, sin plazos ni borrado automático autorizados; los 14 días CI son independientes. Criterios operativos de evidencia/vigencia, catálogo concreto, comunicaciones autorizadas y tratamiento de afirmaciones en texto libre se concretan antes del flujo correspondiente D2/D3.
 
 ## Asuntos abiertos y momento de resolución
+
+Actualización autorizada D2: D1 está integrado en #17; implementar D2 privado en rama nueva, ensayos nuevos aislados y un PR Draft sin merge. Se concretan edición privada de descripción plana acotada, catálogo inicialmente vacío, mensajes explícitos al titular sin copiar review_notes históricas y cuotas sin purgas definitivas. Evidencia registra fuente, responsable, fecha y resultado, pero aprobación operativa permanece bloqueada hasta aprobar criterios por acreditación. [Contrato D2](../private-professional-management.md). D3, vinculaciones, proveedores y despliegue no quedan autorizados.
 
 Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen decisiones de producto aprobadas explícitas arriba; solo sus detalles indicados siguen pendientes:
 

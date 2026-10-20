@@ -1,12 +1,12 @@
 # AGENTS
 
-Encargo D1 autorizado sobre main `3148c9124fb631ff57e2aedd46649182f087bde6`: rama nueva, 006/persistencia privada, ensayos PostgreSQL/Docker nuevos aislados y PR en borrador sin merge. AB-18/24/27 y división D1/D2/D3 aprobados. [Contrato D1](docs/professional-persistence.md), [evidencia](docs/professional-persistence-validation.md). D2/D3, despliegue, cambios administrativos y recursos habituales no autorizados. CI integrada con siete checks obligatorios y artifacts técnicos de 14 días.
+Encargo D2 autorizado desde main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` (D1 #17 integrado): rama nueva, 007 acotada, gestión profesional privada, pruebas en recursos nuevos aislados y un PR Draft sin merge. [Contrato D2](docs/private-professional-management.md), [evidencia](docs/private-professional-validation.md). D3, despliegue, cambios administrativos GitHub y recursos habituales no autorizados. Conservar SQL 001–006 y sus entradas/hashes; CI mantiene siete checks y artifacts técnicos de 14 días.
 
 ## Contexto y fuentes
 
 PsicoPanel es hoy una web-app React/Vite + Express JavaScript + PostgreSQL. La dirección futura es React Native/Expo y TypeScript, sin migración ahora. Preservar lógica reutilizable, contratos claros y estilo existente. Leer [README](README.md), [índice](docs/README.md), [arquitectura](docs/architecture.md), [decisiones](docs/product/decisions.md), [reglas](docs/product/business-rules.md) y [roadmap](docs/product/roadmap.md).
 
-Distinguir producto aprobado, propuesta técnica e implementación. PR #7 aisló backoffice; #8 integró fundamentos 003, sin activar permisos por episodio ni acreditar despliegue; #9 documentó identidad/directorio. [Plan A/B/C/D](docs/identity-directory-delivery-plan.md): A (#10, 0f2ebba), B (#11, 5e549f5) y C (#12, 543442e) integrados. AB-23 mantiene bloqueo legacy global. ADR-029/RN-59–61 conservan entrevista y validación profesional previa a toda activación nueva, con precondición backend/DB todavía pendiente. [Guía B](docs/patient-identity-verification.md). No iniciar D2/D3 ni nuevas vinculaciones.
+Distinguir producto aprobado, propuesta técnica e implementación. PR #7 aisló backoffice; #8 integró fundamentos 003, sin activar permisos por episodio ni acreditar despliegue; #9 documentó identidad/directorio. [Plan A/B/C/D](docs/identity-directory-delivery-plan.md): A (#10, 0f2ebba), B (#11, 5e549f5) y C (#12, 543442e) integrados. AB-23 mantiene bloqueo legacy global. ADR-029/RN-59–61 conservan entrevista y validación profesional previa a toda activación nueva, con precondición backend/DB todavía pendiente. [Guía B](docs/patient-identity-verification.md). Implementar solo D2 autorizado; no iniciar D3 ni nuevas vinculaciones.
 
 ## Límites operativos
 

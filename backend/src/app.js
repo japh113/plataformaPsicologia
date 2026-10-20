@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 
 import authRoutes from './modules/auth/auth.routes.js';
+import {profileRoutes,reviewRoutes} from './modules/professional/professional.routes.js';
+import professionalStatus from './modules/professional/professional.status.js';
 import healthRoutes from './modules/health/health.routes.js';
 import appointmentsRoutes from './modules/appointments/appointments.routes.js';
 import availabilityRoutes from './modules/availability/availability.routes.js';
@@ -18,6 +20,9 @@ app.use(express.json());
 
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/professional-status',professionalStatus);
+app.use('/api/professional-profile',profileRoutes);
+app.use('/api/professional-reviews',reviewRoutes);
 app.use('/api/appointments', authenticate, authorizeClinical, appointmentsRoutes);
 app.use('/api/availability', authenticate, authorizeClinical, availabilityRoutes);
 app.use('/api/patients', authenticate, authorizeClinical, patientsRoutes);

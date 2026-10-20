@@ -7,7 +7,8 @@ export const login = async (payload) => {
   });
 
   const session = response.data;
-  setAuthToken(session.token);
+  if(session.sessionKind==='restricted') clearAuthToken();
+  else setAuthToken(session.token);
   return session;
 };
 

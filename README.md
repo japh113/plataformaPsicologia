@@ -1,6 +1,6 @@
 # PsicoPanel
 
-Estado D1 sobre main verificado `3148c9124fb631ff57e2aedd46649182f087bde6` (#15): A/B/C y CI integrados; D1 implementa persistencia privada/006 en rama, pendiente de integración, con [contrato y límites](docs/professional-persistence.md). D2/D3 siguen pendientes y sin autorización de implementación. Sin despliegue habitual ni nuevas vinculaciones.
+Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](docs/private-professional-management.md), [evidencia D2](docs/private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
 
 CI-02 fue comprobado con PR #15; CI-07 con el [ensayo negativo #16](https://github.com/japh113/plataformaPsicologia/pull/16), cerrado sin merge. Protect main exige los siete checks, política estricta y sin bypass. D1 conserva esa configuración; sus resultados propios se documentan por SHA, sin reutilizar evidencia B/C como nueva. Ensayos D1 autorizados solo en recursos nuevos aislados; no operar Compose/base habitual.
 

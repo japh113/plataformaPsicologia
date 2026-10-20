@@ -1,6 +1,6 @@
 # Etapa 2A — Identidad, directorio básico y vinculación inicial
 
-Actualización D1: base main `3148c9124fb631ff57e2aedd46649182f087bde6`; A/B/C y CI integrados, AB-18/24/27 y división D1/D2/D3 aprobados. [Persistencia D1](professional-persistence.md) concreta únicamente 006 privada en rama. Los candidatos de solicitudes/episodios de este documento siguen propuestos y subordinados a ADR-029.
+Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](private-professional-management.md), [evidencia D2](private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
 
 Base histórica del diseño: 18 de octubre de 2026, `0077f46` (#9 integrado); los contratos B/C y el estado posterior a #12 actualizan únicamente las porciones entregadas.
 

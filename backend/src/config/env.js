@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isLocalDevelopment, resolveJwtSecret } from './security.js';
+import { isLocalDevelopment, resolveJwtSecret, resolveRestrictedSecret } from './security.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -58,6 +58,9 @@ const env = {
   dbSsl: process.env.DB_SSL === 'true',
   jwtSecret: resolveJwtSecret(process.env),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+  d2Enabled: process.env.D2_ENABLED === 'true',
+  restrictedJwtSecret: resolveRestrictedSecret(process.env,resolveJwtSecret(process.env)),
+  professionalMediaRoot: process.env.PROFESSIONAL_MEDIA_ROOT || '',
   passwordResetTokenTtlMinutes: parsePort(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES, 30),
   verificationDelivery: process.env.VERIFICATION_DELIVERY || 'disabled',
   verificationSecret: process.env.VERIFICATION_SECRET || '',
