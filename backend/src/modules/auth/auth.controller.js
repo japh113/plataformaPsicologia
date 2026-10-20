@@ -164,9 +164,11 @@ export const reviewPsychologistHandler = async (req, res, next) => {
     const reviewedUser = await reviewPsychologistUser({
       reviewerUserId: req.user.id,
       reviewerRole: req.user.role,
+      reviewerSessionVersion: req.user.sessionVersion,
       psychologistUserId: req.params.userId,
       approvalStatus: req.body.approvalStatus,
       reviewNotes: req.body.reviewNotes || '',
+      ownerMessage: req.body.ownerMessage || '',
     });
 
     return successResponse(res, reviewedUser, 'Psychologist review updated successfully');
@@ -339,5 +341,7 @@ export const acceptCareRelationshipInviteHandler = async (req, res, next) => {
 };
 
 export const meHandler = async (req, res) => {
-  return successResponse(res, req.user, 'Current user fetched successfully');
+  const user={...req.user,psychologistProfile:req.user.psychologistProfile ? {...req.user.psychologistProfile}:null};
+  if(user.psychologistProfile) delete user.psychologistProfile.reviewNotes;
+  return successResponse(res, user, 'Current user fetched successfully');
 };

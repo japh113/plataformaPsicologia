@@ -18,3 +18,12 @@ export const resolveJwtSecret = (source) => {
 export const assertLocalInitialization = (env) => {
   if (!env.localDevelopment) throw new Error('Legacy schema and demo seeds are restricted to explicit local development; use db:init:production for a NEW empty database');
 };
+
+export const resolveRestrictedSecret = (source,ordinary) => {
+  if(source.D2_ENABLED!=='true') return '';
+  const value=source.RESTRICTED_JWT_SECRET || '';
+  if(value===ordinary || value!==value.trim() || Buffer.byteLength(value)<32 || new Set(value).size<12 || /^(.)\1+$/.test(value))
+    throw new Error('D2 requires a distinct configured RESTRICTED_JWT_SECRET of at least 32 bytes');
+  if(!isLocalDevelopment(source)) resolveJwtSecret({...source,JWT_SECRET:value});
+  return value;
+};

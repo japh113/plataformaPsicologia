@@ -16,7 +16,7 @@
     "db:normalize-future-clinical-notes": "node scripts/normalize-future-clinical-notes.js",
     "db:migrate:clinical-integrity": "node scripts/run-sql-file.js sql/migrations/001_clinical_data_integrity.sql",
     "db:migrate:auth-sessions": "node scripts/run-sql-file.js sql/migrations/002_auth_session_version.sql",
-    "test:integration": "node --test --test-reporter=tap --test-concurrency=1 test/auth.security.integration.test.js test/clinical-integrity.integration.test.js test/backoffice-access.integration.test.js test/identity.integration.test.js test/contact-change.integration.test.js test/contact-change-review.integration.test.js test/contact-deadline.integration.test.js test/professional-persistence.integration.test.js",
+    "test:integration": "node --test --test-reporter=tap --test-concurrency=1 test/auth.security.integration.test.js test/clinical-integrity.integration.test.js test/backoffice-access.integration.test.js test/identity.integration.test.js test/contact-change.integration.test.js test/contact-change-review.integration.test.js test/contact-deadline.integration.test.js test/professional-persistence.integration.test.js test/professional-management.integration.test.js",
     "db:migrate": "node scripts/migrate.js",
     "db:diagnose:episodes": "node scripts/diagnose-episodes.js",
     "test:episodes": "node --test --test-reporter=tap --test-concurrency=1 test/clinical-episodes.integration.test.js"
@@ -26,7 +26,8 @@
     "cors": "^2.8.5",
     "express": "^4.22.3",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "sharp": "0.34.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

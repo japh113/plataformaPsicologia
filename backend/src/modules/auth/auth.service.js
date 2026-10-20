@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import db from '../../config/db.js';
 import env from '../../config/env.js';
 import { ensureAccountCanAuthenticate } from './auth.account-status.js';
+import { restrictedStates, signRestrictedToken } from './restricted-session.js';
 import { ensureBackofficeViewer, ensureBackofficeManager, ensureClinicalActor } from './auth.permissions.js';
 import { projectOperationalAuditMetadata } from '../../utils/audit-projections.js';
 import { logAuditEvent } from '../../utils/audit.js';
@@ -297,10 +298,16 @@ const ensureCareRelationshipResponseAllowed = (actor, relationship, nextStatus) 
 };
 
 export const verifyAuthToken = (token) => {
-  const payload = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
+  const {payload,header} = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'],complete:true });
   if (typeof payload !== 'object' || typeof payload.sub !== 'string' || !payload.sub.trim()) {
     throw createAuthError('Invalid token subject', 401);
   }
+  // Historical ordinary tokens had none of these claims. Contradictory contexts
+  // are rejected even if signed with the ordinary key.
+  if ((header.typ!==undefined && !['JWT','ordinary+jwt'].includes(header.typ)) ||
+      (payload.purpose !== undefined && payload.purpose !== 'ordinary') ||
+      (payload.aud !== undefined && payload.aud !== 'psicopanel-api') ||
+      (payload.iss !== undefined && payload.iss !== 'psicopanel')) throw createAuthError('Invalid token context',401);
   return payload;
 };
 
@@ -356,13 +363,31 @@ export const loginUser = async ({ email, password }) => {
     return null;
   }
 
-  const user = mapUserRow(userRow);
-  ensureAccountCanAuthenticate(user, env);
-
-  return {
-    user,
-    token: signAuthToken(user),
-  };
+  if (!env.d2Enabled) {
+    const user=mapUserRow(userRow);ensureAccountCanAuthenticate(user,env);
+    return {user,token:signAuthToken(user)};
+  }
+  const client=await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const account=(await client.query('SELECT id,password_hash FROM users WHERE id=$1 AND is_active=TRUE AND lower(email)=lower($2) FOR NO KEY UPDATE',[userRow.id,email.trim()])).rows[0];
+    if(!account || account.password_hash!==userRow.password_hash) throw createAuthError('Account changed; sign in again',401);
+    await client.query('SELECT user_id FROM psychologist_profiles WHERE user_id=$1 FOR UPDATE',[userRow.id]);
+    const user=mapUserRow((await client.query(`${baseUserSelect} WHERE u.id=$1`,[userRow.id])).rows[0]);
+    let session;
+    if(user.role==='psychologist' && restrictedStates.includes(user.psychologistStatus)) {
+      const installed=await client.query("SELECT 1 FROM psicopanel_schema_migrations WHERE version='007'");
+      if(!installed.rowCount) throw createAuthError('Private professional management is unavailable',503);
+      session={sessionKind:'restricted',restrictedToken:signRestrictedToken(user)};
+    } else {
+      ensureAccountCanAuthenticate(user,env);
+      // Session DTO is not a channel for historical administrative free text.
+      if(user.psychologistProfile) delete user.psychologistProfile.reviewNotes;
+      session={sessionKind:'ordinary',user,token:signAuthToken(user)};
+    }
+    await client.query('COMMIT');return session;
+  } catch(error) {await client.query('ROLLBACK');throw error;}
+  finally {client.release();}
 };
 
 export const requestPasswordReset = async ({ email }) => {
@@ -812,15 +837,25 @@ export const acceptCareRelationshipInvite = async ({ actor }) => denyLegacyRelat
 export const reviewPsychologistUser = async ({
   reviewerUserId,
   reviewerRole = '',
+  reviewerSessionVersion,
   psychologistUserId,
   approvalStatus,
   reviewNotes = '',
+  ownerMessage = '',
 }) => {
   ensureBackofficeManager({ id: reviewerUserId, role: reviewerRole });
   const client = await db.getClient();
 
   try {
     await client.query('BEGIN');
+
+    // User-first ordering matches resets, D2 writes and the existing 002 trigger.
+    const accounts=(await client.query('SELECT id,role,is_active,session_version FROM users WHERE id=ANY($1::text[]) ORDER BY id FOR NO KEY UPDATE',
+      [[...new Set([reviewerUserId,psychologistUserId])].sort()])).rows;
+    const reviewer=accounts.find(row=>row.id===reviewerUserId);
+    if(reviewerSessionVersion!==undefined && reviewer?.session_version!==reviewerSessionVersion)throw createAuthError('Session has been revoked; sign in again',401);
+    if(!reviewer?.is_active || !['admin','superadmin'].includes(reviewer.role) || reviewer.role!==reviewerRole || reviewerUserId===psychologistUserId)
+      throw createAuthError('Forbidden',403);
 
     const result = await client.query(
       `
@@ -844,6 +879,10 @@ export const reviewPsychologistUser = async ({
     if (!result.rows[0]) {
       throw createAuthError('Psychologist profile not found', 404);
     }
+
+    if(env.d2Enabled && ownerMessage) await client.query(`INSERT INTO professional_account_messages
+      (owner_user_id,author_user_id,author_role,account_status,owner_message) VALUES($1,$2,$3,$4,$5)`,
+      [psychologistUserId,reviewerUserId,reviewerRole,approvalStatus,ownerMessage.trim()]);
 
     await logAuditEvent(client, {
       actorUserId: reviewerUserId,
