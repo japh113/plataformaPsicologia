@@ -178,7 +178,7 @@ export default function BackofficeScreen(props) {
 
   const [search, setSearch] = useState('');
   const [selectedPsychologist, setSelectedPsychologist] = useState(null);
-  const [reviewForm, setReviewForm] = useState({ approvalStatus: 'active', reviewNotes: '' });
+  const [reviewForm, setReviewForm] = useState({ approvalStatus: '', reviewNotes: '', ownerMessage: '' });
   const [relationshipModalOpen, setRelationshipModalOpen] = useState(false);
   const [relationshipForm, setRelationshipForm] = useState({ patientId: '', psychologistUserId: '', status: 'active' });
 
@@ -211,18 +211,20 @@ export default function BackofficeScreen(props) {
   const approvedPsychologists = useMemo(() => users.filter((user) => user.role === 'psychologist' && user.psychologistProfile?.approvalStatus === 'active'), [users]);
 
   const openReviewModal = (psychologistUser) => {
+    if (reviewingPsychologistId) return;
     setSelectedPsychologist(psychologistUser);
-    setReviewForm({ approvalStatus: 'active', reviewNotes: psychologistUser?.psychologistProfile?.reviewNotes || '' });
+    setReviewForm({ approvalStatus: psychologistUser?.psychologistProfile?.approvalStatus || 'pending_review', reviewNotes: psychologistUser?.psychologistProfile?.reviewNotes || '', ownerMessage: '' });
   };
 
   const closeReviewModal = () => {
+    if (reviewingPsychologistId) return;
     setSelectedPsychologist(null);
-    setReviewForm({ approvalStatus: 'active', reviewNotes: '' });
+    setReviewForm({ approvalStatus: '', reviewNotes: '', ownerMessage: '' });
   };
 
   const handleSubmitReview = async (event) => {
     event.preventDefault();
-    if (!selectedPsychologist || !canReviewPsychologists) return;
+    if (!selectedPsychologist || !canReviewPsychologists || reviewingPsychologistId || !['active', 'rejected', 'suspended'].includes(reviewForm.approvalStatus)) return;
     const wasReviewed = await onReviewPsychologist(selectedPsychologist.id, reviewForm);
     if (wasReviewed) closeReviewModal();
   };
@@ -500,7 +502,7 @@ export default function BackofficeScreen(props) {
                 <h2 className="mt-4 text-2xl font-black text-slate-900">{selectedPsychologist.fullName}</h2>
                 <p className="mt-2 text-sm text-slate-500">{selectedPsychologist.email} · {selectedPsychologist.psychologistProfile?.professionalTitle || 'Psicologo'}</p>
               </div>
-              <button type="button" onClick={closeReviewModal} className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100"><XCircle size={18} /></button>
+              <button type="button" aria-label="Cerrar revisión" disabled={Boolean(reviewingPsychologistId)} onClick={closeReviewModal} className="rounded-full border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100"><XCircle size={18} /></button>
             </div>
 
             {actionError ? <div className="mt-5"><InlineNotice tone="error" title="No pudimos guardar la revision" message={actionError} onDismiss={onDismissActionError} /></div> : null}
@@ -512,28 +514,31 @@ export default function BackofficeScreen(props) {
               </div>
 
               <div>
+                <p className="mb-2 text-sm font-semibold text-slate-700">Estado actual: {APPROVAL_STATUS_LABELS[selectedPsychologist.psychologistProfile?.approvalStatus] || 'Pendiente'}</p>
+                <p className="mb-3 text-sm text-slate-500">El estado se conserva al editar notas o mensajes. Para cambiarlo, selecciona una decisión explícita.</p>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">Decision</label>
                 <div className="grid gap-3 md:grid-cols-3">
-                  {[{ value: 'active', label: 'Aprobar', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' }, { value: 'rejected', label: 'Rechazar', className: 'border-rose-200 bg-rose-50 text-rose-700' }, { value: 'suspended', label: 'Suspender', className: 'border-amber-200 bg-amber-50 text-amber-700' }].map((option) => (
-                    <button key={option.value} type="button" disabled={!canReviewPsychologists} onClick={() => setReviewForm((currentForm) => ({ ...currentForm, approvalStatus: option.value }))} className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${reviewForm.approvalStatus === option.value ? option.className : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'} ${!canReviewPsychologists ? 'cursor-not-allowed opacity-60' : ''}`}>
+                  {[{ value: selectedPsychologist.psychologistProfile?.approvalStatus || 'pending_review', label: 'Mantener estado actual', className: 'border-slate-400 bg-slate-100 text-slate-900' }, ...[{ value: 'active', label: 'Aprobar', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' }, { value: 'rejected', label: 'Rechazar', className: 'border-rose-200 bg-rose-50 text-rose-700' }, { value: 'suspended', label: 'Suspender', className: 'border-amber-200 bg-amber-50 text-amber-700' }].filter(option => option.value !== selectedPsychologist.psychologistProfile?.approvalStatus)].map((option) => (
+                    <button key={option.value} type="button" aria-pressed={reviewForm.approvalStatus === option.value} disabled={!canReviewPsychologists || Boolean(reviewingPsychologistId)} onClick={() => setReviewForm((currentForm) => ({ ...currentForm, approvalStatus: option.value }))} className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${reviewForm.approvalStatus === option.value ? option.className : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'} ${!canReviewPsychologists ? 'cursor-not-allowed opacity-60' : ''}`}>
                       {import.meta.env.VITE_D2_ENABLED==='true' && option.value==='active' && ['rejected','suspended'].includes(selectedPsychologist?.psychologistProfile?.approvalStatus)?'Rehabilitar':option.label}
                     </button>
                   ))}
                 </div>
+                {reviewForm.approvalStatus === 'pending_review' && <p className="mt-2 text-sm text-slate-500">Para resolver una solicitud pendiente, elige una decisión antes de guardar.</p>}
               </div>
 
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700">Notas internas</label>
-                <textarea rows={4} value={reviewForm.reviewNotes} disabled={!canReviewPsychologists} onChange={(event) => setReviewForm((currentForm) => ({ ...currentForm, reviewNotes: event.target.value }))} placeholder="Motivo de aprobacion, rechazo o suspension." className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-70" />
+                <textarea rows={4} value={reviewForm.reviewNotes} disabled={!canReviewPsychologists || Boolean(reviewingPsychologistId)} onChange={(event) => setReviewForm((currentForm) => ({ ...currentForm, reviewNotes: event.target.value }))} placeholder="Motivo de aprobacion, rechazo o suspension." className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-70" />
               </div>
 
-              {import.meta.env.VITE_D2_ENABLED==='true' && <label className="block text-sm font-semibold">Mensaje destinado al profesional<textarea maxLength={2000} rows={3} disabled={!canReviewPsychologists} value={reviewForm.ownerMessage||''} onChange={event=>setReviewForm({...reviewForm,ownerMessage:event.target.value})} className="block w-full rounded border p-2"/></label>}
+              {import.meta.env.VITE_D2_ENABLED==='true' && <label className="block text-sm font-semibold">Mensaje destinado al profesional<textarea maxLength={2000} rows={3} disabled={!canReviewPsychologists || Boolean(reviewingPsychologistId)} value={reviewForm.ownerMessage||''} onChange={event=>setReviewForm({...reviewForm,ownerMessage:event.target.value})} className="block w-full rounded border p-2"/></label>}
 
               {!canReviewPsychologists ? <InlineNotice tone="warning" title="Acceso de solo lectura" message="Tu rol puede revisar esta solicitud, pero la aprobacion final queda reservada para admin o superadmin." /> : null}
 
               <div className="flex flex-wrap justify-end gap-3 pt-2">
-                <button type="button" onClick={closeReviewModal} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100">Cerrar</button>
-                <button type="submit" disabled={!canReviewPsychologists || reviewingPsychologistId === selectedPsychologist.id} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">{reviewingPsychologistId === selectedPsychologist.id ? 'Guardando...' : 'Guardar revision'}</button>
+                <button type="button" disabled={Boolean(reviewingPsychologistId)} onClick={closeReviewModal} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100">Cerrar</button>
+                <button type="submit" disabled={!canReviewPsychologists || Boolean(reviewingPsychologistId) || !['active', 'rejected', 'suspended'].includes(reviewForm.approvalStatus)} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">{reviewingPsychologistId === selectedPsychologist.id ? 'Guardando...' : 'Guardar revision'}</button>
               </div>
             </form>
           </div>

@@ -31,3 +31,31 @@ La corrección importa `fileURLToPath` de `node:url` y lo aplica a la URL del wo
 Repetición con la corrección en proyecto nuevo `ddd812dc-8e1e-428f-adec-11b154fcdf65`, PostgreSQL 17.11: episodios 17, integración 107, unitarias backend 99 y frontend tres aprobadas; lint/build exit 0. Sin fallos, skips ni cancelaciones. Los diez contratos Python CI aprobaron con `python -X utf8 -B -m unittest discover -s scripts/ci -p test_*.py`. En ambos sandboxes: DB tmpfs, red interna, sin puertos DB ni volúmenes persistentes; `cleanupConfirmed` y `preexistingContainersPreserved` confirmados. No se usaron recursos habituales.
 
 Estos ensayos locales no sustituyen la aceptación del nuevo HEAD en Actions: se exige de nuevo la matriz completa, Chromium B+C+D2 y siete checks, verificando ejecución/intento/HEAD/base/merge sintético e integridad de artifacts. La ejecución `39496399248` pertenece al HEAD anterior y no acredita esta corrección. La identidad y resultados remotos observados se entregan en el informe final del encargo, manteniendo PR #18 Draft, sin merge ni auto-merge.
+
+## Auditoría independiente D2 — P2-01 y P2-02
+
+Punto auditado: HEAD `e28897faf269952e7e6c920bd490600ce6d79ff6`, base main `2fe0799ee683273df2dbed872840bbfd2ef03f6d`, PR #18 Draft. La ejecución histórica `39506186039` no acredita estas correcciones. Se preservan migraciones 001–007, autenticación, fotografías/fileURLToPath, reglas clínicas y decisiones de producto; no se habilitan aprobación operativa de credenciales ni D3.
+
+| Hallazgo | Causa | Corrección y regresión real de UI |
+| --- | --- | --- |
+| P2-01: rehabilitación involuntaria | El modal inicializaba siempre approvalStatus=active, también al editar comunicaciones de cuentas suspendidas/rechazadas. | Inicializar desde la cuenta seleccionada, mostrar estado actual y opción de mantenerlo, rehabilitar solo mediante elección explícita, reiniciar campos por apertura y bloquear edición/cierre durante guardado. D213 conserva ambos estados al guardar solo mensaje o nota; comprueba cierre/cambio de profesional, rehabilitación de ambos, JWT restringido anterior revocado, flags false, notas reservadas y support sin gestión ni PATCH autorizado. Pendientes siguen exigiendo decisión explícita según el endpoint existente. |
+| P2-02: textos cruzados entre propuestas | Campos no controlados compartían instancia; las respuestas de carga se aplicaban sin comprobar qué selección seguía vigente. | Desmontar al seleccionar/recargar, clave ownerId+credentialVersion, secuencia que ignora respuestas antiguas e invalidación al desmontar. Capturar propuesta y campos juntos al enviar; bloquear selección, recarga, campos y doble envío mientras se decide. Error/conflicto retira el formulario y exige cargar de nuevo. D214 cambia A→B sin recargar, verifica ambos campos vacíos, payload exacto de B sin textos A, motivo propio y exclusión de nota interna del DTO titular. D215 entrega A después de B, mantiene identidad/textos de B, observa controles bloqueados durante POST retenido, induce rowVersion obsoleto/409, recarga campos vacíos y decide únicamente la versión exacta vigente; reintento terminal y versión antigua siguen rechazados. |
+
+Los tres IDs nuevos se añaden al inventario obligatorio [browser-cases.json](../scripts/ci/browser-cases.json), conservando D201–D212 y las suites B/C. Los contratos existentes rechazan omisiones, duplicados, fallos y revisión de otro SHA. Capturas siguen enmascaradas; los diagnósticos de fallo del driver quedan en el directorio de control privado, fuera del export allowlist.
+
+### Reproducción local rojo/verde
+
+- Proyecto nuevo `99d8e060-c17a-493e-afbb-00c410dfc178`, pantallas originales: D201–D212 aprobados; D214 falló por textos conservados de A al abrir B.
+- Proyecto nuevo `fee639fc-f9fc-4d00-bfc8-e4128fd0e913`, solo P2-02 corregido: D201–D212, D214 y D215 aprobados; D213 falló porque el guardado de solo mensaje de suspended enviaba active.
+- Proyecto nuevo `1e63127a-645d-4131-b738-dd92bafa8c10`, ambas correcciones: D214/D215 aprobados; D213 se detuvo con un selector de cierre ambiguo entre aviso y modal. Se acotó al botón accesible Cerrar revisión, sin retirar aserciones ni relajar guardas.
+- Proyecto nuevo `4765c5fa-3f26-4f1d-8584-cecef30d1ff7`: quince casos D2 aprobados, 22 capturas enmascaradas, sin eventos inesperados. Playwright 1.64.0/Chromium 156.0.8078.4. El runtime local registró e28897f con cambios de trabajo todavía sin commit: esta prueba acredita los cambios locales, no una aceptación remota de ese HEAD.
+
+Los cuatro ensayos usaron PostgreSQL 17.11 nuevo, tmpfs, redes internas, sin puertos DB ni volúmenes persistentes. Todos confirmaron cleanupConfirmed y preexistingContainersPreserved; fueron secuenciales. No se tocaron servicios, contenedores, volúmenes ni datos habituales.
+
+Matriz local posterior, proyecto nuevo `aa2ae0d4-d509-418c-9717-56306b584d34`, PostgreSQL 17.11: 17 episodios, 107 integración, 99 unitarias backend y tres frontend aprobados; lint/build exit 0, sin skips/cancelaciones. Incluye la regresión existente de fotografías bajo ruta con espacios. Mismas garantías de aislamiento y limpieza confirmadas. Diez contratos Python CI aprobados con modo UTF-8; documentación/enlaces y decisiones/migraciones protegidas contrastadas. La revisión visual ajustó el contraste del nuevo rótulo de estado; el HEAD remoto final deberá acreditar también ese acabado y su aserción visible.
+
+### Aceptación del HEAD final
+
+La aceptación se exige de nuevo en los [siete checks del HEAD vigente de PR #18](https://github.com/japh113/plataformaPsicologia/pull/18/checks), incluyendo Chromium B+C+D2 e inventario/evidencia. La identidad exacta de ejecución/intento/HEAD/base/merge sintético y verificación de artifacts se registra después de observarla en el cuerpo del PR y el informe de entrega, enlazados desde este registro; nunca se hereda de e28897f. Se conserva la retención CI de 14 días y no se cambia la política de producto.
+
+Límites conservados: aprobación real de credenciales bloqueada; catálogo vacío; publicación/admisión y D3 deshabilitados; esta validación no acredita despliegue ni endurecimiento productivo. No se introduce el modelo futuro de episodios paralelos, pareja o derivaciones.
