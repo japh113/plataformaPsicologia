@@ -4,13 +4,14 @@ No traces, HAR, video, storage-state export, or external mail/SMS. CLI bridge st
 """
 import json,os,re,subprocess,sys
 from pathlib import Path
+from episode_images import execution_suffix
 root=Path.cwd().resolve();config_path=Path(sys.argv[1]).resolve()
 assert config_path.is_relative_to(root/'tmp')
 c=json.loads(config_path.read_text());work=Path(c['work']).resolve();out=Path(c['out']).resolve()
 assert work.is_relative_to(root/'tmp') and out.is_relative_to(root/'tmp')
 assert re.fullmatch(r'[a-f0-9-]{36}',c['run']) and re.fullmatch(r'[a-f0-9-]{36}',c['demo'])
-assert c['project']=='psicopanel-episodes-'+c['demo'] and c['network']==c['project']+'_app'
-assert c['image']=='psicopanel-contact-review-'+c['run']+'-chromium:isolated'
+assert c['project'] in ['psicopanel-episodes-'+c['demo'],'psicopanel-episodes-'+execution_suffix(c['demo'])] and c['network']==c['project']+'_app'
+assert c['image'] in ['psicopanel-contact-review-'+c['run']+'-chromium:isolated','psicopanel-contact-review-'+execution_suffix(c['run'])+'-chromium:isolated']
 baseline=json.loads(Path(c['baseline']).read_text())
 network=json.loads(subprocess.check_output(['docker','network','inspect',c['network']],text=True))[0];assert network['Internal'] is True
 image=json.loads(subprocess.check_output(['docker','image','inspect',c['image']],text=True))[0]
@@ -43,7 +44,7 @@ assert front['Config']['Labels']['com.docker.compose.project']==c['project']
 address=front['NetworkSettings']['Networks'][c['network']]['IPAddress']
 assert address
 revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-cmd=['docker','run','--rm','--init','-i','--name','psicopanel-contact-browser-'+c['run'],'--label','io.psicopanel.contact-review.run='+c['run'],'--user',str(os.getuid())+':'+str(os.getgid()),'--network',c['network'],'--add-host','frontend.localhost:'+address,'--read-only','--tmpfs','/tmp:size=1g,mode=1777','--shm-size=1g','--cap-drop=ALL','--security-opt','no-new-privileges','-e','HOME=/tmp','-e','REVIEW_FRONTEND_IP='+address,'-e','REVIEW_BASE='+c['base'],'-e','REVIEW_REVISION='+revision,'-v',str(work)+':/control','-v',str(out)+':/evidence','-v',str(root/'scripts/contact-ui-review.cjs')+':/review/driver.cjs:ro',c['image'],'node','/review/driver.cjs']
+cmd=['docker','run','--rm','--init','-i','--name','psicopanel-contact-browser-'+execution_suffix(c['run']),'--label','io.psicopanel.contact-review.run='+c['run'],'--user',str(os.getuid())+':'+str(os.getgid()),'--network',c['network'],'--add-host','frontend.localhost:'+address,'--read-only','--tmpfs','/tmp:size=1g,mode=1777','--shm-size=1g','--cap-drop=ALL','--security-opt','no-new-privileges','-e','HOME=/tmp','-e','REVIEW_FRONTEND_IP='+address,'-e','REVIEW_BASE='+c['base'],'-e','REVIEW_REVISION='+revision,'-v',str(work)+':/control','-v',str(out)+':/evidence','-v',str(root/'scripts/contact-ui-review.cjs')+':/review/driver.cjs:ro',c['image'],'node','/review/driver.cjs']
 p=subprocess.Popen(cmd,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,bufsize=1)
 for line in p.stdout:
  if line.startswith('CONTROL '):

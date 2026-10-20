@@ -2,9 +2,9 @@
 
 Corte documental: 19 de octubre de 2026, main `543442ea634e5977bc887ace1db5457eee2ebf8c`. A/B/C integrados; D no iniciado. [Contrato C](contact-changes.md), [evidencia histórica final](contact-change-deadline-validation.md). El wrapper incluye contact-demo y contact-review (red interna para Chromium); sucesora 005 explícita solo en destinos nuevos. No reconstruir ni reparar recursos habituales.
 
-Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile backend](../backend/Dockerfile), [Dockerfile frontend](../frontend/Dockerfile) y [package.json backend](../backend/package.json)/[frontend](../frontend/package.json). Documentar un comando no autoriza ejecutarlo. Este encargo solo modifica Markdown: no opera Docker/PostgreSQL, migraciones, SMS ni emails.
+Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile backend](../backend/Dockerfile), [Dockerfile frontend](../frontend/Dockerfile) y [package.json backend](../backend/package.json)/[frontend](../frontend/package.json). Documentar un comando no autoriza ejecutarlo. El corte documental anterior solo modificó Markdown. El encargo CI autoriza exclusivamente sandboxes nuevos y ensayos ficticios; [implementación y límites](ci-implementation.md).
 
-**Pruebas y contribución:** [CONTRIBUTING](../CONTRIBUTING.md) define entrega por rama/PR; [CI propuesta](ci-plan.md) define automatización futura y aceptación. No hay workflows implementados en el corte #12. Las autorizaciones históricas B/C para ensayos aislados no autorizan nuevas ejecuciones por este PR documental. No levantar/reconstruir el Compose habitual ni alterar bases, imágenes o volúmenes existentes. [Guía B](patient-identity-verification.md), [evidencia histórica B](patient-identity-validation.md).
+**Pruebas y contribución:** [CONTRIBUTING](../CONTRIBUTING.md) define entrega por rama/PR; [CI propuesta](ci-plan.md) define automatización futura y aceptación. El corte #12 no contenía workflows; la [implementación CI posterior](ci-implementation.md) se revisa por separado. Las autorizaciones históricas B/C para ensayos aislados no autorizan nuevas ejecuciones por este PR documental. No levantar/reconstruir el Compose habitual ni alterar bases, imágenes o volúmenes existentes. [Guía B](patient-identity-verification.md), [evidencia histórica B](patient-identity-validation.md).
 
 ## Preparación de entorno local nuevo (solo con autorización)
 
@@ -122,7 +122,7 @@ En arranques posteriores ejecutar solamente `npm run dev` en cada carpeta.
 
 WSL puede no tener node/npm; en la auditoría de A ninguno estaba en PATH. No instalar en host por defecto ni usar contenedores habituales para integrar cambios. Las imágenes existentes de desarrollo usan Node 24 y lockfiles; verificar disponibilidad del motor y elegir ejecución autorizada antes de ensayar.
 
-El proyecto ya dispone de [scripts/clinical-episodes.sh](../scripts/clinical-episodes.sh) y [compose.episodes-test.yaml](../compose.episodes-test.yaml). El wrapper genera proyecto UUID, comprueba recursos nuevos, usa DB tmpfs sin puerto público en red privada y verifica propiedad de imágenes. El modo test ejecuta SQL/runner de episodios, unitarias backend, integración auth/clínica/backoffice/identidad/contactos y lint/build. No ejecuta `frontend npm test` ni Chromium: deben cubrirse por separado en la futura CI. La demo usa puertos loopback dinámicos y datos ficticios; identity-demo no activa episodios o solicitudes nuevas. [Contrato C](contact-changes.md) describe contact-demo/contact-review y sus requisitos.
+El proyecto ya dispone de [scripts/clinical-episodes.sh](../scripts/clinical-episodes.sh) y [compose.episodes-test.yaml](../compose.episodes-test.yaml). El wrapper genera proyecto UUID, comprueba recursos nuevos, usa DB tmpfs sin puerto público en red privada y verifica propiedad de imágenes. El modo test ejecuta SQL/runner de episodios, unitarias backend, integración auth/clínica/backoffice/identidad/contactos y lint/build. No ejecuta `frontend npm test` ni Chromium: los cubre por separado la [implementación CI](ci-implementation.md). La demo usa puertos loopback dinámicos y datos ficticios; identity-demo no activa episodios o solicitudes nuevas. [Contrato C](contact-changes.md) describe contact-demo/contact-review y sus requisitos.
 
 Solo con alcance de pruebas/demos autorizado, desde raíz:
 
@@ -134,7 +134,7 @@ bash scripts/clinical-episodes.sh identity-demo
 
 El modo demo muestra URL/cuentas ficticias y deja únicamente sus recursos propios para inspección. Restablecer significa crear otro destino nuevo; no reutilizar bases ni volúmenes. Limpieza solo del proyecto UUID propio y verificado según el procedimiento de [fundamentos 003](clinical-episodes-foundation.md); nunca prune o limpieza de recursos habituales. A no ejecutó el wrapper; B sí lo ejecuta con autorización y destinos nuevos.
 
-`npm test` en backend selecciona unitarias; `npm run test:integration` requiere entorno opt-in aislado y `test:episodes` prueba SQL/runner y sucesoras. Ejecutarlos fuera del destino verificado puede omitir integración por flags: registrar ejecutadas/omitidas y entorno. En CI propuesta, cualquier omisión inesperada debe fallar el check. No confundir un comando verde con validación de D o permisos por episodio todavía inexistentes.
+`npm test` en backend selecciona unitarias; `npm run test:integration` requiere entorno opt-in aislado y `test:episodes` prueba SQL/runner y sucesoras. Ejecutarlos fuera del destino verificado puede omitir integración por flags: registrar ejecutadas/omitidas y entorno. En la CI implementada en rama, cualquier omisión inesperada falla el check. No confundir un comando verde con validación de D o permisos por episodio todavía inexistentes.
 
 ## Inicialización, migraciones y evidencia
 

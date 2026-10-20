@@ -1,6 +1,6 @@
 # AGENTS
 
-Corte documental, 19 de octubre de 2026: A/B/C integrados en #10/#11/#12; main de referencia `543442ea634e5977bc887ace1db5457eee2ebf8c`. D no iniciado ni autorizado. [Contrato C](docs/contact-changes.md). Encargo actual exclusivamente documental por rama nueva y PR separado, sin merge, cambios administrativos, código funcional ni operación de Docker/PostgreSQL/migraciones/SMS/emails. [CI propuesta](docs/ci-plan.md), todavía sin workflows implementados; [contribución](CONTRIBUTING.md).
+Corte documental, 19 de octubre de 2026: A/B/C integrados en #10/#11/#12; main de referencia `543442ea634e5977bc887ace1db5457eee2ebf8c`. D no iniciado ni autorizado. [Contrato C](docs/contact-changes.md). Encargo CI actual: una rama y un PR técnico, sin merge; autorización para GitHub-hosted Ubuntu y PostgreSQL/Docker nuevos aislados, fixtures ficticios y entrega simulada, retención técnica 14 días. [Implementación/evidencia CI](docs/ci-implementation.md), [plan](docs/ci-plan.md) y [contribución](CONTRIBUTING.md). No modificar administración/protecciones ni operar recursos habituales.
 
 ## Contexto y fuentes
 
@@ -29,4 +29,4 @@ Waitlist manual: sugerir prioridad 1 y conservar decisión profesional. Disponib
 
 Estado principal: frontend/src/App.jsx; pantallas AppointmentsScreen y NotesScreen. Servicios sensibles: auth, patients, appointments y availability en backend/src/modules. Contratos y lectores laterales en [arquitectura](docs/architecture.md).
 
-Antes de cerrar: revisar diff/scope y permisos; si toca agenda, evaluar backend/frontend, espera y disponibilidad. Código funcional: unitarias backend, integración pertinente **aislada**, frontend lint/build y demo ficticia ADR-019 por entrega. Markdown solo: contrastar código y validar enlaces/fragmentos/IDs y diff; no ejecutar bases o demos. Documentar comprobaciones no disponibles sin presentar evidencia histórica como nueva. Commitear documentación también; push a la rama y abrir solo el PR autorizado.
+Antes de cerrar: revisar diff/scope y permisos; si toca agenda, evaluar backend/frontend, espera y disponibilidad. Código funcional: unitarias backend, integración pertinente **aislada**, frontend lint/build y demo ficticia ADR-019 por entrega. Markdown solo: contrastar código y validar enlaces/fragmentos/IDs y diff; no ejecutar manualmente bases o demos locales. La CI autorizada ejecuta la matriz completa en runners nuevos también para PR documentales. Documentar comprobaciones no disponibles sin presentar evidencia histórica como nueva. Commitear documentación también; push a la rama y abrir solo el PR autorizado.

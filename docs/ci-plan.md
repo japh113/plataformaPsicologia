@@ -2,6 +2,8 @@
 
 19 de octubre de 2026. Base: `543442ea634e5977bc887ace1db5457eee2ebf8c`, merge #12, HEAD C revisado `c7f622608af4b7bc27a7c4e9dde49be23221b0ae`. **PROPUESTA técnica, no CI implementada ni autorización administrativa.** Este PR solo cambia Markdown; no crea `.github/workflows`, ejecuta Docker/PostgreSQL/migraciones, envía SMS/emails ni cambia protección, permisos, secrets o merge automático.
 
+La implementación técnica posterior está autorizada por encargo específico y se registra en [implementación y evidencia](ci-implementation.md). Este plan conserva su corte histórico; no sustituye resultados observados ni autoriza cambios administrativos.
+
 ## Estado comprobado y alcance
 
 - A (#10, `0f2ebba`), B (#11, `5e549f5`) y C (#12, `543442e`) integrados. D no iniciado ni autorizado; 2A sigue parcial. [Plan de entregas](identity-directory-delivery-plan.md).
