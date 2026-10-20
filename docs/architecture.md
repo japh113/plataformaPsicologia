@@ -1,8 +1,8 @@
 # Arquitectura vigente de PsicoPanel
 
-Corte documental: 19 de octubre de 2026, main `543442ea634e5977bc887ace1db5457eee2ebf8c` tras #12. A/B/C integrados; D no iniciado. [Cambio seguro de contactos C](contact-changes.md): servicio específico, candidato cifrado, autorización por sesión, confirmación atómica y avisos durables. La aplicación C requiere sucesora 005; sin despliegue habitual acreditado ni episodios activados.
+Estado D1 sobre main verificado `3148c9124fb631ff57e2aedd46649182f087bde6` (#15): A/B/C y CI integrados; D1 implementa persistencia privada/006 en rama, pendiente de integración, con [contrato y límites](professional-persistence.md). D2/D3 siguen pendientes y sin autorización de implementación. Sin despliegue habitual ni nuevas vinculaciones.
 
-[Producto](product/vision.md), [reglas](product/business-rules.md) y [decisiones](product/decisions.md) definen objetivos; esta página describe la implementación y sus límites. [GitHub Actions/CI](ci-implementation.md) tiene implementación técnica en revisión; sus resultados no acreditan capacidades clínicas pendientes.
+[Producto](product/vision.md), [reglas](product/business-rules.md) y [decisiones](product/decisions.md) definen objetivos; esta página describe la implementación y sus límites. [GitHub Actions/CI](ci-implementation.md) está integrado y sus siete checks son obligatorios; sus resultados no acreditan capacidades clínicas pendientes.
 
 ## Aplicación implementada
 
@@ -56,16 +56,20 @@ La política de día clínico aún usa America/Los_Angeles en partes de aplicaci
 | [004](../backend/sql/migrations/004_patient_identity_verification.sql) | DOB global nullable, evidencia/desafíos privados, cuotas e invalidación por contacto | Solo B; sin backfill, acceso clínico nuevo o despliegue habitual. |
 | [005](../backend/sql/migrations/005_secure_contact_changes.sql) | Solicitud privada cifrada, desafío por propósito, autorización por sesión, eventos mínimos y avisos durables; confirmación C revoca todas las sesiones | Integrada en #12; sin backfill ni despliegue habitual acreditado. |
 
-[Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) reconocen 001–005 y targets explícitos 003/004/005; conservan destino, checksums históricos, ledger, lock, transacción y huella de la última versión. No admiten downgrade ni adopción de estructuras no registradas. Procedimiento en [fundamentos 003](clinical-episodes-foundation.md); evidencia histórica en [validación #8](clinical-episodes-validation.md) y [validación final C](contact-change-deadline-validation.md).
+[Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) reconocen 001–006 y targets explícitos 003/004/005/006; conservan destino, checksums históricos, ledger, lock, transacción y huella de la última versión. No admiten downgrade ni adopción de estructuras no registradas. Procedimiento en [fundamentos 003](clinical-episodes-foundation.md); evidencia histórica en [validación #8](clinical-episodes-validation.md) y [validación final C](contact-change-deadline-validation.md).
+
+## Persistencia D1 en rama
+
+[Contrato 006](professional-persistence.md): perfiles bajo demanda, reservas UUID inmutables, catálogo controlado, versiones/decisiones/validez separadas y fotografías solo metadatos. No crea perfiles históricos ni cambia tablas, triggers o servicios legacy. La aplicación sigue autenticando exactamente como antes. [Evidencia propia](professional-persistence-validation.md). D2/D3 no están implementados.
 
 ## Límites de B/C y diseño pendiente
 
-[Plan A/B/C/D](identity-directory-delivery-plan.md): A/B/C integrados; D perfiles/revisión/directorio y retiro público no iniciado. 004/005 existen sin despliegue habitual acreditado; 006 estimada. El resto del [diseño 2A](stage2a-identity-directory-intake.md) sigue propuesto. ADR-029/RN-59–61 exigen entrevista validada antes de activar todo episodio nuevo; la precondición backend/DB sigue pendiente, con relaciones legacy sin reinterpretación.
+[Plan A/B/C/D](identity-directory-delivery-plan.md): A/B/C integrados; D1 prepara 006 privada; gestión/revisión D2 y directorio/retiro D3 pendientes. 004/005 integradas y 006 en rama, sin despliegue habitual acreditado. El resto del [diseño 2A](stage2a-identity-directory-intake.md) sigue propuesto. ADR-029/RN-59–61 exigen entrevista validada antes de activar todo episodio nuevo; la precondición backend/DB sigue pendiente, con relaciones legacy sin reinterpretación.
 
 Solicitudes/invitaciones nuevas, permisos/activación por episodio, derivaciones, adendas, consentimientos de antecedentes, recuperación excepcional y menores siguen pendientes. No tratar una cuenta verificada o un perfil público como vínculo asistencial. No afirmar que los límites actuales por paciente ya aíslan episodios.
 
 ## Pruebas, documentación y dirección futura
 
-Existen unitarias Node y suites HTTP/PostgreSQL en [backend/test](../backend/test); frontend tiene `npm test`, lint y build. [Desarrollo](development.md) centraliza herramientas y destinos aislados; los ensayos requieren alcance autorizado. B/C conservan evidencia histórica de pruebas/demo en recursos UUID nuevos. El wrapper actual no ejecuta `frontend npm test` ni automatiza por sí solo las revisiones Chromium; [CI propuesta](ci-plan.md) debe cubrir expresamente esas brechas.
+Existen unitarias Node y suites HTTP/PostgreSQL en [backend/test](../backend/test); frontend tiene `npm test`, lint y build. [Desarrollo](development.md) centraliza herramientas y destinos aislados; los ensayos requieren alcance autorizado. B/C conservan evidencia histórica de pruebas/demo en recursos UUID nuevos. El wrapper actual no ejecuta `frontend npm test` ni automatiza por sí solo las revisiones Chromium; [CI integrada](ci-implementation.md) cubre por separado esas brechas.
 
 Dirección futura: React Native/Expo, Node/TypeScript/Express, PostgreSQL, alojamiento Railway/Render, auth propia y Expo Notifications; R2 para archivos y Resend para emails son referencias futuras, **no proveedores contratados o autorizados para B/C/D**. Google Calendar/WhatsApp también son futuros. Mantener lógica en servicios y contratos reutilizables; no migrar stack ni incorporar estos servicios en PR A.

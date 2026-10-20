@@ -1,6 +1,6 @@
 # Contribución y revisión
 
-Corte: 19 de octubre de 2026, después de #12 (`543442ea634e5977bc887ace1db5457eee2ebf8c`). A/B/C integrados; D no iniciado ni autorizado. Leer [AGENTS](AGENTS.md), [índice](docs/README.md), [decisiones](docs/product/decisions.md), [reglas](docs/product/business-rules.md) y [plan de entregas](docs/identity-directory-delivery-plan.md).
+Encargo D1 autorizado: persistencia privada/006, pruebas nuevas aisladas y PR Draft sin merge; [contrato](docs/professional-persistence.md). A/B/C y CI integrados; D2/D3 pendientes.
 
 ## Rama y PR
 
@@ -15,10 +15,10 @@ Solo Markdown: contrastar estado/código, enlaces/fragmentos, UTF-8, IDs y diff.
 
 Código funcional: unitarias backend y frontend, lint/build, integración pertinente en destino nuevo verificado y demo ficticia ADR-019 conforme al alcance autorizado. [Desarrollo](docs/development.md) contiene procedimientos; leerlos no autoriza operar entornos. Registrar fallos/cancelaciones/omisiones, no solo salida cero. Si afecta agenda, revisar backend/frontend, disponibilidad y espera; identidad/contactos exige regresión JWT/backoffice/clínica y barrera legacy.
 
-GitHub Actions/CI tiene [implementación técnica en revisión](docs/ci-implementation.md) conforme al [plan CI-01–07](docs/ci-plan.md). Exige la matriz completa incluso en PR documentales. El resumen `ci/required` solo aprueba con todos los componentes y evidencias vigentes. Consultar el informe para distinguir resultados locales y Actions. La protección administrativa/checks requeridos sigue pendiente de autorización separada; no afirmar que GitHub bloquea integración por esos checks hasta verificarla.
+GitHub Actions/CI tiene [implementación integrada](docs/ci-implementation.md) conforme al [plan CI-01–07](docs/ci-plan.md). Exige la matriz completa incluso en PR documentales. El resumen `ci/required` solo aprueba con todos los componentes y evidencias vigentes. Consultar el informe para distinguir resultados locales y Actions. Protect main exige los siete checks, con CI-02 demostrado en #15 y CI-07 en #16. D1 no modifica esta configuración.
 
 ## Datos y decisiones
 
 No modificar SQL histórico/checksums ni inferir DOB, verificación, autoría o episodios legacy. Conservar la clínica existente y AB-23, la separación backoffice/clínica y las garantías de ADR-029/RN-59–61. Identidad o verificación no conceden clínica; no retirar parcialmente fallback ni habilitar nuevos vínculos por este trabajo.
 
-No operar bases/recursos habituales, normalizadores, schema/seed o migraciones sin destino y autorización explícitos. Las pruebas autorizadas usan PostgreSQL nuevo y aislado, fixtures ficticios, entrega simulada y limpieza solo de recursos propios. Nunca subir secretos, mensajes privados, dumps o datos reales. D, proveedores, despliegue y cambios administrativos requieren autorización propia.
+No operar bases/recursos habituales, normalizadores, schema/seed o migraciones sin destino y autorización explícitos. Las pruebas autorizadas usan PostgreSQL nuevo y aislado, fixtures ficticios, entrega simulada y limpieza solo de recursos propios. Nunca subir secretos, mensajes privados, dumps o datos reales. D2/D3, proveedores, despliegue y cambios administrativos requieren autorización propia.

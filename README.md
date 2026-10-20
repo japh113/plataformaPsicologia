@@ -1,8 +1,8 @@
 # PsicoPanel
 
-Estado tras el merge de PR #14 en `main`, commit `3f51f09c525fa7a202bd57232637832dd2d036cd`. A, B y C están integrados; D no está iniciado. Integración en Git no acredita despliegue habitual. GitHub Actions/CI está integrado en `main`: [implementación](docs/ci-implementation.md), [plan y criterios](docs/ci-plan.md) y [evidencia técnica histórica](docs/ci-validation.md). La [ejecución del merge 39363841602](https://github.com/japh113/plataformaPsicologia/actions/runs/39363841602) aprobó los siete checks.
+Estado D1 sobre main verificado `3148c9124fb631ff57e2aedd46649182f087bde6` (#15): A/B/C y CI integrados; D1 implementa persistencia privada/006 en rama, pendiente de integración, con [contrato y límites](docs/professional-persistence.md). D2/D3 siguen pendientes y sin autorización de implementación. Sin despliegue habitual ni nuevas vinculaciones.
 
-CI-02 sigue pendiente de comprobar un PR exclusivamente Markdown, independiente de #14, con los siete checks aprobados y artifacts del commit realmente probado. CI-07 sigue pendiente de activación y verificación administrativa de checks obligatorios, con autorización separada. La aceptación de CI será completa solo después de ambas validaciones; este PR documental no modifica la protección de `main`.
+CI-02 fue comprobado con PR #15; CI-07 con el [ensayo negativo #16](https://github.com/japh113/plataformaPsicologia/pull/16), cerrado sin merge. Protect main exige los siete checks, política estricta y sin bypass. D1 conserva esa configuración; sus resultados propios se documentan por SHA, sin reutilizar evidencia B/C como nueva. Ensayos D1 autorizados solo en recursos nuevos aislados; no operar Compose/base habitual.
 
 Plataforma para psicólogos independientes y pacientes: agenda, disponibilidad, espera manual asistida, tareas, objetivos, notas y seguimiento clínico, con backoffice separado.
 

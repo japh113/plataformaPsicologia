@@ -1,6 +1,6 @@
 # Etapa 2A — Identidad, directorio básico y vinculación inicial
 
-Corte documental: 19 de octubre de 2026, main `543442ea634e5977bc887ace1db5457eee2ebf8c`. A/B/C integrados; D no iniciado. AB-25 cerrado para C; [contrato C](contact-changes.md) prevalece sobre candidatos anteriores de contactos. 004/005 integradas, solo ensayo aislado, sin despliegue habitual acreditado ni nuevas vinculaciones. [CI propuesta](ci-plan.md) sin implementar.
+Actualización D1: base main `3148c9124fb631ff57e2aedd46649182f087bde6`; A/B/C y CI integrados, AB-18/24/27 y división D1/D2/D3 aprobados. [Persistencia D1](professional-persistence.md) concreta únicamente 006 privada en rama. Los candidatos de solicitudes/episodios de este documento siguen propuestos y subordinados a ADR-029.
 
 Base histórica del diseño: 18 de octubre de 2026, `0077f46` (#9 integrado); los contratos B/C y el estado posterior a #12 actualizan únicamente las porciones entregadas.
 
@@ -19,7 +19,7 @@ AB-23 fue aprobado expresamente: alta unilateral y request/invite/respond/accept
 | `requestCareRelationship`, `inviteCareRelationship`, `respondToCareRelationship`, `acceptCareRelationshipInvite` | B deniega todas esas mutaciones antes de DB; no sincroniza acceso. Pendientes históricos permanecen conservados, sin aceptar/rechazar/canjear. |
 | [auth.permissions.js](../backend/src/modules/auth/auth.permissions.js), `buildPatientAccessScope` | Vínculo activo O `psychologist_patient_access`, filtrado por paciente. #7 excluye backoffice, pero falta autorización por episodio. |
 | [003](../backend/sql/migrations/003_clinical_episode_foundation.sql) y [fundamentos](clinical-episodes-foundation.md) | Episodios independientes `active`/`paused`/`finalized`; índice `clinical_episodes_one_current_patient_idx` por paciente active/paused; atribución compuesta opcional e inmutable en citas/notas/tareas/espera. No autoriza clínicamente ni atribuye legacy. |
-| [ejecutor](../backend/scripts/episode-migration.js) y [manifiesto](../backend/sql/migrations/manifest.json) | B reconoce 001–004 y targets 003/004 con huella previa/nueva, ledger, lock y transacción; archivos/checksums 001–003 intactos. |
+| [ejecutor](../backend/scripts/episode-migration.js) y [manifiesto](../backend/sql/migrations/manifest.json) | D1 reconoce 001–006 y targets 003/004/005/006 con huella previa/nueva, ledger, lock y transacción; archivos/checksums 001–003 intactos. |
 | [auditoría](../backend/src/utils/audit.js) y preservación de 001 | Metadatos JSON e historial de filas. El filtro administrativo de #7 no protege un mensaje si primero se copia a auditoría/historial genéricos. |
 
 La [evidencia de #8](clinical-episodes-validation.md) es histórica; no representa la ejecución de B; B aporta su propio reporte en destino nuevo aislado, sin consultar la base habitual. Tener 003 en Git no acredita instalación en un entorno.
@@ -81,7 +81,7 @@ ADR-024 fija email por enlace de 24 h, SMS por código de 10 min, espera de 60 s
 
 ADR-025 exige contraseña reciente, aviso al contacto anterior sin veto, verificar nuevo e invalidar evidencia previa y todas las sesiones al confirmar. C ya separa candidato/vigente, confirma con incremento de session_version y usa avisos durables con entrega simulada al menos una vez. Preservar los límites de deadline, lease y limpieza del contrato C; proveedor real y recuperación excepcional siguen pendientes.
 
-ADR-026/027 requieren versión aprobada separada de pendiente, revisión administrativa selectiva y retiro/reconfirmación pública. Proponer snapshot aprobado + propuesta versionada y decisión transaccional, sin permitir que edición directa de campos, registro profesional o review genérico publiquen pendientes. El DTO de cuenta actual contiene reviewNotes: no reutilizarlo públicamente. Especialidades/enfoque verificables y nombre profesional/foto requieren cerrar AB-24; consulta de estado para cuentas no aprobadas AB-27.
+ADR-026/027 requieren versión aprobada separada de pendiente, revisión administrativa selectiva y retiro/reconfirmación pública. Proponer snapshot aprobado + propuesta versionada y decisión transaccional, sin permitir que edición directa de campos, registro profesional o review genérico publiquen pendientes. El DTO de cuenta actual contiene reviewNotes: no reutilizarlo públicamente. AB-24 aprueba catálogo general controlado y acreditaciones protegidas; AB-27 aprueba estado restringido en D2. La persistencia concreta de D1 se documenta en su contrato; API y flujos siguen pendientes.
 
 ### Agregados de vinculación (D-04)
 
@@ -189,9 +189,9 @@ Sin atribución inequívoca, no inferir responsable/autor/DOB/verificación desd
 
 ## 10. Evolución posterior a 003 (D-11)
 
-A no creó migraciones. B integró 004 para identidad/verificación y C integró 005 de contactos; 006 de perfiles sigue estimada en el [plan](identity-directory-delivery-plan.md). Solicitudes/invitaciones y contexto/permisos por episodio pertenecen a entregas posteriores, no a esas estimaciones por implicación.
+A no creó migraciones. B integró 004 para identidad/verificación y C integró 005 de contactos; 006 privada se implementa en D1 en el [plan](identity-directory-delivery-plan.md). Solicitudes/invitaciones y contexto/permisos por episodio pertenecen a entregas posteriores, no a esas estimaciones por implicación.
 
-El runner actual verifica 001–005, catálogo corriente y destino explícito, con targets 003/004/005. Protocolo implementado: validar huella previa, registrar sucesora/nueva huella y permitir verificar/repetir versión corriente sin confundir sucesora con deriva. No alterar checksum histórico, ignorar deriva, borrar registro o marcar versión sin validación. Conservar 001/002/003; runner/manifiesto solo se modifican con implementación autorizada y pruebas de upgrade/replay/fallo/compatibilidad.
+El runner actual verifica 001–006, catálogo corriente y destino explícito, con targets 003/004/005/006. Protocolo implementado: validar huella previa, registrar sucesora/nueva huella y permitir verificar/repetir versión corriente sin confundir sucesora con deriva. No alterar checksum histórico, ignorar deriva, borrar registro o marcar versión sin validación. Conservar 001/002/003; runner/manifiesto solo se modifican con implementación autorizada y pruebas de upgrade/replay/fallo/compatibilidad.
 
 Ensayos futuros en PostgreSQL nuevo aislado, fixtures ficticios, destino explícito y guardas. No ejecutar migraciones/schema/seed en la base habitual o bases existentes; no alterar contenedores/volúmenes existentes. Un despliegue real exige autorización separada, diagnóstico mínimo, respaldo/ensayo y coordinación de escritores. Git integrado no es despliegue. Recuperación propuesta mediante corrección aditiva conservando evidencia y revocaciones, sin borrar episodios ni reabrir fallback.
 
@@ -227,9 +227,9 @@ Cada PR muestra solo alcance implementado: B de identidad/verificación no prese
 
 ## 12. Aprobaciones y siguiente implementación
 
-La secuencia sigue A→B→C→D. A/B/C integrados; D no iniciado ni autorizado. AB-23 resuelto para B, AB-25 para C y aspectos técnicos aplicables de AB-21/26 documentados en la guía. El endurecimiento multicuenta/red/costo antes de envíos reales sigue pendiente.
+La secuencia sigue A→B→C→D. A/B/C integrados; D1 autorizado solo para persistencia; D2/D3 pendientes. AB-23 resuelto para B, AB-25 para C y aspectos técnicos aplicables de AB-21/26 documentados en la guía. El endurecimiento multicuenta/red/costo antes de envíos reales sigue pendiente.
 
-Antes de D, cerrar los aspectos aplicables de AB-18/24/27 y obtener autorización propia; no reabrir AB-25 ya resuelto para C. AB-19/20 de nuevas solicitudes/invitaciones y segmentación por episodio corresponden a entregas posteriores. B/C no las habilitan.
+AB-18/24/27 aprobados; D1 autorizado para persistencia y D2/D3 requieren autorización propia; no reabrir AB-25 ya resuelto para C. AB-19/20 de nuevas solicitudes/invitaciones y segmentación por episodio corresponden a entregas posteriores. B/C no las habilitan.
 
 ## 13. Evidencia documental
 

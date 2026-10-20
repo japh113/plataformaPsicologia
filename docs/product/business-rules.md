@@ -1,6 +1,6 @@
 # Reglas de negocio y permisos
 
-Referencia documental: 19 de octubre de 2026; main `543442ea634e5977bc887ace1db5457eee2ebf8c` tras #12. Son requisitos APROBADOS de producto, no capacidades ya implementadas por el hecho de figurar aquí. Mecanismos pendientes en [decisions.md](decisions.md); secuencia A/B/C/D en el [plan](../identity-directory-delivery-plan.md). A/B/C integrados; D no iniciado, sin despliegue habitual acreditado. #7 cubre aislamiento administrativo y #8 fundamentos SQL; no acreditan permisos por episodio. ADR-029/RN-59–61 conservan su texto y precondición técnica pendiente. La [CI propuesta](../ci-plan.md) no crea nuevas garantías clínicas.
+Actualización D1: AB-18/24/27 y división D1/D2/D3 aprobados; únicamente persistencia privada/006 en implementación autorizada. [Contrato D1](../professional-persistence.md). A/B/C y CI integrados; sin despliegue ni permisos por episodio. ADR-029/RN-59–61 intactas.
 
 ## Conceptos
 
@@ -83,12 +83,16 @@ Referencia documental: 19 de octubre de 2026; main `543442ea634e5977bc887ace1db5
 | RN-55 | Directorio anónimo mediante proyección explícita limitada, sin pacientes, relaciones, cuentas privadas, notas de revisión ni metadatos administrativos. Titular no modifica aprobación ni publica pendientes por otra ruta. |
 | RN-56 | Suspendido/inactivo/sin aprobación desaparece y no recibe nuevas solicitudes públicas. Rehabilitar exige reconfirmar publicación y recepción; conserva información aprobada salvo revisión necesaria. Sin motivo público ni cambios automáticos de historia clínica. |
 | RN-57 | Auditar todas las mutaciones legacy de vínculos y acceso para cuentas nuevas y existentes; bloqueo/adaptación y pérdida funcional requieren aprobación expresa. Registro, verificación y directorio no habilitan clínica; no activar permisos por episodio con fallback sin retirar coordinadamente. |
-| RN-58 | A/B/C/D es la división aprobada; A/B/C integrados y D no iniciado, pendiente de autorización propia. B/C/D con pruebas y demo aislada por entrega, sin nuevas solicitudes/invitaciones ni recuperación excepcional. 004/005 integradas, ambas validadas aisladamente; 006 estimada; sin modificar 001–003 ni tocar base habitual/recursos existentes. |
+| RN-58 | A→B→C→D conserva su orden; A/B/C integrados. División interna D1 persistencia privada/006, D2 gestión privada/estado restringido y D3 directorio aprobada; solo D1 autorizado ahora. Pruebas aisladas por entrega, sin solicitudes/invitaciones nuevas, permisos por episodio o recuperación excepcional. SQL 001–005/hashes intactos y sin recursos habituales. |
 | RN-59 | Antes de activar cualquier episodio terapéutico nuevo debe existir entrevista inicial completada y validada expresamente por el psicólogo responsable para ese episodio. El paciente puede aportar información; el profesional determina completitud y suficiencia. Una entrevista de otro profesional/episodio no autoriza automáticamente el nuevo. Ningún episodio nuevo active sin validación previa; la futura implementación debe imponerlo en backend y base de datos. Precondición técnica pendiente, fuera de PR B, sin nuevas tablas/migraciones ahora. |
 | RN-60 | Registro, login, identidad y verificación de contactos no dependen de entrevista ni vínculo/episodio. Una entrevista pendiente no bloquea globalmente funciones personales; se ofrece acceso explícito y cerrable cuando corresponda, sin completarla automáticamente ni alterar clínica existente. Conservar reglas específicas de escritura/edición autorizada. |
 | RN-61 | Vinculación bilateral y activación del episodio son operaciones distintas; vincular no activa ni valida entrevista por sí mismo. No inferir episodios nuevos activos desde care_relationships.status=active ni aplicar RN-59 retroactivamente a legacy. Conservar datos y permisos históricos; no entrevistas ficticias ni completitud/validaciones automáticas. |
 
 La resolución AB-25 del 19 de octubre de 2026 concreta RN-49–50 para C: contraseña 10 minutos por sesión/versión, candidato de 24 horas y verificación separada, avisos durables de hasta 72 horas, cuotas y protección temporal aprobadas. [Contrato C](../contact-changes.md). No cambia RN-59–61 ni autoriza D o despliegue habitual.
+
+## Precisiones aprobadas para D1/D2/D3
+
+AB-18 exige ID público aleatorio estable/no reutilizable, retiro en nuevas consultas, sin caché compartida inicial y reconfirmación de preferencias tras rehabilitación. AB-24 concreta catálogo controlado general, declaraciones formales protegidas, decisión sobre versión exacta y separación de motivo comunicable/observaciones internas; vigencia no sustentada exige nueva revisión. AB-27 habilitará únicamente estado propio restringido en D2, nunca clínica ni cuentas globalmente inactivas. D1 solo prepara persistencia y no modifica estas capacidades actuales. Retención de datos de producto pendiente de plazos, sin TTL/borrado automático; distinta de los 14 días CI.
 
 ## Matriz breve de actores y permisos objetivo
 

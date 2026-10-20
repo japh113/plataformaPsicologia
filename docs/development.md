@@ -1,12 +1,12 @@
 # Desarrollo, Docker/WSL y validación
 
-Estado tras el merge de PR #14: `main` en `3f51f09c525fa7a202bd57232637832dd2d036cd`, con GitHub Actions/CI integrado. A/B/C integrados; D no iniciado. [Contrato C](contact-changes.md), [evidencia histórica final](contact-change-deadline-validation.md). El wrapper incluye contact-demo y contact-review (red interna para Chromium); sucesora 005 explícita solo en destinos nuevos. No reconstruir ni reparar recursos habituales.
+Estado D1 sobre main verificado `3148c9124fb631ff57e2aedd46649182f087bde6` (#15): A/B/C y CI integrados; D1 implementa persistencia privada/006 en rama, pendiente de integración, con [contrato y límites](professional-persistence.md). D2/D3 siguen pendientes y sin autorización de implementación. Sin despliegue habitual ni nuevas vinculaciones.
 
 Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile backend](../backend/Dockerfile), [Dockerfile frontend](../frontend/Dockerfile) y [package.json backend](../backend/package.json)/[frontend](../frontend/package.json). Documentar un comando no autoriza ejecutarlo. La CI integrada usa exclusivamente runners estándar GitHub-hosted Ubuntu, sandboxes nuevos y ensayos ficticios; [implementación y límites](ci-implementation.md).
 
 **Pruebas y contribución:** [CONTRIBUTING](../CONTRIBUTING.md) define entrega por rama/PR; el [plan CI-01–07](ci-plan.md) conserva la propuesta histórica y sus criterios. La [implementación CI](ci-implementation.md) está integrada en `main` mediante #14; la [ejecución del merge 39363841602](https://github.com/japh113/plataformaPsicologia/actions/runs/39363841602) aprobó los siete checks. Los PR exclusivamente Markdown también ejecutan automáticamente toda la matriz en runners nuevos, con artifacts del commit realmente probado.
 
-CI-02 sigue pendiente de demostrar ese comportamiento en un PR documental independiente de #14; CI-07, de activar y verificar los checks obligatorios con autorización administrativa separada. La aceptación completa requiere ambas validaciones. Este PR solo modifica Markdown: validar localmente enlaces, IDs y diff, sin ejecutar manualmente Docker, PostgreSQL, SQL ni demos. Las autorizaciones históricas B/C no habilitan ensayos locales nuevos por este encargo. No levantar/reconstruir el Compose habitual ni alterar bases, imágenes o volúmenes existentes. [Guía B](patient-identity-verification.md), [evidencia histórica B](patient-identity-validation.md).
+CI-02 fue comprobado con PR #15; CI-07 con el [ensayo negativo #16](https://github.com/japh113/plataformaPsicologia/pull/16), cerrado sin merge. Protect main exige los siete checks, política estricta y sin bypass. D1 conserva esa configuración; sus resultados propios se documentan por SHA, sin reutilizar evidencia B/C como nueva. Ensayos D1 autorizados solo en recursos nuevos aislados; no operar Compose/base habitual.
 
 ## Preparación de entorno local nuevo (solo con autorización)
 
@@ -144,7 +144,7 @@ El modo demo muestra URL/cuentas ficticias y deja únicamente sus recursos propi
 - `db:schema` ejecuta baseline más 001/002 y `db:seed` datos demo; **no son upgrades**. No repetirlos sobre bases existentes ni ejecutarlos por un cambio documental.
 - `db:init:production` rechaza base no vacía y no carga demo. Instala schema/001/002, no 003. No ejecutarlo ahora ni confundirlo con despliegue.
 - 003 tiene runner de destino explícito, checksums/ledger/huella, y no se aplica por reiniciar Docker. Procedimientos específicos en [clinical-episodes-foundation.md](clinical-episodes-foundation.md); 001/002 en [integridad](clinical-data-integrity.md) y [autenticación](authentication-security.md).
-- No modificar 001–005/manifiesto en este encargo, asumir despliegue, inferir históricos ni ejecutar normalizadores como reparación. 004 de B y 005 de C están integradas y validadas aisladamente; 006 de D sigue estimada en el [plan](identity-directory-delivery-plan.md). Runner actual admite targets explícitos 003/004/005.
+- D1 conserva 001–005 y sus entradas/hashes, agrega 006 al manifiesto; no, asumir despliegue, inferir históricos ni ejecutar normalizadores como reparación. 004 de B y 005 de C están integradas y validadas aisladamente; 006 de D1 prepara persistencia privada en el [plan](identity-directory-delivery-plan.md). Runner actual admite targets explícitos 003/004/005/006.
 - Mantener secretos fuera de logs/commits/frontend. Las cuentas demo se restringen al modo local explícito; nunca copiarlas o habilitarlas en producción.
 
 ## Validaciones según tipo de cambio

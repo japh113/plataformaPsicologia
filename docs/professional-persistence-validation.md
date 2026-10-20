@@ -1,0 +1,44 @@
+# D1 — Registro de validación
+
+Base: `3148c9124fb631ff57e2aedd46649182f087bde6` (main remoto consultado y fetch explícito). Rama nueva: feat/d1-professional-persistence. [Contrato y procedimientos](professional-persistence.md). Implementación en rama, sin merge/despliegue; D2/D3 pendientes.
+
+## Ensayo local realmente ejecutado
+
+Commit funcional probado: `26f9a450061f8a76cb57a4763c4f17888b488df6`. En ese momento solo había documentación D1 en edición; código, SQL y tests correspondían a ese commit. Se usó la clase Sandbox de scripts/ci/sandbox.py desde un orquestador temporal ignorado, sin instalar Node/npm en host. Node e imágenes PostgreSQL fijados por scripts/ci/versions.json; PostgreSQL observado: 17.11.
+
+Proyecto propio: psicopanel-episodes-b299e3f0-fe06-45cd-a08e-e0040f144c96. Comprobados ausencia previa, UUID, propiedad de imágenes, DB tmpfs, red privada, ausencia de puertos DB y volúmenes persistentes. Al terminar: cleanupConfirmed=true y preexistingContainersPreserved=true; imágenes de esta ejecución retiradas con comprobación de propiedad, etiquetas preexistentes conservadas.
+
+Comandos realmente ejecutados mediante docker compose -p PROYECTO_NUEVO -f compose.episodes-test.yaml -f OVERRIDE_PROPIO, después del preflight y verificación del sandbox:
+
+| Servicio/comando | Resultado observado |
+| --- | --- |
+| backend npm run test:episodes | 17 aprobados; 0 fallos/omisiones/cancelaciones |
+| backend npm run test:integration | 93 aprobados; 0 fallos/omisiones/cancelaciones; incluye 14 subcasos D1 y su caso contenedor |
+| backend npm test | 94 aprobados; 0 fallos/omisiones/cancelaciones |
+| frontend npm run test | 3 aprobados; 0 fallos/omisiones/cancelaciones |
+| frontend npm run lint | Exit 0 |
+| frontend npm run build | Exit 0 |
+
+Frontend se ejecutó con --profile demo run --rm --no-deps en el mismo proyecto nuevo; no se levantó Compose habitual. Los procesos HTTP de pruebas escucharon solo dentro del contenedor de pruebas. No se ejecutaron envíos reales o un navegador D artificial.
+
+## Cobertura D1
+
+Instalación vacía/CLI y rechazo de destino incorrecto; upgrades 003/004/005→006; preservación de filas y ledger previo; migración concurrente/replay sin regenerar UUID; downgrade y versión desconocida; checksum de archivo/ledger y prefijo incompleto; deriva; objetos D1 sin registro; fallo DDL tardío con rollback de tablas y ledger. La prueba de fallo tardío modifica deliberadamente una huella exclusivamente dentro de un fixture nuevo para alcanzar el error DDL; no es opción del runner ni procedimiento de adopción.
+
+Defaults privados, UUID generado por DB/no reutilizable, propietarios/FK compuestas, snapshot/decisión inmutables, revisor autorizado/sin autorrevisión, decisión concurrente única, pendiente consistente al commit con espera PostgreSQL observada, ediciones optimistas, flags independientes, catálogo, validez sin expiración inventada, fotos solo metadatos y privilegios PUBLIC revocados. Prueba HTTP de aplicación anterior sobre 006: lectura legacy, cinco bloqueos AB-23 sin cambios de datos, rutas D ausentes, suspensión y rehabilitación sin revivir JWT.
+
+## Fallo anterior y corrección
+
+Primer ensayo local, commit `5d21a5fd15d1ea098bf64c316c2675ca65856499`, proyecto propio 302850e9-a8c2-437f-855c-a39fc8aa2538: integración con 91 aprobados y 2 fallos TAP (subcaso D1 y contenedor). Causa: aserción esperaba número 3 para BIGINT que pg devuelve como texto. Commit 26f9a45 corrigió la comparación sin relajar SQL o permisos. El subcaso de concurrencia se ejecutó completo en la repetición aprobada. Ambos sandboxes propios quedaron limpiados; no se reutilizaron recursos.
+
+La escritura documental inicial desde PowerShell perdió acentos; se reparó UTF-8 antes del commit documental. No se presentó ese borrador como validación final.
+
+## Preservación y cierre CI
+
+001–005 y sus cinco entradas/hashes se compararon byte a byte con la base y permanecen idénticos. 006 SHA-256: `5d22fb10ce1770bc2b66afa278feedac264aa3873dd6a1d0609e55fc078d1530`. No hay cambios de código runtime backend/frontend, autenticación, permisos, schema/seed, inicializadores o workflow/Ruleset. La suite D1 está realmente incluida en test:integration que ci/postgres ejecuta e inventaría.
+
+El contrato documental valida enlaces/IDs, UTF-8 y bloques protegidos ADR-029/AB-25/RN-59–61. La aceptación del HEAD final depende de sus siete checks Actions y artifacts íntegros; la evidencia local anterior no se atribuye a un SHA documental posterior. PR/ejecución/merge sintético y hashes descargados se registrarán en el informe final y cuerpo del PR al verificar la ejecución correspondiente. Chromium B/C se conserva y se comprobará en esa matriz, sin adelantar D3.
+
+## Riesgos y pendientes
+
+Sin exposición D1, sesiones nuevas o acceso clínico nuevo. P1 para D2/D3: no interpretar flags ni supported como autorización pública completa; implementar elegibilidad vigente, revisión, retiro y reconfirmación antes de montar lectores. P2: criterios operativos de evidencia, catálogo, tratamiento de declaraciones en texto libre, comunicaciones autorizadas y retención concreta siguen pendientes. No hay TTL/borrado automático ni garantía de calidad terapéutica. Despliegue, producción y recursos habituales fuera de alcance.
