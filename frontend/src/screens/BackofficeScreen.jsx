@@ -472,9 +472,9 @@ export default function BackofficeScreen(props) {
                   </div>
                 </div>
 
-                {user.role === 'psychologist' && user.psychologistProfile?.approvalStatus === 'pending_review' ? (
+                {user.role === 'psychologist' && (user.psychologistProfile?.approvalStatus === 'pending_review' || (import.meta.env.VITE_D2_ENABLED==='true' && canReviewPsychologists)) ? (
                   <button type="button" onClick={() => openReviewModal(user)} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100">
-                    Revisar solicitud
+                    {user.psychologistProfile?.approvalStatus==='pending_review'?'Revisar solicitud':'Gestionar estado profesional'}
                   </button>
                 ) : null}
               </div>
@@ -516,7 +516,7 @@ export default function BackofficeScreen(props) {
                 <div className="grid gap-3 md:grid-cols-3">
                   {[{ value: 'active', label: 'Aprobar', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' }, { value: 'rejected', label: 'Rechazar', className: 'border-rose-200 bg-rose-50 text-rose-700' }, { value: 'suspended', label: 'Suspender', className: 'border-amber-200 bg-amber-50 text-amber-700' }].map((option) => (
                     <button key={option.value} type="button" disabled={!canReviewPsychologists} onClick={() => setReviewForm((currentForm) => ({ ...currentForm, approvalStatus: option.value }))} className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${reviewForm.approvalStatus === option.value ? option.className : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'} ${!canReviewPsychologists ? 'cursor-not-allowed opacity-60' : ''}`}>
-                      {option.label}
+                      {import.meta.env.VITE_D2_ENABLED==='true' && option.value==='active' && ['rejected','suspended'].includes(selectedPsychologist?.psychologistProfile?.approvalStatus)?'Rehabilitar':option.label}
                     </button>
                   ))}
                 </div>
