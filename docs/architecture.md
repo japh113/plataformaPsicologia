@@ -1,6 +1,6 @@
 # Arquitectura vigente de PsicoPanel
 
-Estado D1 sobre main verificado `3148c9124fb631ff57e2aedd46649182f087bde6` (#15): A/B/C y CI integrados; D1 implementa persistencia privada/006 en rama, pendiente de integración, con [contrato y límites](professional-persistence.md). D2/D3 siguen pendientes y sin autorización de implementación. Sin despliegue habitual ni nuevas vinculaciones.
+Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](private-professional-management.md), [evidencia D2](private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
 
 [Producto](product/vision.md), [reglas](product/business-rules.md) y [decisiones](product/decisions.md) definen objetivos; esta página describe la implementación y sus límites. [GitHub Actions/CI](ci-implementation.md) está integrado y sus siete checks son obligatorios; sus resultados no acreditan capacidades clínicas pendientes.
 
@@ -17,7 +17,7 @@ Las APIs por dominio están en [frontend/src/api](../frontend/src/api), y los ma
 
 ## Autenticación y permisos actuales
 
-[authMiddleware](../backend/src/middlewares/authMiddleware.js) verifica firma HS256, carga usuario vigente y comprueba estado y `session_version`. El rol efectivo viene de DB. Paciente con cuenta usa su `patientId`; profesional requiere cuenta activa y perfil aprobado. Pendiente/rechazado/suspendido no puede iniciar sesión clínica. 002 revoca JWT por cambio de contraseña/inactivación o salida de aprobación activa; rehabilitar no revive JWT anteriores.
+[authMiddleware](../backend/src/middlewares/authMiddleware.js) verifica firma HS256, carga usuario vigente y comprueba estado y `session_version`. El rol efectivo viene de DB. Paciente con cuenta usa su `patientId`; profesional requiere cuenta activa y perfil aprobado para sesión ordinaria. D2 permite estado propio restringido para pendiente/rechazado/suspendido mediante clave, middleware y frontend separados. 002 conserva su revocación; 007 cubre las otras transiciones profesionales. Rehabilitar no revive JWT anteriores ni convierte una restringida en ordinaria. [Contrato D2](private-professional-management.md).
 
 [auth.permissions.js](../backend/src/modules/auth/auth.permissions.js) distingue patient/psychologist y backoffice support/admin/superadmin. #7 deniega clínica ordinaria a los tres roles administrativos y restringe DTO/auditoría operativos. Admin/superadmin gestionan revisión autorizada; support lee operativa, no aprueba. No hay acceso maestro clínico ni emergencia implementada.
 
@@ -58,9 +58,9 @@ La política de día clínico aún usa America/Los_Angeles en partes de aplicaci
 
 [Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) reconocen 001–006 y targets explícitos 003/004/005/006; conservan destino, checksums históricos, ledger, lock, transacción y huella de la última versión. No admiten downgrade ni adopción de estructuras no registradas. Procedimiento en [fundamentos 003](clinical-episodes-foundation.md); evidencia histórica en [validación #8](clinical-episodes-validation.md) y [validación final C](contact-change-deadline-validation.md).
 
-## Persistencia D1 en rama
+## Persistencia D1 integrada y gestión privada D2
 
-[Contrato 006](professional-persistence.md): perfiles bajo demanda, reservas UUID inmutables, catálogo controlado, versiones/decisiones/validez separadas y fotografías solo metadatos. No crea perfiles históricos ni cambia tablas, triggers o servicios legacy. La aplicación sigue autenticando exactamente como antes. [Evidencia propia](professional-persistence-validation.md). D2/D3 no están implementados.
+[Contrato 006](professional-persistence.md): perfiles bajo demanda, reservas UUID inmutables, catálogo controlado, versiones/decisiones/validez separadas y fotografías solo metadatos. D1 se integró mediante #17. D2 agrega servicios privados, sesiones restringidas, revisión exacta y procesamiento real de fotografías, con 007 sucesora y sin reescribir 006. [Contrato D2](private-professional-management.md), [evidencia propia](private-professional-validation.md). Aprobación operativa de credenciales, catálogo concreto, publicación/admisión y lectores D3 permanecen deshabilitados.
 
 ## Límites de B/C y diseño pendiente
 

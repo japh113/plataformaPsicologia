@@ -1,6 +1,6 @@
 # Registro de decisiones de producto y arquitectura
 
-Actualización D1 sobre main `3148c9124fb631ff57e2aedd46649182f087bde6`: A/B/C y CI integrados. División D1/D2/D3 y AB-18/24/27 aprobados; solo D1 autorizado para implementación y ensayos nuevos aislados, PR en borrador sin merge. [Contrato D1](../professional-persistence.md). AB-25 y ADR-029 conservan íntegro su texto; sin despliegue habitual ni nuevas vinculaciones.
+Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](../private-professional-management.md), [evidencia D2](../private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
 
 Base histórica de la auditoría A: `0077f46`, merge #9, el 18 de octubre de 2026; #7 y #8 ya integrados. La actualización de estado posterior a #12 no acredita ejecución de 003–005 en la base habitual ni autorización clínica por episodio.
 

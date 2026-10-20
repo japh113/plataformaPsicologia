@@ -1,6 +1,6 @@
 # D1 — Persistencia profesional privada
 
-Base verificada: `3148c9124fb631ff57e2aedd46649182f087bde6` (#15), después de A/B/C y CI. Implementación D1 en rama, pendiente de integración y despliegue. [Evidencia D1](professional-persistence-validation.md). El encargo autoriza únicamente 006, persistencia, integridad y ensayos en recursos nuevos aislados; PR en borrador sin merge. D2/D3 requieren autorización independiente.
+D1 integrado en main por #17 (`2fe0799ee683273df2dbed872840bbfd2ef03f6d`), sin despliegue habitual acreditado. Este documento conserva el contrato D1/006 histórico e inmutable. D2 evoluciona mediante [sucesora 007 y servicios privados](private-professional-management.md), con [evidencia propia](private-professional-validation.md), en rama nueva y sin merge. D3 sigue pendiente.
 
 ## Producto aprobado y límites
 

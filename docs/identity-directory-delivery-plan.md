@@ -1,13 +1,13 @@
 # Identidad y directorio — plan de entregas A/B/C/D
 
-Actualización D1 sobre main `3148c9124fb631ff57e2aedd46649182f087bde6`: A/B/C integrados; división D1/D2/D3 aprobada. Solo D1 autorizado en rama y ensayos nuevos aislados, PR Draft sin merge; sin despliegue habitual o nuevas vinculaciones. [Contrato D1](professional-persistence.md), [evidencia propia](professional-persistence-validation.md).
+Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](private-professional-management.md), [evidencia D2](private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
 
 | Entrega | Integración comprobada | Estado |
 | --- | --- | --- |
 | A | #10, `0f2ebba3891c29683d8e63ba86f3a2ae6619b805` | Documentación integrada |
 | B | #11, `5e549f51bc7fa3e2535db023b4f9bca3d383a7c5` | Identidad/verificación y 004 integradas; [guía](patient-identity-verification.md), [evidencia histórica](patient-identity-validation.md) |
 | C | #12, `543442ea634e5977bc887ace1db5457eee2ebf8c` | Contactos y 005 integrados; HEAD revisado `c7f622608af4b7bc27a7c4e9dde49be23221b0ae` |
-| D | Sin entrega | No iniciado; necesita resolver abiertos aplicables y autorización propia |
+| D | D1 #17, `2fe0799` | D1 integrado; D2 privado en rama autorizada; D3 pendiente |
 
 La siguiente entrega documental propone [GitHub Actions/CI](ci-plan.md) con criterios de aceptación, sin implementar workflows ni cambiar protecciones. No sustituye la autorización de D, de pruebas operativas o de despliegue.
 
@@ -40,7 +40,7 @@ Cada PR funcional actualiza su documentación de estado; A no obliga a mantener 
 | D2 | Estado restringido, gestión privada, revisión y fotos, con autorización propia | Directorio y entrega anónima |
 | D3 | Directorio, preferencias optativas y retiro completo; Chromium B+C+D reales | Solicitudes/invitaciones y episodios |
 
-Solo D1 está autorizado. El esquema mantiene compatibilidad con la aplicación anterior; futuras sucesoras no reescriben 006 integrada.
+D1 está integrado y D2 está autorizado en rama nueva con 007 sucesora, pruebas nuevas aisladas y un PR Draft sin merge. D3 no está autorizado. El esquema mantiene compatibilidad con la aplicación anterior; 001–006 y sus entradas históricas permanecen intactos.
 
 ## Migraciones y compatibilidad — 004/005 integradas; 006 privada D1
 

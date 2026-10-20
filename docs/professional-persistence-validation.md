@@ -1,5 +1,7 @@
 # D1 — Registro de validación
 
+Nota de estado posterior: D1 fue integrado por #17 en `2fe0799ee683273df2dbed872840bbfd2ef03f6d`. Este registro conserva su evidencia histórica; D2 tiene [evidencia independiente](private-professional-validation.md).
+
 Base: `3148c9124fb631ff57e2aedd46649182f087bde6` (main remoto consultado y fetch explícito). Rama nueva: feat/d1-professional-persistence. [Contrato y procedimientos](professional-persistence.md). Implementación en rama, sin merge/despliegue; D2/D3 pendientes.
 
 ## Ensayo local realmente ejecutado
