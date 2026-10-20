@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import {constants} from 'node:fs';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import env from '../../config/env.js';
 import {transaction,lockProfessional,expectVersion,fail} from './professional.core.js';
 import {decimal,exact} from './professional.validators.js';
@@ -19,7 +20,7 @@ export const privateRoot=async()=>{
 };
 export const photoPath=(root,key)=>{if(!uuid.test(key))throw fail('Fotografía no disponible.',404);return path.join(root,key+'.webp');};
 export const processImage=(input,mime)=>new Promise((resolve,reject)=>{
-  const child=spawn(process.execPath,['--max-old-space-size=64',new URL('./photo-worker.js',import.meta.url).pathname,mime],{stdio:['pipe','pipe','ignore'],env:{PATH:process.env.PATH}});
+  const child=spawn(process.execPath,['--max-old-space-size=64',fileURLToPath(new URL('./photo-worker.js',import.meta.url)),mime],{stdio:['pipe','pipe','ignore'],env:{PATH:process.env.PATH}});
   const chunks=[];let size=0,done=false;
   const timer=setTimeout(()=>{child.kill('SIGKILL');},8000);
   const end=(error,value)=>{if(done)return;done=true;clearTimeout(timer);error?reject(error):resolve(value);};
