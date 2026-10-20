@@ -1,4 +1,6 @@
 import IdentityPanel from './components/IdentityPanel';
+import ProfessionalProfileScreen from './screens/ProfessionalProfileScreen';
+import ProfessionalReviewScreen from './screens/ProfessionalReviewScreen';
 import { patientRegistrationError } from './utils/identityFeedback';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './App.css';
@@ -112,7 +114,7 @@ const buildDateRangeStrings = (startDate, endDate) => {
   return dates;
 };
 
-export default function App() {
+export default function App({onRestrictedSession}) {
   const [vistaActiva, setVistaActiva] = useState('dashboard');
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null);
   const [sessionDraftAppointmentId, setSessionDraftAppointmentId] = useState(null);
@@ -381,6 +383,9 @@ export default function App() {
 
     try {
       const session = await login(credentials);
+      if(session.sessionKind==='restricted') {
+        setCurrentUser(null);resetSessionState();onRestrictedSession(session.restrictedToken);return;
+      }
       setCurrentUser(session.user);
       resetSessionState();
     } catch (error) {
@@ -1417,6 +1422,8 @@ export default function App() {
   };
 
   const renderMainContent = () => {
+    if(vistaActiva==='professional-profile' && currentUser?.role==='psychologist')return <ProfessionalProfileScreen/>;
+    if(vistaActiva==='professional-reviews' && ['admin','superadmin'].includes(currentUser?.role))return <ProfessionalReviewScreen/>;
     if (cargandoDatos) {
       return (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">

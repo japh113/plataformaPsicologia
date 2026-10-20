@@ -527,6 +527,8 @@ export default function BackofficeScreen(props) {
                 <textarea rows={4} value={reviewForm.reviewNotes} disabled={!canReviewPsychologists} onChange={(event) => setReviewForm((currentForm) => ({ ...currentForm, reviewNotes: event.target.value }))} placeholder="Motivo de aprobacion, rechazo o suspension." className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:opacity-70" />
               </div>
 
+              {import.meta.env.VITE_D2_ENABLED==='true' && <label className="block text-sm font-semibold">Mensaje destinado al profesional<textarea maxLength={2000} rows={3} disabled={!canReviewPsychologists} value={reviewForm.ownerMessage||''} onChange={event=>setReviewForm({...reviewForm,ownerMessage:event.target.value})} className="block w-full rounded border p-2"/></label>}
+
               {!canReviewPsychologists ? <InlineNotice tone="warning" title="Acceso de solo lectura" message="Tu rol puede revisar esta solicitud, pero la aprobacion final queda reservada para admin o superadmin." /> : null}
 
               <div className="flex flex-wrap justify-end gap-3 pt-2">
