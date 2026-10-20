@@ -57,6 +57,8 @@ Guardas Python existentes: seis pruebas. Contratos CI finales: nueve pruebas, in
 
 La [primera revisión de cierre](https://github.com/japh113/plataformaPsicologia/actions/runs/39344393210), HEAD `b619026550895f3abab586a7cda51de9db64f3a1`, detectó F06 FAIL en B; no hubo errores JS/HTTP inesperados y la limpieza quedó confirmada. Evidence preservó el fallo y required lo rechazó. F06 leía inmediatamente la cantidad de chips Verificado tras la respuesta HTTP; se añade espera explícita a que ambos chips sean visibles, manteniendo la aserción exacta, sin repetir solicitudes, reintentar suites ni ampliar timeouts globales. Se clasifica como corrección de sincronización del harness; la causa concreta del fallo histórico no se infiere de un nuevo pase. Los fallos Chromium posteriores conservan además capturas enmascaradas de los casos afectados y una categoría de error sin mensajes/valores privados. Toda revisión requiere su propia matriz verde.
 
+La [revisión con F06 sincronizado](https://github.com/japh113/plataformaPsicologia/actions/runs/39344908979), HEAD `1f64850b252b141a07b1f57a3fa59164ceeee6bb`, pasó F06 y detectó E05 timeout. Las capturas exportadas muestran que PATCH había guardado y cerrado el modal; el harness esperaba texto de la nota en la pantalla de lista, que no lo muestra. Se corrige la condición: esperar cierre, reabrir la misma nota, comprobar su valor completo original más la modificación ficticia y cerrar sin otra escritura. Se conserva el fallo, sin reintento de suite ni cambios de aplicación. Cleanup confirmado; ningún error JS/HTTP inesperado; required rechazó la ejecución.
+
 ## Estado de aceptación
 
 | Criterio | Estado y límite |

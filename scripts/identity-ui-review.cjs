@@ -191,14 +191,19 @@ await test('E04','Cita histórica y continuidad de agenda','Historial muestra ci
 await test('E05','Nota histórica y escritura autorizada','Abrir y guardar una modificación ficticia sin perder contenido.',async()=>{
  await page.getByRole('button',{name:'Notas clinicas',exact:true}).click();
  await page.getByRole('button',{name:'Abrir nota clinica',exact:true}).first().click();
- const textareas=page.locator('textarea');const index=await textareas.evaluateAll(a=>a.findIndex(e=>e.value.includes('Synthetic legacy note: do not attribute')));
+ const modalHeading=page.getByRole('heading',{name:'Editar nota clinica',exact:true});await modalHeading.waitFor({state:'visible'});
+ const textareas=page.locator('textarea');await textareas.first().waitFor({state:'visible'});const index=await textareas.evaluateAll(a=>a.findIndex(e=>e.value.includes('Synthetic legacy note: do not attribute')));
  assert.ok(index>=0);const note=textareas.nth(index);
  const before=await note.inputValue();await shot('31a-historical-note-open');
  await note.fill(before+'\nRevisión UI ficticia: continuidad autorizada.');
  const waiting=page.waitForResponse(r=>r.request().method()==='PATCH'&&new URL(r.url()).pathname.includes('/clinical-notes/'));
- await page.getByRole('button',{name:'Guardar cambios',exact:true}).click();assert.equal((await waiting).status(),200);await settle();
- await text('Revisión UI ficticia: continuidad autorizada.');
- return {observed:'Nota existente abierta y guardada desde UI, conservando el contenido original y su cita completada. Solo DB propia ficticia.',screenshot:await shot('31-historical-note-saved')};
+ await page.getByRole('button',{name:'Guardar cambios',exact:true}).click();assert.equal((await waiting).status(),200);
+ await modalHeading.waitFor({state:'hidden'});await settle();
+ await page.getByRole('button',{name:'Abrir nota clinica',exact:true}).first().click();await modalHeading.waitFor({state:'visible'});await textareas.first().waitFor({state:'visible'});
+ const saved=await textareas.evaluateAll(a=>a.map(e=>e.value));assert.ok(saved.includes(before+'\nRevisión UI ficticia: continuidad autorizada.'));
+ const screenshot=await shot('31-historical-note-saved');
+ await modalHeading.locator('..').locator('..').getByRole('button').click();await modalHeading.waitFor({state:'hidden'});
+ return {observed:'Nota existente guardada, modal cerrado y misma nota reabierta desde UI; valor completo conserva contenido original y modificación ficticia. Solo DB propia.',screenshot};
  });
 await test('E06','Aislamiento real entre A/B y paciente nuevo','Cada profesional solo ve su clínica; lecturas ajenas 404.',async()=>{
  await page.getByRole('button',{name:'Mis Pacientes',exact:true}).click();await settle();
