@@ -19,7 +19,7 @@ El [plan canónico de entregas](../identity-directory-delivery-plan.md) contiene
 | A | Decisiones, documentación técnica, reorganización y auditoría de mutaciones legacy | Integrado en #10, 0f2ebba |
 | B | Registro adulto/DOB global, básicos, verificación email/SMS y simuladores | Integrado en #11, 5e549f5; 004 y demo validadas aisladamente |
 | C | Reautenticación, cambios de contacto y revocación total de sesiones | Integrado en #12, 543442e; 005 y regresiones finales validadas aisladamente |
-| D | Perfil, revisión/versiones de credenciales y directorio anónimo, suspensión/rehabilitación | D1 persistencia privada/006 en rama; D2 gestión privada y D3 directorio pendientes de autorización |
+| D | Perfil, revisión/versiones de credenciales y directorio anónimo, suspensión/rehabilitación | D1/006 integrado en #17; D2 privado autorizado en rama; D3 sin iniciar |
 
 004/005 creadas e integradas, validadas aisladamente; 006 privada en rama D1. La barrera legacy rige para cuentas nuevas y existentes; [matriz y pérdidas temporales aprobadas AB-23](../stage2a-legacy-mutations.md) implementadas en B. D no incorpora solicitudes públicas funcionales. El registro de menores, invitaciones/solicitudes nuevas, episodios/permisos, derivaciones y recuperación excepcional no se habilitan en B/C/D.
 

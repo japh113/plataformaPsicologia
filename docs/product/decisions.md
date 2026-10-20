@@ -322,6 +322,8 @@ AB-18/24/27 están resueltos como producto según sus filas. Retención específ
 
 ## Asuntos abiertos y momento de resolución
 
+Actualización autorizada D2: D1 está integrado en #17; implementar D2 privado en rama nueva, ensayos nuevos aislados y un PR Draft sin merge. Se concretan edición privada de descripción plana acotada, catálogo inicialmente vacío, mensajes explícitos al titular sin copiar review_notes históricas y cuotas sin purgas definitivas. Evidencia registra fuente, responsable, fecha y resultado, pero aprobación operativa permanece bloqueada hasta aprobar criterios por acreditación. [Contrato D2](../private-professional-management.md). D3, vinculaciones, proveedores y despliegue no quedan autorizados.
+
 Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen decisiones de producto aprobadas explícitas arriba; solo sus detalles indicados siguen pendientes:
 
 | ID | Pregunta a resolver | Antes de |

@@ -48,7 +48,8 @@ D1 está integrado y D2 está autorizado en rama nueva con 007 sucesora, pruebas
 | --- | --- | --- |
 | 004_patient_identity_verification.sql | DOB global nullable, evidencia/desafíos, cuotas y revocación de evidencia ante cambio de contacto; probada solo aisladamente | B |
 | 005_secure_contact_changes.sql | Solicitudes privadas, propósito C, autorización por sesión, eventos mínimos y avisos durables; implementada y ensayada solo aisladamente | C |
-| 006 | Perfil público, versiones y revisiones profesionales | D |
+| 006 | Persistencia profesional privada, versiones y revisiones; integrada en #17 | D1 |
+| 007 | Revocación restringida, retiro de preferencias, comunicaciones de cuenta y reserva fotográfica | D2 en rama |
 
 004/005 integradas; D1 agrega 006 y conserva los SQL/entradas/hashes históricos. Runner con targets explícitos 003/004/005/006, huella previa/nueva, ledger y rollback. Ensayos D1 y límites en su contrato; resultados B/C anteriores son historia.
 

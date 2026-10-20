@@ -32,7 +32,7 @@ AB-23 bloquea las cinco mutaciones legacy en servicio antes de DB. No existe ya 
 | Dominio | Tablas/servicios existentes y límites |
 | --- | --- |
 | Identidad y cuentas | patients, users (patient_id único opcional), password_reset_tokens. Paciente conserva ID global. 004 añade patients.global_birth_date, contact_verification_state y contact_verification_challenges. Evidencia independiente por contacto, HMAC y cuotas compartidas PostgreSQL. 005 y servicio C añaden solicitudes/avisos privados, confirmación atómica y revocación total de sesiones; solo entrega simulada. |
-| Profesional y vínculos | psychologist_profiles con título/cédula, aprobación y notas de revisión; care_relationships y psychologist_patient_access legacy. Sin versiones de credenciales, opt-in público o admisión independiente. Selector legacy deshabilitado (403 sin consulta) y sin carga frontend; DTO clínico de vínculos sin email profesional. Backoffice conserva proyección operativa autorizada. Directorio D pendiente. |
+| Profesional y vínculos | psychologist_profiles conserva aprobación de cuenta y datos legacy; care_relationships y psychologist_patient_access siguen como lectores legacy. 006 añade versiones/decisiones y preferencias privadas independientes. D2 implementa gestión privada y 007; ninguna API habilita opt-in o admisión. Selector legacy sigue 403 sin consulta; directorio D3 pendiente. |
 | Expediente | patient_intakes, patient_tasks (tareas/objetivos), patient_clinical_notes. Entrevista/riesgo/contexto se agregan por paciente; no están segmentados funcionalmente por episodio. Paciente tiene acciones limitadas de entrevista/actividades; no asumir toda la visión RN-24 implementada. |
 | Agenda | appointments, appointment_waitlist_entries; citas/recurrencias, cancelación conservadora, espera manual priorizada y retiro sin borrar. Reglas de 60 min/hora exacta y nota/cita en servicios y 001; no confundirlas con toda la concurrencia objetivo de etapa 2D. |
 | Disponibilidad | psychologist_availability y bloques, excepciones y bloques por fecha, controles de cobertura de citas futuras. Lecturas operativas dependen de accesos legacy. |
@@ -56,7 +56,7 @@ La política de día clínico aún usa America/Los_Angeles en partes de aplicaci
 | [004](../backend/sql/migrations/004_patient_identity_verification.sql) | DOB global nullable, evidencia/desafíos privados, cuotas e invalidación por contacto | Solo B; sin backfill, acceso clínico nuevo o despliegue habitual. |
 | [005](../backend/sql/migrations/005_secure_contact_changes.sql) | Solicitud privada cifrada, desafío por propósito, autorización por sesión, eventos mínimos y avisos durables; confirmación C revoca todas las sesiones | Integrada en #12; sin backfill ni despliegue habitual acreditado. |
 
-[Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) reconocen 001–006 y targets explícitos 003/004/005/006; conservan destino, checksums históricos, ledger, lock, transacción y huella de la última versión. No admiten downgrade ni adopción de estructuras no registradas. Procedimiento en [fundamentos 003](clinical-episodes-foundation.md); evidencia histórica en [validación #8](clinical-episodes-validation.md) y [validación final C](contact-change-deadline-validation.md).
+[Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) reconocen 001–007 y targets explícitos 003/004/005/006/007; conservan destino, checksums históricos, ledger, lock, transacción y huella de la última versión. No admiten downgrade ni adopción de estructuras no registradas. La vista D1 se verifica también sobre 007 con requisito TEMP. Procedimiento histórico en [fundamentos 003](clinical-episodes-foundation.md); [contrato D2](private-professional-management.md).
 
 ## Persistencia D1 integrada y gestión privada D2
 
@@ -64,7 +64,7 @@ La política de día clínico aún usa America/Los_Angeles en partes de aplicaci
 
 ## Límites de B/C y diseño pendiente
 
-[Plan A/B/C/D](identity-directory-delivery-plan.md): A/B/C integrados; D1 prepara 006 privada; gestión/revisión D2 y directorio/retiro D3 pendientes. 004/005 integradas y 006 en rama, sin despliegue habitual acreditado. El resto del [diseño 2A](stage2a-identity-directory-intake.md) sigue propuesto. ADR-029/RN-59–61 exigen entrevista validada antes de activar todo episodio nuevo; la precondición backend/DB sigue pendiente, con relaciones legacy sin reinterpretación.
+[Plan A/B/C/D](identity-directory-delivery-plan.md): A/B/C/D1 integrados; D2 privado en rama y D3 pendiente. Ninguna integración acredita despliegue habitual. El resto del [diseño 2A](stage2a-identity-directory-intake.md) sigue propuesto. ADR-029/RN-59–61 exigen entrevista validada antes de activar todo episodio nuevo; la precondición backend/DB sigue pendiente, con relaciones legacy sin reinterpretación.
 
 Solicitudes/invitaciones nuevas, permisos/activación por episodio, derivaciones, adendas, consentimientos de antecedentes, recuperación excepcional y menores siguen pendientes. No tratar una cuenta verificada o un perfil público como vínculo asistencial. No afirmar que los límites actuales por paciente ya aíslan episodios.
 
