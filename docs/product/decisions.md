@@ -1,10 +1,10 @@
 # Registro de decisiones de producto y arquitectura
 
-Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](../private-professional-management.md), [evidencia D2](../private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
+Base documental verificada: main `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, merge de [D2 / #18](https://github.com/japh113/plataformaPsicologia/pull/18). D1/D2 integrados, sin despliegue habitual acreditado; D3 y nuevas vinculaciones pendientes. Este encargo solo formaliza [episodios paralelos y pareja](../parallel-couple-episodes.md) como producto aprobado, con implementación pendiente; no activa capacidades clínicas ni modifica D2.
 
 Base histórica de la auditoría A: `0077f46`, merge #9, el 18 de octubre de 2026; #7 y #8 ya integrados. La actualización de estado posterior a #12 no acredita ejecución de 003–005 en la base habitual ni autorización clínica por episodio.
 
-A documental se integró en #10 (0f2ebba); B en #11 (5e549f5), incluida la deshabilitación global AB-23 y 004; C en #12 (543442e), con contactos seguros y 005. [Guía B](../patient-identity-verification.md), [contrato C](../contact-changes.md) y [evidencia histórica final C](../contact-change-deadline-validation.md). Integración no acredita despliegue; D2/D3 y nueva vinculación siguen sin autorización.
+A documental se integró en #10 (0f2ebba); B en #11 (5e549f5), incluida la deshabilitación global AB-23 y 004; C en #12 (543442e), con contactos seguros y 005. [Guía B](../patient-identity-verification.md), [contrato C](../contact-changes.md) y [evidencia histórica final C](../contact-change-deadline-validation.md). Integración no acredita despliegue; D1/D2 se integraron después en #17/#18; D3 y nueva vinculación siguen pendientes.
 
 El diseño completo de 2A conserva propuestas fuera de B. El usuario confirmó para B nombre editable y DOB histórica desconocida sin alta/corrección posterior; también email verificado como requisito para solicitar SMS, con cuotas por cuenta/destino y limitación residual de abuso multicuenta.
 
@@ -34,6 +34,8 @@ Como antecedente de #5/#9, se actualizaron ADR-002/003/005/010/011, conservando 
 
 **Estado: APROBADA.**
 
+**Sustitución parcial por ADR-030 (20 de octubre de 2026):** el texto siguiente conserva la decisión histórica. Su exclusividad global por paciente deja de ser política vigente; ahora hay un responsable por episodio y tratamientos paralelos. El ciclo individual y la conservación histórica permanecen; pausa/cierre unilateral de pareja requieren política propia (AB-28/29). No interpretar «reanudar requiere ambos» como resolución del ciclo de pareja: en el acuerdo individual son paciente y profesional.
+
 **Decisión:** como máximo un responsable vigente por paciente; episodios `activo` y `pausado` cuentan para exclusividad. Reanudar pausa conserva episodio; tras `finalizado` se abre otro, incluido A→B→A. No sobrescribir episodios ni reatribuir citas/notas. Cualquiera puede iniciar pausa o finalizar unilateralmente con confirmación/motivo apropiado y aviso al otro, resolviendo citas futuras antes sin borrado. Reanudar requiere ambos; pausa impide citas nuevas y permite finalizar. El paciente puede quedar sin responsable (RN-02/03/21).
 
 **Consecuencia:** responsabilidad actual no habilita gestión de episodios cerrados ni antecedentes ajenos. Archivo y adendas propias se rigen por ADR-005/013; alta inicial por ADR-012. Índice y estados técnicos de los fundamentos están aprobados en ADR-006; las transacciones funcionales siguen en ADR-008 y AB-14/15. No interpretar la pausa como vacante para otro responsable.
@@ -42,12 +44,14 @@ Como antecedente de #5/#9, se actualizaron ADR-002/003/005/010/011, conservando 
 
 **Estado: APROBADA.**
 
+**Alcance precisado por ADR-030:** ambas vías se aplican al tratamiento objeto del cambio. Abrir otro tratamiento independiente no es derivación. Pareja requiere confirmación expresa de ambos pacientes y mantiene los demás requisitos de la vía; confidencialidad detallada pendiente.
+
 **Decisión:** dos vías (RN-04–RN-07/18/19):
 
 - **Profesional A→B:** A inicia, paciente acepta cambio, B acepta. A redacta resumen clínico obligatorio; paciente revisa, puede rechazar contenido con motivos y pedir revisiones a A hasta aprobar la versión exacta. Solo esa versión se comunica a B y sin ella no se completa esta vía. A no está obligado a escribir información clínicamente falsa y se conservan borradores/versiones. B conoce identidad del remitente A y datos mínimos, sin notas antes de aprobación pertinente.
 - **Directa del paciente:** identidad verificada y aceptación de B, sin consentimiento ni bloqueo de A y sin resumen obligatorio de A. No comparte historial automáticamente. B solo ve los datos básicos proporcionados por el paciente; no divulgar innecesariamente identidad de A. Al completarse A recibe aviso sin conocer nuevo contenido clínico.
 
-En ambas, una sola solicitud pendiente de cambio por paciente, cancelable, y A sigue responsable hasta cambio atómico. Autorizar cambio, aprobar resumen y autorizar antecedentes adicionales son decisiones separadas: negar los adicionales no bloquea derivación con resumen aprobado. Resumen obligatorio no equivale a historial ilimitado.
+En ambas se conserva una sola solicitud pendiente de cambio por paciente, cancelable. La solicitud identifica el tratamiento que se deriva; A sigue responsable de su episodio de origen hasta el cambio atómico, sin afectar otros tratamientos. El cupo no impone exclusividad clínica ni obliga a derivar para abrir atención independiente; su aplicación conjunta necesita diseño, sin ampliarlo por inferencia. Autorizar cambio, aprobar resumen y autorizar antecedentes adicionales son decisiones separadas: negar los adicionales no bloquea derivación con resumen aprobado. Resumen obligatorio no equivale a historial ilimitado.
 
 **Consecuencia:** solicitud o aceptación parcial no habilitan expediente. No hay asignación administrativa que sustituya acuerdos. Cancelabilidad y solicitud pendiente única están aprobadas; estados API, orden detallado, caducidad, errores y mecanismo de concurrencia quedan abiertos. Agenda al completar: ADR-014. La frase previa «sin historial obligatorio» se limita ahora a antecedentes adicionales; no elimina el resumen de la vía profesional.
 
@@ -73,6 +77,8 @@ La migración [001_clinical_data_integrity.sql](../../backend/sql/migrations/001
 
 **Estado: APROBADA para los fundamentos técnicos del PR posterior a #7. Etapa: 2A, entrega parcial.**
 
+**Contrato histórico implementado en 003, conservado:** ADR-030 sustituye la exclusividad global como producto y añade pareja; no modifica este SQL ni sus garantías. El modelo de un paciente por fila y el índice descritos abajo requieren evolución sucesora antes de habilitar el nuevo dominio. Identidad inmutable, autoría, terminalidad y ausencia de backfill siguen vigentes.
+
 **Decisión técnica confirmada por el usuario:** crear `clinical_episodes` independiente de `care_relationships`; conservar `patients.id` como identidad global estable. El episodio referencia paciente y psicólogo, sin referencia permanente obligatoria a la cuenta del paciente: la asociación de cuenta se resuelve en el modelo de identidad y puede cambiar en una recuperación excepcional sin reescribir historia clínica.
 
 Estados técnicos `active`, `paused`, `finalized`; índice único parcial por paciente para activos Y pausados. Identidad del episodio inmutable, finalización terminal y conservación sin DELETE/TRUNCATE. Regresar tras finalización crea otro ID, incluso A→B→A. Referencia compuesta al rol profesional impide atribuir episodios a usuarios no psicólogos sin impedir suspensión de la cuenta.
@@ -96,6 +102,8 @@ Cada autorización identificaría destinatario y alcance fijo de registros/versi
 ## ADR-008 — Finalización transaccional y coordinación con escrituras
 
 **Estado: PROPUESTA; no aprobada para código. Etapas: 2A/2B, ampliación en 2C/2D.**
+
+**Precisión ADR-030:** el cambio cierra el episodio de origen y abre otro para el destino del tratamiento; continuidad lógica no permite cambiar `psychologist_user_id` en el original. El bloqueo por paciente siguiente es un candidato histórico que debe revisarse para participantes y concurrencia; no impone exclusividad global ni afecta otros episodios.
 
 **Propuesta:** completar cambio mediante transacción con bloqueo por paciente y revalidación de condiciones según vía (resumen aprobado en profesional; sin acuerdo de A en directa), responsabilidad vigente, solicitud única, cancelación confirmada de futuras y permisos. Cerrar episodio anterior y abrir el nuevo de forma indivisible es requisito aprobado; este mecanismo aún no. Coordinar con **todas** las escrituras clínicas/operativas, pausa, cierre y suspensión; validar fuera y escribir después no basta.
 
@@ -137,7 +145,7 @@ Ejecución exclusivamente explícita: URL y nombre de base confirmados, transacc
 
 **Estado: APROBADA. Etapas: 2A/2B. Reglas: RN-15–RN-17/29/34/40.**
 
-**Decisión:** identidad global única sin búsqueda que revele pacientes de otro consultorio; prevenir duplicados sin unión automática por coincidencias. Todos los pacientes y psicólogos tienen cuenta digital obligatoria. Paciente puede registrarse independientemente sin psicólogo; el registro por sí solo no crea episodio ni concede acceso clínico. Psicólogo también puede invitar a un paciente conocido, aunque este aún no tenga cuenta. Primer responsable solo después de verificación y confirmación bilateral según vía (ADR-021). Si hay episodio vigente, usar cambio. Verificar correo y teléfono al activar y adicionalmente en duplicados/recuperación; no imponer universalmente CURP/documento oficial. Contactos verificados no prueban identidad física única.
+**Decisión:** identidad global única sin búsqueda que revele pacientes de otro consultorio; prevenir duplicados sin unión automática por coincidencias. Todos los pacientes y psicólogos tienen cuenta digital obligatoria. Paciente puede registrarse independientemente sin psicólogo; el registro por sí solo no crea episodio ni concede acceso clínico. Psicólogo también puede invitar a un paciente conocido, aunque este aún no tenga cuenta. Responsable del nuevo episodio solo después de verificación y confirmaciones según vía (ADR-021/030). ADR-030 sustituye «si hay episodio vigente, usar cambio»: un tratamiento nuevo independiente no exige derivación, aunque existan otros activos o pausados. Verificar correo y teléfono al activar y adicionalmente en duplicados/recuperación; no imponer universalmente CURP/documento oficial. Contactos verificados no prueban identidad física única.
 
 El paciente administra nombre, contactos y fecha de nacimiento globales; el psicólogo solicita corrección, no cambia identidad. Básicos acompañan al paciente tras cambio confirmado; clínicos por episodio.
 
@@ -156,6 +164,8 @@ El paciente administra nombre, contactos y fecha de nacimiento globales; el psic
 **Estado: APROBADA. Etapas: 2A/2B, concurrencia en 2D. Reglas: RN-18–RN-20.**
 
 **Decisión:** notificar a A al completar cualquier cambio. Mostrar al paciente futuras citas con A y exigir confirmación de cancelación; cancelarlas consistentemente con el cambio atómico, conservar histórico, sin reprogramar con B. Datos visibles según vía en ADR-003. Resolver agenda también antes de pausa/cierre; procedimiento de espera, recurrencias y conflictos sigue AB-09/15.
+
+**Delimitación ADR-030:** futuras citas del tratamiento objeto del cambio, sin cancelar las de otros episodios aunque coincida el profesional. Pausa/cierre se delimitan al episodio; no se resuelven desacuerdos de pareja aquí ni se trasladan registros históricos.
 
 ## ADR-015 — Suspensión sin cierre automático
 
@@ -213,7 +223,7 @@ Cualquier visitante consulta perfiles públicos sin registrarse. Solo pacientes 
 
 **Decisión:** invitación profesional a paciente conocido: este se registra si hace falta, verifica datos y acepta expresamente; la invitación sola no crea episodio ni acceso. Solicitud del paciente: consulta perfil público que admite nuevos pacientes y envía petición, con mensaje breve opcional y sin exigir motivo de consulta. El profesional acepta o rechaza; si acepta, el paciente debe confirmar finalmente. Las confirmaciones y verificaciones completan la vinculación; la activación del episodio es una operación distinta, transaccional y sujeta además a la entrevista validada de ADR-029/RN-59.
 
-El mensaje es privado y sensible: no aparece en directorio ni auditoría administrativa. Ninguna solicitud pendiente concede acceso clínico. PostgreSQL conserva máximo un episodio activo o pausado por paciente; no revelar vínculos con otros consultorios. Si existe episodio vigente, corresponde cambio 2B, sin reutilizar este flujo como atajo. Permisos clínicos por episodio, nunca por aparecer en directorio.
+El mensaje es privado y sensible: no aparece en directorio ni auditoría administrativa. Ninguna solicitud pendiente concede acceso clínico. ADR-030 sustituye la exclusividad global y la obligación histórica de usar cambio 2B ante cualquier episodio vigente: se admite vinculación para tratamiento independiente, sin modificar otros. La restricción de PostgreSQL 003 sigue efectiva hasta transición segura. Permisos clínicos por episodio, nunca por aparecer en directorio; no revelar tratamientos de otros consultorios.
 
 **Consecuencias y pendientes:** la separación funcional de vinculación y episodio está aprobada. Como propuesta técnica, se recomienda persistir solicitudes/invitaciones fuera de `clinical_episodes` y no tratarlas como `care_relationships` activas que sincronicen permisos legacy. Estados/nombres de almacenamiento, API, locks, idempotencia, protección del mensaje y sucesoras de 003 son PROPUESTAS en el [diseño](../stage2a-identity-directory-intake.md). No cambian derivación, resumen, consentimiento adicional, archivo, ARCO ni responsabilidad vigente de ADR-002–ADR-018.
 
@@ -223,7 +233,7 @@ El mensaje es privado y sensible: no aparece en directorio ni auditoría adminis
 
 **Decisión:** máximo una solicitud inicial pendiente iniciada por paciente; ocupa cupo esperando respuesta o confirmación final. Es cancelable por el paciente y las solicitudes caducan. Debe haber protecciones contra solicitudes/cancelaciones masivas, automatización y acoso. Rechazar no debe permitir acoso reiterado ni impedir injustificadamente atención.
 
-Invitaciones profesionales se administran separadamente del cupo del paciente. No queda aprobada una política definitiva para invitaciones simultáneas de profesionales distintos; exclusividad de episodio vigente sí permanece obligatoria. Tampoco se mezcla este cupo con el de cambio en RN-19.
+Invitaciones profesionales se administran separadamente del cupo del paciente. No queda aprobada una política definitiva para invitaciones simultáneas de profesionales distintos. ADR-030 sustituye únicamente la exclusividad global de episodios: el cupo inicial permanece, sin convertirse en prohibición de tratamientos paralelos. Su aplicación a solicitudes conjuntas requiere diseño. Tampoco se mezcla este cupo con el de cambio por paciente en RN-19.
 
 **Pendiente de aprobación antes de habilitar los flujos:** plazos por estado, límites de frecuencia, cooldown, bloqueos y revisión, simultaneidad de invitaciones y tratamiento de solicitudes en curso. El diseño propone mecanismos, sin fijar valores ni reglas definitivas por defecto (AB-19/20).
 
@@ -294,7 +304,7 @@ Rehabilitar no republica ni reactiva recepción automáticamente: el profesional
 
 ## ADR-028 — Secuencia A/B/C/D y barrera legacy
 
-**Estado: APROBADA la secuencia; A/B/C integrados en #10/#11/#12. D1 autorizado en rama con persistencia privada; D2/D3 pendientes. Reglas: RN-57–58.**
+**Estado: APROBADA la secuencia; A/B/C integrados en #10/#11/#12. D1/006 y D2/007 integrados en #17/#18; D3 pendiente. Reglas: RN-57–58.**
 
 B implementa registro adulto, nombre propio, estados y verificación email/SMS, migración 004 y barrera legacy. El usuario aprobó AB-23: bloquear POST patients y request/invite/respond/accept-code para todas las cuentas, incluidos pendientes antiguos y rechazos. Se conservan los 403 administrativos de #7 y todos los accesos/pendientes existentes sin sync incidental. [Inventario revalidado](../stage2a-legacy-mutations.md).
 
@@ -314,15 +324,31 @@ Se conservan los permisos y reglas concretas legacy: el paciente solo puede guar
 
 Esta decisión precisa ADR-016/021 y los efectos de activación de RN-34/35/40: las aceptaciones de vinculación no bastan para activar. Solicitudes/invitaciones, atribución y permisos por episodio siguen pendientes, con fallback legacy intacto y nuevas vinculaciones bloqueadas.
 
+## ADR-030 — Episodios paralelos, pareja y derivación por tratamiento
+
+**Estado: APROBADA como producto el 20 de octubre de 2026; implementación PENDIENTE. Etapas: fundamentos 2A y flujos 2B, consentimiento adicional 2C y concurrencia 2D. Reglas: RN-62–68.**
+
+**Decisión:** un paciente global puede participar en varios episodios activos o pausados, con distintos profesionales. Se aprueban individual (un paciente registrado) y pareja (dos pacientes registrados en un tratamiento conjunto), ambos con un psicólogo responsable por episodio e identidad clínica propia. No representar pareja como dos episodios independientes. No se aprueban familiar de tres o más, grupal ni varios corresponsables en un episodio.
+
+Crear tratamiento independiente no inicia ni exige derivación ni cambia atenciones previas. Derivar uno conserva las dos vías, resumen revisable, confirmaciones profesionales, autorización adicional separada, cancelación confirmada de futuras de ese tratamiento y cierre de origen/apertura de destino. RN-03 y la identidad inmutable de ADR-006 permanecen: no reasignar el profesional histórico, mover citas/notas/autoría ni reutilizar finalizados. El efecto del cambio se delimita al tratamiento; el cupo pendiente por paciente RN-19 se conserva, sin impedir nuevos tratamientos independientes. Su aplicación a pareja requiere diseño sin ampliar cupos por inferencia.
+
+Derivar pareja requiere confirmación expresa de ambos pacientes y los demás requisitos de la vía correspondiente; si uno no acepta no se completa. Parciales sin acceso clínico anticipado. No se inventa resolución posterior, silencio, plazos, mayoría o aceptación unilateral. Confirmar derivación, aprobar resumen y autorizar antecedentes adicionales son actos distintos.
+
+Participación explícita y permisos por episodio/participante/alcance, sin herencia de consentimientos ni acceso a otros tratamientos; proteger contra inferencia/enumeración. Pareja no vuelve automáticamente compartidas aportaciones individuales o comunicaciones privadas. Política exacta de confidencialidad y portal pendiente (AB-30/31); no extender unilateralidad de pausa/cierre individual a pareja (AB-28/29). RN-27 y ADR-029/RN-59–61 permanecen íntegros.
+
+**Sustitución y trazabilidad:** reemplaza solo exclusividad global y obligación de cambio por existir cualquier episodio en ADR-002/006/012/021/022 y RN-02/16/40; precisa alcance de ADR-003/008/014 y RN-03/05/18–21. Cupo inicial RN-37, identidad, verificaciones, historia, derivación y consentimiento conservados. [Tabla detallada y ejemplos](../parallel-couple-episodes.md#trazabilidad-de-reglas-sustituidas-y-conservadas).
+
+**Consecuencia técnica pendiente:** `clinical_episodes_one_current_patient_idx` de 003 impide coexistencia; la fila de un paciente y sus FK no representan pareja. Requiere migración sucesora, participantes explícitos, pertenencia/autoría consistentes, permisos y transición coordinada del fallback legacy; esquema definitivo aún sin aprobar. No modificar 001–007 ni sus hashes. AB-23 y protecciones efectivas continúan hasta transición segura autorizada; no se implementa ni despliega nada en este PR. [Impacto, privacidad, dependencias y preguntas](../parallel-couple-episodes.md).
+
 ## Resolución D1 — Persistencia y división interna
 
-**APROBADO:** D1 fundamentos privados/006, D2 gestión privada y estado restringido, D3 directorio; solo D1 autorizado ahora en rama nueva, pruebas nuevas aisladas y PR Draft sin merge. [Contrato y mecanismos concretos](../professional-persistence.md). No se aprueban API, autenticación o publicación por implicación.
+**Antecedente aprobado para D1:** D1 fundamentos privados/006, D2 gestión privada y estado restringido, D3 directorio; en ese encargo solo D1 autorizado en rama nueva, pruebas nuevas aisladas y PR Draft sin merge. [Contrato y mecanismos concretos](../professional-persistence.md). No se aprueban API, autenticación o publicación por implicación.
 
 AB-18/24/27 están resueltos como producto según sus filas. Retención específica de propuestas, versiones, observaciones y fotografías: aprobada su necesidad, sin plazos ni borrado automático autorizados; los 14 días CI son independientes. Criterios operativos de evidencia/vigencia, catálogo concreto, comunicaciones autorizadas y tratamiento de afirmaciones en texto libre se concretan antes del flujo correspondiente D2/D3.
 
 ## Asuntos abiertos y momento de resolución
 
-Actualización autorizada D2: D1 está integrado en #17; implementar D2 privado en rama nueva, ensayos nuevos aislados y un PR Draft sin merge. Se concretan edición privada de descripción plana acotada, catálogo inicialmente vacío, mensajes explícitos al titular sin copiar review_notes históricas y cuotas sin purgas definitivas. Evidencia registra fuente, responsable, fecha y resultado, pero aprobación operativa permanece bloqueada hasta aprobar criterios por acreditación. [Contrato D2](../private-professional-management.md). D3, vinculaciones, proveedores y despliegue no quedan autorizados.
+Antecedente del encargo D2, integrado mediante #18: D1 ya estaba integrado en #17; se autorizó implementar D2 privado en rama nueva, ensayos nuevos aislados y un PR Draft sin merge. Se concretan edición privada de descripción plana acotada, catálogo inicialmente vacío, mensajes explícitos al titular sin copiar review_notes históricas y cuotas sin purgas definitivas. Evidencia registra fuente, responsable, fecha y resultado, pero aprobación operativa permanece bloqueada hasta aprobar criterios por acreditación. [Contrato D2](../private-professional-management.md). D3, vinculaciones, proveedores y despliegue no quedan autorizados.
 
 Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen decisiones de producto aprobadas explícitas arriba; solo sus detalles indicados siguen pendientes:
 
@@ -342,7 +368,7 @@ Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen de
 | AB-12 | ¿Qué roles jurídicos reales, avisos, contratos, conservación, respaldos, restauración y controles operativos se requieren en México? | Diseño aplicable de 2C y salida de 5 |
 | AB-13 | Verificación normal de correo/teléfono, sin fusión por contactos; revisión excepcional no clínica por soporte autorizado, auditada y con evidencia adicional cuando proceda: APROBADO en ADR-012. Pendientes los métodos técnicos concretos de verificación excepcional y recuperación. | Identidad/alta 2A y cambio directo 2B |
 | AB-14 | Fundamentos de episodios/atribución aprobados en ADR-006. Pendientes contratos/permisos, identidad, notas/adendas y sustitución de todas las rutas heredadas. | Implementación aplicable 2A |
-| AB-15 | ¿Qué locks/transacciones, idempotencia, errores y coordinación de lectores/escritores preservan exclusividad, cambios atómicos, pausa/cierre/suspensión y agenda? | Diseño 2A/2B, ampliación 2C/2D |
+| AB-15 | ¿Qué locks/transacciones, idempotencia, errores y coordinación de lectores/escritores preservan integridad por episodio/participante, tratamientos paralelos, cambios atómicos, pausa/cierre/suspensión y agenda (ADR-030)? | Diseño 2A/2B, ampliación 2C/2D |
 | AB-16 | ¿Qué estado técnico, procedimiento y actores resuelven citas pendientes por suspensión, respetando privacidad y sin cancelación automática? | Permisos 2A y flujo 2B; agenda 2D |
 | AB-17 | Diseño/ensayo de fundamentos 003 aprobados en ADR-009. Pendientes resolución de legacy real, activación de atribuciones/permisos y autorización/ensayo del rollout de cada entorno. | Antes del despliegue y activación de 2A |
 | AB-18 | APROBADO: ID público aleatorio, opaco, estable, independiente y no reutilizable; flags privados/apagados e independientes; retiro en nuevas consultas y sin caché compartida inicial; rehabilitar no restaura flags. Persistencia D1; lectores y reconfirmación D2/D3. Solicitudes pendientes fuera de D. | D1 persistencia; D2/D3 con autorización independiente |
@@ -358,6 +384,21 @@ Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen de
 
 Los fundamentos integrados en #8 están delimitados en ADR-006/009; AB-06 no autoriza atribución legacy. Antes de activar el resto de 2A deben cerrarse las propuestas y asuntos bloqueantes aplicables, especialmente AB-02/06/08/13–AB-22. Los mecanismos técnicos D-01–D-12 permanecen PROPUESTOS salvo los requisitos de producto expresamente resueltos en ADR-023–028. AB-23 fue aprobado expresamente en el encargo B; el resto de propuestas no se aprueba por aceptar la división. Los requisitos de producto aprobados no aprueban todos los detalles técnicos de 2A. No inventar respuestas de 2C para cerrar este PR documental; dividir encargos y dependencias según [roadmap.md](roadmap.md).
 
+Preguntas nuevas de pareja y tratamientos paralelos (ADR-030), sin resolver por inferencia:
+
+| ID | Asunto abierto | Momento bloqueante |
+| --- | --- | --- |
+| AB-28 | Qué sucede si uno abandona terapia de pareja | Ciclo de pareja 2A/2B |
+| AB-29 | Pausar/finalizar cuando el otro no está de acuerdo | Pausa/cierre 2B |
+| AB-30 | Distinguir información compartida e individualmente confidencial, comunicaciones privadas y autorizaciones | Privacidad 2A; resumen/consentimiento 2B/2C |
+| AB-31 | Qué ve cada paciente en su portal | Permisos y UX de pareja 2A |
+| AB-32 | Presentación y validación de entrevista inicial de ambos | Antes de activar pareja 2A |
+| AB-33 | Resolución posterior al rechazo de derivación conjunta; no se completa sin ambos | Derivación de pareja 2B |
+| AB-34 | Evitar duplicados no deseados sin exclusividad global por paciente | Vinculación/concurrencia 2A |
+| AB-35 | Representar citas individuales y conjuntas en pareja sin relajar reglas vigentes por inferencia | Agenda 2A/2B/2D |
+| AB-36 | Reglas específicas de consentimiento, confidencialidad y datos que deben validarse jurídicamente en México | Diseño de pareja y preparación para producción |
+| AB-37 | Varios tratamientos conjuntos de las mismas dos personas con objetivos distintos | Alcance/vinculación 2A |
+
 ## Acciones y supuestos no aprobados
 
 **Estado: NO APROBADA para el alcance actual**, o incompatibles con las reglas firmes según se indica:
@@ -365,7 +406,7 @@ Los fundamentos integrados en #8 están delimitados en ADR-006/009; AB-06 no aut
 - En este encargo documental: modificar backend/frontend, crear o ejecutar migraciones, modificar 001/002/003, ejecutar schema/seed, tocar la base habitual, crear/eliminar contenedores o volúmenes, o hacer merge. La autorización histórica de #8 para ensayar 003 en destinos propios no se extiende a este encargo; no autoriza despliegue ni atribución histórica.
 - Tratar como aprobados los nombres/tablas/estados/API/locks/cifrado/plazos propuestos para identidad y vinculación, o los mecanismos pendientes de 2B/2C. Los fundamentos específicos de 003 sí fueron aprobados en ADR-006/009 e integrados en #8.
 - Implementar ahora la red estatal/nacional, migración móvil, emergencias o un flujo break-glass por aparecer en la visión futura.
-- Conceder expediente por red o backoffice, aceptar dos responsables vigentes (incluida pausa), heredar consentimiento, compartir automáticamente historial, reutilizar episodios finalizados o cambiar autoría: incompatibles con RN-01–RN-12/27.
+- Conceder expediente por red o backoffice, varios responsables simultáneos en un mismo episodio, heredar consentimiento, compartir automáticamente historial, reutilizar episodios finalizados o cambiar autoría: incompatibles con RN-01–RN-12/27/62–68. Tratamientos paralelos sí están aprobados como producto por ADR-030, con implementación pendiente; no retirar por ello protecciones existentes.
 - Convertir carga/casilla profesional en consentimiento verificado, bloquear derivación por negar antecedentes adicionales con resumen aprobado, bloquear cambio directo por A o vetar ARCO: incompatibles con RN-06/08/13/18.
 - Completar derivación profesional sin resumen aprobado, mostrar adendas posteriores sin nueva autorización, unir identidades por contacto, exigir CURP universal, cancelar futuras por suspensión automáticamente o reinicializar demo sin autorización separada: incompatibles con RN-04/15/16/22/23/28.
 - Asignar automáticamente dueños legacy inciertos, borrar duplicados o trasladar agenda/espera para facilitar la migración: sin aprobación y contrarios al enfoque conservador propuesto.

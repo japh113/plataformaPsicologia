@@ -1,6 +1,6 @@
 # Arquitectura vigente de PsicoPanel
 
-Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](private-professional-management.md), [evidencia D2](private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
+Base documental verificada: main `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, merge de [D2 / #18](https://github.com/japh113/plataformaPsicologia/pull/18). D1/D2 integrados, sin despliegue habitual acreditado; D3 y nuevas vinculaciones pendientes. Este encargo solo formaliza [episodios paralelos y pareja](parallel-couple-episodes.md) como producto aprobado, con implementación pendiente; no activa capacidades clínicas ni modifica D2.
 
 [Producto](product/vision.md), [reglas](product/business-rules.md) y [decisiones](product/decisions.md) definen objetivos; esta página describe la implementación y sus límites. [GitHub Actions/CI](ci-implementation.md) está integrado y sus siete checks son obligatorios; sus resultados no acreditan capacidades clínicas pendientes.
 
@@ -64,7 +64,9 @@ La política de día clínico aún usa America/Los_Angeles en partes de aplicaci
 
 ## Límites de B/C y diseño pendiente
 
-[Plan A/B/C/D](identity-directory-delivery-plan.md): A/B/C/D1 integrados; D2 privado en rama y D3 pendiente. Ninguna integración acredita despliegue habitual. El resto del [diseño 2A](stage2a-identity-directory-intake.md) sigue propuesto. ADR-029/RN-59–61 exigen entrevista validada antes de activar todo episodio nuevo; la precondición backend/DB sigue pendiente, con relaciones legacy sin reinterpretación.
+**Producto posterior a D2 — ADR-030, pendiente de implementación:** [episodios paralelos y pareja](parallel-couple-episodes.md) permiten varios tratamientos por paciente, con un responsable por episodio y participantes explícitos (uno individual, dos pareja). Vinculación independiente no deriva otro tratamiento; derivar uno cierra origen/abre destino sin reasignar historia y deja los demás intactos. Pareja exige confirmación expresa de ambos pacientes; confidencialidad detallada pendiente. El índice `clinical_episodes_one_current_patient_idx` y `patient_id` singular de 003 son incompatibles con ese dominio futuro; continúan intactos como protecciones actuales hasta una sucesora autorizada que revise FK/pertenencia, concurrencia y permisos por episodio/participante/alcance. No basta quitar el índice: lectores por paciente/fallback no aíslan episodios. No se decide esquema final ni se activan funciones, y no se infieren participantes legacy. 2A aporta fundamentos/privacidad/entrevista propia; 2B flujos delimitados conservando resumen y consentimiento vigentes. AB-23 y ADR-029/RN-59–61 no se debilitan.
+
+[Plan A/B/C/D](identity-directory-delivery-plan.md): A/B/C/D1/D2 integrados; D3 pendiente. Ninguna integración acredita despliegue habitual. El resto del [diseño 2A](stage2a-identity-directory-intake.md) sigue propuesto. ADR-029/RN-59–61 exigen entrevista validada antes de activar todo episodio nuevo; la precondición backend/DB sigue pendiente, con relaciones legacy sin reinterpretación.
 
 Solicitudes/invitaciones nuevas, permisos/activación por episodio, derivaciones, adendas, consentimientos de antecedentes, recuperación excepcional y menores siguen pendientes. No tratar una cuenta verificada o un perfil público como vínculo asistencial. No afirmar que los límites actuales por paciente ya aíslan episodios.
 

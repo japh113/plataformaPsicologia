@@ -1,5 +1,11 @@
 # Fundamentos de episodios clínicos — migración 003
 
+## Política posterior: ADR-030
+
+Esta guía conserva el contrato técnico histórico de 003 y sus ensayos de #8. [ADR-030](product/decisions.md#adr-030--episodios-paralelos-pareja-y-derivación-por-tratamiento) sustituye como producto la exclusividad global por tratamientos paralelos y aprueba pareja (dos pacientes registrados, un tratamiento conjunto y un psicólogo). **No está implementado por esta documentación.** `clinical_episodes_one_current_patient_idx` continúa impidiendo varios active/paused por paciente donde 003 esté instalada; no retirarlo ni modificar 003 o los archivos/hashes 001–007 aquí.
+
+La futura sucesora debe evolucionar restricción y representación de participantes, FK de pertenencia/autoría y permisos, conservando profesional e identidad de cada episodio histórico. Derivación cierra origen/abre destino; no actualizar `psychologist_user_id` ni mover registros. El `patient_id` singular actual y sus claves compuestas no representan pareja. Esquema definitivo pendiente, sin backfill de participantes inferidos. El fallback legacy por paciente requiere transición coordinada completa; AB-23 y entrevista validada ADR-029/RN-59–61 siguen intactos. [Trazabilidad e impacto futuro](parallel-couple-episodes.md). La exclusividad y sus rechazos descritos abajo son comportamiento histórico conservado, no aceptación futura de 2A.
+
 ## Sucesora B — compatibilidad del runner
 
 B incorpora 004_patient_identity_verification.sql sin modificar 001–003 ni activar permisos por episodio. El runner admite targets explícitos 003/004; después de 004, target 003 se rechaza como downgrade. Upgrade verifica la huella de 003 y agrega ledger/huella 004 sin modificar filas previas. Replay verifica la última versión; deriva/checksum/prerrequisitos y estructuras no registradas fallan cerrados. [Guía B](patient-identity-verification.md), [pruebas nuevas](patient-identity-validation.md). Los comandos 003 y la evidencia histórica de esta guía no acreditan despliegue habitual.

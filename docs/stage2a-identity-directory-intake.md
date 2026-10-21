@@ -1,12 +1,12 @@
 # Etapa 2A — Identidad, directorio básico y vinculación inicial
 
-Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](private-professional-management.md), [evidencia D2](private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
+Base documental verificada: main `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, merge de [D2 / #18](https://github.com/japh113/plataformaPsicologia/pull/18). D1/D2 integrados, sin despliegue habitual acreditado; D3 y nuevas vinculaciones pendientes. Este encargo solo formaliza [episodios paralelos y pareja](parallel-couple-episodes.md) como producto aprobado, con implementación pendiente; no activa capacidades clínicas ni modifica D2.
 
 Base histórica del diseño: 18 de octubre de 2026, `0077f46` (#9 integrado); los contratos B/C y el estado posterior a #12 actualizan únicamente las porciones entregadas.
 
 **Estado: diseño completo de 2A, mayoritariamente PROPUESTO; B/C implementan solo sus porciones autorizadas.** A integrado en #10 (0f2ebba), B en #11 (5e549f5), C en #12 (543442e), sin despliegue habitual acreditado. La [guía B](patient-identity-verification.md) y el contrato C definen lo implementado y prevalecen sobre candidatos antiguos. [Evidencia histórica B](patient-identity-validation.md).
 
-AB-23 fue aprobado expresamente: alta unilateral y request/invite/respond/accept-code bloqueados para todas las cuentas, incluidos pendientes antiguos, sin sincronizar accesos. DOB posterior pendiente por confirmación del usuario; email vigente verificado antes de solicitar SMS. D, directorio público y nuevas vinculaciones no implementados ni autorizados. ADR-029/RN-59–61 conservan precondición backend/DB pendiente antes de activar cualquier episodio nuevo.
+AB-23 fue aprobado expresamente: alta unilateral y request/invite/respond/accept-code bloqueados para todas las cuentas, incluidos pendientes antiguos, sin sincronizar accesos. DOB posterior pendiente por confirmación del usuario; email vigente verificado antes de solicitar SMS. D1/D2 privados integrados en #17/#18; directorio público D3 y nuevas vinculaciones pendientes, fuera de este encargo. ADR-029/RN-59–61 conservan precondición backend/DB pendiente antes de activar cualquier episodio nuevo.
 
 ## 1. Base existente y límites de confianza
 
@@ -19,20 +19,22 @@ AB-23 fue aprobado expresamente: alta unilateral y request/invite/respond/accept
 | `requestCareRelationship`, `inviteCareRelationship`, `respondToCareRelationship`, `acceptCareRelationshipInvite` | B deniega todas esas mutaciones antes de DB; no sincroniza acceso. Pendientes históricos permanecen conservados, sin aceptar/rechazar/canjear. |
 | [auth.permissions.js](../backend/src/modules/auth/auth.permissions.js), `buildPatientAccessScope` | Vínculo activo O `psychologist_patient_access`, filtrado por paciente. #7 excluye backoffice, pero falta autorización por episodio. |
 | [003](../backend/sql/migrations/003_clinical_episode_foundation.sql) y [fundamentos](clinical-episodes-foundation.md) | Episodios independientes `active`/`paused`/`finalized`; índice `clinical_episodes_one_current_patient_idx` por paciente active/paused; atribución compuesta opcional e inmutable en citas/notas/tareas/espera. No autoriza clínicamente ni atribuye legacy. |
-| [ejecutor](../backend/scripts/episode-migration.js) y [manifiesto](../backend/sql/migrations/manifest.json) | D1 reconoce 001–006 y targets 003/004/005/006 con huella previa/nueva, ledger, lock y transacción; archivos/checksums 001–003 intactos. |
+| [ejecutor](../backend/scripts/episode-migration.js) y [manifiesto](../backend/sql/migrations/manifest.json) | D2 reconoce 001–007 y targets 003/004/005/006/007 con huella previa/nueva, ledger, lock y transacción; archivos/checksums 001–003 intactos. |
 | [auditoría](../backend/src/utils/audit.js) y preservación de 001 | Metadatos JSON e historial de filas. El filtro administrativo de #7 no protege un mensaje si primero se copia a auditoría/historial genéricos. |
 
 La [evidencia de #8](clinical-episodes-validation.md) es histórica; no representa la ejecución de B; B aporta su propio reporte en destino nuevo aislado, sin consultar la base habitual. Tener 003 en Git no acredita instalación en un entorno.
 
 ## 2. Invariantes aprobadas y frontera con 2B/2C
 
+**Actualización de producto ADR-030:** [tratamientos paralelos y pareja](parallel-couple-episodes.md) sustituyen exclusividad global, sin cambiar código/SQL ni activar flujos. Individual tiene un paciente; pareja dos registrados en un único tratamiento conjunto; un profesional por episodio. Participación, confidencialidad y entrevista de ambos necesitan diseño específico. Las alternativas D-01–D-12 siguen siendo propuestas y no un esquema aprobado de pareja.
+
 - Registro independiente, correo/teléfono verificados y aceptación bilateral sin fusión automática. Sin motivo de consulta, CURP o documento universal obligatorio. Soporte excepcional no clínico conforme AB-13, con metodología pendiente.
 - Perfil privado por defecto, publicación optativa solo del aprobado y recepción de nuevos pacientes independiente. Lectura anónima mínima; invitación directa independiente de admisión pública.
 - Solicitud del paciente: aceptación profesional seguida de confirmación final. Una pendiente iniciada por él ocupa cupo en ambas esperas; cancelable y caducable. Mensaje opcional sensible fuera del directorio/auditoría administrativa.
 - Invitación a conocido: admite registro posterior, exige verificación y aceptación expresa; sola no abre episodio. Invitaciones separadas, sin política definitiva de simultaneidad aprobada.
-- Ningún pendiente concede expediente. Creación de episodio transaccional y máximo uno activo/pausado garantizado por PostgreSQL, sin revelar otros consultorios.
+- Ningún pendiente concede expediente. Creación/activación transaccional con pertenencia, permisos y entrevista validada propios, sin revelar otros tratamientos. PostgreSQL 003 aún impide varios active/paused por paciente: protección histórica incompatible con ADR-030 que solo se evoluciona mediante transición segura autorizada.
 
-Con episodio activo o pausado, alta inicial no lo cierra, pausa ni transfiere: corresponde 2B. Solo al paciente en su ámbito puede indicarse que requiere cambio; al profesional, indisponibilidad genérica sin identidad ni existencia explícita de otro consultorio. Si 2B no existe, no simular éxito. Regreso tras finalización requiere nuevo ID (RN-03); elegibilidad exacta de readmisión en la futura vinculación requiere D-06/D-10.
+Con episodio activo o pausado puede acordarse un tratamiento nuevo independiente: no exige ni inicia 2B, ni cierra, pausa o transfiere otros. Derivar un tratamiento específico sí usa 2B y conserva cierre de origen/apertura de destino, resumen y acuerdos correspondientes; no simular flujos aún ausentes. No revelar identidad/existencia de otros tratamientos por errores o elegibilidad. Regreso tras finalización requiere nuevo ID (RN-03); readmisión y prevención de duplicados requieren diseño D-06/D-10 y AB-34/37. El cupo inicial RN-37 permanece y no es exclusividad clínica.
 
 Se conservan derivación con resumen por versión exacta, cambio directo, agenda y responsabilidad anterior de 2B; antecedentes adicionales, consentimiento/revocación de 2C; archivo propio, adendas, respuestas históricas y ARCO. Alta inicial no copia clínicos globales o de otros episodios.
 
@@ -47,7 +49,7 @@ Las alternativas de mecanismo D-01–D-12 requieren revisión/aprobación antes 
 | D-03 Verificación | Métodos resueltos: enlace email y código SMS; pendiente proveedor y mecanismo | Desafíos por cuenta, propósito y versión de contacto, de un uso; adaptadores de entrega | Fuerza bruta, SIM swap, replay, enumeración, fallas y costo | Métodos/TTL/reenvíos/cuotas/intentos SMS resueltos ADR-024; proveedores reales, controles adicionales y recuperación pendientes (AB-21/26) |
 | D-04 Persistencia | Reutilizar `care_relationships`, tabla polimórfica o dos agregados | Solicitudes e invitaciones separadas, previas a episodio y sin sincronizar acceso legacy | Estados duplicados, joins que filtran datos y destinatario aún sin cuenta | Entidades/campos, evidencia y relación con episodio (AB-14/19/22) |
 | D-05 Estados/cupo | Solo servicio o restricción DB; worker o vencimiento en operación | Índice parcial de pendientes del paciente y locks; caducidad materializada por worker y operaciones | Cupo ocupado por worker caído, carreras y cambios de admisión | Estados, transiciones, plazos y pendientes ante cambios (AB-18/19) |
-| D-06 Confirmación | Solo índice, serializable o locks + índice | Transacción, locks ordenados, revalidación final y unicidad de 003 | Deadlocks, permisos legacy y cambios concurrentes de cuenta/aprobación | Protocolo de escritores, errores/reintentos, readmisión y activación (AB-14/15/17) |
+| D-06 Confirmación | Serializable o locks + restricciones sucesoras por definir | Transacción, locks ordenados y revalidación de participantes, entrevista y permisos; revisar candidato ante ADR-030 | Deadlocks, duplicados, permisos legacy y cambios concurrentes de cuenta/aprobación | Protocolo, sucesora de 003, errores/reintentos y activación (AB-14/15/17/32/34) |
 | D-07 Idempotencia | Solo frontend, registro persistido o ID determinista | Registro transaccional por actor/operación/clave, huella autenticada y resultado mínimo | Copia de mensaje, reuso de clave y replay entre cuentas | Alcance/duración, huella y respuestas (AB-15/22) |
 | D-08 Abuso | IP, cuenta o combinación; bloqueo total o por pareja | Límites compartidos por cuenta/destinatario/red/costo; cooldown por pareja con revisión | NAT, exclusión legítima, cuentas múltiples y acoso por invitación | Valores, bloqueo/revisión y simultaneidad de invitaciones (AB-20) |
 | D-09 Mensajes | Texto en relación/audit, tabla privada o payload cifrado separado | Payload privado separado, llaves fuera de DB y eventos sin contenido | Historial/backup/logs duplican texto; llaves, XSS y longitud | Límite, cifrado/llaves, retención/borrado y privilegios (AB-22) |
@@ -87,13 +89,13 @@ ADR-026/027 requieren versión aprobada separada de pendiente, revisión adminis
 
 | Entidad candidata | Datos mínimos sugeridos y límites |
 | --- | --- |
-| Solicitud inicial | ID opaco; paciente de sesión; profesional destinatario; estado/versión; creación/caducidad/resolución; aceptación profesional y confirmación final con actor/fecha/versión; mensaje privado opcional por referencia; episodio solo al completar. |
-| Invitación profesional | ID opaco; emisor; contacto privado de entrega o cuenta verificada asociada posteriormente; digest de token aleatorio de alta entropía de un uso; estado/versión/fechas; aceptación del paciente; episodio al completar. No exigir cuenta al emitir. |
+| Solicitud inicial | ID opaco; paciente de sesión; profesional destinatario; estado/versión; creación/caducidad/resolución; aceptación profesional y confirmación final con actor/fecha/versión; mensaje privado opcional por referencia; relación con episodio/activación separada por diseñar. |
+| Invitación profesional | ID opaco; emisor; contacto privado de entrega o cuenta verificada asociada posteriormente; digest de token aleatorio de alta entropía de un uso; estado/versión/fechas; aceptación del paciente; relación con episodio/activación separada por diseñar. No exigir cuenta al emitir. |
 | Eventos | Agregado, transición, actor interno, instante y versión de condiciones. Sin mensaje, contacto, token o motivo libre; acceso restringido a participantes. No incorporarlos al feed administrativo. |
 | Payload privado | Mensaje opcional cifrado y versión de llave; solo paciente autor/profesional destinatario autorizado. No es nota ni se copia al expediente. |
 | Verificación/idempotencia | Datos mínimos por propósito, sin respuestas completas ni secretos en texto. Retención independiente de clínicos, pendiente AB-22. |
 
-FK a paciente global/profesional; episodio enlazado debe coincidir en ambos. Propuesta: máximo un episodio por origen y un origen inicial por episodio; históricos pueden carecer de origen nuevo sin backfill inventado. Participantes inmutables tras emitir; otro destinatario requiere nueva operación. Timestamps servidor UTC con precisión acordada. Ninguna de estas entidades se crea aquí.
+El candidato anterior de FK a un paciente global/profesional requiere revisión para representar participantes explícitos de pareja y comprobar su pertenencia sin romper autoría. Propuesta individual: máximo un episodio por origen y un origen inicial por episodio; no determina la representación conjunta ni la continuidad entre episodios derivados. Históricos sin backfill inventado. Participantes del agregado inmutables tras emitir; otro destinatario requiere nueva operación, con diseño conjunto pendiente. Timestamps servidor UTC con precisión acordada. Ninguna entidad o relación definitiva se aprueba o crea aquí.
 
 ## 5. Estados y transiciones candidatos (D-05)
 
@@ -106,7 +108,7 @@ FK a paciente global/profesional; episodio enlazado debe coincidir en ambos. Pro
 | `awaiting_professional` | Rechazar / profesional destinatario | `rejected`; libera cupo, sin motivo clínico libre ni exposición administrativa. |
 | Ambas esperas | Cancelar / paciente solicitante | `cancelled`; libera cupo sin borrar historia o contadores. |
 | Ambas esperas | Vencer / servidor | `expired` si llegó plazo; libera cupo aunque worker se retrase. |
-| `awaiting_patient_confirmation` | Confirmar / mismo paciente verificado | `linked` junto al COMMIT del episodio y condiciones revalidadas. Aceptación profesional no basta. |
+| `awaiting_patient_confirmation` | Confirmar / mismo paciente verificado | `linked` confirma vinculación, no activa episodio. Activación separada con RN-59–61, entrevista validada, participantes y permisos propios. Diseño conjunto pendiente. |
 | Ambas esperas | Inhabilitar flujo / servidor | Candidato `closed_unavailable`, sin causa ajena detallada; condiciones requieren AB-18/19, no equivale a cambio 2B. |
 
 Cupo DB ocupado por `awaiting_professional` y `awaiting_patient_confirmation`. Terminales: `linked`, `rejected`, `cancelled`, `expired` y, si se aprueba, `closed_unavailable`. Sin volver a pendiente ni reutilizar rechazo; nueva solicitud usa otro ID y cuotas. Aceptar solo desde primera espera y confirmar solo desde segunda. Reintentar o doble aceptar no extiende vida automáticamente.
@@ -119,28 +121,28 @@ Aprobar plazos de respuesta y confirmación, inicio de cada uno y cota de vida t
 | --- | --- | --- |
 | Sin invitación | Emitir / profesional activo y aprobado | `awaiting_patient_acceptance`, token privado dirigido a conocido, acuse uniforme exista o no cuenta. Sin exigir publicación/admisión. |
 | `awaiting_patient_acceptance` | Registrar/verificar/consultar / destinatario | Sigue pendiente: enlace/sesión no aceptan ni conceden expediente. |
-| `awaiting_patient_acceptance` | Aceptar expresamente / destinatario verificado | `linked` junto al episodio y validaciones. Invitación expresa acuerdo del profesional; no añadir por defecto una segunda aceptación suya. |
+| `awaiting_patient_acceptance` | Aceptar expresamente / destinatario verificado | `linked` de vinculación, sin activar episodio ni validar entrevista automáticamente. Invitación expresa acuerdo del profesional; no añadir por defecto una segunda aceptación suya. Activación separada con RN-59–61. |
 | `awaiting_patient_acceptance` | Rechazar / destinatario verificado | `declined`, sin episodio. |
 | `awaiting_patient_acceptance` | Retirar / profesional emisor | `revoked`, sin episodio. |
 | `awaiting_patient_acceptance` | Vencer / servidor | `expired`, sin episodio. |
 
 Estados, retirada, TTL y errores son propuestas. Token atado a destinatario, un uso, no aceptable por otra cuenta/contacto sin verificar. Evitar datos personales en URL y token en historial/referrer/telemetría; proponer canje por envío autenticado con redacción de logs. Entrega/canje pendientes D-03/D-09.
 
-**No definir por accidente simultaneidad:** no aplicar cupo del paciente a invitaciones ni imponer una sola recibida. No decidir que aceptar una cancela las otras, que quedan reutilizables tras finalizar o que solicitud propia las invalida. Ante colisión solo un episodio vigente puede confirmar; las demás operaciones no abren otro y reciben resultado genérico. Destino terminal/pendiente, duración, cuotas y validez restante requieren AB-20 antes de habilitar. Integridad DB no resuelve esa política.
+**No definir por accidente simultaneidad:** no aplicar cupo del paciente a invitaciones ni imponer una sola recibida. No decidir que aceptar una cancela las otras, que quedan reutilizables tras finalizar o que solicitud propia las invalida. ADR-030 permite tratamientos independientes paralelos; no usar una colisión de invitaciones como exclusividad clínica global. Duplicados, política conjunta, destino terminal/pendiente, duración, cuotas y validez requieren AB-20/34/37 antes de habilitar. Integridad DB no resuelve esas políticas.
 
 ## 6. Concurrencia, atomicidad e idempotencia (D-05–D-07)
 
-Protocolo candidato común a confirmación final y aceptación de invitación:
+Protocolo candidato de vinculación individual; activación es otra operación con RN-59–61. El candidato anterior que insertaba `active` al confirmar queda corregido: aceptación no valida entrevista. Extenderlo a pareja exige resolver participantes/entrevista/privacidad; no queda aprobado un protocolo definitivo:
 
 1. Autenticar con estado vigente/JWT de 002. Paciente desde cuenta, nunca body. Resolver metadatos del agregado con pertenencia autorizada antes de revelar información.
 2. Abrir transacción. Orden común propuesto: cuentas participantes por ID estable, perfil profesional, identidad `patients`, agregado, idempotencia y episodio si corresponde. Cambios de contactos y otros escritores deben usar orden compatible probado; lectura preliminar no reemplaza relectura bloqueada.
 3. Registrar/leer idempotencia por actor/operación/clave; comprobar huella. Revalidar agregado/versionado, destinatario, contactos verificados, aceptación pertinente y caducidad con reloj DB tras locks.
-4. Revalidar cuenta/aprobación. Solicitud revalida flags conforme política de pendientes AB-18/19; invitación no exige flags públicos. Comprobar ausencia de active/paused y descartar responsabilidad legacy sin episodio: ausencia de `clinical_episodes` no prueba que legacy esté libre.
-5. Insertar episodio `active`, inicialización propia NO EVALUADO/entrevista independiente según modelo aprobado, enlace al origen, evidencia y estado `linked` indivisiblemente. Sin sincronizar acceso legacy ni crear cita, nota, tarea, espera o copiar clínicos previos.
+4. Revalidar cuenta/aprobación. Solicitud revalida flags conforme política de pendientes AB-18/19; invitación no exige flags públicos. No exigir ausencia global de active/paused para tratamiento independiente. No interpretar ausencia de episodios como ausencia de acceso legacy: AB-23 y barrera de permisos siguen cerrados hasta transición completa.
+5. Confirmar vinculación, evidencia y estado `linked` indivisiblemente, sin clínica ni activación automática. Diseñar aparte preparación/activación del episodio con entrevista completada y validada antes de cualquier `active`, riesgo propio NO EVALUADO, participantes y permisos comprobados. Sin sincronizar acceso legacy ni crear cita, nota, tarea, espera o copiar clínicos previos.
 6. Guardar resultado mínimo de idempotencia/evento sin texto sensible. Si hay avisos, intención transaccional (outbox candidato) y entrega después del commit; fallo de entrega no crea otro episodio.
-7. Commit y respuesta mínima propia. Un conflicto de unicidad de 003 revierte todo; error sin ID/estado/profesional del episodio competidor.
+7. Commit y respuesta mínima propia. Conflictos de integridad revierten la operación, sin IDs/estados/profesionales ajenos. El índice de 003 no puede servir como garantía final de tratamientos paralelos: su sucesora necesita diseño y pruebas propios antes de activar.
 
-Lock por paciente serializa vías concurrentes; índice de pendientes protege cupo y 003 exclusividad aun ante escritor que incumpla protocolo. No finalizar responsabilidad existente para hacer espacio. Resolver cancelación vs confirmar, caducidad vs aceptar, suspensión/despublicación vs confirmar y cambio de contacto/recuperación vs aceptar. Gana commit coherente; la otra operación relee sin confirmar versión vieja. Éxito de aceptar solicitud no es éxito clínico.
+Revisar orden de locks de participantes/agregados/episodios y restricciones sucesoras: serializar una identidad no equivale a imponer exclusividad global. Mantener cupo RN-37 separado de duplicados de operación/tratamiento, cuya política sigue pendiente. No finalizar atenciones para hacer espacio. Resolver cancelación vs confirmar, caducidad vs aceptar, suspensión/despublicación vs confirmar, cambios de contacto y consentimientos/confirmaciones parciales de pareja. La otra operación relee sin confirmar versión vieja. Éxito de aceptar solicitud no es éxito clínico.
 
 Idempotencia propuesta en enviar, aceptar/confirmar, emitir/canjear invitación, cancelar y rechazar. Huella autenticada de entradas canónicas, referencia a resultado y vencimiento por aprobar. Misma clave con otro payload: conflicto; replay idéntico tras timeout: mismo resultado sin episodio/desafío/aviso duplicados. Reautorizar replay antes de devolverlo, también tras recuperación. No almacenar mensaje/token en registro ni usar hash simple de mensaje de baja entropía. Acordar duración, secreto y huella AB-22; reintentos limitados solo para fallos transitorios aprobados, no funcionales/de identidad.
 
@@ -170,7 +172,7 @@ Operaciones siguientes NO son endpoints creados. Ruta/versionado exactos pendien
 | Crear solicitud | Paciente autenticado/verificado; ID público, mensaje opcional, idempotencia | ID opaco, estado/versión/vencimiento; paciente de sesión, sin vínculos ajenos. |
 | Listar/detallar solicitudes | Paciente titular / profesional destinatario | Estado/básicos mínimos propios; mensaje en detalle solo autorizado, sin texto en lista o terceros. |
 | Aceptar/rechazar solicitud | Profesional destinatario; ID/versión/decisión/clave | Aceptar devuelve espera de confirmación, nunca expediente; sin motivo clínico administrativo. |
-| Confirmar / cancelar | Paciente solicitante; ID/versión/acto explícito/clave | `linked` y episodio propio solo tras commit, o cancelación consistente; no `status=active` arbitrario. |
+| Confirmar / cancelar | Paciente solicitante; ID/versión/acto explícito/clave | `linked` de vinculación tras commit, o cancelación consistente; no activa ni valida entrevista. Participación conjunta por diseñar. |
 | Emitir invitación | Profesional activo/aprobado; contacto conocido/clave | Acuse uniforme exista o no cuenta; entrega privada, sin búsqueda global o estado ajeno. |
 | Consultar/canjear/aceptar invitación | Destinatario autenticado; para aceptar, verificado; token/ID/versión/acto explícito | Emisor mínimo/estado propio tras validar destino; abrir/canjear no acepta ni revela otras invitaciones. |
 | Listar emitidas / retirar | Profesional emisor; ID propio/versión | Estado mínimo de su invitación, sin existencia de cuenta/relaciones de terceros ni token reutilizable. |
@@ -189,9 +191,11 @@ Sin atribución inequívoca, no inferir responsable/autor/DOB/verificación desd
 
 ## 10. Evolución posterior a 003 (D-11)
 
-A no creó migraciones. B integró 004 para identidad/verificación y C integró 005 de contactos; 006 privada se implementa en D1 en el [plan](identity-directory-delivery-plan.md). Solicitudes/invitaciones y contexto/permisos por episodio pertenecen a entregas posteriores, no a esas estimaciones por implicación.
+ADR-030 exige una sucesora para `clinical_episodes_one_current_patient_idx`, participantes explícitos, FK de pertenencia/autoría, autorización por episodio/participante/permiso y transición coordinada del fallback. El modelo actual de un `patient_id` no basta para pareja. Preservar profesionales e IDs históricos, sin inferir participantes o hacer backfills ambiguos. No se decide esquema definitivo ni se modifica SQL 001–007, manifiesto o hashes aquí. [Impacto y dependencias 2A/2B](parallel-couple-episodes.md#impacto-técnico-futuro-y-dependencias).
 
-El runner actual verifica 001–006, catálogo corriente y destino explícito, con targets 003/004/005/006. Protocolo implementado: validar huella previa, registrar sucesora/nueva huella y permitir verificar/repetir versión corriente sin confundir sucesora con deriva. No alterar checksum histórico, ignorar deriva, borrar registro o marcar versión sin validación. Conservar 001/002/003; runner/manifiesto solo se modifican con implementación autorizada y pruebas de upgrade/replay/fallo/compatibilidad.
+A no creó migraciones. B integró 004 para identidad/verificación y C integró 005 de contactos; 006 privada y 007 están integradas en D1/D2 en el [plan](identity-directory-delivery-plan.md). Solicitudes/invitaciones y contexto/permisos por episodio pertenecen a entregas posteriores, no a esas estimaciones por implicación.
+
+El runner actual verifica 001–007, catálogo corriente y destino explícito, con targets 003/004/005/006/007. Protocolo implementado: validar huella previa, registrar sucesora/nueva huella y permitir verificar/repetir versión corriente sin confundir sucesora con deriva. No alterar checksum histórico, ignorar deriva, borrar registro o marcar versión sin validación. Conservar 001/002/003; runner/manifiesto solo se modifican con implementación autorizada y pruebas de upgrade/replay/fallo/compatibilidad.
 
 Ensayos futuros en PostgreSQL nuevo aislado, fixtures ficticios, destino explícito y guardas. No ejecutar migraciones/schema/seed en la base habitual o bases existentes; no alterar contenedores/volúmenes existentes. Un despliegue real exige autorización separada, diagnóstico mínimo, respaldo/ensayo y coordinación de escritores. Git integrado no es despliegue. Recuperación propuesta mediante corrección aditiva conservando evidencia y revocaciones, sin borrar episodios ni reabrir fallback.
 
@@ -206,8 +210,8 @@ La tabla siguiente describe la futura 2A completa. A fue documental; B crea suit
 | Estados | Cada arista válida/inválida por actor/versión; aceptar profesional no abre episodio; paciente confirma finalmente; sin mensaje/motivo obligatorio; terminal no reabre. |
 | Cupo/caducidad | Dos creaciones a distintos destinatarios: solo una pendiente; confirmación ocupa cupo; cancelar/expirar libera sin resetear cuotas; worker caído, límite temporal y aceptación tardía. |
 | Invitación | Sin cuenta previa, acuse uniforme y registro posterior; token ajeno/replay; abrir no acepta; simultaneidad/colisiones según AB-20 aprobado. |
-| Atomicidad/idempotencia | Doble confirmación y replay; cancelación/caducidad/suspensión/contacto vs confirmar; dos vías simultáneas: máximo un vigente. Fallo entre inserción/enlace/evento/idempotencia revierte todo; reintento seguro. |
-| Exclusividad/2B | Active/paused impide alta nueva sin cierre/transferencia ni filtración al profesional. Tras finalizado, nuevo ID cuando autorizado, sin herencia de contenido. |
+| Atomicidad/idempotencia | Doble confirmación/replay; cancelación/caducidad/suspensión/contacto/consentimiento vs confirmar; sin duplicar operación ni acceso cruzado. Fallos revierten todo; reintento seguro. Carrera de derivaciones conserva cupo por paciente RN-19, sin afectar otros episodios; aplicación a pareja por diseñar. |
+| Paralelos/pareja/2B | Individuales y pareja coexisten aislados; nuevo tratamiento no deriva/cierra otros. Derivar uno cierra origen/abre destino conservando los otros. Pareja requiere ambos, sin clínica por parciales; negativa no completa. Tras finalizado, nuevo ID sin herencia. Política de confidencialidad/duplicados por aprobar antes de sus regresiones definitivas. |
 | Permisos/API | IDOR, IDs/rol inyectados y cada ruta legacy/adaptador; pendientes y administradores sin clínica; episodio nuevo sin legacy/otros episodios. Cubrir agenda/notas/tareas/objetivos/disponibilidad/espera/series/recordatorios y derivados. |
 | Mensajes/secretos | Solo partes autorizadas, render seguro y límites; sin texto/token en logs/audit/historial genérico/avisos/API pública/idempotencia/backoffice; retención/backup según aprobación. |
 | Abuso | Cuotas atómicas multiinstancia; cancelar/rechazar/reenvío no elude; cuenta/red/destinatario, cooldown/revisión sin bloqueo indiscriminado de red compartida. Valores de verificación aprobados en ADR-024; límites adicionales AB-26 y los de solicitudes siguen pendientes. |
@@ -218,18 +222,18 @@ Demo propuesta: A/B aprobados, C pendiente y D suspendido; P sin cuenta al invit
 Recorridos con estado inicial, cuentas, URL local, pasos y resultado documentados:
 
 1. Visitante ve A público/admite y B público/no admite; no C/D/privados. Cambio de flags demuestra independencia; sin sesión no solicita.
-2. Q registra/verifica sin episodio y solicita A sin mensaje; A acepta sin expediente. Q confirma y entonces se abre episodio propio. Otra solicitud falla en ambas esperas.
+2. Q registra/verifica sin episodio y solicita A sin mensaje; A acepta sin expediente. Q confirma vinculación; activar exige después entrevista propia validada y permisos seguros. Otra solicitud falla en ambas esperas por cupo inicial, no por tener otro episodio.
 3. B invita P pese a no admitir solicitudes públicas; P registra, verifica y acepta; cuenta distinta no canjea ni enlace concede clínica.
 4. Cancelación/rechazo/caducidad liberan cupo según política, conservando contadores. Mensaje solo para partes; no backoffice/visitantes.
-5. S no obtiene segundo responsable por estar pausado; T demuestra que vínculo nuevo no revela historia previa y archivo propio queda aislado cuando implementado. Carreras se prueban automáticamente además de UI.
+5. S con episodio pausado puede iniciar tratamiento independiente sin derivarlo cuando se implemente la transición; T demuestra aislamiento de historia y archivo propio. Añadir Carlos/Ana, Carlos/Luis y Carlos/María/Laura simultáneos; derivar solo personal sin efecto en los otros y pareja con una confirmación insuficiente. Carreras se prueban automáticamente además de UI; pendientes de confidencialidad no se inventan en la demo.
 
 Cada PR muestra solo alcance implementado: B de identidad/verificación no presenta solicitudes/episodios funcionales. Destino nuevo verificado development con UUID e imágenes/etiquetas propias conforme corrección #8; detenerse si existe o no es desarrollo. Sin copiar datos reales, compartir volúmenes, reutilizar etiquetas de app o autocargar cuentas en producción. Restablecer creando otro destino nuevo; limpieza solo de recursos propios comprobados, sin volúmenes/etiquetas ajenos o prune. Credenciales demo restringidas a ese destino. Procedimientos se autorizan/ejecutan con implementación, nunca en este PR.
 
 ## 12. Aprobaciones y siguiente implementación
 
-La secuencia sigue A→B→C→D. A/B/C integrados; D1 autorizado solo para persistencia; D2/D3 pendientes. AB-23 resuelto para B, AB-25 para C y aspectos técnicos aplicables de AB-21/26 documentados en la guía. El endurecimiento multicuenta/red/costo antes de envíos reales sigue pendiente.
+La secuencia sigue A→B→C→D. A/B/C integrados; D1 persistencia y D2 gestión privada integrados; D3 pendiente. AB-23 resuelto para B, AB-25 para C y aspectos técnicos aplicables de AB-21/26 documentados en la guía. El endurecimiento multicuenta/red/costo antes de envíos reales sigue pendiente.
 
-AB-18/24/27 aprobados; D1 autorizado para persistencia y D2/D3 requieren autorización propia; no reabrir AB-25 ya resuelto para C. AB-19/20 de nuevas solicitudes/invitaciones y segmentación por episodio corresponden a entregas posteriores. B/C no las habilitan.
+AB-18/24/27 aprobados; D1/D2 integrados con alcance privado y D3 requiere autorización propia; no reabrir AB-25 ya resuelto para C. AB-19/20 de nuevas solicitudes/invitaciones y segmentación por episodio corresponden a entregas posteriores. B/C no las habilitan.
 
 ## 13. Evidencia documental
 
