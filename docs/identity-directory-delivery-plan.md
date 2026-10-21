@@ -1,19 +1,27 @@
 # Identidad y directorio — plan de entregas A/B/C/D
 
-Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](private-professional-management.md), [evidencia D2](private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
+Estado actual verificado: A/B/C/D1/D2 integrados. D2 se integró mediante [PR #18](https://github.com/japh113/plataformaPsicologia/pull/18), merge `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, HEAD actual de `main`. Su integración y CI aprobada no acreditan instalación de 007, activación ni despliegue habitual. [Contrato D2](private-professional-management.md) y [evidencia D2](private-professional-validation.md) conservan el contexto histórico de implementación. D3, nuevas vinculaciones y autorización clínica por episodio siguen pendientes y fuera de este encargo documental.
 
 | Entrega | Integración comprobada | Estado |
 | --- | --- | --- |
 | A | #10, `0f2ebba3891c29683d8e63ba86f3a2ae6619b805` | Documentación integrada |
 | B | #11, `5e549f51bc7fa3e2535db023b4f9bca3d383a7c5` | Identidad/verificación y 004 integradas; [guía](patient-identity-verification.md), [evidencia histórica](patient-identity-validation.md) |
 | C | #12, `543442ea634e5977bc887ace1db5457eee2ebf8c` | Contactos y 005 integrados; HEAD revisado `c7f622608af4b7bc27a7c4e9dde49be23221b0ae` |
-| D | D1 #17, `2fe0799` | D1 integrado; D2 privado en rama autorizada; D3 pendiente |
+| D1 | #17, `2fe0799ee683273df2dbed872840bbfd2ef03f6d` | Persistencia privada y 006 integradas; [contrato](professional-persistence.md), [evidencia histórica](professional-persistence-validation.md) |
+| D2 | #18, `fcabf5245d889f700804ec6d1b9f48043fd30fc0` | Gestión profesional privada y 007 integradas en Git; sin instalación, activación ni despliegue habitual acreditados |
+| D3 | Sin integración | Directorio público, preferencias optativas y lectores anónimos pendientes; sin autorización de implementación en este encargo |
 
-La siguiente entrega documental propone [GitHub Actions/CI](ci-plan.md) con criterios de aceptación, sin implementar workflows ni cambiar protecciones. No sustituye la autorización de D, de pruebas operativas o de despliegue.
+GitHub Actions ya está [implementado](ci-implementation.md): el [workflow vigente](../.github/workflows/ci.yml) ejecuta también para PR documentales los siete checks `ci/docs`, `ci/backend-unit`, `ci/frontend`, `ci/postgres`, `ci/browser`, `ci/evidence` y `ci/required`, con artifacts técnicos de 14 días. La [protección Protect main](https://github.com/japh113/plataformaPsicologia/rules/25440100) está activa, exige los siete checks con política estricta y no tiene bypass. El [plan CI](ci-plan.md) y las [evidencias anteriores](ci-validation.md) conservan su trazabilidad y corte histórico; no sustituyen este estado actual ni la ejecución propia de cada nuevo HEAD. Esta corrección no modifica CI ni configuración GitHub.
+
+La [ejecución posterior al merge de D2 39517506435](https://github.com/japh113/plataformaPsicologia/actions/runs/39517506435), intento 1, evento `push` sobre `main` y SHA `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, terminó con los siete checks en `success`. Es evidencia del merge D2, no de este nuevo HEAD documental ni de un despliegue. Cada HEAD posterior requiere su propia ejecución.
 
 Las letras de PR no son las subetapas del producto: **PR B no equivale a etapa 2B**. B/C/D entregan partes de 2A sin completarla. Fuente de requisitos: [ADR-023–028](product/decisions.md) y [RN-41–58](product/business-rules.md); [diseño técnico](stage2a-identity-directory-intake.md) y [matriz legacy](stage2a-legacy-mutations.md) conservan propuestas pendientes.
 
+[ADR-030](product/decisions.md#adr-030--episodios-paralelos-pareja-y-derivación-por-tratamiento) y RN-62–68 formalizan tratamientos paralelos individuales y de pareja como **producto aprobado, todavía no implementado**. La [decisión y su trazabilidad](parallel-couple-episodes.md) distinguen vinculación independiente y derivación de un tratamiento; no amplían las capacidades entregadas por D1/D2. Fundamentos de participantes, permisos, entrevista previa y transición segura PostgreSQL/legacy corresponden a futuras entregas 2A; derivaciones delimitadas y flujos conjuntos, a 2B según el [roadmap](product/roadmap.md). D3 y nuevas vinculaciones no se habilitan por documentarlo; ADR-029/RN-59–61, AB-23 y los pendientes AB-28–37 permanecen intactos.
+
 ## Entregas y criterios de revisión
+
+La tabla conserva el alcance y los criterios acordados de A/B/C y de D completo. La integración real de D se desglosa arriba y en D1/D2/D3; no implica que el directorio ni todos los recorridos públicos de D estén entregados. Las evidencias de cada implementación conservan su SHA y contexto histórico, sin atribuirse al nuevo HEAD documental.
 
 | PR | Funcionalidad/documentos | Pruebas y demo | Dependencias |
 | --- | --- | --- | --- |
@@ -34,24 +42,26 @@ Cada PR funcional actualiza su documentación de estado; A no obliga a mantener 
 
 ## División interna aprobada de D
 
+La columna «Permanece deshabilitado» conserva el límite al concluir cada subentrega; no revierte capacidades integradas en subentregas posteriores.
+
 | Subentrega | Alcance y aceptación | Permanece deshabilitado |
 | --- | --- | --- |
 | D1 | 006, persistencia privada, runner y pruebas de integridad/compatibilidad en PostgreSQL nuevo | API D, sesiones nuevas, archivos reales, publicación y clínica nueva |
 | D2 | Estado restringido, gestión privada, revisión y fotos, con autorización propia | Directorio y entrega anónima |
 | D3 | Directorio, preferencias optativas y retiro completo; Chromium B+C+D reales | Solicitudes/invitaciones y episodios |
 
-D1 está integrado y D2 está autorizado en rama nueva con 007 sucesora, pruebas nuevas aisladas y un PR Draft sin merge. D3 no está autorizado. El esquema mantiene compatibilidad con la aplicación anterior; 001–006 y sus entradas históricas permanecen intactos.
+D1 está integrado en #17 y D2 en #18, con 007 sucesora y evidencia de pruebas aisladas. El encargo histórico de D2 exigió rama nueva y PR Draft sin merge por el agente; su integración posterior en `main` no autoriza instalación, activación o despliegue habitual ni D3. El esquema conserva compatibilidad con la aplicación anterior; los SQL 001–007 y sus entradas/hashes históricos permanecen intactos en esta corrección.
 
-## Migraciones y compatibilidad — 004/005 integradas; 006 privada D1
+## Migraciones y compatibilidad — 004–007 integradas en Git
 
-| Referencia orientativa | Posible contenido | PR |
+| Migración integrada | Alcance y límite | Entrega |
 | --- | --- | --- |
 | 004_patient_identity_verification.sql | DOB global nullable, evidencia/desafíos, cuotas y revocación de evidencia ante cambio de contacto; probada solo aisladamente | B |
 | 005_secure_contact_changes.sql | Solicitudes privadas, propósito C, autorización por sesión, eventos mínimos y avisos durables; implementada y ensayada solo aisladamente | C |
 | 006 | Persistencia profesional privada, versiones y revisiones; integrada en #17 | D1 |
-| 007 | Revocación restringida, retiro de preferencias, comunicaciones de cuenta y reserva fotográfica | D2 en rama |
+| [007_private_professional_management.sql](../backend/sql/migrations/007_private_professional_management.sql) | Revocación restringida, retiro de preferencias, comunicaciones de cuenta y reserva fotográfica; integrada en Git, sin instalación en PostgreSQL habitual acreditada | D2, #18 integrado |
 
-004/005 integradas; D1 agrega 006 y conserva los SQL/entradas/hashes históricos. Runner con targets explícitos 003/004/005/006, huella previa/nueva, ledger y rollback. Ensayos D1 y límites en su contrato; resultados B/C anteriores son historia.
+004/005/006/007 están integradas en Git. El [runner vigente](../backend/scripts/episode-migration.js) y el [manifiesto](../backend/sql/migrations/manifest.json) reconocen 001–007 y targets explícitos 003/004/005/006/007, con verificación de huella previa/nueva, checksums, ledger y rollback transaccional. No instalan 007 automáticamente por arrancar la aplicación o integrar un PR. La instalación en PostgreSQL habitual no está acreditada ni autorizada por esta corrección. Ensayos D1/D2 y límites en sus contratos/evidencias; resultados anteriores de B/C y del merge D2 conservan su identidad histórica.
 
 Validar cada sucesora en PostgreSQL nuevo y aislado: instalación vacía; actualización con fixtures sintéticos legacy (incluidos datos ausentes); ejecución repetida; fallo transaccional; checksum alterado, versión desconocida y deriva rechazados; compatibilidad del diagnóstico/runner y regresión 001–003. Mantener vacíos los datos desconocidos; no convertir DOB de entrevista, edad, coincidencias, aprobación previa o relaciones en nueva evidencia.
 
@@ -63,4 +73,4 @@ Documentación puede revertirse independientemente. Separar B de C limita el imp
 
 La estrategia técnica recomendada es revertir aplicación/funcionalidad conservando estructuras y evidencia, mediante corrección aditiva cuando proceda; no borrar datos ni bajar `session_version`. Revertir C no debe hacer válidos JWT revocados, y volver a una aplicación antigua no debe restablecer bypass legacy. Compatibilidad entre versiones, fallos de entrega, bloqueos DDL y recuperación se ensayan antes de cada implementación/despliegue. Ningún ensayo autoriza despliegue en la base habitual.
 
-Cada PR se abre hacia `main` sin merge. Los asuntos abiertos se resuelven por alcance, no por integrar una propuesta documental.
+Las futuras entregas se proponen mediante PR hacia `main`, sin merge ni auto-merge por el agente salvo autorización expresa posterior. Esta corrección actualiza únicamente Markdown en el Draft PR #19, que permanece sin merge. Los asuntos abiertos se resuelven por alcance, no por integrar una propuesta documental.
