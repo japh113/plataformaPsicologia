@@ -1,6 +1,6 @@
 # PsicoPanel
 
-Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](docs/private-professional-management.md), [evidencia D2](docs/private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
+Base documental verificada: main `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, merge de [D2 / #18](https://github.com/japh113/plataformaPsicologia/pull/18). D1/D2 integrados, sin despliegue habitual acreditado; D3 y nuevas vinculaciones pendientes. Este encargo solo formaliza [episodios paralelos y pareja](docs/parallel-couple-episodes.md) como producto aprobado, con implementación pendiente; no activa capacidades clínicas ni modifica D2.
 
 CI-02 fue comprobado con PR #15; CI-07 con el [ensayo negativo #16](https://github.com/japh113/plataformaPsicologia/pull/16), cerrado sin merge. Protect main exige los siete checks, política estricta y sin bypass. D1 conserva esa configuración; sus resultados propios se documentan por SHA, sin reutilizar evidencia B/C como nueva. Ensayos D1 autorizados solo en recursos nuevos aislados; no operar Compose/base habitual.
 
