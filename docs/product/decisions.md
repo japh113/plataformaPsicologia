@@ -1,6 +1,8 @@
 # Registro de decisiones de producto y arquitectura
 
-Base documental verificada: main `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, merge de [D2 / #18](https://github.com/japh113/plataformaPsicologia/pull/18). D1/D2 integrados, sin despliegue habitual acreditado; D3 y nuevas vinculaciones pendientes. Este encargo solo formaliza [episodios paralelos y pareja](../parallel-couple-episodes.md) como producto aprobado, con implementación pendiente; no activa capacidades clínicas ni modifica D2.
+Consolidación clínica documental del 28 de octubre de 2026: base verificada `main` `021c12e2481a3a2c4f74b65a37e468c28634bc92`. [Evidencia anonimizada](../couple-clinical-evidence.md); producto aprobado, implementación y revisión jurídica pendientes. Esta actualización solo modifica Markdown.
+
+Antecedente documental de ADR-030: main `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, merge de [D2 / #18](https://github.com/japh113/plataformaPsicologia/pull/18). D1/D2 integrados, sin despliegue habitual acreditado; D3 y nuevas vinculaciones pendientes. Este encargo solo formaliza [episodios paralelos y pareja](../parallel-couple-episodes.md) como producto aprobado, con implementación pendiente; no activa capacidades clínicas ni modifica D2.
 
 Base histórica de la auditoría A: `0077f46`, merge #9, el 18 de octubre de 2026; #7 y #8 ya integrados. La actualización de estado posterior a #12 no acredita ejecución de 003–005 en la base habitual ni autorización clínica por episodio.
 
@@ -34,7 +36,7 @@ Como antecedente de #5/#9, se actualizaron ADR-002/003/005/010/011, conservando 
 
 **Estado: APROBADA.**
 
-**Sustitución parcial por ADR-030 (20 de octubre de 2026):** el texto siguiente conserva la decisión histórica. Su exclusividad global por paciente deja de ser política vigente; ahora hay un responsable por episodio y tratamientos paralelos. El ciclo individual y la conservación histórica permanecen; pausa/cierre unilateral de pareja requieren política propia (AB-28/29). No interpretar «reanudar requiere ambos» como resolución del ciclo de pareja: en el acuerdo individual son paciente y profesional.
+**Sustitución parcial por ADR-030 (20 de octubre de 2026):** el texto siguiente conserva la decisión histórica. Su exclusividad global por paciente deja de ser política vigente; ahora hay un responsable por episodio y tratamientos paralelos. El ciclo individual y la conservación histórica permanecen; el ciclo de pareja se precisa en ADR-030/RN-71; sus transiciones siguen pendientes (AB-28/29). No interpretar «reanudar requiere ambos» como resolución del ciclo de pareja: en el acuerdo individual son paciente y profesional.
 
 **Decisión:** como máximo un responsable vigente por paciente; episodios `activo` y `pausado` cuentan para exclusividad. Reanudar pausa conserva episodio; tras `finalizado` se abre otro, incluido A→B→A. No sobrescribir episodios ni reatribuir citas/notas. Cualquiera puede iniciar pausa o finalizar unilateralmente con confirmación/motivo apropiado y aviso al otro, resolviendo citas futuras antes sin borrado. Reanudar requiere ambos; pausa impide citas nuevas y permite finalizar. El paciente puede quedar sin responsable (RN-02/03/21).
 
@@ -44,7 +46,7 @@ Como antecedente de #5/#9, se actualizaron ADR-002/003/005/010/011, conservando 
 
 **Estado: APROBADA.**
 
-**Alcance precisado por ADR-030:** ambas vías se aplican al tratamiento objeto del cambio. Abrir otro tratamiento independiente no es derivación. Pareja requiere confirmación expresa de ambos pacientes y mantiene los demás requisitos de la vía; confidencialidad detallada pendiente.
+**Alcance precisado por ADR-030:** ambas vías se aplican al tratamiento objeto del cambio. Abrir otro tratamiento independiente no es derivación. Pareja requiere confirmación expresa de ambos pacientes y mantiene los demás requisitos de la vía; privacidad ordinaria aprobada y diseño de confidencialidad pendiente (AB-30/31).
 
 **Decisión:** dos vías (RN-04–RN-07/18/19):
 
@@ -326,15 +328,23 @@ Esta decisión precisa ADR-016/021 y los efectos de activación de RN-34/35/40: 
 
 ## ADR-030 — Episodios paralelos, pareja y derivación por tratamiento
 
-**Estado: APROBADA como producto el 20 de octubre de 2026; implementación PENDIENTE. Etapas: fundamentos 2A y flujos 2B, consentimiento adicional 2C y concurrencia 2D. Reglas: RN-62–68.**
+**Estado: APROBADA como producto el 20 de octubre de 2026; implementación PENDIENTE. Etapas: fundamentos 2A y flujos 2B, consentimiento adicional 2C y concurrencia 2D. Reglas: RN-62–73. Consolidación clínica documental del 28 de octubre de 2026.**
 
-**Decisión:** un paciente global puede participar en varios episodios activos o pausados, con distintos profesionales. Se aprueban individual (un paciente registrado) y pareja (dos pacientes registrados en un tratamiento conjunto), ambos con un psicólogo responsable por episodio e identidad clínica propia. No representar pareja como dos episodios independientes. No se aprueban familiar de tres o más, grupal ni varios corresponsables en un episodio.
+**Decisión:** un paciente global puede participar en varios episodios activos o pausados, con distintos profesionales; puede mantener terapia individual con uno y de pareja con otro. Pareja contiene exactamente dos pacientes registrados y un psicólogo responsable, en un tratamiento conjunto con identidad clínica propia, sin dividirlo en dos episodios individuales. **No se permiten dos episodios conjuntos activos simultáneos para la misma pareja**, aunque cambien profesional, objetivos u orden de los participantes (AB-37/RN-73). La semántica de episodios pausados requiere especificación antes de implementar esta restricción; no limita los tratamientos individuales independientes. No se aprueban familiar de tres o más, grupal ni varios corresponsables en un episodio.
+
+Ambos pacientes deben aceptar expresamente el tratamiento y contar con entrevista inicial propia; el objetivo del tratamiento es conjunto. Antes de activar, el psicólogo responsable valida expresamente la completitud y suficiencia de las entrevistas conforme a ADR-029. Se admiten sesiones conjuntas e individuales, diferenciadas en agenda y notas, sin secuencia fija ni cuatro visitas obligatorias. Representación y garantía backend/DB pendientes (RN-69/70).
 
 Crear tratamiento independiente no inicia ni exige derivación ni cambia atenciones previas. Derivar uno conserva las dos vías, resumen revisable, confirmaciones profesionales, autorización adicional separada, cancelación confirmada de futuras de ese tratamiento y cierre de origen/apertura de destino. RN-03 y la identidad inmutable de ADR-006 permanecen: no reasignar el profesional histórico, mover citas/notas/autoría ni reutilizar finalizados. El efecto del cambio se delimita al tratamiento; el cupo pendiente por paciente RN-19 se conserva, sin impedir nuevos tratamientos independientes. Su aplicación a pareja requiere diseño sin ampliar cupos por inferencia.
 
 Derivar pareja requiere confirmación expresa de ambos pacientes y los demás requisitos de la vía correspondiente; si uno no acepta no se completa. Parciales sin acceso clínico anticipado. No se inventa resolución posterior, silencio, plazos, mayoría o aceptación unilateral. Confirmar derivación, aprobar resumen y autorizar antecedentes adicionales son actos distintos.
 
-Participación explícita y permisos por episodio/participante/alcance, sin herencia de consentimientos ni acceso a otros tratamientos; proteger contra inferencia/enumeración. Pareja no vuelve automáticamente compartidas aportaciones individuales o comunicaciones privadas. Política exacta de confidencialidad y portal pendiente (AB-30/31); no extender unilateralidad de pausa/cierre individual a pareja (AB-28/29). RN-27 y ADR-029/RN-59–61 permanecen íntegros.
+Participación explícita y permisos por episodio/participante/alcance, sin herencia de consentimientos ni acceso a otros tratamientos; proteger contra inferencia/enumeración. El psicólogo autorizado registra y consulta información clínica dentro de su episodio. Ningún integrante recibe automáticamente las notas profesionales, incluidos secretos o revelaciones individuales, ni se publican automáticamente sus aportaciones. El portal muestra seguimiento expresamente destinado al paciente, sus tareas individuales autorizadas y, para ambos, tareas compartidas, objetivos y resúmenes aprobados para ambos. Una comunicación o revelación deliberada en sesión sigue siendo decisión profesional, sin automatismos de la plataforma. Privacidad ordinaria aprobada; excepciones, publicación, DTO/API y permisos pendientes (AB-30/31). El acceso legal a datos y ARCO tiene procedimiento separado y revisión jurídica pendiente (AB-36); la privacidad del portal no deniega absolutamente derechos.
+
+La participación en pareja es voluntaria: no se obliga a continuar contra la voluntad de un integrante. Su abandono definitivo impide continuar normalmente el episodio conjunto; una inasistencia aislada no equivale a abandono, no convierte automáticamente la sesión conjunta en individual ni finaliza automáticamente el episodio. Distinguir pausa temporal, finalización definitiva e inasistencia. El profesional gestiona y documenta la decisión clínica y operativa, conservando historial, autoría y datos; confirmaciones, transiciones, avisos y agenda quedan pendientes (AB-28/29/35). No extrapolar el procedimiento unilateral individual ni diseñar aquí la conversión a terapia individual con el mismo profesional tras el cierre; tampoco declararla universalmente prohibida o jurídicamente resuelta.
+
+Solo el psicólogo responsable determina el cumplimiento de objetivos; el paciente consulta objetivos y progreso, sin evaluarlos ni registrar autopercepción de cumplimiento. Sí puede marcar tareas asignadas como realizadas. Se conservan exactamente los estados actuales de objetivos ([Issue #22](https://github.com/japh113/plataformaPsicologia/issues/22), RN-72); no se implementa esa corrección aquí. RN-27 y ADR-029/RN-59–61 permanecen íntegros.
+
+**Fuentes y alcance de la evidencia:** [matrices anónimas de ambos cuestionarios](../couple-clinical-evidence.md), con las tres respuestas recibidas en cada uno, aclaración del propietario sobre la pregunta 15 y diferencias clínicas conservadas. El rechazo de los tres profesionales a dos terapias de pareja simultáneas respalda AB-37; su aprobación procede de la decisión expresa del propietario, no de convertir opiniones en reglas legales. Las discrepancias sobre continuidad individual, consulta de información reservada e inasistencias permanecen registradas. AB-36 sigue pendiente; ningún comentario sobre entrega de expedientes o COFEPRIS constituye conclusión jurídica.
 
 **Sustitución y trazabilidad:** reemplaza solo exclusividad global y obligación de cambio por existir cualquier episodio en ADR-002/006/012/021/022 y RN-02/16/40; precisa alcance de ADR-003/008/014 y RN-03/05/18–21. Cupo inicial RN-37, identidad, verificaciones, historia, derivación y consentimiento conservados. [Tabla detallada y ejemplos](../parallel-couple-episodes.md#trazabilidad-de-reglas-sustituidas-y-conservadas).
 
@@ -384,20 +394,20 @@ Los puntos siguientes conservan cuestiones **ABIERTAS**. AB-02 y AB-13 tienen de
 
 Los fundamentos integrados en #8 están delimitados en ADR-006/009; AB-06 no autoriza atribución legacy. Antes de activar el resto de 2A deben cerrarse las propuestas y asuntos bloqueantes aplicables, especialmente AB-02/06/08/13–AB-22. Los mecanismos técnicos D-01–D-12 permanecen PROPUESTOS salvo los requisitos de producto expresamente resueltos en ADR-023–028. AB-23 fue aprobado expresamente en el encargo B; el resto de propuestas no se aprueba por aceptar la división. Los requisitos de producto aprobados no aprueban todos los detalles técnicos de 2A. No inventar respuestas de 2C para cerrar este PR documental; dividir encargos y dependencias según [roadmap.md](roadmap.md).
 
-Preguntas nuevas de pareja y tratamientos paralelos (ADR-030), sin resolver por inferencia:
+Pareja y tratamientos paralelos (ADR-030): principios aprobados y mecanismos pendientes. Las precisiones siguientes sustituyen las preguntas de producto originales; no cierran los bloqueos técnicos ni la revisión jurídica:
 
-| ID | Asunto abierto | Momento bloqueante |
+| ID | Principio aprobado y pendiente específico | Momento bloqueante |
 | --- | --- | --- |
-| AB-28 | Qué sucede si uno abandona terapia de pareja | Ciclo de pareja 2A/2B |
-| AB-29 | Pausar/finalizar cuando el otro no está de acuerdo | Pausa/cierre 2B |
-| AB-30 | Distinguir información compartida e individualmente confidencial, comunicaciones privadas y autorizaciones | Privacidad 2A; resumen/consentimiento 2B/2C |
-| AB-31 | Qué ve cada paciente en su portal | Permisos y UX de pareja 2A |
-| AB-32 | Presentación y validación de entrevista inicial de ambos | Antes de activar pareja 2A |
-| AB-33 | Resolución posterior al rechazo de derivación conjunta; no se completa sin ambos | Derivación de pareja 2B |
-| AB-34 | Evitar duplicados no deseados sin exclusividad global por paciente | Vinculación/concurrencia 2A |
-| AB-35 | Representar citas individuales y conjuntas en pareja sin relajar reglas vigentes por inferencia | Agenda 2A/2B/2D |
-| AB-36 | Reglas específicas de consentimiento, confidencialidad y datos que deben validarse jurídicamente en México | Diseño de pareja y preparación para producción |
-| AB-37 | Varios tratamientos conjuntos de las mismas dos personas con objetivos distintos | Alcance/vinculación 2A |
+| AB-28 | APROBADO: abandono definitivo de un integrante impide continuar normalmente el episodio conjunto; una ausencia aislada no es abandono. Pendientes confirmación, transiciones y resolución de agenda, sin cierre automático por inasistencia (RN-71). | Ciclo de pareja 2A/2B |
+| AB-29 | APROBADO: participación voluntaria, nadie obligado a continuar; distinguir pausa temporal, finalización definitiva e inasistencia. Profesional gestiona/documenta sin imponer continuidad. Procedimiento, avisos y transiciones pendientes (RN-71). | Pausa/cierre 2B |
+| AB-30 | APROBADO: privacidad ordinaria RN-67, notas sin entrega automática y comunicación deliberada como decisión profesional. Pendientes excepciones, criterios de publicación y tratamiento de derechos de acceso; revisión jurídica AB-36. | Privacidad 2A; resumen/consentimiento 2B/2C |
+| AB-31 | APROBADO: seguimiento destinado a cada paciente, tareas individuales propias autorizadas y contenido compartido aprobado para ambos. Pendientes DTO/API y permisos por participante (RN-67). | Permisos y UX de pareja 2A |
+| AB-32 | APROBADO: entrevista inicial propia de cada integrante, aceptación expresa de ambos y objetivo conjunto; validación profesional previa ADR-029 intacta (RN-69). Presentación, atribución y garantía técnica backend/DB pendientes. | Antes de activar pareja 2A |
+| AB-33 | APROBADO: una negativa impide completar derivación conjunta y las aceptaciones parciales no conceden clínica. Alternativas y resolución posterior pendientes, conservando las dos vías (RN-65). | Derivación de pareja 2B |
+| AB-34 | ABIERTA la prevención de duplicados y concurrencia sin exclusividad global por paciente; debe respetar la prohibición aprobada de AB-37 sin imponer límites a tratamientos individuales independientes. | Vinculación/concurrencia 2A |
+| AB-35 | APROBADO: sesiones conjuntas e individuales diferenciadas en agenda/notas, sin secuencia fija; ausencia sin conversión automática ni cierre automático (RN-70). Pendientes agenda, tratamiento operativo de inasistencias y atribución, conservando reglas vigentes. | Agenda 2A/2B/2D |
+| AB-36 | LEGAL A VALIDAR: revisión jurídica mexicana de consentimiento, confidencialidad, datos, entrega de expedientes y procedimiento ARCO pendiente. Opiniones clínicas no establecen obligaciones ni restricciones legales; privacidad ordinaria no es denegación absoluta de derechos. | Diseño de pareja y preparación para producción |
+| AB-37 | RESUELTA COMO PRODUCTO: no permitir dos episodios conjuntos activos simultáneos para la misma pareja, aunque cambien profesional u objetivos (RN-73). Pendientes semántica de pausados y mecanismo técnico seguro antes de implementar. | Alcance/vinculación 2A; implementación pendiente |
 
 ## Acciones y supuestos no aprobados
 
