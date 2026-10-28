@@ -118,7 +118,7 @@ El modo test ejecuta episodios, unitarias backend, integración, unitarias front
 
 Los vínculos legacy deliberadamente inválidos se fabrican solo en copias temporales sin restricciones, dentro de una transacción que se revierte. Las tablas persistentes y sus restricciones permanecen intactas; 003 sigue rechazando enlaces cruzados nuevos. Esta prueba valida el lector defensivo, no autoriza reparar ni reclasificar datos antiguos. Las validaciones existentes de escritura de tareas se conservan.
 
-## Evidencia de esta entrega
+## Evidencia inicial — HEAD auditado ec5482c
 
 Resultados locales de 28 de octubre de 2026; no son resultados de GitHub Actions.
 
@@ -138,6 +138,64 @@ Todos los proyectos propios de matrices y demos fueron limpiados con comprobaci�
 Incidencias registradas: el primer ensayo aprobó 17 episodios, 105 unitarias backend y 132 integración, pero falló lint por faltar el import explícito de `node:process` en la prueba de fechas; se corrigió. El primer recorrido Chromium pasó los escenarios de paciente pero comprobó el número de notas inmediatamente después del POST 201, antes del refresco React; se ajustó el arnés para esperar el cierre del modal y la tercera nota visible. Se repitió en otra demo nueva. La inspección visual de escritorio y móvil confirmó fechas, consulta sin tareas, histórico y presentación profesional; se reforzó además la interacción de la última tarea móvil.
 
 Capturas y reportes locales quedan en `tmp/issue21` ignorado por Git; solo contienen fixtures ficticios, con credenciales enmascaradas. La reproducción queda versionada. No se publican logs crudos ni capturas como artifacts de Actions desde este arnés local.
+
+## Recuperación ante fallos parciales — P2 del Draft PR #27
+
+Corrección autorizada sobre el HEAD auditado `ec5482c430b70a9a368a0a1a35821ab06bcc46e7`, verificado contra el HEAD real del PR antes de editar. Se conserva el lector seguro, su DTO y su definición de consulta realizada. No se cambian backend funcional, JWT, permisos ni la matriz de CI.
+
+### P2-01: resultado principal independiente
+
+`cargarDatos` aplica los pacientes, agenda, recordatorios y relaciones obtenidos correctamente sin esperar el lector opcional. Cada expediente del paciente tiene estado local de seguimiento `loading`, `ready` o `error`, separado de su proyección. Un GET primario de detalle correcto también se aplica antes del refresco opcional. Los helpers API con `includeFollowUp` conservan el resultado principal ante fallo transitorio y propagan 401/403/404.
+
+| Situación | Presentación y recuperación |
+| --- | --- |
+| Lectura correcta, sin consultas | «Todavía no tienes consultas realizadas» |
+| Lectura correcta, con consultas | Cronología y grupos verificados existentes |
+| Sin proyección, carga pendiente | «Actualizando seguimiento…», sin inventar lista vacía |
+| Sin proyección, red/500 | «Seguimiento temporalmente no disponible», tareas propias en lista sin asociación inferida |
+| Proyección anterior válida, actualización pendiente/fallida | Se conserva y se indica que está actualizando o que no se pudo actualizar |
+| Reintento | Solo GET de seguimiento; conserva las demás secciones y no repite PUT ni carga general |
+
+Un reintento correcto actualiza también las tareas del DTO mínimo, incluidas nuevas tareas y sus estados actuales. El botón «Reintentar seguimiento» está en tablero, resumen y cronología. Durante la petición queda deshabilitado. Sin proyección válida, el contador de consultas muestra «—»; las tareas propias siguen interactivas en una lista «Tus tareas», sin atribuirlas a consultas ni clasificarlas artificialmente como históricas. Con proyección anterior se conserva su agrupación, señalada como última información cargada.
+
+### P2-02: entrevista confirmada y refresco independiente
+
+Cuando el PUT confirma el guardado, `saveInterview` aplica inmediatamente el expediente y formulario de su respuesta, conserva el seguimiento del mismo paciente, muestra «Entrevista guardada correctamente» y devuelve `true` para cerrar el modal. El refresco opcional ocurre aparte. Un fallo de red/500 solo cambia el aviso de seguimiento, no la confirmación del guardado; no sugiere ni ejecuta un segundo PUT. Un rechazo real del PUT conserva el resultado `false` y el mensaje de error.
+
+La proyección previa no se sustituye por una colección vacía inventada. Un reintento correcto elimina el aviso y actualiza la cronología sin perder la entrevista confirmada.
+
+### Sesión y autorización
+
+El cliente API existente mantiene su tratamiento de 401: elimina el token vigente y emite `psicopanel-session-ended`. No se cambió ese cliente ni el contrato JWT. Las respuestas opcionales se aplican solo si siguen vigentes el token, la generación de sesión y el intento más reciente para ese paciente. Cerrar sesión o iniciar otra invalida respuestas pendientes, incluso para el mismo ID.
+
+403/404 del lector o de la lectura primaria de detalle no se tratan como fallos transitorios: se descartan expediente seleccionado, colección clínica, agenda, recordatorios y relaciones de ese acceso; se muestra denegación y no se usa la proyección anterior como acceso autorizado. Por seguridad, un 404 del lector se trata como pérdida de acceso/recurso; no se infiere que sea un problema temporal del servidor.
+
+Si la entrevista fue confirmada y un refresco posterior obtiene 401, el resultado persistente del PUT sigue siendo éxito, mientras la sesión se invalida y la interfaz protegida desaparece. Un PUT rechazado por 401 no obtiene confirmación de guardado. No se reutilizan datos de una sesión/paciente anterior tras iniciar otra sesión.
+
+### Pruebas específicas y límites conocidos
+
+[Pruebas de recuperación](../frontend/test/patient-follow-up-recovery.test.js) ejecutan el código real de los helpers API, cliente HTTP, carga principal, refresco de detalle, reintento y callbacks de guardado/modal de App. Se simulan únicamente las respuestas y setters del entorno, no una reimplementación del flujo.
+
+Nueve pruebas nuevas cubren red/500 y petición pendiente sin bloquear los datos principales; vacío correcto y reintento solo del lector; detalle con proyección previa; 403/404 con datos descartados; logout/cambio de sesión y respuestas fuera de orden; PUT confirmado con refresco correcto o fallido; modal cerrado, formulario actualizado, `true`, aviso separado y un solo PUT; PUT fallido con `false`; 401 y evento real de invalidación; actualización posterior consistente.
+
+El [recorrido Chromium P2](../scripts/follow-up-recovery-ui-review.cjs) usa la app y backend ficticio reales, interceptando solo fallos específicos de red/HTTP. Comprueba navegación/agenda/tareas durante fallo, contadores de peticiones para demostrar el reintento aislado, PUT real confirmado y rechazado, cierre de modal y confirmación conservada, ausencia de segundo PUT, acceso denegado y sesión invalidada. El [arnés aislado](../scripts/run-follow-up-recovery-ui-review.py) ejecuta también los seis recorridos previos de paciente/profesional, sin incorporar ninguno a `ci/browser`.
+
+La diferencia legacy observada se documenta mediante regresión mínima de [integración](../backend/test/patient-follow-up.integration.test.js): en copias TEMP, una cita con nota y estado almacenado `pending` aparece como `completed` en el lector de agenda existente, pero no entra en las consultas del seguimiento, que exige estado almacenado `completed`. Sus tareas quedan separadas en este último. La transacción se revierte y se comparan filas persistentes intactas. No se cambia la definición aprobada ni se reconcilian estados históricos; cualquier unificación requiere decisión posterior.
+
+Cobertura CI: los recorridos de seguimiento inicial y P2 siguen siendo validación local reproducible; no forman parte de `ci/browser`. Es una observación no bloqueante, sin ampliar los siete checks ni sus artifacts de 14 días. El build emite un aviso no bloqueante por un chunk de aproximadamente 502 kB; no se amplía esta corrección a una reorganización del bundle.
+
+Validación local nueva del 28 de octubre de 2026, separada de la evidencia inicial y de Actions:
+
+- Código funcional: `987d3ac5f1590222d9176ded8d98f84c94a24ec3`; pruebas/arnés: `152d964a24fc12aeaf363b2c98926bd34fe09c1b`. Los contenidos se probaron antes de esos commits.
+- Matriz nueva `aefdc82e-3f2e-463b-9e97-5ef645f2ff6e`: **105/105 unitarias backend, 17/17 episodios, 133/133 integración HTTP/PostgreSQL, 17/17 frontend**, lint/build aprobados; cero fallidas/canceladas/omitidas. Incluye privacidad #25, permisos #26, integridad y la observación legacy.
+- Tras reforzar el refresco de las tareas actuales, demo final nueva `090211c0-b0a2-4403-9f8c-0250aceb661d`: **17/17 frontend**, lint/build y **11/11 escenarios Chromium** aprobados, seis previos y cinco P2. Cero errores de página o API inesperados; los fallos de red/500/401/403/404 inyectados están clasificados como esperados.
+- La prueba de reintento incorpora tareas nuevas y estados actuales del DTO mínimo sin otra lectura del expediente; las demás secciones conservan sus referencias y contenido.
+- Demos previas nuevas `1ac337cb-cafd-4e9a-b656-5a22e446ce63` y `799e9c21-817b-4ad9-b388-0e8ef3006850`: cinco P2 y once escenarios, respectivamente, aprobados. No hubo fallos de pruebas en esta corrección; se repitió frontend/Chromium tras el ajuste final del reintento. La matriz backend ya aprobada no se repitió después de ese ajuste exclusivamente frontend.
+- Node 24/PostgreSQL 17 en Docker Desktop/Ubuntu WSL; navegador Node 24.21.0, Playwright 1.64.0 y Chromium 156.0.8078.4. Capturas ficticias enmascaradas inspeccionadas visualmente: indisponibilidad con tareas, guardado confirmado con aviso separado y proyección anterior preservada.
+- **80 archivos protegidos idénticos byte a byte al HEAD auditado**: todo backend funcional, SQL/manifiesto/hashes, cliente API de sesión, lockfiles, decisiones y configuración CI. Verificación offline de Markdown/enlaces/IDs/UTF-8, diez pruebas del contrato de evidencia CI y `git diff --check` aprobados.
+- Los cuatro proyectos propios nuevos de esta corrección fueron limpiados: tres demos y una matriz. También se limpiaron sus imágenes de navegador etiquetadas y se verificó que las etiquetas preexistentes no cambiaron. Evidencia local ignorada en `tmp/issue21-p2`; sin datos reales ni logs crudos publicados.
+
+La matriz de siete checks de GitHub Actions se ejecuta al publicar los commits en el mismo Draft PR; su estado se informa aparte. No se atribuyen los resultados locales anteriores a Actions.
 
 ## Límites de entrega
 
