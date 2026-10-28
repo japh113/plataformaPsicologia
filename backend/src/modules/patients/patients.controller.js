@@ -1,3 +1,4 @@
+import { getPatientFollowUp } from './patients.follow-up.js';
 import { successResponse, errorResponse } from '../../utils/response.js';
 import {
   getAllPatients,
@@ -303,4 +304,12 @@ export const deletePatientClinicalNoteHandler = async (req, res, next) => {
   } catch (error) {
     return next(error);
   }
+};
+
+export const getPatientFollowUpHandler = async (req, res, next) => {
+  try {
+    const followUp = await getPatientFollowUp(req.params.id, req.user);
+    if (!followUp) return errorResponse(res, 'Patient not found', 404);
+    return successResponse(res, followUp, 'Patient follow-up fetched successfully');
+  } catch (error) { return next(error); }
 };

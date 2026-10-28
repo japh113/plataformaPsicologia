@@ -31,6 +31,7 @@ import {
   deletePatientObjective,
   deletePatientTask,
   getPatient,
+  getPatientFollowUp,
   getPatients,
   upsertPatientInterview,
   updatePatient,
@@ -279,7 +280,7 @@ export default function App({onRestrictedSession}) {
         return;
       }
 
-      const commonRequests = [getPatients(), getAppointments(), getMyReminders(), getCareRelationships()];
+      const commonRequests = [getPatients({ includeFollowUp: currentUser.role === 'patient' }), getAppointments(), getMyReminders(), getCareRelationships()];
       let backendPatients;
       let backendAppointments;
       let backendReminders;
@@ -712,7 +713,7 @@ export default function App({onRestrictedSession}) {
   };
 
   const refreshSelectedPatient = async (patientId) => {
-    const refreshedPatient = await getPatient(patientId);
+    const refreshedPatient = await getPatient(patientId, { includeFollowUp: currentUser?.role === 'patient' });
     const uiPatient = mapBackendPatientToUiPatient(refreshedPatient);
     syncPatientState(uiPatient);
     return uiPatient;
@@ -894,6 +895,7 @@ export default function App({onRestrictedSession}) {
 
     try {
       const updatedApiPatient = await upsertPatientInterview(patientId, mapUiInterviewToBackendInterview(interviewForm));
+      if (currentUser?.role === 'patient') updatedApiPatient.followUp = await getPatientFollowUp(patientId);
       const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
       syncPatientState(updatedPatient);
 

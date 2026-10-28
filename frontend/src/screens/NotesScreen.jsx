@@ -1,3 +1,5 @@
+import PatientFollowUp from '../components/PatientFollowUp';
+import { getPatientFollowUpGroups } from '../utils/patientFollowUp';
 import React, { useMemo, useState } from 'react';
 import {
   AlertCircle,
@@ -316,6 +318,7 @@ export default function NotesScreen({
   const hasCompletedInterview = Boolean(patient.entrevistaCompleta && patientInterview);
   const nextAppointment = upcomingAppointments[0] || null;
   const latestSession = sessions[0] || null;
+  const latestConsultation = getPatientFollowUpGroups(patient).consultations[0] || null;
   const completedAppointmentsWithoutSession = patientAppointments.filter((appointment) => appointment.estado === 'completada' && !appointmentSessionsMap.has(appointment.id));
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) || null;
   const selectedAppointment = patientAppointments.find((appointment) => appointment.id === sessionForm.citaId) || null;
@@ -339,7 +342,7 @@ export default function NotesScreen({
       { id: 'resumen', label: 'Resumen' },
       { id: 'entrevista', label: 'Entrevista' },
       { id: 'agenda', label: 'Agenda' },
-      { id: 'sesiones', label: 'Notas clinicas' },
+      { id: 'sesiones', label: 'Mi seguimiento' },
       { id: 'objetivos', label: 'Objetivos' },
     ];
 
@@ -858,7 +861,9 @@ export default function NotesScreen({
     }
   };
 
-  const renderSessionsTab = () => (
+  const renderSessionsTab = () => !isPsychologist ? (
+    <PatientFollowUp patient={patient} onToggleTask={onToggleTask} processingTaskId={processingTaskId} />
+  ) : (
     <SectionCard
       title={isPsychologist ? 'Notas clinicas' : 'Seguimiento entre consultas'}
       description={isPsychologist ? 'Historial clinico y tareas asignadas por nota clinica.' : 'Aqui se organiza tu proceso por fecha de seguimiento, con las tareas que debes trabajar entre una cita y otra.'}
@@ -1327,10 +1332,10 @@ export default function NotesScreen({
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultimo seguimiento</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">
-              {latestSession ? formatSessionDate(latestSession.fecha) : 'Sin seguimiento registrado'}
+              {latestConsultation ? formatSessionDate(latestConsultation.fecha) : 'Todavía no tienes consultas realizadas'}
             </p>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              {latestSession ? 'Puedes revisar tus tareas y el historial de seguimientos en la pestaña de Notas clinicas.' : 'Todavia no hay seguimientos registrados en tu expediente.'}
+              {latestConsultation ? 'Revisa tus consultas y tareas en la pestaña Mi seguimiento.' : 'Tus tareas anteriores, si las hay, siguen disponibles en Mi seguimiento.'}
             </p>
           </div>
         </div>

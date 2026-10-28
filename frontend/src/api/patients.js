@@ -1,13 +1,20 @@
 import { apiRequest } from './client';
 
-export const getPatients = async () => {
-  const response = await apiRequest('/patients');
+export const getPatientFollowUp = async (id) => {
+  const response = await apiRequest(`/patients/${id}/follow-up`);
   return response.data;
 };
 
-export const getPatient = async (id) => {
+const withFollowUp = async (patient) => ({ ...patient, followUp: await getPatientFollowUp(patient.id) });
+
+export const getPatients = async ({ includeFollowUp = false } = {}) => {
+  const response = await apiRequest('/patients');
+  return includeFollowUp ? Promise.all(response.data.map(withFollowUp)) : response.data;
+};
+
+export const getPatient = async (id, { includeFollowUp = false } = {}) => {
   const response = await apiRequest(`/patients/${id}`);
-  return response.data;
+  return includeFollowUp ? withFollowUp(response.data) : response.data;
 };
 
 export const createPatient = async (payload) => {
