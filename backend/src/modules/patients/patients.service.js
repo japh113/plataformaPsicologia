@@ -820,7 +820,10 @@ export const createPatientTask = async (patientId, payload, actor) => createPati
 export const updatePatientTask = async (patientId, taskId, payload, actor) => updatePatientChecklistItem(patientId, taskId, payload, actor, 'task');
 export const deletePatientTask = async (patientId, taskId, actor) => deletePatientChecklistItem(patientId, taskId, actor, 'task');
 export const createPatientObjective = async (patientId, payload, actor) => createPatientChecklistItem(patientId, payload, actor, 'objective');
-export const updatePatientObjective = async (patientId, objectiveId, payload, actor) => updatePatientChecklistItem(patientId, objectiveId, payload, actor, 'objective');
+export const updatePatientObjective = async (patientId, objectiveId, payload, actor) => {
+  ensurePsychologist(actor);
+  return updatePatientChecklistItem(patientId, objectiveId, payload, actor, 'objective');
+};
 export const deletePatientObjective = async (patientId, objectiveId, actor) => deletePatientChecklistItem(patientId, objectiveId, actor, 'objective');
 
 export const createPatientClinicalNote = async (patientId, payload, actor) => {

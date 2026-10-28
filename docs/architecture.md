@@ -42,6 +42,8 @@ Servicios: [patients](../backend/src/modules/patients/patients.service.js), [app
 
 Proyecciones de respuesta de expediente y tareas por actor: solo el psicólogo autorizado recibe contexto general, riesgo y objetivo de nota profesional. El paciente conserva tareas, referencias de seguimiento y respuestas propias de entrevista; las respuestas de escritura usan la misma proyección. [Contrato y evidencia del Issue #23](patient-response-privacy.md). La autorización legacy por paciente permanece intacta.
 
+Cumplimiento de objetivos: controlador y servicio exigen psicólogo, conservando alcance por paciente y filtro de tipo. El paciente consulta estados/progreso y puede completar sus tareas; la interfaz y el callback de objetivos respetan esa distinción. [Contrato y evidencia del Issue #22](objective-completion-authorization.md).
+
 La elegibilidad adulta del registro B usa exclusivamente la referencia civil America/Mexico_City aprobada en su segunda revisión, independiente de la zona del host/cliente. No es una configuración global de zonas.
 
 La política de día clínico aún usa America/Los_Angeles en partes de aplicación/001; etapa 2E sigue pendiente. No cambiar zona ni interpretar histórico por efecto de esta documentación.

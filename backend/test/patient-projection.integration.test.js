@@ -7,6 +7,7 @@ import db from '../src/config/db.js';
 import env from '../src/config/env.js';
 import { initializeProduction } from '../scripts/initialize-production.js';
 import { migrate } from '../scripts/episode-migration.js';
+import { updatePatientObjective } from '../src/modules/patients/patients.service.js';
 
 const restrictedKeys = new Set(['notes', 'riskLevel', 'clinicalNoteObjective', 'sessionObjective']);
 const professionalMarkers = ['FICTIONAL_PRIVATE_CONTEXT_', 'FICTIONAL_NOTE_OBJECTIVE_', 'FICTIONAL_NOTE_CONTENT_'];
@@ -57,6 +58,10 @@ test('patient response projections: private clinical fields, writes and isolatio
     }
     await db.query(`INSERT INTO psychologist_profiles(user_id,approval_status) VALUES ('psychologist','active')`);
     await db.query(`INSERT INTO psychologist_patient_access(psychologist_user_id,patient_id) VALUES ('psychologist','a')`);
+    await db.query(`INSERT INTO users(id,first_name,email,password_hash,role)
+      VALUES ('psychologist_b','Fictional B','psychologist_b@projection.invalid','unused-fictional-hash','psychologist')`);
+    await db.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES ('psychologist_b','active')");
+    await db.query("INSERT INTO psychologist_patient_access(psychologist_user_id,patient_id) VALUES ('psychologist_b','b')");
     const items = {};
     for (const id of ['a', 'b']) {
       const appointment = (await db.query(`INSERT INTO appointments(patient_id,scheduled_date,scheduled_time,status)
@@ -209,20 +214,106 @@ test('patient response projections: private clinical fields, writes and isolatio
       assert.equal((await request(path, 'a', 'PATCH', { completed: false })).status, 404);
     });
 
-    await t.test('therapeutic objective permissions remain unchanged pending Issue 22', async () => {
+    // Complete rows include updated_at, attribution and retirement fields; audit events
+    // and patient rows must also remain identical after every denied write.
+    const persistence = async () => ({
+      items: (await db.query('SELECT * FROM patient_tasks ORDER BY id')).rows,
+      patients: (await db.query('SELECT * FROM patients ORDER BY id')).rows,
+      audit: (await db.query('SELECT * FROM audit_logs ORDER BY id')).rows,
+    });
+    const deniedWrite = async (path, actor, payload, status = 403, method = 'PATCH') => {
+      const before = await persistence();
+      const response = await request(path, actor, method, payload);
+      assert.equal(response.status, status, actor + ' ' + method + ' ' + path);
+      assertPatientProjection(response.body);
+      assert.deepEqual(await persistence(), before, 'Denied write changed persistence or audit');
+      return response.body;
+    };
+
+    await t.test('only the authorized psychologist completes and unmarks objectives; patient reads both states', async () => {
       const path = `/patients/a/objectives/${items.a.objective}`;
-      for (const completed of [true, false]) {
-        const response = await request(path, 'a', 'PATCH', { completed });
-        assert.equal(response.status, 200);
-        assertPatientProjection(response.body);
-        assert.equal(response.body.data.completed, completed);
+      for (const completed of [false, true, false]) {
+        const updated = await request(path, 'psychologist', 'PATCH', { completed });
+        assert.equal(updated.status, 200);
+        assert.equal(updated.body.data.completed, completed);
+        for (const readPath of ['/patients', '/patients/a']) {
+          const response = await request(readPath);
+          assert.equal(response.status, 200);
+          assertPatientProjection(response.body);
+          const patient = readPath === '/patients' ? response.body.data[0] : response.body.data;
+          assert.equal(patient.objectives[0].id, items.a.objective);
+          assert.equal(patient.objectives[0].completed, completed);
+        }
+        // Both values, including the current value, must be forbidden without
+        // refreshing updated_at or introducing audit/attribution changes.
+        for (const payload of [{ completed: true }, { completed: false }, { text: 'Unpermitted' },
+          { completed: 'invalid' }, {}, { text: 'Unpermitted', completed }]) {
+          const own = await deniedWrite(path, 'a', payload);
+          const foreign = await deniedWrite(`/patients/b/objectives/${items.b.objective}`, 'a', payload);
+          assert.deepEqual(own, foreign, 'Forbidden response must not disclose resource ownership');
+        }
       }
-      assert.equal((await request(path, 'a', 'PATCH', { text: 'Unpermitted' })).status, 403);
+    });
+
+    await t.test('direct objective service calls reject patients and administrative actors without writes', async () => {
+      for (const actor of [{ id: 'a', role: 'patient', patientId: 'a' },
+        { id: 'b', role: 'patient', patientId: 'b' },
+        ...['admin', 'superadmin', 'support', 'unknown'].map(role => ({ id: role, role })), undefined]) {
+        for (const completed of [true, false]) {
+          const before = await persistence();
+          await assert.rejects(updatePatientObjective('a', items.a.objective, { completed }, actor),
+            { status: actor ? 403 : 401, message: actor ? 'Forbidden' : 'Unauthorized' });
+          assert.deepEqual(await persistence(), before);
+        }
+      }
+    });
+
+    await t.test('objective authorization preserves psychologist isolation, ownership and administrative denials', async () => {
+      for (const actor of ['admin', 'superadmin', 'support']) {
+        await deniedWrite(`/patients/a/objectives/${items.a.objective}`, actor, { completed: true });
+      }
+      for (const [patient, item, actor] of [
+        ['b', items.b.objective, 'psychologist'], ['a', items.a.objective, 'psychologist_b'],
+        ['a', items.b.objective, 'psychologist'], ['b', items.a.objective, 'psychologist_b'],
+        ['a', '999999999', 'psychologist'],
+      ]) {
+        await deniedWrite(`/patients/${patient}/objectives/${item}`, actor, { completed: true }, 404);
+        const before = await persistence();
+        assert.equal(await updatePatientObjective(patient, item, { completed: true },
+          { id: actor, role: 'psychologist' }), null);
+        assert.deepEqual(await persistence(), before);
+      }
+      for (const completed of [true, false]) {
+        const updated = await request(`/patients/b/objectives/${items.b.objective}`, 'psychologist_b', 'PATCH', { completed });
+        assert.equal(updated.status, 200);
+        assert.equal(updated.body.data.completed, completed);
+      }
+    });
+
+    await t.test('task and objective IDs cannot cross kinds through HTTP or the objective service', async () => {
+      await deniedWrite(`/patients/a/tasks/${items.a.objective}`, 'a', { completed: true }, 404);
+      await deniedWrite(`/patients/a/tasks/${items.a.objective}`, 'psychologist', { completed: true }, 404);
+      await deniedWrite(`/patients/a/objectives/${items.a.task}`, 'psychologist', { completed: true }, 404);
+      await deniedWrite(`/patients/a/objectives/${items.a.task}`, 'a', { completed: true });
+      const before = await persistence();
+      assert.equal(await updatePatientObjective('a', items.a.task, { completed: true },
+        { id: 'psychologist', role: 'psychologist' }), null);
+      assert.deepEqual(await persistence(), before);
+    });
+
+    await t.test('objective creation, text editing and retirement remain professional operations', async () => {
+      await deniedWrite('/patients/a/objectives', 'a', { text: 'Unpermitted' }, 403, 'POST');
+      await deniedWrite(`/patients/a/objectives/${items.a.objective}`, 'a', undefined, 403, 'DELETE');
       const created = await request('/patients/a/objectives', 'psychologist', 'POST', { text: 'FICTIONAL_NEW_OBJECTIVE' });
       assert.equal(created.status, 201);
       const newPath = `/patients/a/objectives/${created.body.data.id}`;
-      assert.equal((await request(newPath, 'psychologist', 'PATCH', { text: 'FICTIONAL_EDITED_OBJECTIVE', completed: true })).status, 200);
+      const updated = await request(newPath, 'psychologist', 'PATCH', { text: 'FICTIONAL_EDITED_OBJECTIVE', completed: true });
+      assert.equal(updated.status, 200);
+      assert.equal(updated.body.data.text, 'FICTIONAL_EDITED_OBJECTIVE');
+      assert.equal(updated.body.data.completed, true);
       assert.equal((await request(newPath, 'psychologist', 'DELETE')).status, 200);
+      await deniedWrite(newPath, 'psychologist', { completed: false }, 404);
+      assert.ok((await db.query('SELECT retired_at FROM patient_tasks WHERE id=$1', [created.body.data.id])).rows[0].retired_at);
     });
 
     await t.test('private stored fields remain intact after all patient and task operations', async () => {
