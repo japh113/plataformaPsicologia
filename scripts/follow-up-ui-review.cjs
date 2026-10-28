@@ -53,6 +53,7 @@ async function main() {
     await login('p');
     let section = await timeline();
     const visits = section.locator('article');
+    await visits.nth(2).waitFor();
     assert.equal(await visits.count(),3);
     assert.deepEqual(await visits.locator('h3').allTextContents(),['8 de abril de 2026','5 de abril de 2026','1 de abril de 2026']);
     assert.equal(await visits.nth(0).getByRole('checkbox').count(),1);
@@ -113,6 +114,7 @@ async function main() {
     for (const [id,count,message] of [['q',2,null],['r',0,'Todavía no tienes consultas realizadas'],['s',0,'Tareas sin consulta identificada']]) {
       await login(id);
       section = await timeline();
+      if (count) await section.locator('article').nth(count - 1).waitFor();
       assert.equal(await section.locator('article').count(),count);
       if (id === 'q') {
         assert.deepEqual(await section.locator('article h3').allTextContents(),['8 de abril de 2026','8 de abril de 2026']);
@@ -160,6 +162,7 @@ async function main() {
     privateProjection(body);
     assert.equal(body.data.consultations.length,3);
     section = await timeline();
+    await section.locator('article').nth(2).waitFor();
     assert.equal(await section.locator('article').count(),3);
     assert.equal((await page.locator('body').innerText()).includes('FICTIONAL_PRIVATE'),false);
     results.push('P6: complete JSON and patient UI stay private after professional edits/creation: PASS');

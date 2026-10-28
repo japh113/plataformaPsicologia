@@ -127,6 +127,20 @@ test('follow-up: complete HTTP JSON, real dates, task association, privacy and a
           assert.equal(new Set(ids).size,ids.length);
           await isolated.query('ROLLBACK TO SAVEPOINT malformed');
         }
+        await isolated.query('SAVEPOINT legacy_status');
+        await isolated.query("UPDATE pg_temp.appointments SET status='pending' WHERE id=$1",[f.first]);
+        const agenda = await request('/appointments');
+        assert.equal(agenda.status,200);
+        assert.equal(agenda.body.data.find(item => item.id === String(f.first)).status,'completed',
+          'Existing agenda represents a linked note as completed');
+        const stored = (await isolated.query('SELECT status FROM pg_temp.appointments WHERE id=$1',[f.first])).rows[0].status;
+        assert.equal(stored,'pending');
+        const actualFollowUp = await follow();
+        assertPrivacy(actualFollowUp.body);
+        assert.equal(actualFollowUp.body.data.consultations.some(item => item.id === String(f.first)),false,
+          'Follow-up keeps the approved stored-completed definition');
+        assert.equal(actualFollowUp.body.data.unassignedTasks.some(item => item.id === String(f.tasks[0])),true);
+        await isolated.query('ROLLBACK TO SAVEPOINT legacy_status');
         for (const zone of ['America/Chihuahua','Pacific/Kiritimati','UTC']) {
           await isolated.query("SELECT set_config('TimeZone',$1,true)",[zone]);
           assert.deepEqual((await follow()).body.data,expected);
