@@ -209,19 +209,12 @@ export const createPatientObjectiveHandler = async (req, res, next) => {
 
 export const updatePatientObjectiveHandler = async (req, res, next) => {
   try {
+    ensurePsychologist(req.user);
+
     const errors = validateUpdateTaskPayload(req.body);
 
     if (errors.length > 0) {
       return errorResponse(res, 'Validation error', 400, errors);
-    }
-
-    if (isPatient(req.user)) {
-      const payloadKeys = Object.keys(req.body);
-      const onlyCompletedUpdate = payloadKeys.length === 1 && payloadKeys[0] === 'completed';
-
-      if (!onlyCompletedUpdate) {
-        throw createForbiddenError('Patients can only update objective completion');
-      }
     }
 
     const objective = await updatePatientObjective(req.params.id, req.params.objectiveId, req.body, req.user);

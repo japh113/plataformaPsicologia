@@ -121,7 +121,10 @@ test('backoffice clinical isolation and operational projections with PostgreSQL 
       assert.match(JSON.stringify(patient.body.data), /patient-activity/);
       assert.match(JSON.stringify(patient.body.data), /sensitive-interview/);
       assert.equal((await request(`/patients/own/tasks/${task}`, 'patient', 'PATCH', { completed: true })).status, 200);
-      assert.equal((await request(`/patients/own/objectives/${objective}`, 'patient', 'PATCH', { completed: true })).status, 200);
+      const beforeObjective = (await db.query('SELECT * FROM patient_tasks WHERE id=$1', [objective])).rows;
+      assert.equal((await request(`/patients/own/objectives/${objective}`, 'patient', 'PATCH', { completed: true })).status, 403);
+      assert.deepEqual((await db.query('SELECT * FROM patient_tasks WHERE id=$1', [objective])).rows, beforeObjective);
+      assert.equal((await request(`/patients/own/objectives/${objective}`, 'psychologist', 'PATCH', { completed: true })).status, 200);
       assert.equal((await request(`/patients/own/tasks/${task}`, 'psychologist', 'PATCH', { text: 'updated-activity' })).status, 200);
       assert.equal((await request('/availability/me', 'psychologist')).status, 200);
       const relationships = await request('/auth/care-relationships', 'psychologist');

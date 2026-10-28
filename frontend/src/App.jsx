@@ -1004,7 +1004,7 @@ export default function App({onRestrictedSession}) {
   };
 
   const toggleObjective = async (objectiveId) => {
-    if (!pacienteSeleccionado || procesandoObjetivoId) {
+    if (!isPsychologist || !pacienteSeleccionado || procesandoObjetivoId) {
       return;
     }
 

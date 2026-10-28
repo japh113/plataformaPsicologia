@@ -1006,7 +1006,7 @@ export default function NotesScreen({
   const renderObjectivesTab = () => (
     <SectionCard
       title={isPsychologist ? 'Objetivos del proceso' : 'Mis objetivos'}
-      description={isPsychologist ? 'Seguimiento de objetivos clinicos y de proceso del paciente.' : 'Marca tus objetivos conforme avances para tener una lectura clara de lo que sigue en tu proceso.'}
+      description={isPsychologist ? 'Seguimiento de objetivos clinicos y de proceso del paciente.' : 'Consulta tus objetivos y su avance. Tu psicologo actualiza su cumplimiento.'}
       action={(
         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-700">
           Avance {objectivesProgress}%
@@ -1045,13 +1045,16 @@ export default function NotesScreen({
         ) : (
           sortedObjectives.map((objective) => (
             <div key={objective.id} className="group flex items-start rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-              <input
-                type="checkbox"
-                checked={objective.completada}
-                disabled={processingObjectiveId === objective.id}
-                onChange={() => onToggleObjective(objective.id)}
-                className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:cursor-not-allowed"
-              />
+              {isPsychologist && (
+                <input
+                  type="checkbox"
+                  aria-label={`Cumplimiento de ${objective.texto}`}
+                  checked={objective.completada}
+                  disabled={processingObjectiveId === objective.id}
+                  onChange={() => onToggleObjective(objective.id)}
+                  className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 disabled:cursor-not-allowed"
+                />
+              )}
               <span className={`ml-3 flex-1 text-sm ${objective.completada ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{objective.texto}</span>
               <span
                 className={`ml-3 shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${
@@ -1081,7 +1084,7 @@ export default function NotesScreen({
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Como usar esta vista</p>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Marca un objetivo cuando sientas que ya esta trabajado o cumplido. Esto ayuda a que tu seguimiento y el de tu psicologo se mantengan alineados.
+              Tu psicologo evalua y actualiza el cumplimiento de los objetivos. Puedes consultar sus estados y tu avance, y seguir marcando tus tareas asignadas como realizadas.
             </p>
           </div>
         )}
