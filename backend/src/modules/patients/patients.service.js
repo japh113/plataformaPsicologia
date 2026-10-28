@@ -147,7 +147,8 @@ const psychologistClinicalNoteSelectColumn = `,
   ) AS clinical_notes
 `;
 
-const mapTaskRow = (task) => ({
+// Professional fields are opt-in; an omitted actor gets the limited projection.
+const mapTaskRow = (task, actor) => ({
   id: String(task.id),
   text: task.text,
   completed: Boolean(task.completed),
@@ -160,7 +161,9 @@ const mapTaskRow = (task) => ({
         )
       : String(task.clinicalNoteId),
   clinicalNoteDate: normalizeDateValue(task.clinicalNoteDate ?? task.sessionDate),
-  clinicalNoteObjective: task.clinicalNoteObjective || task.sessionObjective || '',
+  ...(isPsychologist(actor) ? {
+    clinicalNoteObjective: task.clinicalNoteObjective || task.sessionObjective || '',
+  } : {}),
 });
 
 const mapClinicalNoteRow = (clinicalNote) => ({
@@ -207,24 +210,27 @@ const mapInterviewRow = (interview) => {
   };
 };
 
-const mapPatientRow = (row) => ({
+const mapPatientRow = (row, actor) => ({
   id: String(row.id),
   firstName: row.first_name,
   lastName: row.last_name,
   fullName: row.full_name,
   email: row.email,
   phone: row.phone,
-  riskLevel: row.risk_level,
   status: row.status,
   lastClinicalNoteDate: normalizeDateValue(row.last_clinical_note_date),
-  notes: row.notes,
   age: row.age,
   reasonForConsultation: row.reason_for_consultation,
   interviewCompleted: Boolean(row.interview_completed),
   interview: mapInterviewRow(row.interview),
-  tasks: Array.isArray(row.tasks) ? row.tasks.map(mapTaskRow) : [],
-  objectives: Array.isArray(row.objectives) ? row.objectives.map(mapTaskRow) : [],
-  clinicalNotes: Array.isArray(row.clinical_notes) ? row.clinical_notes.map(mapClinicalNoteRow) : [],
+  tasks: Array.isArray(row.tasks) ? row.tasks.map(task => mapTaskRow(task, actor)) : [],
+  objectives: Array.isArray(row.objectives) ? row.objectives.map(task => mapTaskRow(task, actor)) : [],
+  clinicalNotes: isPsychologist(actor) && Array.isArray(row.clinical_notes)
+    ? row.clinical_notes.map(mapClinicalNoteRow) : [],
+  ...(isPsychologist(actor) ? {
+    riskLevel: row.risk_level,
+    notes: row.notes,
+  } : {}),
 });
 
 const getPatientBaseQuery = (includeClinicalNotes = false) => `
@@ -234,7 +240,7 @@ const getPatientBaseQuery = (includeClinicalNotes = false) => `
   FROM patients p
 `;
 
-const mapPatientResult = (result) => (result.rows[0] ? mapPatientRow(result.rows[0]) : null);
+const mapPatientResult = (result, actor) => (result.rows[0] ? mapPatientRow(result.rows[0], actor) : null);
 const normalizeOptionalText = (value) => (typeof value === 'string' ? value.trim() : '');
 
 const ensureClinicalNoteBelongsToPatient = async (clinicalNoteId, patientId) => {
@@ -394,7 +400,7 @@ export const getAllPatients = async (actor) => {
     accessScope.params,
   );
 
-  return result.rows.map(mapPatientRow);
+  return result.rows.map(row => mapPatientRow(row, actor));
 };
 
 export const getPatientById = async (id, actor) => {
@@ -410,7 +416,7 @@ export const getPatientById = async (id, actor) => {
     [id, ...accessScope.params],
   );
 
-  return mapPatientResult(result);
+  return mapPatientResult(result, actor);
 };
 
 const markAppointmentAsCompleted = async (appointmentId) => {
@@ -508,6 +514,7 @@ export const __testables = {
   mapInterviewRow,
   mapClinicalNoteRow,
   mapTaskRow,
+  mapPatientRow,
   normalizeClinicalNoteTaskPayloads,
 };
 
@@ -709,7 +716,7 @@ const createPatientChecklistItem = async (patientId, payload, actor, kind) => {
     ...result.rows[0],
     clinicalNoteDate: session?.clinical_note_date || null,
     clinicalNoteObjective: session?.clinical_note_objective || '',
-  });
+  }, actor);
 };
 
 const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kind) => {
@@ -774,7 +781,7 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
     ...result.rows[0],
     clinicalNoteDate: session?.clinical_note_date || null,
     clinicalNoteObjective: session?.clinical_note_objective || '',
-  });
+  }, actor);
 };
 
 const deletePatientChecklistItem = async (patientId, taskId, actor, kind) => {

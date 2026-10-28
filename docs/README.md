@@ -8,6 +8,7 @@ Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AG
 
 | Tema | Documento y estado |
 | --- | --- |
+| Privacidad API del paciente | [Contrato y evidencia Issue #23](patient-response-privacy.md): proyecciones por rol, lecturas/escrituras, regresiones y demo nueva aislada; Draft PR sin despliegue |
 | Arquitectura | [architecture.md](architecture.md): implementación, fundamentos no activados y futuro separados |
 | Desarrollo y pruebas | [development.md](development.md): Docker/WSL, inicialización nueva, seguridad y destinos aislados |
 | Producto | [Visión](product/vision.md), [decisiones/abiertos](product/decisions.md), [reglas](product/business-rules.md), [roadmap](product/roadmap.md): aprobado no equivale a implementado |

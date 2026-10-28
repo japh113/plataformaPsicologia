@@ -186,9 +186,11 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
                 <div>
                   <div className="flex items-center gap-3 flex-wrap">
                     <h3 className="font-bold text-gray-900">{patient.nombre}</h3>
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getRiskColor(patient.riesgo)}`}>
-                      Riesgo {patient.riesgo}
-                    </span>
+                    {isPsychologist && (
+                      <span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getRiskColor(patient.riesgo)}`}>
+                        Riesgo {patient.riesgo}
+                      </span>
+                    )}
                     <span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getPatientStatusClasses(patient.estado || 'activo')}`}>
                       {patient.estado || 'activo'}
                     </span>

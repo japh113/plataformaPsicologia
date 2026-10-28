@@ -40,6 +40,8 @@ AB-23 bloquea las cinco mutaciones legacy en servicio antes de DB. No existe ya 
 
 Servicios: [patients](../backend/src/modules/patients/patients.service.js), [appointments](../backend/src/modules/appointments/appointments.service.js), [availability](../backend/src/modules/availability/availability.service.js), [reminders](../backend/src/modules/reminders/reminders.service.js). Cancelar citas conserva filas; notas requieren cita completada y no futura; no se permite borrar expediente/nota. Edición actual de notas conserva versiones; **adendas e inmutabilidad finalizada de RN-23 aún no están implementadas**.
 
+Proyecciones de respuesta de expediente y tareas por actor: solo el psicólogo autorizado recibe contexto general, riesgo y objetivo de nota profesional. El paciente conserva tareas, referencias de seguimiento y respuestas propias de entrevista; las respuestas de escritura usan la misma proyección. [Contrato y evidencia del Issue #23](patient-response-privacy.md). La autorización legacy por paciente permanece intacta.
+
 La elegibilidad adulta del registro B usa exclusivamente la referencia civil America/Mexico_City aprobada en su segunda revisión, independiente de la zona del host/cliente. No es una configuración global de zonas.
 
 La política de día clínico aún usa America/Los_Angeles en partes de aplicación/001; etapa 2E sigue pendiente. No cambiar zona ni interpretar histórico por efecto de esta documentación.

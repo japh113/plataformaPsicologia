@@ -56,7 +56,7 @@ test('normalizeClinicalNoteTaskPayloads normalizes ids and defaults completed to
   ]);
 });
 
-test('mapTaskRow preserves clinical note links for patient tasks', () => {
+test('mapTaskRow preserves clinical note context for authorized psychologists', () => {
   const task = patientTestables.mapTaskRow({
     id: 7,
     text: 'Practicar grounding',
@@ -64,7 +64,7 @@ test('mapTaskRow preserves clinical note links for patient tasks', () => {
     clinicalNoteId: 10,
     clinicalNoteDate: '2026-04-08',
     clinicalNoteObjective: 'Reducir ansiedad',
-  });
+  }, { role: 'psychologist' });
 
   assert.deepEqual(task, {
     id: '7',
@@ -150,4 +150,41 @@ test('validateUpdateClinicalNotePayload validates appointmentId and task id shap
     'tasks[0].id must be a valid value when provided',
     'appointmentId must be a valid value when provided',
   ]);
+});
+
+
+test('mapTaskRow excludes professional context for patients, other roles and missing actors', () => {
+  for (const actor of [undefined, { role: 'patient' }, { role: 'admin' }, { role: 'superadmin' }, { role: 'support' }]) {
+    for (const context of [
+      { clinicalNoteId: 10, clinicalNoteDate: '2026-04-08', clinicalNoteObjective: 'FICTIONAL_PRIVATE_OBJECTIVE' },
+      { sessionId: 10, sessionDate: '2026-04-08', sessionObjective: 'FICTIONAL_PRIVATE_OBJECTIVE' },
+    ]) {
+      assert.deepEqual(patientTestables.mapTaskRow({ id: 7, text: 'Fictional task', completed: true, ...context }, actor), {
+        id: '7', text: 'Fictional task', completed: true, clinicalNoteId: '10', clinicalNoteDate: '2026-04-08',
+      });
+    }
+  }
+});
+
+test('mapPatientRow excludes private fields even when the query supplies clinical notes', () => {
+  const row = { id: 'fictional', notes: 'FICTIONAL_PRIVATE_CONTEXT', risk_level: 'high',
+    interview: { birthPlace: 'FICTIONAL_OWN_ANSWER' },
+    tasks: [{ id: 7, text: 'Fictional task', clinicalNoteObjective: 'FICTIONAL_PRIVATE_OBJECTIVE' }],
+    objectives: [{ id: 8, text: 'Fictional shared objective' }],
+    clinical_notes: [{ id: 10, content: 'FICTIONAL_PRIVATE_CONTENT' }],
+    future_private_field: 'FICTIONAL_PRIVATE_FUTURE' };
+  for (const actor of [undefined, { role: 'patient' }, { role: 'admin' }, { role: 'superadmin' }, { role: 'support' }]) {
+    const patient = patientTestables.mapPatientRow(row, actor);
+    const serialized = JSON.stringify(patient);
+    assert.doesNotMatch(serialized, /FICTIONAL_PRIVATE|"notes"|"riskLevel"|"clinicalNoteObjective"/);
+    assert.equal(patient.interview.birthPlace, 'FICTIONAL_OWN_ANSWER');
+    assert.deepEqual(patient.clinicalNotes, []);
+    assert.equal(patient.tasks[0].text, 'Fictional task');
+    assert.equal(patient.objectives[0].text, 'Fictional shared objective');
+  }
+  const professional = patientTestables.mapPatientRow(row, { role: 'psychologist' });
+  assert.equal(professional.notes, row.notes);
+  assert.equal(professional.riskLevel, row.risk_level);
+  assert.equal(professional.tasks[0].clinicalNoteObjective, row.tasks[0].clinicalNoteObjective);
+  assert.equal(professional.clinicalNotes[0].content, row.clinical_notes[0].content);
 });
