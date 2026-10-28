@@ -1,3 +1,4 @@
+import PatientFollowUpNotice from '../components/PatientFollowUpNotice';
 import { getPatientFollowUpGroups } from '../utils/patientFollowUp';
 import React from 'react';
 import { Activity, AlertCircle, ArrowRight, Bell, Calendar, CheckSquare, ClipboardList, FileText, User } from 'lucide-react';
@@ -207,6 +208,7 @@ export default function DashboardScreen({
   onOpenPatient,
   onCompleteInterview,
   onViewAppointments,
+  onRetryFollowUp,
   onToggleTask,
   onRequestCareRelationship,
   onInviteCareRelationship,
@@ -241,7 +243,9 @@ export default function DashboardScreen({
   const totalConsultations = followUp.consultations.length;
   const interviewCompleted = Boolean(patientProfile?.entrevistaCompleta);
   const hasLegacyRelationship = careRelationships.some(relationship => relationship.status === 'active');
-  const patientTaskGroups = [
+  const patientTaskGroups = !patientProfile?.seguimiento ? (patientProfile?.tareas?.length ? [{
+    id: 'available', tasks: patientProfile.tareas, title: 'Tus tareas',
+  }] : []) : [
     ...followUp.consultations.map(entry => ({ ...entry, fechaSesion: entry.fecha, title: 'Consulta realizada' })),
     ...(followUp.unassignedTasks.length ? [{ id: 'unassigned', tasks: followUp.unassignedTasks, title: 'Tareas sin consulta identificada' }] : []),
   ];
@@ -363,7 +367,7 @@ export default function DashboardScreen({
               <h3 className="text-slate-600 font-medium text-sm md:text-base">Consultas realizadas</h3>
               <FileText className="text-slate-500" size={24} />
             </div>
-            <p className="text-2xl md:text-3xl font-bold text-slate-900 mt-2">{totalConsultations}</p>
+            <p className="text-2xl md:text-3xl font-bold text-slate-900 mt-2">{patientProfile?.seguimiento ? totalConsultations : '—'}</p>
             <p className="mt-1 text-xs text-slate-500">{completedTasks} tarea(s) completadas en tu proceso</p>
           </div>
         </div>
@@ -386,6 +390,7 @@ export default function DashboardScreen({
                 </button>
               )}
             </div>
+            {patientProfile && <PatientFollowUpNotice patient={patientProfile} onRetry={() => onRetryFollowUp(patientProfile.id)} />}
             <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
               {patientTaskGroups.length ? (
                 patientTaskGroups.map((group) => {
@@ -395,7 +400,7 @@ export default function DashboardScreen({
                     <div key={group.id} className="rounded-xl border border-slate-200 p-4 transition hover:border-slate-300">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{group.fechaSesion ? formatClinicalNoteDate(group.fechaSesion) : 'Tareas anteriores'}</p>
+                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{group.fechaSesion ? formatClinicalNoteDate(group.fechaSesion) : patientProfile?.seguimiento ? 'Tareas anteriores' : 'Agrupación pendiente de actualizar'}</p>
                           <h3 className="mt-1 text-sm md:text-base font-bold text-slate-900">{group.title}</h3>
                           <p className="mt-1 text-xs text-slate-500">{group.tasks.length ? `${group.tasks.length} tarea(s)` : 'Sin tareas asignadas'}</p>
                         </div>
@@ -433,7 +438,7 @@ export default function DashboardScreen({
                 })
               ) : (
                 <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
-                  <p className="text-sm font-semibold text-slate-700">No tienes tareas activas entre seguimientos</p>
+                  <p className="text-sm font-semibold text-slate-700">{patientProfile?.seguimiento ? 'No tienes tareas activas entre seguimientos' : 'La agrupación del seguimiento está pendiente de actualizar'}</p>
                   <p className="mt-2 text-sm text-gray-500">Cuando tu psicologo te deje ejercicios o practicas para trabajar antes de la siguiente cita, apareceran agrupados aqui.</p>
                 </div>
               )}

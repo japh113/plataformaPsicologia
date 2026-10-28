@@ -5,7 +5,14 @@ export const getPatientFollowUp = async (id) => {
   return response.data;
 };
 
-const withFollowUp = async (patient) => ({ ...patient, followUp: await getPatientFollowUp(patient.id) });
+const withFollowUp = async (patient) => {
+  try {
+    return { ...patient, followUp: await getPatientFollowUp(patient.id) };
+  } catch (error) {
+    if ([401, 403, 404].includes(error.status)) throw error;
+    return { ...patient, followUpUnavailable: true };
+  }
+};
 
 export const getPatients = async ({ includeFollowUp = false } = {}) => {
   const response = await apiRequest('/patients');

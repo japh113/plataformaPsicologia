@@ -18,3 +18,13 @@ export const formatFollowUpDate = (value) => {
     day: 'numeric', month: 'long', year: 'numeric',
   }).format(new Date(year, month - 1, day));
 };
+
+// Preserve only this patient's current-session projection during optional refreshes.
+export const preservePatientFollowUp = (previous, next) => {
+  if (previous?.id !== next.id || next.seguimiento) return next;
+  return {
+    ...next,
+    seguimiento: previous.seguimiento,
+    seguimientoEstado: next.seguimientoEstado === 'idle' ? previous.seguimientoEstado : next.seguimientoEstado,
+  };
+};

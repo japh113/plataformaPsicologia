@@ -1,3 +1,4 @@
+import PatientFollowUpNotice from '../components/PatientFollowUpNotice';
 import PatientFollowUp from '../components/PatientFollowUp';
 import { getPatientFollowUpGroups } from '../utils/patientFollowUp';
 import React, { useMemo, useState } from 'react';
@@ -176,6 +177,7 @@ export default function NotesScreen({
   notesTemp,
   setNotesTemp,
   onSaveNotes,
+  onRetryFollowUp,
   onToggleTask,
   onDeleteTask,
   onToggleObjective,
@@ -862,7 +864,7 @@ export default function NotesScreen({
   };
 
   const renderSessionsTab = () => !isPsychologist ? (
-    <PatientFollowUp patient={patient} onToggleTask={onToggleTask} processingTaskId={processingTaskId} />
+    <PatientFollowUp patient={patient} onRetryFollowUp={onRetryFollowUp} onToggleTask={onToggleTask} processingTaskId={processingTaskId} />
   ) : (
     <SectionCard
       title={isPsychologist ? 'Notas clinicas' : 'Seguimiento entre consultas'}
@@ -1301,6 +1303,7 @@ export default function NotesScreen({
   const renderPatientSummaryTab = () => (
     <div className="space-y-5">
       <SectionCard title="Resumen" description="Una vista simple de tu seguimiento actual.">
+        <PatientFollowUpNotice patient={patient} onRetry={() => onRetryFollowUp(patient.id)} />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Proxima cita</p>
@@ -1332,7 +1335,7 @@ export default function NotesScreen({
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultimo seguimiento</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">
-              {latestConsultation ? formatSessionDate(latestConsultation.fecha) : 'Todavía no tienes consultas realizadas'}
+              {latestConsultation ? formatSessionDate(latestConsultation.fecha) : patient.seguimiento ? 'Todavía no tienes consultas realizadas' : 'Seguimiento pendiente de actualizar'}
             </p>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               {latestConsultation ? 'Revisa tus consultas y tareas en la pestaña Mi seguimiento.' : 'Tus tareas anteriores, si las hay, siguen disponibles en Mi seguimiento.'}

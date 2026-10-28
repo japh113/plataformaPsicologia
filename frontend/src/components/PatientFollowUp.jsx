@@ -1,8 +1,9 @@
+import PatientFollowUpNotice from './PatientFollowUpNotice';
 import React from 'react';
 import { formatFollowUpDate, getPatientFollowUpGroups } from '../utils/patientFollowUp';
 import { formatAppointmentDisplayHour } from '../mappers/appointments';
 
-export default function PatientFollowUp({ patient, onToggleTask, processingTaskId }) {
+export default function PatientFollowUp({ patient, onToggleTask, processingTaskId, onRetryFollowUp }) {
   const { consultations, unassignedTasks } = getPatientFollowUpGroups(patient);
   const renderTasks = tasks => (
     <div className="mt-4 space-y-2">
@@ -22,7 +23,15 @@ export default function PatientFollowUp({ patient, onToggleTask, processingTaskI
         <h2 className="text-lg font-bold text-slate-900">Mi seguimiento</h2>
         <p className="mt-1 text-sm text-slate-500">Tus consultas realizadas y las tareas asignadas entre consultas.</p>
       </div>
-      {consultations.length ? consultations.map(consultation => (
+      <PatientFollowUpNotice patient={patient} onRetry={() => onRetryFollowUp(patient.id)} />
+      {!patient.seguimiento && (patient.tareas || []).length > 0 && (
+        <section aria-label="Tareas disponibles">
+          <h3 className="font-semibold text-slate-900">Tus tareas</h3>
+          <p className="mt-1 text-xs text-slate-500">Podrás ver su agrupación cuando se actualice el seguimiento.</p>
+          {renderTasks(patient.tareas)}
+        </section>
+      )}
+      {patient.seguimiento && (consultations.length ? consultations.map(consultation => (
         <article key={consultation.id} data-consultation-id={consultation.id}
           className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -32,7 +41,7 @@ export default function PatientFollowUp({ patient, onToggleTask, processingTaskI
           {consultation.hora && <p className="mt-2 text-sm text-slate-500">{formatAppointmentDisplayHour(consultation.hora)}</p>}
           {consultation.tasks.length ? renderTasks(consultation.tasks) : <p className="mt-4 text-sm text-slate-500">Sin tareas asignadas</p>}
         </article>
-      )) : <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-sm text-slate-600">Todavía no tienes consultas realizadas</p>}
+      )) : <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-sm text-slate-600">Todavía no tienes consultas realizadas</p>)}
       {unassignedTasks.length > 0 && (
         <section aria-label="Tareas sin consulta identificada" className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <h3 className="font-semibold text-slate-900">Tareas sin consulta identificada</h3>

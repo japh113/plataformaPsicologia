@@ -1,8 +1,9 @@
+import { preservePatientFollowUp } from './utils/patientFollowUp';
 import IdentityPanel from './components/IdentityPanel';
 import ProfessionalProfileScreen from './screens/ProfessionalProfileScreen';
 import ProfessionalReviewScreen from './screens/ProfessionalReviewScreen';
 import { patientRegistrationError } from './utils/identityFeedback';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import Sidebar from './components/layout/Sidebar';
 import MobileNav from './components/layout/MobileNav';
@@ -73,6 +74,7 @@ import {
 import { getMyReminders } from './api/reminders';
 import {
   mapBackendPatientToUiPatient,
+  mapBackendFollowUpToUiFollowUp,
   mapBackendTaskToUiTask,
   mapUiInterviewToBackendInterview,
   mapUiPatientToBackendPatient,
@@ -85,9 +87,6 @@ import {
   mapUiAppointmentToBackendAppointment,
 } from './mappers/appointments';
 import { buildInterviewForm as buildInterviewDraftForm } from './utils/patientInterview';
-
-const syncPatientInCollection = (patients, nextPatient) =>
-  patients.map((patient) => (patient.id === nextPatient.id ? nextPatient : patient));
 
 const sortAppointments = (appointments) =>
   [...appointments].sort((a, b) => {
@@ -116,6 +115,8 @@ const buildDateRangeStrings = (startDate, endDate) => {
 };
 
 export default function App({onRestrictedSession}) {
+  const sessionEpoch = useRef(0);
+  const followUpRequests = useRef(new Map());
   const [vistaActiva, setVistaActiva] = useState('dashboard');
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null);
   const [sessionDraftAppointmentId, setSessionDraftAppointmentId] = useState(null);
@@ -208,6 +209,8 @@ export default function App({onRestrictedSession}) {
   const showErrorFeedback = (message) => showUiFeedback('error', message);
 
   const resetSessionState = () => {
+    sessionEpoch.current += 1;
+    followUpRequests.current.clear();
     setVistaActiva('dashboard');
     setPacienteSeleccionado(null);
     setSessionDraftAppointmentId(null);
@@ -259,11 +262,55 @@ export default function App({onRestrictedSession}) {
     setAuditLogs(nextAuditLogs);
   }, []);
 
+  const refreshPatientFollowUp = useCallback(async (patientId) => {
+    if (currentUser?.role !== 'patient' || String(currentUser.patientId) !== String(patientId)) return false;
+    const token = getAuthToken();
+    const epoch = sessionEpoch.current;
+    const requestId = (followUpRequests.current.get(patientId) || 0) + 1;
+    followUpRequests.current.set(patientId, requestId);
+    const isCurrent = () => token && getAuthToken() === token && sessionEpoch.current === epoch &&
+      followUpRequests.current.get(patientId) === requestId;
+    const update = transform => {
+      setPacientes(previous => previous.map(patient => patient.id === patientId ? transform(patient) : patient));
+      setPacienteSeleccionado(previous => previous?.id === patientId ? transform(previous) : previous);
+    };
+    if (!isCurrent()) return false;
+    update(patient => ({ ...patient, seguimientoEstado: 'loading' }));
+    try {
+      const followUp = await getPatientFollowUp(patientId);
+      if (!isCurrent()) return false;
+      update(patient => ({
+        ...patient,
+        seguimiento: mapBackendFollowUpToUiFollowUp(followUp),
+        tareas: [...followUp.consultations.flatMap(entry => entry.tasks), ...followUp.unassignedTasks].map(mapBackendTaskToUiTask),
+        seguimientoEstado: 'ready',
+      }));
+      return true;
+    } catch (error) {
+      if (!isCurrent()) return false;
+      if ([401, 403, 404].includes(error.status)) {
+        // A lost authorization is not a transient failure: discard protected data.
+        setPacientes([]);
+        setPacienteSeleccionado(null);
+        setAppointments([]);
+        setReminders([]);
+        setCareRelationships([]);
+        setErrorCarga('Ya no tienes acceso a este expediente. Vuelve a comprobar tu sesión.');
+      } else {
+        update(patient => ({ ...patient, seguimientoEstado: 'error' }));
+      }
+      return false;
+    }
+  }, [currentUser]);
+
   const cargarDatos = useCallback(async () => {
     if (!currentUser) {
       return;
     }
 
+    const token = getAuthToken();
+    const epoch = sessionEpoch.current;
+    const isCurrent = () => token && getAuthToken() === token && sessionEpoch.current === epoch;
     setCargandoDatos(true);
     setErrorCarga('');
 
@@ -280,7 +327,7 @@ export default function App({onRestrictedSession}) {
         return;
       }
 
-      const commonRequests = [getPatients({ includeFollowUp: currentUser.role === 'patient' }), getAppointments(), getMyReminders(), getCareRelationships()];
+      const commonRequests = [getPatients(), getAppointments(), getMyReminders(), getCareRelationships()];
       let backendPatients;
       let backendAppointments;
       let backendReminders;
@@ -308,7 +355,11 @@ export default function App({onRestrictedSession}) {
         [backendPatients, backendAppointments, backendReminders, backendRelationships] = await Promise.all(commonRequests);
       }
 
-      setPacientes(backendPatients.map(mapBackendPatientToUiPatient));
+      if (!isCurrent()) return;
+      setPacientes(previous => backendPatients.map(patient => preservePatientFollowUp(
+        previous.find(existing => existing.id === String(patient.id)),
+        { ...mapBackendPatientToUiPatient(patient), seguimientoEstado: currentUser.role === 'patient' ? 'loading' : 'idle' },
+      )));
       setAppointments(sortAppointments(backendAppointments.map(mapBackendAppointmentToUiAppointment)));
       setReminders(backendReminders);
       setCareRelationships(backendRelationships);
@@ -323,12 +374,23 @@ export default function App({onRestrictedSession}) {
         setAvailabilityDraft([]);
         setAvailabilityExceptions([]);
       }
+      if (currentUser.role === 'patient' && backendPatients.some(patient => String(patient.id) === String(currentUser.patientId))) {
+        void refreshPatientFollowUp(String(currentUser.patientId));
+      }
     } catch (error) {
+      if (!isCurrent()) return;
+      if ([401, 403, 404].includes(error.status)) {
+        setPacientes([]);
+        setPacienteSeleccionado(null);
+        setAppointments([]);
+        setReminders([]);
+        setCareRelationships([]);
+      }
       setErrorCarga(error.message || 'No se pudieron cargar los datos del tablero.');
     } finally {
-      setCargandoDatos(false);
+      if (isCurrent()) setCargandoDatos(false);
     }
-  }, [currentUser, refreshBackofficeData]);
+  }, [currentUser, refreshBackofficeData, refreshPatientFollowUp]);
 
   useEffect(() => {
     const bootstrapSession = async () => {
@@ -691,8 +753,8 @@ export default function App({onRestrictedSession}) {
   };
 
   const syncPatientState = (nextPatient) => {
-    setPacientes((currentPatients) => syncPatientInCollection(currentPatients, nextPatient));
-    setPacienteSeleccionado((currentPatient) => (currentPatient?.id === nextPatient.id ? nextPatient : currentPatient));
+    setPacientes((currentPatients) => currentPatients.map(patient => patient.id === nextPatient.id ? preservePatientFollowUp(patient, nextPatient) : patient));
+    setPacienteSeleccionado((currentPatient) => (currentPatient?.id === nextPatient.id ? preservePatientFollowUp(currentPatient, nextPatient) : currentPatient));
   };
 
   const syncAppointmentsState = (updater) => {
@@ -713,10 +775,21 @@ export default function App({onRestrictedSession}) {
   };
 
   const refreshSelectedPatient = async (patientId) => {
-    const refreshedPatient = await getPatient(patientId, { includeFollowUp: currentUser?.role === 'patient' });
-    const uiPatient = mapBackendPatientToUiPatient(refreshedPatient);
-    syncPatientState(uiPatient);
-    return uiPatient;
+    const token = getAuthToken();
+    const epoch = sessionEpoch.current;
+    try {
+      const refreshedPatient = await getPatient(patientId);
+      if (!token || getAuthToken() !== token || sessionEpoch.current !== epoch) return null;
+      const uiPatient = mapBackendPatientToUiPatient(refreshedPatient);
+      syncPatientState(uiPatient);
+      if (currentUser?.role === 'patient') void refreshPatientFollowUp(patientId);
+      return uiPatient;
+    } catch (error) {
+      if (token && getAuthToken() === token && sessionEpoch.current === epoch && [401, 403, 404].includes(error.status)) {
+        setPacientes([]); setPacienteSeleccionado(null); setAppointments([]); setReminders([]); setCareRelationships([]);
+      }
+      throw error;
+    }
   };
 
   const refreshAppointmentsAndWaitlist = useCallback(async () => {
@@ -891,11 +964,15 @@ export default function App({onRestrictedSession}) {
       return false;
     }
 
+    const token = getAuthToken();
+    const epoch = sessionEpoch.current;
+    const isCurrent = () => token && getAuthToken() === token && sessionEpoch.current === epoch;
     setGuardandoEntrevista(true);
 
     try {
       const updatedApiPatient = await upsertPatientInterview(patientId, mapUiInterviewToBackendInterview(interviewForm));
-      if (currentUser?.role === 'patient') updatedApiPatient.followUp = await getPatientFollowUp(patientId);
+      // The PUT is confirmed even if this session ends before its response arrives.
+      if (!isCurrent()) return true;
       const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
       syncPatientState(updatedPatient);
 
@@ -904,13 +981,14 @@ export default function App({onRestrictedSession}) {
       }
 
       showSuccessFeedback('Entrevista guardada correctamente.');
+      if (currentUser?.role === 'patient') void refreshPatientFollowUp(patientId);
       return true;
     } catch (error) {
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
-      showErrorFeedback((error.message || 'No se pudo guardar la entrevista.') + details);
+      if (isCurrent()) showErrorFeedback((error.message || 'No se pudo guardar la entrevista.') + details);
       return false;
     } finally {
-      setGuardandoEntrevista(false);
+      if (isCurrent()) setGuardandoEntrevista(false);
     }
   };
 
@@ -1481,6 +1559,7 @@ export default function App({onRestrictedSession}) {
           onCompleteInterview={() => setShowPatientInterview(true)}
           onNewPatient={() => setMostrarModalNuevoPaciente(true)}
           onViewAppointments={() => abrirAgenda(isPsychologist ? todayDate : '')}
+          onRetryFollowUp={refreshPatientFollowUp}
           onToggleTask={toggleTask}
           onRequestCareRelationship={handleRequestCareRelationship}
           onInviteCareRelationship={handleInviteCareRelationship}
@@ -1601,6 +1680,7 @@ export default function App({onRestrictedSession}) {
           notesTemp={notasTemp}
           setNotesTemp={setNotasTemp}
           onSaveNotes={guardarNotas}
+          onRetryFollowUp={refreshPatientFollowUp}
           onToggleTask={toggleTask}
           onDeleteTask={removeTask}
           onToggleObjective={toggleObjective}
