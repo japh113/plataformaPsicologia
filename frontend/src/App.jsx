@@ -1,4 +1,4 @@
-import { preservePatientFollowUp } from './utils/patientFollowUp';
+import { preservePatientActivity } from './utils/patientFollowUp';
 import IdentityPanel from './components/IdentityPanel';
 import ProfessionalProfileScreen from './screens/ProfessionalProfileScreen';
 import ProfessionalReviewScreen from './screens/ProfessionalReviewScreen';
@@ -117,6 +117,8 @@ const buildDateRangeStrings = (startDate, endDate) => {
 export default function App({onRestrictedSession}) {
   const sessionEpoch = useRef(0);
   const followUpRequests = useRef(new Map());
+  const clinicalAccess = useRef({ generation: 0, denied: false });
+  const patientRevisions = useRef(new Map());
   const [vistaActiva, setVistaActiva] = useState('dashboard');
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null);
   const [sessionDraftAppointmentId, setSessionDraftAppointmentId] = useState(null);
@@ -210,6 +212,8 @@ export default function App({onRestrictedSession}) {
 
   const resetSessionState = () => {
     sessionEpoch.current += 1;
+    clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: false };
+    patientRevisions.current.clear();
     followUpRequests.current.clear();
     setVistaActiva('dashboard');
     setPacienteSeleccionado(null);
@@ -235,6 +239,11 @@ export default function App({onRestrictedSession}) {
     setSessionActionError('');
     setGuardandoSesion(false);
     setGuardandoEntrevista(false);
+    setCargandoDatos(false); setProcesandoTareaId(null); setCreandoObjetivo(false); setProcesandoObjetivoId(null);
+    setGuardandoCita(false); setProcesandoCitaId(null); setGuardandoListaEspera(false); setProcesandoListaEsperaId(null);
+    setGuardandoNotas(false); setGuardandoPerfilPaciente(false); setGuardandoPaciente(false);
+    setSavingAvailability(false); setSavingAvailabilityException(false);
+    setPatientInterviewForm(buildInterviewDraftForm(null, '')); setUiFeedback(null);
     setReviewingPsychologistId(null);
     setProcessingRelationshipId(null);
     setBackofficeActionError('');
@@ -249,27 +258,56 @@ export default function App({onRestrictedSession}) {
     setResettingPassword(false);
   };
 
+  const beginClinicalOperation = useCallback(({ allowDenied = false } = {}) => {
+    const token = getAuthToken();
+    const session = sessionEpoch.current;
+    const access = clinicalAccess.current.generation;
+    return () => Boolean(token) && getAuthToken() === token && sessionEpoch.current === session &&
+      clinicalAccess.current.generation === access && (allowDenied || !clinicalAccess.current.denied);
+  }, []);
+
+  const advancePatientRevision = useCallback((patientId) => {
+    patientRevisions.current.set(patientId, (patientRevisions.current.get(patientId) || 0) + 1);
+  }, []);
+
+  const invalidateClinicalAccess = useCallback(() => {
+    clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: true };
+    followUpRequests.current.clear();
+    setPacientes([]); setPacienteSeleccionado(null); setAppointments([]); setReminders([]); setCareRelationships([]);
+    setAppointmentWaitlist([]); setAvailability([]); setAvailabilityDraft([]); setAvailabilityExceptions([]);
+    setNotasTemp(''); setShowPatientInterview(false); setPatientInterviewForm(buildInterviewDraftForm(null, ''));
+    setCargandoDatos(false); setGuardandoEntrevista(false); setGuardandoSesion(false);
+    setGuardandoPaciente(false); setGuardandoNotas(false); setGuardandoPerfilPaciente(false);
+    setProcesandoTareaId(null); setCreandoObjetivo(false); setProcesandoObjetivoId(null);
+    setGuardandoCita(false); setProcesandoCitaId(null); setGuardandoListaEspera(false); setProcesandoListaEsperaId(null);
+    setSavingAvailability(false); setSavingAvailabilityException(false); setProcessingRelationshipId(null);
+    setErrorCarga('Ya no tienes acceso a este expediente. Vuelve a comprobar tu sesión.');
+  }, []);
+
   const refreshBackofficeData = useCallback(async () => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     const [users, pending, relationships, nextAuditLogs] = await Promise.all([
       getBackofficeUsers(),
       getPendingPsychologists(),
       getCareRelationships(),
       getAuditLogs(),
     ]);
+    if (!isCurrent()) return false;
     setBackofficeUsers(users);
     setPendingPsychologists(pending);
     setCareRelationships(relationships);
     setAuditLogs(nextAuditLogs);
-  }, []);
+  }, [beginClinicalOperation]);
 
   const refreshPatientFollowUp = useCallback(async (patientId) => {
     if (currentUser?.role !== 'patient' || String(currentUser.patientId) !== String(patientId)) return false;
-    const token = getAuthToken();
-    const epoch = sessionEpoch.current;
+    const isAccessCurrent = beginClinicalOperation();
+    if (!isAccessCurrent()) return false;
+    const revision = patientRevisions.current.get(patientId) || 0;
     const requestId = (followUpRequests.current.get(patientId) || 0) + 1;
     followUpRequests.current.set(patientId, requestId);
-    const isCurrent = () => token && getAuthToken() === token && sessionEpoch.current === epoch &&
-      followUpRequests.current.get(patientId) === requestId;
+    const isCurrent = () => isAccessCurrent() && followUpRequests.current.get(patientId) === requestId;
     const update = transform => {
       setPacientes(previous => previous.map(patient => patient.id === patientId ? transform(patient) : patient));
       setPacienteSeleccionado(previous => previous?.id === patientId ? transform(previous) : previous);
@@ -279,6 +317,11 @@ export default function App({onRestrictedSession}) {
     try {
       const followUp = await getPatientFollowUp(patientId);
       if (!isCurrent()) return false;
+      if ((patientRevisions.current.get(patientId) || 0) !== revision) {
+        update(patient => patient.seguimientoEstado === 'loading' ? { ...patient, seguimientoEstado: 'error' } : patient);
+        return false;
+      }
+      advancePatientRevision(patientId);
       update(patient => ({
         ...patient,
         seguimiento: mapBackendFollowUpToUiFollowUp(followUp),
@@ -287,36 +330,31 @@ export default function App({onRestrictedSession}) {
       }));
       return true;
     } catch (error) {
-      if (!isCurrent()) return false;
+      if (!isAccessCurrent()) return false;
       if ([401, 403, 404].includes(error.status)) {
-        // A lost authorization is not a transient failure: discard protected data.
-        setPacientes([]);
-        setPacienteSeleccionado(null);
-        setAppointments([]);
-        setReminders([]);
-        setCareRelationships([]);
-        setErrorCarga('Ya no tienes acceso a este expediente. Vuelve a comprobar tu sesión.');
-      } else {
+        invalidateClinicalAccess();
+      } else if (isCurrent()) {
         update(patient => ({ ...patient, seguimientoEstado: 'error' }));
       }
       return false;
     }
-  }, [currentUser]);
+  }, [currentUser, beginClinicalOperation, advancePatientRevision, invalidateClinicalAccess]);
 
-  const cargarDatos = useCallback(async () => {
+  const cargarDatos = useCallback(async ({ recheckAccess = false } = {}) => {
     if (!currentUser) {
       return;
     }
 
-    const token = getAuthToken();
-    const epoch = sessionEpoch.current;
-    const isCurrent = () => token && getAuthToken() === token && sessionEpoch.current === epoch;
+    let isCurrent = beginClinicalOperation({ allowDenied: recheckAccess });
+    if (!isCurrent()) return;
+    const revisions = new Map(patientRevisions.current);
     setCargandoDatos(true);
     setErrorCarga('');
 
     try {
       if (['admin', 'support', 'superadmin'].includes(currentUser.role)) {
         await refreshBackofficeData();
+        if (!isCurrent()) return;
         setPacientes([]);
         setAppointments([]);
         setAppointmentWaitlist([]);
@@ -356,9 +394,29 @@ export default function App({onRestrictedSession}) {
       }
 
       if (!isCurrent()) return;
-      setPacientes(previous => backendPatients.map(patient => preservePatientFollowUp(
-        previous.find(existing => existing.id === String(patient.id)),
-        { ...mapBackendPatientToUiPatient(patient), seguimientoEstado: currentUser.role === 'patient' ? 'loading' : 'idle' },
+      let recheckedFollowUp = null;
+      if (clinicalAccess.current.denied) {
+        // Only the explicit button may probe again. All required reads must succeed.
+        if (currentUser.role === 'patient') {
+          recheckedFollowUp = await getPatientFollowUp(String(currentUser.patientId));
+          if (!isCurrent()) return;
+        }
+        clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: false };
+        setVistaActiva('dashboard');
+        isCurrent = beginClinicalOperation();
+      }
+      const updates = backendPatients.map(patient => {
+        const id = String(patient.id);
+        const preserveActivity = (revisions.get(id) || 0) !== (patientRevisions.current.get(id) || 0);
+        advancePatientRevision(id);
+        return { id, preserveActivity, patient: mapBackendPatientToUiPatient(
+          recheckedFollowUp && id === String(currentUser.patientId) ? { ...patient, followUp: recheckedFollowUp, tasks: [
+            ...recheckedFollowUp.consultations.flatMap(entry => entry.tasks), ...recheckedFollowUp.unassignedTasks,
+          ] } : patient,
+        ) };
+      });
+      setPacientes(previous => updates.map(({ id, patient, preserveActivity }) => preservePatientActivity(
+        previous.find(existing => existing.id === id), patient, preserveActivity,
       )));
       setAppointments(sortAppointments(backendAppointments.map(mapBackendAppointmentToUiAppointment)));
       setReminders(backendReminders);
@@ -374,23 +432,24 @@ export default function App({onRestrictedSession}) {
         setAvailabilityDraft([]);
         setAvailabilityExceptions([]);
       }
-      if (currentUser.role === 'patient' && backendPatients.some(patient => String(patient.id) === String(currentUser.patientId))) {
+      if (!recheckedFollowUp && currentUser.role === 'patient' && backendPatients.some(patient => String(patient.id) === String(currentUser.patientId))) {
         void refreshPatientFollowUp(String(currentUser.patientId));
       }
     } catch (error) {
       if (!isCurrent()) return;
       if ([401, 403, 404].includes(error.status)) {
-        setPacientes([]);
-        setPacienteSeleccionado(null);
-        setAppointments([]);
-        setReminders([]);
-        setCareRelationships([]);
+        invalidateClinicalAccess();
+        return;
+      }
+      if (clinicalAccess.current.denied) {
+        setErrorCarga('No se pudo comprobar el acceso. El expediente sigue bloqueado; puedes reintentar.');
+        return;
       }
       setErrorCarga(error.message || 'No se pudieron cargar los datos del tablero.');
     } finally {
       if (isCurrent()) setCargandoDatos(false);
     }
-  }, [currentUser, refreshBackofficeData, refreshPatientFollowUp]);
+  }, [currentUser, refreshBackofficeData, refreshPatientFollowUp, beginClinicalOperation, advancePatientRevision, invalidateClinicalAccess]);
 
   useEffect(() => {
     const bootstrapSession = async () => {
@@ -611,6 +670,8 @@ export default function App({onRestrictedSession}) {
   };
 
   const handleCreateCareRelationship = async (payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isBackoffice || processingRelationshipId) {
       return false;
     }
@@ -620,18 +681,24 @@ export default function App({onRestrictedSession}) {
 
     try {
       const relationship = await createCareRelationship(payload);
+      if (!isCurrent()) return false;
       syncCareRelationshipState(relationship);
       showSuccessFeedback('Relacion paciente-psicologo creada correctamente.');
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setBackofficeActionError(error.message || 'No se pudo crear la relacion paciente-psicologo.');
       return false;
     } finally {
-      setProcessingRelationshipId(null);
+      if (isCurrent()) {
+        setProcessingRelationshipId(null);
+      }
     }
   };
 
   const handleUpdateCareRelationship = async (relationshipId, payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isBackoffice || processingRelationshipId) {
       return false;
     }
@@ -641,18 +708,24 @@ export default function App({onRestrictedSession}) {
 
     try {
       const relationship = await updateCareRelationship(relationshipId, payload);
+      if (!isCurrent()) return false;
       syncCareRelationshipState(relationship);
       showSuccessFeedback('Relacion paciente-psicologo actualizada correctamente.');
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setBackofficeActionError(error.message || 'No se pudo actualizar la relacion paciente-psicologo.');
       return false;
     } finally {
-      setProcessingRelationshipId(null);
+      if (isCurrent()) {
+        setProcessingRelationshipId(null);
+      }
     }
   };
 
   const handleRequestCareRelationship = async (payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (currentUser?.role !== 'patient' || processingRelationshipId) {
       return false;
     }
@@ -662,18 +735,24 @@ export default function App({onRestrictedSession}) {
 
     try {
       const relationship = await requestCareRelationship(payload);
+      if (!isCurrent()) return false;
       syncCareRelationshipState(relationship);
       showSuccessFeedback('Solicitud enviada al psicologo. Quedara pendiente hasta que la revise.');
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setRelationshipActionError(error.message || 'No se pudo enviar la solicitud de vinculo.');
       return false;
     } finally {
-      setProcessingRelationshipId(null);
+      if (isCurrent()) {
+        setProcessingRelationshipId(null);
+      }
     }
   };
 
   const handleInviteCareRelationship = async (payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (currentUser?.role !== 'psychologist' || processingRelationshipId) {
       return false;
     }
@@ -684,19 +763,25 @@ export default function App({onRestrictedSession}) {
 
     try {
       const relationship = await inviteCareRelationship(payload);
+      if (!isCurrent()) return false;
       syncCareRelationshipState(relationship);
       setRelationshipInvitePreview(relationship.invitePreview || null);
       showSuccessFeedback('Invitacion enviada al paciente para vincular su expediente.');
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setRelationshipActionError(error.message || 'No se pudo enviar la invitacion al paciente.');
       return false;
     } finally {
-      setProcessingRelationshipId(null);
+      if (isCurrent()) {
+        setProcessingRelationshipId(null);
+      }
     }
   };
 
   const handleRespondToCareRelationship = async (relationshipId, payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!['patient', 'psychologist'].includes(currentUser?.role || '') || processingRelationshipId) {
       return false;
     }
@@ -706,13 +791,20 @@ export default function App({onRestrictedSession}) {
 
     try {
       const relationship = await respondToCareRelationship(relationshipId, payload);
+      if (!isCurrent()) return false;
       syncCareRelationshipState(relationship);
 
       if (currentUser?.role === 'psychologist' && payload.status === 'active') {
         try {
           const refreshedPatients = await getPatients();
+          if (!isCurrent()) return false;
           setPacientes(refreshedPatients.map(mapBackendPatientToUiPatient));
-        } catch {
+        } catch (error) {
+          if (!isCurrent()) return false;
+          if ([403, 404].includes(error.status)) {
+            invalidateClinicalAccess();
+            return false;
+          }
           // Keep current state if background refresh fails.
         }
       }
@@ -724,14 +816,19 @@ export default function App({onRestrictedSession}) {
       );
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setRelationshipActionError(error.message || 'No se pudo responder la solicitud de vinculo.');
       return false;
     } finally {
-      setProcessingRelationshipId(null);
+      if (isCurrent()) {
+        setProcessingRelationshipId(null);
+      }
     }
   };
 
   const handleAcceptCareRelationshipByCode = async (payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (currentUser?.role !== 'patient' || processingRelationshipId) {
       return false;
     }
@@ -741,20 +838,27 @@ export default function App({onRestrictedSession}) {
 
     try {
       const relationship = await acceptCareRelationshipByCode(payload);
+      if (!isCurrent()) return false;
       syncCareRelationshipState(relationship);
       showSuccessFeedback('Invitacion aceptada correctamente. El vinculo clinico ya quedo activo.');
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setRelationshipActionError(error.message || 'No se pudo aceptar el codigo de invitacion.');
       return false;
     } finally {
-      setProcessingRelationshipId(null);
+      if (isCurrent()) {
+        setProcessingRelationshipId(null);
+      }
     }
   };
 
-  const syncPatientState = (nextPatient) => {
-    setPacientes((currentPatients) => currentPatients.map(patient => patient.id === nextPatient.id ? preservePatientFollowUp(patient, nextPatient) : patient));
-    setPacienteSeleccionado((currentPatient) => (currentPatient?.id === nextPatient.id ? preservePatientFollowUp(currentPatient, nextPatient) : currentPatient));
+  const syncPatientState = (patientOrId, transform) => {
+    const id = transform ? patientOrId : patientOrId.id;
+    const update = patient => clinicalAccess.current.denied ? patient :
+      transform ? transform(patient) : preservePatientActivity(patient, patientOrId, true);
+    setPacientes(previous => previous.map(patient => patient.id === id ? update(patient) : patient));
+    setPacienteSeleccionado(previous => previous?.id === id ? update(previous) : previous);
   };
 
   const syncAppointmentsState = (updater) => {
@@ -775,24 +879,27 @@ export default function App({onRestrictedSession}) {
   };
 
   const refreshSelectedPatient = async (patientId) => {
-    const token = getAuthToken();
-    const epoch = sessionEpoch.current;
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return null;
+    const revision = patientRevisions.current.get(patientId) || 0;
     try {
       const refreshedPatient = await getPatient(patientId);
-      if (!token || getAuthToken() !== token || sessionEpoch.current !== epoch) return null;
+      if (!isCurrent()) return null;
       const uiPatient = mapBackendPatientToUiPatient(refreshedPatient);
-      syncPatientState(uiPatient);
+      const preserveActivity = revision !== (patientRevisions.current.get(patientId) || 0);
+      advancePatientRevision(patientId);
+      syncPatientState(patientId, previous => preservePatientActivity(previous, uiPatient, preserveActivity));
       if (currentUser?.role === 'patient') void refreshPatientFollowUp(patientId);
       return uiPatient;
     } catch (error) {
-      if (token && getAuthToken() === token && sessionEpoch.current === epoch && [401, 403, 404].includes(error.status)) {
-        setPacientes([]); setPacienteSeleccionado(null); setAppointments([]); setReminders([]); setCareRelationships([]);
-      }
+      if (isCurrent() && [401, 403, 404].includes(error.status)) invalidateClinicalAccess();
       throw error;
     }
   };
 
   const refreshAppointmentsAndWaitlist = useCallback(async () => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!currentUser) {
       return;
     }
@@ -805,6 +912,7 @@ export default function App({onRestrictedSession}) {
 
     try {
       const [backendAppointments, backendWaitlist = []] = await Promise.all(requests);
+      if (!isCurrent()) return false;
       setAppointments(sortAppointments(backendAppointments.map(mapBackendAppointmentToUiAppointment)));
 
       if (currentUser.role === 'psychologist') {
@@ -812,25 +920,33 @@ export default function App({onRestrictedSession}) {
       } else {
         setAppointmentWaitlist([]);
       }
-    } catch {
+    } catch (error) {
+      if (!isCurrent()) return false;
+      if ([403, 404].includes(error.status)) invalidateClinicalAccess();
       // Keep current state if this background refresh fails.
     }
-  }, [currentUser]);
+  }, [currentUser, beginClinicalOperation, invalidateClinicalAccess]);
 
   const refreshReminders = async () => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!currentUser) {
       return;
     }
 
     try {
       const nextReminders = await getMyReminders();
+      if (!isCurrent()) return false;
       setReminders(nextReminders);
-    } catch {
+    } catch (error) {
+      if (!isCurrent()) return false;
+      if ([403, 404].includes(error.status)) invalidateClinicalAccess();
       // Keep the current reminders on screen if the refresh fails.
     }
   };
 
   const abrirNotas = (paciente, options = {}) => {
+    if (clinicalAccess.current.denied) return;
     const pacienteActualizado = pacientes.find((currentPatient) => currentPatient.id === paciente.id) || paciente;
     setPacienteSeleccionado(pacienteActualizado);
     setSessionDraftAppointmentId(options.appointmentId || null);
@@ -850,6 +966,8 @@ export default function App({onRestrictedSession}) {
   };
 
   const guardarNuevoPaciente = async (e) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     e.preventDefault();
 
     if (!isPsychologist || !nuevoPacienteForm.nombre.trim() || guardandoPaciente) {
@@ -867,19 +985,25 @@ export default function App({onRestrictedSession}) {
           estado: 'active',
         }),
       );
+      if (!isCurrent()) return false;
 
       setPacientes((currentPatients) => [...currentPatients, mapBackendPatientToUiPatient(createdPatient)]);
       setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
       setMostrarModalNuevoPaciente(false);
       showSuccessFeedback('Paciente creado correctamente.');
     } catch (error) {
+      if (!isCurrent()) return false;
       showErrorFeedback(error.message || 'No se pudo crear el paciente.');
     } finally {
-      setGuardandoPaciente(false);
+      if (isCurrent()) {
+        setGuardandoPaciente(false);
+      }
     }
   };
 
   const guardarNotas = async () => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || !pacienteSeleccionado || guardandoNotas) {
       return;
     }
@@ -893,19 +1017,25 @@ export default function App({onRestrictedSession}) {
         patientToUpdate.id,
         { notes: notasTemp },
       );
+      if (!isCurrent()) return false;
 
       const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
       syncPatientState(updatedPatient);
       setNotasTemp(updatedApiPatient.notes || '');
       showSuccessFeedback('Expediente actualizado correctamente.');
     } catch (error) {
+      if (!isCurrent()) return false;
       showErrorFeedback(error.message || 'No se pudieron guardar las notas.');
     } finally {
-      setGuardandoNotas(false);
+      if (isCurrent()) {
+        setGuardandoNotas(false);
+      }
     }
   };
 
   const actualizarPerfilPaciente = async (changes) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || !pacienteSeleccionado || guardandoPerfilPaciente) {
       return false;
     }
@@ -918,6 +1048,7 @@ export default function App({onRestrictedSession}) {
         patientToUpdate.id,
         (() => {
           const mapped = mapUiPatientToBackendPatient({ ...patientToUpdate, ...changes });
+          if (!isCurrent()) return false;
           return { riskLevel: mapped.riskLevel, status: mapped.status, reasonForConsultation: mapped.reasonForConsultation };
         })(),
       );
@@ -927,10 +1058,13 @@ export default function App({onRestrictedSession}) {
       showSuccessFeedback('Ficha del paciente actualizada.');
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       showErrorFeedback(error.message || 'No se pudo actualizar la ficha del paciente.');
       return false;
     } finally {
-      setGuardandoPerfilPaciente(false);
+      if (isCurrent()) {
+        setGuardandoPerfilPaciente(false);
+      }
     }
   };
 
@@ -964,9 +1098,8 @@ export default function App({onRestrictedSession}) {
       return false;
     }
 
-    const token = getAuthToken();
-    const epoch = sessionEpoch.current;
-    const isCurrent = () => token && getAuthToken() === token && sessionEpoch.current === epoch;
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     setGuardandoEntrevista(true);
 
     try {
@@ -997,10 +1130,16 @@ export default function App({onRestrictedSession}) {
       return;
     }
 
-    if (await saveInterview(patientProfile.id, patientInterviewForm)) setShowPatientInterview(false);
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return;
+    const patientId = patientProfile.id;
+    const wasSaved = await saveInterview(patientId, patientInterviewForm);
+    if (wasSaved && isCurrent()) setShowPatientInterview(false);
   };
 
   const toggleTask = async (taskId) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!pacienteSeleccionado || procesandoTareaId) {
       return;
     }
@@ -1011,29 +1150,38 @@ export default function App({onRestrictedSession}) {
       return;
     }
 
+    const patientId = pacienteSeleccionado.id;
+    advancePatientRevision(patientId);
     setProcesandoTareaId(taskId);
 
     try {
-      const updatedTask = await updatePatientTask(pacienteSeleccionado.id, taskId, {
+      const updatedTask = await updatePatientTask(patientId, taskId, {
         completed: !task.completada,
       });
+      if (!isCurrent()) return false;
 
       const uiTask = mapBackendTaskToUiTask(updatedTask);
-      const nextPatient = {
-        ...pacienteSeleccionado,
-        tareas: pacienteSeleccionado.tareas.map((currentTask) => (currentTask.id === taskId ? uiTask : currentTask)),
-      };
-
-      syncPatientState(nextPatient);
+      advancePatientRevision(patientId);
+      syncPatientState(patientId, patient => ({
+        ...patient,
+        tareas: patient.tareas.map(currentTask => currentTask.id === taskId ? uiTask : currentTask),
+      }));
       await refreshReminders();
+      if (!isCurrent()) return false;
     } catch (error) {
+      if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
       showErrorFeedback(error.message || 'No se pudo actualizar la tarea.');
     } finally {
-      setProcesandoTareaId(null);
+      if (isCurrent()) {
+        setProcesandoTareaId(null);
+      }
     }
   };
 
   const removeTask = async (taskId) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || !pacienteSeleccionado || procesandoTareaId) {
       return;
     }
@@ -1042,22 +1190,26 @@ export default function App({onRestrictedSession}) {
 
     try {
       await deletePatientTask(pacienteSeleccionado.id, taskId);
+      if (!isCurrent()) return false;
 
-      const nextPatient = {
-        ...pacienteSeleccionado,
-        tareas: pacienteSeleccionado.tareas.filter((task) => task.id !== taskId),
-      };
-
-      syncPatientState(nextPatient);
+      syncPatientState(pacienteSeleccionado.id, patient => ({
+        ...patient, tareas: patient.tareas.filter(task => task.id !== taskId),
+      }));
       await refreshReminders();
+      if (!isCurrent()) return false;
     } catch (error) {
+      if (!isCurrent()) return false;
       showErrorFeedback(error.message || 'No se pudo retirar la tarea.');
     } finally {
-      setProcesandoTareaId(null);
+      if (isCurrent()) {
+        setProcesandoTareaId(null);
+      }
     }
   };
 
   const addObjective = async (objectiveText) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || !pacienteSeleccionado || creandoObjetivo) {
       return false;
     }
@@ -1066,24 +1218,27 @@ export default function App({onRestrictedSession}) {
 
     try {
       const createdObjective = await createPatientObjective(pacienteSeleccionado.id, { text: objectiveText });
+      if (!isCurrent()) return false;
       const uiObjective = mapBackendTaskToUiTask(createdObjective);
-      const nextPatient = {
-        ...pacienteSeleccionado,
-        objetivos: [...(pacienteSeleccionado.objetivos || []), uiObjective],
-      };
-
-      syncPatientState(nextPatient);
+      syncPatientState(pacienteSeleccionado.id, patient => ({
+        ...patient, objetivos: [...(patient.objetivos || []), uiObjective],
+      }));
       showSuccessFeedback('Objetivo agregado correctamente.');
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       showErrorFeedback(error.message || 'No se pudo crear el objetivo.');
       return false;
     } finally {
-      setCreandoObjetivo(false);
+      if (isCurrent()) {
+        setCreandoObjetivo(false);
+      }
     }
   };
 
   const toggleObjective = async (objectiveId) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || !pacienteSeleccionado || procesandoObjetivoId) {
       return;
     }
@@ -1100,22 +1255,25 @@ export default function App({onRestrictedSession}) {
       const updatedObjective = await updatePatientObjective(pacienteSeleccionado.id, objectiveId, {
         completed: !objective.completada,
       });
+      if (!isCurrent()) return false;
 
       const uiObjective = mapBackendTaskToUiTask(updatedObjective);
-      const nextPatient = {
-        ...pacienteSeleccionado,
-        objetivos: (pacienteSeleccionado.objetivos || []).map((currentObjective) => (currentObjective.id === objectiveId ? uiObjective : currentObjective)),
-      };
-
-      syncPatientState(nextPatient);
+      syncPatientState(pacienteSeleccionado.id, patient => ({
+        ...patient, objetivos: (patient.objetivos || []).map(objective => objective.id === objectiveId ? uiObjective : objective),
+      }));
     } catch (error) {
+      if (!isCurrent()) return false;
       showErrorFeedback(error.message || 'No se pudo actualizar el objetivo.');
     } finally {
-      setProcesandoObjetivoId(null);
+      if (isCurrent()) {
+        setProcesandoObjetivoId(null);
+      }
     }
   };
 
   const removeObjective = async (objectiveId) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || !pacienteSeleccionado || procesandoObjetivoId) {
       return;
     }
@@ -1124,22 +1282,25 @@ export default function App({onRestrictedSession}) {
 
     try {
       await deletePatientObjective(pacienteSeleccionado.id, objectiveId);
+      if (!isCurrent()) return false;
 
-      const nextPatient = {
-        ...pacienteSeleccionado,
-        objetivos: (pacienteSeleccionado.objetivos || []).filter((objective) => objective.id !== objectiveId),
-      };
-
-      syncPatientState(nextPatient);
+      syncPatientState(pacienteSeleccionado.id, patient => ({
+        ...patient, objetivos: (patient.objetivos || []).filter(objective => objective.id !== objectiveId),
+      }));
       showSuccessFeedback('Objetivo retirado; su registro se conserva.');
     } catch (error) {
+      if (!isCurrent()) return false;
       showErrorFeedback(error.message || 'No se pudo retirar el objetivo.');
     } finally {
-      setProcesandoObjetivoId(null);
+      if (isCurrent()) {
+        setProcesandoObjetivoId(null);
+      }
     }
   };
 
   const createSession = async (payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || !pacienteSeleccionado || guardandoSesion) {
       return false;
     }
@@ -1149,20 +1310,27 @@ export default function App({onRestrictedSession}) {
 
     try {
       await createPatientClinicalNote(pacienteSeleccionado.id, payload);
+      if (!isCurrent()) return false;
       await refreshSelectedPatient(pacienteSeleccionado.id);
+      if (!isCurrent()) return false;
       setSessionActionError('');
       showSuccessFeedback('Nota clinica creada correctamente.');
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
       setSessionActionError((error.message || 'No se pudo crear la nota clinica.') + details);
       return false;
     } finally {
-      setGuardandoSesion(false);
+      if (isCurrent()) {
+        setGuardandoSesion(false);
+      }
     }
   };
 
   const updateSession = async (sessionId, payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || !pacienteSeleccionado || guardandoSesion) {
       return false;
     }
@@ -1172,20 +1340,27 @@ export default function App({onRestrictedSession}) {
 
     try {
       await updatePatientClinicalNote(pacienteSeleccionado.id, sessionId, payload);
+      if (!isCurrent()) return false;
       await refreshSelectedPatient(pacienteSeleccionado.id);
+      if (!isCurrent()) return false;
       setSessionActionError('');
       showSuccessFeedback('Nota clinica actualizada correctamente.');
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
       setSessionActionError((error.message || 'No se pudo actualizar la nota clinica.') + details);
       return false;
     } finally {
-      setGuardandoSesion(false);
+      if (isCurrent()) {
+        setGuardandoSesion(false);
+      }
     }
   };
 
   const handleCreateAppointment = async (appointmentForm) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || guardandoCita) {
       return false;
     }
@@ -1195,21 +1370,29 @@ export default function App({onRestrictedSession}) {
 
     try {
       const createdAppointment = await createAppointment(mapUiAppointmentToBackendAppointment(appointmentForm));
+      if (!isCurrent()) return false;
       const uiAppointment = mapBackendAppointmentToUiAppointment(createdAppointment);
       syncAppointmentsState((currentAppointments) => [...currentAppointments, uiAppointment]);
       await refreshAppointmentsAndWaitlist();
+      if (!isCurrent()) return false;
       await refreshReminders();
+      if (!isCurrent()) return false;
       showSuccessFeedback('Cita creada correctamente.');
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setAppointmentActionError(error.message || 'No se pudo crear la cita.');
       return false;
     } finally {
-      setGuardandoCita(false);
+      if (isCurrent()) {
+        setGuardandoCita(false);
+      }
     }
   };
 
   const handleUpdateAppointment = async (appointmentId, appointmentForm) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || guardandoCita) {
       return false;
     }
@@ -1220,24 +1403,32 @@ export default function App({onRestrictedSession}) {
 
     try {
       const updatedAppointment = await updateAppointment(appointmentId, mapUiAppointmentToBackendAppointment(appointmentForm));
+      if (!isCurrent()) return false;
       const uiAppointment = mapBackendAppointmentToUiAppointment(updatedAppointment);
       syncAppointmentsState((currentAppointments) =>
         currentAppointments.map((appointment) => (appointment.id === appointmentId ? uiAppointment : appointment)),
       );
       await refreshAppointmentsAndWaitlist();
+      if (!isCurrent()) return false;
       await refreshReminders();
+      if (!isCurrent()) return false;
       showSuccessFeedback('Cita actualizada correctamente.');
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setAppointmentActionError(error.message || 'No se pudo actualizar la cita.');
       return false;
     } finally {
-      setGuardandoCita(false);
-      setProcesandoCitaId(null);
+      if (isCurrent()) {
+        setGuardandoCita(false);
+        setProcesandoCitaId(null);
+      }
     }
   };
 
   const handleCancelFutureRecurringAppointments = async (appointmentId) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || procesandoCitaId) {
       return false;
     }
@@ -1247,15 +1438,21 @@ export default function App({onRestrictedSession}) {
 
     try {
       await cancelFutureRecurringAppointments(appointmentId);
+      if (!isCurrent()) return false;
       showSuccessFeedback('Citas canceladas; sus registros se conservan.');
       await refreshAppointmentsAndWaitlist();
+      if (!isCurrent()) return false;
       await refreshReminders();
+      if (!isCurrent()) return false;
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setAppointmentActionError(error.message || 'No se pudieron cancelar las citas futuras de la recurrencia.');
       return false;
     } finally {
-      setProcesandoCitaId(null);
+      if (isCurrent()) {
+        setProcesandoCitaId(null);
+      }
     }
   };
 
@@ -1271,6 +1468,8 @@ export default function App({onRestrictedSession}) {
   };
 
   const handleCreateAppointmentWaitlist = async (waitlistForm) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || guardandoListaEspera) {
       return false;
     }
@@ -1285,17 +1484,24 @@ export default function App({onRestrictedSession}) {
         scheduledTime: waitlistForm.hora24,
         notes: waitlistForm.notas || '',
       });
+      if (!isCurrent()) return false;
       await refreshAppointmentsAndWaitlist();
+      if (!isCurrent()) return false;
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setWaitlistActionError(error.message || 'No se pudo agregar a lista de espera.');
       return false;
     } finally {
-      setGuardandoListaEspera(false);
+      if (isCurrent()) {
+        setGuardandoListaEspera(false);
+      }
     }
   };
 
   const handleDeleteAppointmentWaitlist = async (waitlistEntryId) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || procesandoListaEsperaId) {
       return false;
     }
@@ -1305,17 +1511,24 @@ export default function App({onRestrictedSession}) {
 
     try {
       await deleteAppointmentWaitlistEntry(waitlistEntryId);
+      if (!isCurrent()) return false;
       await refreshAppointmentsAndWaitlist();
+      if (!isCurrent()) return false;
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setWaitlistActionError(error.message || 'No se pudo eliminar la solicitud de lista de espera.');
       return false;
     } finally {
-      setProcesandoListaEsperaId(null);
+      if (isCurrent()) {
+        setProcesandoListaEsperaId(null);
+      }
     }
   };
 
   const handleReorderAppointmentWaitlist = async (payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || guardandoListaEspera) {
       return false;
     }
@@ -1329,17 +1542,24 @@ export default function App({onRestrictedSession}) {
         scheduledTime: payload.hora24,
         entryIds: payload.entryIds,
       });
+      if (!isCurrent()) return false;
       await refreshAppointmentsAndWaitlist();
+      if (!isCurrent()) return false;
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setWaitlistActionError(error.message || 'No se pudo reordenar la lista de espera.');
       return false;
     } finally {
-      setGuardandoListaEspera(false);
+      if (isCurrent()) {
+        setGuardandoListaEspera(false);
+      }
     }
   };
 
   const handleOpenSessionFromAppointment = async (appointment, patient) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || !appointment || !patient) {
       return false;
     }
@@ -1358,6 +1578,7 @@ export default function App({onRestrictedSession}) {
         ...appointment,
         estado: 'completada',
       });
+      if (!isCurrent()) return false;
 
       if (!wasUpdated) {
         return false;
@@ -1369,6 +1590,8 @@ export default function App({onRestrictedSession}) {
   };
 
   const handleUpdateAvailability = async (entries) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || savingAvailability) {
       return false;
     }
@@ -1378,18 +1601,24 @@ export default function App({onRestrictedSession}) {
 
     try {
       const updatedAvailability = await updateMyAvailability(entries);
+      if (!isCurrent()) return false;
       setAvailability(updatedAvailability);
       setAvailabilityDraft(updatedAvailability);
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setAvailabilityActionError(error.message || 'No se pudo actualizar la disponibilidad.');
       return false;
     } finally {
-      setSavingAvailability(false);
+      if (isCurrent()) {
+        setSavingAvailability(false);
+      }
     }
   };
 
   const handleUpsertAvailabilityException = async (payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || savingAvailabilityException) {
       return false;
     }
@@ -1399,20 +1628,26 @@ export default function App({onRestrictedSession}) {
 
     try {
       const savedException = await upsertMyAvailabilityException(payload);
+      if (!isCurrent()) return false;
       setAvailabilityExceptions((currentExceptions) => {
         const withoutCurrentDate = currentExceptions.filter((exception) => exception.date !== savedException.date);
         return [...withoutCurrentDate, savedException].sort((left, right) => left.date.localeCompare(right.date));
       });
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setAvailabilityExceptionActionError(error.message || 'No se pudo guardar la excepcion.');
       return false;
     } finally {
-      setSavingAvailabilityException(false);
+      if (isCurrent()) {
+        setSavingAvailabilityException(false);
+      }
     }
   };
 
   const handleDeleteAvailabilityException = async (date) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || savingAvailabilityException) {
       return false;
     }
@@ -1422,17 +1657,23 @@ export default function App({onRestrictedSession}) {
 
     try {
       await deleteMyAvailabilityException(date);
+      if (!isCurrent()) return false;
       setAvailabilityExceptions((currentExceptions) => currentExceptions.filter((exception) => exception.date !== date));
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setAvailabilityExceptionActionError(error.message || 'No se pudo eliminar la excepcion.');
       return false;
     } finally {
-      setSavingAvailabilityException(false);
+      if (isCurrent()) {
+        setSavingAvailabilityException(false);
+      }
     }
   };
 
   const handleCreateAvailabilityExceptionRange = async (payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || savingAvailabilityException) {
       return false;
     }
@@ -1442,6 +1683,7 @@ export default function App({onRestrictedSession}) {
 
     try {
       const createdExceptions = await createMyUnavailableAvailabilityRange(payload);
+      if (!isCurrent()) return false;
       setAvailabilityExceptions((currentExceptions) => {
         const blockedDates = new Set(createdExceptions.map((exception) => exception.date));
         const preservedExceptions = currentExceptions.filter((exception) => !blockedDates.has(exception.date));
@@ -1449,14 +1691,19 @@ export default function App({onRestrictedSession}) {
       });
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setAvailabilityExceptionActionError(error.message || 'No se pudo bloquear el periodo.');
       return false;
     } finally {
-      setSavingAvailabilityException(false);
+      if (isCurrent()) {
+        setSavingAvailabilityException(false);
+      }
     }
   };
 
   const handleUpdateAvailabilityExceptionRange = async (payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || savingAvailabilityException) {
       return false;
     }
@@ -1466,6 +1713,7 @@ export default function App({onRestrictedSession}) {
 
     try {
       const updatedExceptions = await updateMyUnavailableAvailabilityRange(payload);
+      if (!isCurrent()) return false;
       setAvailabilityExceptions((currentExceptions) => {
         const currentRangeDates = new Set(buildDateRangeStrings(payload.currentStartDate, payload.currentEndDate));
         const preservedExceptions = currentExceptions.filter((exception) => !currentRangeDates.has(exception.date));
@@ -1473,14 +1721,19 @@ export default function App({onRestrictedSession}) {
       });
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setAvailabilityExceptionActionError(error.message || 'No se pudo actualizar el periodo bloqueado.');
       return false;
     } finally {
-      setSavingAvailabilityException(false);
+      if (isCurrent()) {
+        setSavingAvailabilityException(false);
+      }
     }
   };
 
   const handleDeleteAvailabilityExceptionRange = async (payload) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent()) return false;
     if (!isPsychologist || savingAvailabilityException) {
       return false;
     }
@@ -1490,14 +1743,18 @@ export default function App({onRestrictedSession}) {
 
     try {
       const deletedRange = await deleteMyUnavailableAvailabilityRange(payload);
+      if (!isCurrent()) return false;
       const deletedDates = new Set(deletedRange.deletedDates || []);
       setAvailabilityExceptions((currentExceptions) => currentExceptions.filter((exception) => !deletedDates.has(exception.date)));
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       setAvailabilityExceptionActionError(error.message || 'No se pudo desbloquear el periodo.');
       return false;
     } finally {
-      setSavingAvailabilityException(false);
+      if (isCurrent()) {
+        setSavingAvailabilityException(false);
+      }
     }
   };
 
@@ -1519,7 +1776,7 @@ export default function App({onRestrictedSession}) {
           <h2 className="text-xl font-bold text-gray-800">No pudimos sincronizar la informacion</h2>
           <p className="mt-2 text-sm text-gray-500">{errorCarga}</p>
           <p className="mt-1 text-sm text-gray-500">Puedes reintentar sin perder tu sesion actual.</p>
-          <button onClick={cargarDatos} className="mt-4 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium">
+          <button onClick={() => cargarDatos({ recheckAccess: true })} className="mt-4 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium">
             Reintentar
           </button>
         </div>
