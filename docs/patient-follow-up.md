@@ -197,6 +197,79 @@ Validación local nueva del 28 de octubre de 2026, separada de la evidencia inic
 
 La matriz de siete checks de GitHub Actions se ejecuta al publicar los commits en el mismo Draft PR; su estado se informa aparte. No se atribuyen los resultados locales anteriores a Actions.
 
+## Concurrencia de lecturas, escrituras y sesiones — P2-A/B/C
+
+Encargo focalizado sobre el HEAD auditado `69867d3d646f6c4e1c75504e70ded507c1c753b2`, verificado idéntico al remoto antes de editar. Las secciones anteriores conservan la evidencia de sus respectivos HEAD; los ensayos siguientes son nuevos. Sin cambios del lector, DTO, backend funcional, autorización ni decisiones de producto.
+
+### Carreras y protección
+
+| Hallazgo | Causa | Protección |
+| --- | --- | --- |
+| A1: GET retenido, PATCH 200, GET antiguo liberado | Solo se comparaban intentos GET; una escritura no invalidaba su snapshot | Revisión monotónica por paciente al iniciar y resolver PATCH; un GET con revisión anterior no aplica su DTO |
+| A2: PATCH retenido, GET incorpora tarea y estado ready, PATCH liberado | El PATCH reconstruía todo el paciente desde la captura anterior al await | Actualización funcional de la tarea confirmada sobre ambos estados vigentes; conserva otras tareas, asociaciones y estado |
+| B: carga principal retenida, seguimiento 403/404, carga liberada | El descarte no cambiaba una generación compartida con las otras operaciones | Generación de acceso clínico y estado denied, separados de la generación de sesión; todas las operaciones anteriores quedan invalidadas |
+| C: PUT de P retenido, nueva sesión Q con modal abierto, PUT P confirmado | El consumidor interpretaba true como autorización para cerrar cualquier modal actual | El consumidor captura y comprueba la identidad vigente de la operación antes de cerrar su modal |
+
+Las referencias de control viven solo durante la sesión de App: generación de sesión, generación/denegación de acceso, revisión por paciente y último intento de seguimiento. No se añade caché global, almacenamiento persistente, librerías ni campos de servidor.
+
+En A, un GET iniciado mientras el PATCH está pendiente puede incorporar tareas nuevas antes de que este se confirme. La respuesta posterior del PATCH cambia únicamente su tarea y conserva el resto del estado ready. Si el GET termina después de la confirmación, su revisión ya no es aplicable. El fallo real del PATCH conserva las tareas y comunica error, sin éxito ficticio. Cuando se descarta la petición de seguimiento todavía activa, se conserva la proyección vigente y queda disponible el aviso/reintento existente, sin mantener un loading indefinido.
+
+Los lectores de expediente/listado también capturan la revisión: un DTO anterior puede actualizar sus otros campos, pero conserva las actividades más recientes en lugar de borrar tareas nuevas o revertir su estado. Los guardados de campos no relacionados preservan la actividad vigente. Las modificaciones de tareas y objetivos usan actualizadores funcionales y no reconstruyen el expediente completo desde una captura anterior. Los permisos de objetivos permanecen intactos.
+
+En B, `beginClinicalOperation` captura token y generaciones; los resultados, errores y limpiezas asíncronas comprueban su vigencia antes de aplicarse. La misma guarda cubre carga principal, detalle, seguimiento, refrescos de agenda/espera/recordatorios/relaciones y callbacks de escritura que puedan repoblar esos estados. El descarte central vacía las colecciones clínicas y formularios pertinentes y limpia sus flags; un finally antiguo no puede modificar los flags de una operación posterior. Una denegación de un GET todavía perteneciente al acceso vigente también invalida el acceso aunque exista otro GET más reciente.
+
+403/404 no cierran la sesión global. La denegación permanece ante respuestas antiguas y ante errores de red/500 posteriores. El reintento ordinario de seguimiento y una carga automática no la levantan. El botón global «Reintentar» solicita una comprobación explícita: solo después de que las peticiones principales y, para el paciente, el seguimiento respondan correctamente, abre una generación nueva y vuelve al tablero autorizado. Si el probe falla, permanece bloqueado. Iniciar una sesión nueva vacía el estado y exige sus lecturas autenticadas propias. El tratamiento de 401 y revocación del cliente API existente se conserva.
+
+En C, `saveInterview` sigue pudiendo devolver true cuando el servidor confirmó el PUT de P. Ese resultado no autoriza efectos en Q: el consumidor vuelve a comprobar la operación antes de cerrar el modal; formulario, avisos, estado de guardado y finally también quedan protegidos. Se prueban Q distinto y una nueva sesión del mismo paciente, incluso con la misma cadena de token. La entrevista confirmada de la sesión vigente conserva éxito/cierre aunque falle el refresco opcional; el rechazo del PUT mantiene el modal y su error real.
+
+### Secuencias reproducibles
+
+[Pruebas de concurrencia](../frontend/test/patient-follow-up-concurrency.test.js) y [arnés de App](../frontend/test/helpers/followUpAppHarness.js) ejecutan los callbacks reales extraídos del código vigente. El arnés conserva la captura de paciente de cada invocación, como un render de React; no sustituye las guardas ni reimplementa las operaciones. Las promesas se resuelven/rechazan explícitamente en el orden de cada prueba; las continuaciones asentadas se drenan mediante una barrera del bucle de eventos, sin umbrales temporales ni sleeps.
+
+Trece pruebas nuevas cubren:
+
+1. GET antiguo → PATCH 200 → GET antiguo: tarea confirmada conservada.
+2. PATCH pendiente → GET con tarea nueva/ready → PATCH: tareas, asociación y estado conservados en colección y selección.
+3. GET iniciado durante PATCH y entregado después de confirmarlo; dos GET fuera de orden.
+4. PATCH realmente fallido después de GET con tarea nueva, sin pérdida ni éxito falso.
+5. Lectura antigua de detalle/listado frente a tareas nuevas y PATCH confirmado.
+6. Carga principal pendiente → 403/404 → carga tardía y seguimiento 500: todo permanece descartado.
+7. Denegación → detalle, agenda, recordatorios o PATCH antiguos: no repueblan estado.
+8. Denegación persistente hasta comprobación explícita correcta; principales 200 + seguimiento 500 siguen bloqueados.
+9. Finally antiguo frente a un probe nuevo todavía pendiente: no apaga su loading.
+10. GET/PATCH de sesión anterior, otro paciente o mismo paciente/token: sin efectos en la sesión nueva.
+11. PUT de P pendiente → reset real de sesión → modal/formulario/guardado de Q → PUT P confirmado: Q permanece intacto, un solo PUT.
+12. PUT vigente confirmado + seguimiento 500; PUT rechazado con modal abierto.
+13. Denegación de un GET anterior mientras existe otro más reciente: la respuesta 500 posterior no restaura acceso.
+
+El [recorrido Chromium](../scripts/follow-up-concurrency-ui-review.cjs), mediante el [arnés aislado](../scripts/run-follow-up-concurrency-ui-review.py), complementa las promesas unitarias con la app y API reales. Retiene respuestas HTTP después de confirmar el backend, libera cada compuerta explícitamente y comprueba A1/A2. Para A2 crea una tarea ficticia mediante el psicólogo autorizado en la misma demo nueva. Para C retiene los PUT confirmados de P y Q, entrega P primero y comprueba modal, respuesta y botón de guardado de Q intactos, con un PUT por paciente. Una señal de consumo del JSON y barrera de tarea confirma que las continuaciones de P ya se procesaron, sin esperar un número arbitrario de frames. Después entrega Q y verifica el cierre correcto pese al 500 opcional. También comprueba el bloqueo 403, probe 500 y recuperación explícita correcta.
+
+Reproducción autorizada en recursos nuevos:
+
+```bash
+bash scripts/clinical-episodes.sh test
+bash scripts/clinical-episodes.sh patient-follow-up-demo
+python3 scripts/run-follow-up-concurrency-ui-review.py UUID_NUEVO_DE_LA_DEMO
+bash scripts/clinical-episodes.sh cleanup UUID_NUEVO_DE_LA_DEMO
+```
+
+Para los once recorridos previos, crear otra demo nueva y ejecutar `scripts/run-follow-up-recovery-ui-review.py` con su UUID. No reutilizar sus pacientes ya entrevistados para repetir los PUT de otra ejecución.
+
+Validación local nueva del 28 de octubre de 2026, separada de Actions:
+
+- Código funcional `d0974462f579aac807b2019a7a0894649ffa8ad4`; pruebas/arnés `973359949e1027975f937adc0859106616472660`. Los contenidos se probaron antes de los commits.
+- Matriz nueva `f9706ebb-f537-4bbd-9fcf-16e5cc251ed1`: **105/105 unitarias backend, 17/17 episodios, 133/133 integración HTTP/PostgreSQL, 30/30 frontend**, lint/build aprobados; cero fallidas/canceladas/omitidas. Incluye privacidad #25, permisos #26 e integridad.
+- Demo final nueva `5b0a5a67-be17-42fa-a8d1-b6b28787e525`: **30/30 frontend**, lint/build y **4/4 escenarios Chromium de concurrencia** aprobados. Incluye GET/PATCH retenidos y dos PUT de entrevista confirmados pero retenidos, con consumo de respuesta de P observado antes de verificar Q. Cero errores de página; un solo PUT por paciente.
+- Otra demo nueva `d0fa062c-fd7c-4047-94b4-2e639b78df7d`: **30/30 frontend**, lint/build y **11/11 recorridos previos** aprobados, cero errores inesperados de página/API; fallos de red/500/401/403/404 inyectados identificados como esperados. Se conservaron cronología, asociaciones, tareas, objetivos de solo consulta, vista profesional, navegación y sesión.
+- Primer ensayo unitario: **25 aprobadas/5 fallidas de 30** por comparar arrays de contextos VM diferentes con deepStrictEqual; los valores coincidían. Se normalizó su contenedor con Array.from sin alterar las expectativas. Repetición: **30/30**, lint/build aprobados. La primera demo `38a05b47-51da-4dc5-8e21-872c1bf907b3` también aprobó los cuatro recorridos; la final sustituyó la barrera de frames del arnés por señal de consumo de JSON y tarea de evento.
+- Node 24/PostgreSQL 17 en Docker Desktop/Ubuntu WSL; navegador Node 24.21.0, Playwright 1.64.0 y Chromium 156.0.8078.4. Capturas ficticias enmascaradas inspeccionadas, incluido el modal de Q con sus respuestas y guardado pendiente después de la confirmación de P.
+- Todo el backend funcional, SQL/001–007/manifiesto/hashes, cliente API de sesión, lockfiles, decisiones y CI permanecen idénticos byte a byte al HEAD auditado: **80 archivos protegidos**. Verificador offline de Markdown/enlaces/IDs/UTF-8, diez pruebas del contrato de evidencia CI y diff aprobados.
+- Los cuatro proyectos propios nuevos se limpiaron: tres demos y una matriz, junto con sus imágenes de navegador etiquetadas. Se comprobaron propiedad y conservación de etiquetas preexistentes. Evidencia local ignorada en `tmp/issue21-concurrency`; solo fixtures ficticios, sin logs crudos publicados.
+
+Los siete checks de Actions se disparan al publicar los commits en la misma rama del Draft PR; su estado se informa aparte. Ningún resultado local anterior se presenta como resultado de Actions.
+
+Persisten las observaciones no bloqueantes sobre estados legacy y recorridos específicos fuera de `ci/browser`; no se amplía CI. El aviso de tamaño de bundle se mantiene (aproximadamente 505 kB en esta revisión). No se modifica la historia clínica ni se presenta una respuesta confirmada antigua como permiso actual.
+
 ## Límites de entrega
 
 Sin cambios a SQL 001–007, baseline/seed, manifiesto/hashes, autenticación/JWT, autorización legacy, proyecciones reservadas de #25, permisos de objetivos de #26, decisiones de producto, configuración CI/producción o administración de GitHub. Sin D3, nuevas vinculaciones, episodios paralelos, reconciliación histórica, proveedores ni despliegue.
