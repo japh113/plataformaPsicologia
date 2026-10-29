@@ -1,12 +1,12 @@
 # Desarrollo, Docker/WSL y validación
 
-Estado D2: D1 integrado en main `2fe0799ee683273df2dbed872840bbfd2ef03f6d` mediante #17; D2 se implementa en rama nueva con PR Draft y ensayos nuevos aislados. [Contrato D2](private-professional-management.md), [evidencia D2](private-professional-validation.md). Sin merge, despliegue habitual, D3 ni nuevas vinculaciones.
+Estado al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a`; A/B/C/D1/D2 y #25–#27 integrados. [Estado operativo y backlog](operational-status.md). [Contrato D2](private-professional-management.md) y [evidencia D2](private-professional-validation.md) conservan el corte de su entrega; no son una nueva autorización de ensayos. D3, nuevas vinculaciones y activación/permisos por episodio pendientes; instalación y despliegue habitual sin acreditar.
 
 Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile backend](../backend/Dockerfile), [Dockerfile frontend](../frontend/Dockerfile) y [package.json backend](../backend/package.json)/[frontend](../frontend/package.json). Documentar un comando no autoriza ejecutarlo. La CI integrada usa exclusivamente runners estándar GitHub-hosted Ubuntu, sandboxes nuevos y ensayos ficticios; [implementación y límites](ci-implementation.md).
 
 **Pruebas y contribución:** [CONTRIBUTING](../CONTRIBUTING.md) define entrega por rama/PR; el [plan CI-01–07](ci-plan.md) conserva la propuesta histórica y sus criterios. La [implementación CI](ci-implementation.md) está integrada en `main` mediante #14; la [ejecución del merge 39363841602](https://github.com/japh113/plataformaPsicologia/actions/runs/39363841602) aprobó los siete checks. Los PR exclusivamente Markdown también ejecutan automáticamente toda la matriz en runners nuevos, con artifacts del commit realmente probado.
 
-CI-02 fue comprobado con PR #15; CI-07 con el [ensayo negativo #16](https://github.com/japh113/plataformaPsicologia/pull/16), cerrado sin merge. Protect main exige los siete checks, política estricta y sin bypass. D1 conserva esa configuración; sus resultados propios se documentan por SHA, sin reutilizar evidencia B/C como nueva. Ensayos D1 autorizados solo en recursos nuevos aislados; no operar Compose/base habitual.
+CI-02 fue comprobado con PR #15; CI-07 con el [ensayo negativo #16](https://github.com/japh113/plataformaPsicologia/pull/16), cerrado sin merge. Protect main exige los siete checks, política estricta y sin bypass. La actualización #40 conserva esa configuración, reconsultada de solo lectura. Cada ejecución conserva su SHA; los ensayos funcionales futuros requieren autorización y recursos nuevos aislados. No operar Compose/base habitual por este encargo documental.
 
 ## Preparación de entorno local nuevo (solo con autorización)
 

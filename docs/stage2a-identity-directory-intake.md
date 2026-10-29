@@ -1,6 +1,6 @@
 # Etapa 2A — Identidad, directorio básico y vinculación inicial
 
-Base documental verificada: main `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, merge de [D2 / #18](https://github.com/japh113/plataformaPsicologia/pull/18). D1/D2 integrados, sin despliegue habitual acreditado; D3 y nuevas vinculaciones pendientes. Este encargo solo formaliza [episodios paralelos y pareja](parallel-couple-episodes.md) como producto aprobado, con implementación pendiente; no activa capacidades clínicas ni modifica D2.
+Estado operativo al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a` (merge #27). A/B/C/D1/D2 y #25–#27 integrados; Issues #21–#23 cerrados. [Resumen vigente, backlog y cortes históricos](operational-status.md). D3, nuevas vinculaciones y activación/permisos por episodio pendientes. #19/#24 documentaron producto de pareja, sin implementar su motor. Integración en Git y pruebas aisladas no acreditan instalación ni despliegue habitual.
 
 Base histórica del diseño: 18 de octubre de 2026, `0077f46` (#9 integrado); los contratos B/C y el estado posterior a #12 actualizan únicamente las porciones entregadas.
 
@@ -83,7 +83,7 @@ ADR-024 fija email por enlace de 24 h, SMS por código de 10 min, espera de 60 s
 
 ADR-025 exige contraseña reciente, aviso al contacto anterior sin veto, verificar nuevo e invalidar evidencia previa y todas las sesiones al confirmar. C ya separa candidato/vigente, confirma con incremento de session_version y usa avisos durables con entrega simulada al menos una vez. Preservar los límites de deadline, lease y limpieza del contrato C; proveedor real y recuperación excepcional siguen pendientes.
 
-ADR-026/027 requieren versión aprobada separada de pendiente, revisión administrativa selectiva y retiro/reconfirmación pública. Proponer snapshot aprobado + propuesta versionada y decisión transaccional, sin permitir que edición directa de campos, registro profesional o review genérico publiquen pendientes. El DTO de cuenta actual contiene reviewNotes: no reutilizarlo públicamente. AB-24 aprueba catálogo general controlado y acreditaciones protegidas; AB-27 aprueba estado restringido en D2. La persistencia concreta de D1 se documenta en su contrato; API y flujos siguen pendientes.
+ADR-026/027 requieren versión aprobada separada de pendiente, revisión administrativa selectiva y retiro/reconfirmación pública. Proponer snapshot aprobado + propuesta versionada y decisión transaccional, sin permitir que edición directa de campos, registro profesional o review genérico publiquen pendientes. El DTO de cuenta actual contiene reviewNotes: no reutilizarlo públicamente. AB-24 aprueba catálogo general controlado y acreditaciones protegidas; AB-27 aprueba estado restringido en D2. La persistencia D1 y la API/gestión privadas D2 están integradas en #17/#18; [contrato D2](private-professional-management.md). API pública, publicación y flujos de D3 siguen pendientes (#28/#29).
 
 ### Agregados de vinculación (D-04)
 

@@ -1,6 +1,6 @@
 # Identidad y directorio — plan de entregas A/B/C/D
 
-Estado actual verificado: A/B/C/D1/D2 integrados. D2 se integró mediante [PR #18](https://github.com/japh113/plataformaPsicologia/pull/18), merge `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, HEAD actual de `main`. Su integración y CI aprobada no acreditan instalación de 007, activación ni despliegue habitual. [Contrato D2](private-professional-management.md) y [evidencia D2](private-professional-validation.md) conservan el contexto histórico de implementación. D3, nuevas vinculaciones y autorización clínica por episodio siguen pendientes y fuera de este encargo documental.
+Estado al 29 de octubre de 2026: `main` `a1720245083008399a3543ca4b794ec4d1289d5a` (merge #27). A/B/C/D1/D2 y #25–#27 integrados. D2 se integró por [#18](https://github.com/japh113/plataformaPsicologia/pull/18), merge `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, corte histórico distinto de la base de esta revisión. [Estado operativo y backlog](operational-status.md). Integración y CI no acreditan instalación de 007 ni despliegue habitual. [Contrato D2](private-professional-management.md) y [evidencia D2](private-professional-validation.md) conservan su contexto histórico. D3, nuevas vinculaciones y autorización/activación por episodio siguen pendientes.
 
 | Entrega | Integración comprobada | Estado |
 | --- | --- | --- |
@@ -73,4 +73,4 @@ Documentación puede revertirse independientemente. Separar B de C limita el imp
 
 La estrategia técnica recomendada es revertir aplicación/funcionalidad conservando estructuras y evidencia, mediante corrección aditiva cuando proceda; no borrar datos ni bajar `session_version`. Revertir C no debe hacer válidos JWT revocados, y volver a una aplicación antigua no debe restablecer bypass legacy. Compatibilidad entre versiones, fallos de entrega, bloqueos DDL y recuperación se ensayan antes de cada implementación/despliegue. Ningún ensayo autoriza despliegue en la base habitual.
 
-Las futuras entregas se proponen mediante PR hacia `main`, sin merge ni auto-merge por el agente salvo autorización expresa posterior. Esta corrección actualiza únicamente Markdown en el Draft PR #19, que permanece sin merge. Los asuntos abiertos se resuelven por alcance, no por integrar una propuesta documental.
+Las futuras entregas se proponen mediante PR hacia `main`, sin merge ni auto-merge por el agente salvo autorización expresa posterior. El encargo histórico #19 se entregó como Draft sin merge por el agente y fue integrado después; #24 también fue documental. La actualización #40 solo modifica documentación, con revisión y autorización de merge posteriores. Los asuntos abiertos se resuelven por alcance, no por integrar una propuesta documental.
