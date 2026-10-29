@@ -1,12 +1,12 @@
 # Etapa 2A — Identidad, directorio básico y vinculación inicial
 
-Base documental verificada: main `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, merge de [D2 / #18](https://github.com/japh113/plataformaPsicologia/pull/18). D1/D2 integrados, sin despliegue habitual acreditado; D3 y nuevas vinculaciones pendientes. Este encargo solo formaliza [episodios paralelos y pareja](parallel-couple-episodes.md) como producto aprobado, con implementación pendiente; no activa capacidades clínicas ni modifica D2.
+Estado operativo al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a` (merge #27). A/B/C/D1/D2 y #25–#27 integrados; Issues #21–#23 cerrados. [Resumen vigente, backlog y cortes históricos](operational-status.md). D3, nuevas vinculaciones y activación/permisos por episodio pendientes. #19/#24 documentaron producto de pareja, sin implementar su motor. Integración en Git y pruebas aisladas no acreditan instalación ni despliegue habitual.
 
 Base histórica del diseño: 18 de octubre de 2026, `0077f46` (#9 integrado); los contratos B/C y el estado posterior a #12 actualizan únicamente las porciones entregadas.
 
 **Estado: diseño completo de 2A, mayoritariamente PROPUESTO; B/C implementan solo sus porciones autorizadas.** A integrado en #10 (0f2ebba), B en #11 (5e549f5), C en #12 (543442e), sin despliegue habitual acreditado. La [guía B](patient-identity-verification.md) y el contrato C definen lo implementado y prevalecen sobre candidatos antiguos. [Evidencia histórica B](patient-identity-validation.md).
 
-AB-23 fue aprobado expresamente: alta unilateral y request/invite/respond/accept-code bloqueados para todas las cuentas, incluidos pendientes antiguos, sin sincronizar accesos. DOB posterior pendiente por confirmación del usuario; email vigente verificado antes de solicitar SMS. D1/D2 privados integrados en #17/#18; directorio público D3 y nuevas vinculaciones pendientes, fuera de este encargo. ADR-029/RN-59–61 conservan precondición backend/DB pendiente antes de activar cualquier episodio nuevo.
+AB-23 fue aprobado expresamente: alta unilateral y request/invite/respond/accept-code bloqueados para todas las cuentas, incluidos pendientes antiguos, sin sincronizar accesos. DOB posterior pendiente por confirmación del usuario; email vigente verificado antes de solicitar SMS. D1/D2 privados integrados en #17/#18; directorio público D3 y nuevas vinculaciones pendientes, con alcance y autorización propios requeridos para su implementación. ADR-029/RN-59–61 conservan precondición backend/DB pendiente antes de activar cualquier episodio nuevo.
 
 ## 1. Base existente y límites de confianza
 
@@ -83,7 +83,7 @@ ADR-024 fija email por enlace de 24 h, SMS por código de 10 min, espera de 60 s
 
 ADR-025 exige contraseña reciente, aviso al contacto anterior sin veto, verificar nuevo e invalidar evidencia previa y todas las sesiones al confirmar. C ya separa candidato/vigente, confirma con incremento de session_version y usa avisos durables con entrega simulada al menos una vez. Preservar los límites de deadline, lease y limpieza del contrato C; proveedor real y recuperación excepcional siguen pendientes.
 
-ADR-026/027 requieren versión aprobada separada de pendiente, revisión administrativa selectiva y retiro/reconfirmación pública. Proponer snapshot aprobado + propuesta versionada y decisión transaccional, sin permitir que edición directa de campos, registro profesional o review genérico publiquen pendientes. El DTO de cuenta actual contiene reviewNotes: no reutilizarlo públicamente. AB-24 aprueba catálogo general controlado y acreditaciones protegidas; AB-27 aprueba estado restringido en D2. La persistencia concreta de D1 se documenta en su contrato; API y flujos siguen pendientes.
+ADR-026/027 requieren versión aprobada separada de pendiente, revisión administrativa selectiva y retiro/reconfirmación pública. Proponer snapshot aprobado + propuesta versionada y decisión transaccional, sin permitir que edición directa de campos, registro profesional o review genérico publiquen pendientes. El DTO de cuenta actual contiene reviewNotes: no reutilizarlo públicamente. AB-24 aprueba catálogo general controlado y acreditaciones protegidas; AB-27 aprueba estado restringido en D2. La persistencia D1 y la API/gestión privadas D2 están integradas en #17/#18; [contrato D2](private-professional-management.md). API pública, publicación y flujos de D3 siguen pendientes (#28/#29).
 
 ### Agregados de vinculación (D-04)
 
@@ -227,7 +227,7 @@ Recorridos con estado inicial, cuentas, URL local, pasos y resultado documentado
 4. Cancelación/rechazo/caducidad liberan cupo según política, conservando contadores. Mensaje solo para partes; no backoffice/visitantes.
 5. S con episodio pausado puede iniciar tratamiento independiente sin derivarlo cuando se implemente la transición; T demuestra aislamiento de historia y archivo propio. Añadir Carlos/Ana, Carlos/Luis y Carlos/María/Laura simultáneos; derivar solo personal sin efecto en los otros y pareja con una confirmación insuficiente. Carreras se prueban automáticamente además de UI; pendientes de confidencialidad no se inventan en la demo.
 
-Cada PR muestra solo alcance implementado: B de identidad/verificación no presenta solicitudes/episodios funcionales. Destino nuevo verificado development con UUID e imágenes/etiquetas propias conforme corrección #8; detenerse si existe o no es desarrollo. Sin copiar datos reales, compartir volúmenes, reutilizar etiquetas de app o autocargar cuentas en producción. Restablecer creando otro destino nuevo; limpieza solo de recursos propios comprobados, sin volúmenes/etiquetas ajenos o prune. Credenciales demo restringidas a ese destino. Procedimientos se autorizan/ejecutan con implementación, nunca en este PR.
+Cada PR muestra solo alcance implementado: B de identidad/verificación no presenta solicitudes/episodios funcionales. Destino nuevo verificado development con UUID e imágenes/etiquetas propias conforme corrección #8; detenerse si existe o no es desarrollo. Sin copiar datos reales, compartir volúmenes, reutilizar etiquetas de app o autocargar cuentas en producción. Restablecer creando otro destino nuevo; limpieza solo de recursos propios comprobados, sin volúmenes/etiquetas ajenos o prune. Credenciales demo restringidas a ese destino. Los procedimientos requieren autorización específica de implementación y ensayos; leer este diseño no autoriza ejecutarlos.
 
 ## 12. Aprobaciones y siguiente implementación
 

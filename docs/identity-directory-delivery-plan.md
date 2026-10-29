@@ -1,6 +1,6 @@
 # Identidad y directorio — plan de entregas A/B/C/D
 
-Estado actual verificado: A/B/C/D1/D2 integrados. D2 se integró mediante [PR #18](https://github.com/japh113/plataformaPsicologia/pull/18), merge `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, HEAD actual de `main`. Su integración y CI aprobada no acreditan instalación de 007, activación ni despliegue habitual. [Contrato D2](private-professional-management.md) y [evidencia D2](private-professional-validation.md) conservan el contexto histórico de implementación. D3, nuevas vinculaciones y autorización clínica por episodio siguen pendientes y fuera de este encargo documental.
+Estado al 29 de octubre de 2026: `main` `a1720245083008399a3543ca4b794ec4d1289d5a` (merge #27). A/B/C/D1/D2 y #25–#27 integrados. D2 se integró por [#18](https://github.com/japh113/plataformaPsicologia/pull/18), merge `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, corte histórico distinto de la base de esta revisión. [Estado operativo y backlog](operational-status.md). Integración y CI no acreditan instalación de 007 ni despliegue habitual. [Contrato D2](private-professional-management.md) y [evidencia D2](private-professional-validation.md) conservan su contexto histórico. D3, nuevas vinculaciones y autorización/activación por episodio siguen pendientes.
 
 | Entrega | Integración comprobada | Estado |
 | --- | --- | --- |
@@ -9,7 +9,7 @@ Estado actual verificado: A/B/C/D1/D2 integrados. D2 se integró mediante [PR #1
 | C | #12, `543442ea634e5977bc887ace1db5457eee2ebf8c` | Contactos y 005 integrados; HEAD revisado `c7f622608af4b7bc27a7c4e9dde49be23221b0ae` |
 | D1 | #17, `2fe0799ee683273df2dbed872840bbfd2ef03f6d` | Persistencia privada y 006 integradas; [contrato](professional-persistence.md), [evidencia histórica](professional-persistence-validation.md) |
 | D2 | #18, `fcabf5245d889f700804ec6d1b9f48043fd30fc0` | Gestión profesional privada y 007 integradas en Git; sin instalación, activación ni despliegue habitual acreditados |
-| D3 | Sin integración | Directorio público, preferencias optativas y lectores anónimos pendientes; sin autorización de implementación en este encargo |
+| D3 | Sin integración | Directorio público, preferencias optativas y lectores anónimos pendientes; su implementación requiere alcance y autorización propios |
 
 GitHub Actions ya está [implementado](ci-implementation.md): el [workflow vigente](../.github/workflows/ci.yml) ejecuta también para PR documentales los siete checks `ci/docs`, `ci/backend-unit`, `ci/frontend`, `ci/postgres`, `ci/browser`, `ci/evidence` y `ci/required`, con artifacts técnicos de 14 días. La [protección Protect main](https://github.com/japh113/plataformaPsicologia/rules/25440100) está activa, exige los siete checks con política estricta y no tiene bypass. El [plan CI](ci-plan.md) y las [evidencias anteriores](ci-validation.md) conservan su trazabilidad y corte histórico; no sustituyen este estado actual ni la ejecución propia de cada nuevo HEAD. Esta corrección no modifica CI ni configuración GitHub.
 
@@ -73,4 +73,4 @@ Documentación puede revertirse independientemente. Separar B de C limita el imp
 
 La estrategia técnica recomendada es revertir aplicación/funcionalidad conservando estructuras y evidencia, mediante corrección aditiva cuando proceda; no borrar datos ni bajar `session_version`. Revertir C no debe hacer válidos JWT revocados, y volver a una aplicación antigua no debe restablecer bypass legacy. Compatibilidad entre versiones, fallos de entrega, bloqueos DDL y recuperación se ensayan antes de cada implementación/despliegue. Ningún ensayo autoriza despliegue en la base habitual.
 
-Las futuras entregas se proponen mediante PR hacia `main`, sin merge ni auto-merge por el agente salvo autorización expresa posterior. Esta corrección actualiza únicamente Markdown en el Draft PR #19, que permanece sin merge. Los asuntos abiertos se resuelven por alcance, no por integrar una propuesta documental.
+Las futuras entregas se proponen mediante PR hacia `main`, sin merge ni auto-merge por el agente salvo autorización expresa posterior. El encargo histórico #19 se entregó como Draft sin merge por el agente y fue integrado después; #24 también fue documental. Antecedente de preparación del PR #42 para el Issue #40: su alcance fue exclusivamente documental y reservó la revisión y autorización de merge para una decisión posterior; esas restricciones no definen el alcance de otros encargos. Los asuntos abiertos se resuelven por alcance, no por integrar una propuesta documental.

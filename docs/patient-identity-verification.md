@@ -1,8 +1,8 @@
 # PR B — identidad adulta y verificación de contactos
 
-Estado al 19 de octubre de 2026: B integrado en #11 (5e549f5) y C en #12 (543442e). [Contrato C](contact-changes.md) amplía contactos seguros, comparte cuotas B y distingue propósitos. Aplicación C requiere 005; las secciones de demo B conservan su alcance de entrega y sus evidencias no sustituyen la [validación final C](contact-change-deadline-validation.md). [CI](ci-plan.md) propuesta, sin workflows implementados.
+Estado operativo al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a`. B (#11), C (#12) y D1/D2 (#17/#18) integrados. [Contrato C](contact-changes.md) amplía contactos seguros, comparte cuotas B y distingue propósitos; requiere 005. CI ya está [implementada](ci-implementation.md) desde #14, con #15 y ensayo negativo #16 cerrado sin merge; el [plan CI](ci-plan.md) es histórico. Las secciones de demo B y sus evidencias conservan el corte de la entrega, sin sustituir la [validación final C](contact-change-deadline-validation.md) ni acreditar despliegue. [Resumen y backlog vigente](operational-status.md).
 
-B fue implementado sobre 0f2ebba (#10) e integrado en #11. Sin despliegue habitual acreditado, proveedores reales, D o nueva vinculación clínica. Decisiones: ADR-012/019/023/024/028, RN-41–48/57–58 y AB-23. [Evidencia histórica B](patient-identity-validation.md), [matriz legacy](stage2a-legacy-mutations.md).
+B fue implementado sobre 0f2ebba (#10) e integrado en #11. En el corte de la entrega B no había D; D1/D2 se integraron posteriormente. No se acredita despliegue habitual ni se habilitan proveedores reales, D3 o nueva vinculación clínica. Decisiones: ADR-012/019/023/024/028, RN-41–48/57–58 y AB-23. [Evidencia histórica B](patient-identity-validation.md), [matriz legacy](stage2a-legacy-mutations.md).
 
 ## Registro, titularidad y fuentes
 
