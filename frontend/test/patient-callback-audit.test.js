@@ -91,7 +91,7 @@ test('final P2-02: a GET started while objective PATCH is pending is discarded i
   const h=professional(),write=deferred(),read=deferred();
   h.context.updatePatientObjective=()=>write.promise;const patch=h.invoke('toggleObjective','o');
   h.context.getPatient=()=>read.promise;const get=h.selected('p');
-  write.resolve(item('o',true));await patch;read.resolve(raw);assert.equal(await get,null);
+  write.resolve(item('o',true));await patch;read.resolve(raw);assert.equal((await get).status,'conflict');
   assert.equal(h.state.selected.objetivos[0].completada,true);synced(h);
 });
 
@@ -125,7 +125,7 @@ test('callback audit: confirmed note save with failed secondary GET is not a fai
     h.context[name==='createSession'?'createPatientClinicalNote':'updatePatientClinicalNote']=async()=>{writes++;return {id:'new-note'};};
     h.context.getPatient=async()=>{throw error(500);};
     const result=await h.invoke(name,...(name==='createSession'?[{}]:['old-note',{}]));
-    assert.equal(result,true);assert.equal(writes,1);assert.match(h.state.success[0],/se guardó.*No se pudo actualizar/);
+    assert.equal(result,true);assert.equal(writes,1);assert.match(h.state.warnings[0],/se guardó.*No se pudo actualizar/);
     const bad=professional();bad.context[name==='createSession'?'createPatientClinicalNote':'updatePatientClinicalNote']=async()=>{throw error(500);};
     assert.equal(await bad.invoke(name,...(name==='createSession'?[{}]:['old-note',{}])),false);
     assert.equal(bad.state.success.length,0);assert.ok(bad.state.SessionActionError);
@@ -218,5 +218,169 @@ test('callback audit: appointment-to-note consumer opens a fresh file rather tha
     assert.equal(await opening,false);
     assert.equal(failed.state.selected,expected);
     assert.equal(failed.state.AppointmentActionError,boundary==='current'?'fresh file unavailable':'new session message');
+  }
+});
+
+
+// Controlled reads reproduce a confirmed note whose first detail response loses
+// its revision race. Definitive note/task IDs always come from the server DTO.
+const noteNames=['createSession','updateSession'];
+const noteArgs=name=>name==='createSession'?[{content:'submitted',tasks:[{text:'submitted task'}]}]:['old-note',{content:'submitted',tasks:[{text:'submitted task'}]}];
+function noteSnapshot(name) {
+  const id=name==='createSession'?'confirmed-note':'old-note';
+  return {...raw,objectives:[item('o',true),item('recent-objective',true)],
+    clinicalNotes:[...(name==='createSession'?raw.clinicalNotes:[]),{id,content:'AUTHORITATIVE_NOTE_CONTENT'}],
+    tasks:[...raw.tasks,{...item('confirmed-task'),clinicalNoteId:id},{...item('recent-task'),clinicalNoteId:'other-note'}]};
+}
+function retainedNote(h,name) {
+  const first=deferred(),firstStarted=deferred(),second=deferred(),secondStarted=deferred();
+  const counts={writes:0,reads:0,objectives:0};
+  h.context[name==='createSession'?'createPatientClinicalNote':'updatePatientClinicalNote']=async()=>{counts.writes++;return {id:'write-result-without-task-contract'};};
+  h.context.updatePatientObjective=async()=>{counts.objectives++;return item('o',true);};
+  h.context.getPatient=()=>{
+    counts.reads++;
+    assert.ok(counts.reads<=2,'recovery must be bounded to one additional GET');
+    if(counts.reads===1){firstStarted.resolve();return first.promise;}
+    secondStarted.resolve();return second.promise;
+  };
+  const pending=h.invoke(name,...noteArgs(name));
+  return {first,firstStarted,second,secondStarted,counts,pending};
+}
+async function recoveryStarted(r) {
+  const outcome=await Promise.race([r.secondStarted.promise.then(()=>'reading'),r.pending.then(()=>'finished')]);
+  assert.equal(outcome,'reading','a confirmed note conflict must initiate a new GET before reporting success');
+}
+function assertConfirmedVisible(h,name) {
+  const id=name==='createSession'?'confirmed-note':'old-note';
+  assert.equal(h.state.selected.sesiones.find(n=>n.id===id).contenido,'AUTHORITATIVE_NOTE_CONTENT');
+  assert.equal(h.state.selected.tareas.find(t=>t.id==='confirmed-task').sesionId,id);
+  assert.equal(h.state.selected.tareas.some(t=>t.id==='recent-task'),true);
+  assert.equal(h.state.selected.objetivos.find(o=>o.id==='o').completada,true);
+  synced(h);
+}
+
+test('note recovery P2: create/edit confirmed -> old GET -> objective PATCH -> one fresh GET exposes note AND linked task',async()=>{
+  for(const name of noteNames){
+    const h=professional(),r=retainedNote(h,name);
+    await r.firstStarted.promise;
+    await h.invoke('toggleObjective','o');
+    r.first.resolve({...noteSnapshot(name),objectives:raw.objectives});
+    await recoveryStarted(r);
+    r.second.resolve(noteSnapshot(name));
+    assert.equal(await r.pending,true);assertConfirmedVisible(h,name);
+    assert.deepEqual(r.counts,{writes:1,reads:2,objectives:1});
+    assert.match(h.state.success.at(-1),/Nota clinica (creada|actualizada) correctamente/);
+    assert.equal(h.state.warnings.length,0);
+  }
+});
+
+test('note recovery P2: repeated revision conflict is bounded and preserves removeTask/addObjective/toggleObjective state',async()=>{
+  for(const name of noteNames)for(const op of operations.filter(o=>o.name!=='removeObjective')){
+    const h=professional(),r=retainedNote(h,name);
+    h.context[op.api]=async()=>op.reply;
+    await r.firstStarted.promise;await h.invoke(op.name,...op.args);
+    const firstCurrent=h.state.selected;
+    r.first.resolve(raw);await recoveryStarted(r);
+    assert.equal(h.state.selected,firstCurrent);
+    // A genuinely later read can contain activities absent from both held DTOs.
+    const current={...h.state.selected,notas:'LATEST_FILE',tareas:[...h.state.selected.tareas,{id:'later-task',texto:'Latest',completada:false}]};
+    h.state.patients=[current];h.state.selected=current;
+    h.context.updatePatientObjective=async(patientId,id,payload)=>item(id,payload.completed);
+    await h.invoke('toggleObjective','o');
+    const latest=h.state.selected;
+    r.second.resolve(noteSnapshot(name));assert.equal(await r.pending,true);
+    assert.equal(h.state.selected,latest);
+    if(op.name==='toggleObjective')assert.equal(latest.objetivos.find(o=>o.id==='o').completada,false);
+    else op.check(latest);
+    synced(h);
+    assert.equal(r.counts.writes,1);assert.equal(r.counts.reads,2);
+    assert.equal(h.state.selected.tareas.some(t=>t.id==='confirmed-task'),false,'do not invent tasks when no read was applied');
+    assert.match(h.state.warnings.at(-1),/se guardó.*pendiente.*recarga/i);
+    assert.equal(h.state.success.some(m=>/^Nota clinica/.test(m)),false);
+  }
+});
+
+test('note recovery P2: HTTP 500 on the new GET confirms persistence, warns and never repeats POST/PATCH',async()=>{
+  for(const name of noteNames){
+    const h=professional(),r=retainedNote(h,name);
+    await r.firstStarted.promise;await h.invoke('toggleObjective','o');
+    const current=h.state.selected;r.first.resolve(raw);await recoveryStarted(r);
+    r.second.reject(error(500));assert.equal(await r.pending,true);
+    assert.equal(h.state.selected,current);assert.equal(h.state.selected.objetivos[0].completada,true);synced(h);
+    assert.deepEqual(r.counts,{writes:1,reads:2,objectives:1});
+    assert.match(h.state.warnings.at(-1),/se guardó.*actualizar.*recarga/i);
+    assert.equal(h.state.success.length,0);assert.equal(h.state.errors.length,0);
+  }
+});
+
+test('note recovery P2: 401/403/404 or logout before/inside recovery cannot retry or repopulate another session',async()=>{
+  for(const name of noteNames)for(const stage of ['first','recovery'])for(const boundary of [401,403,404,'logout']){
+    const h=professional(),r=retainedNote(h,name);
+    await r.firstStarted.promise;
+    if(stage==='recovery'){
+      await h.invoke('toggleObjective','o');r.first.resolve(raw);await recoveryStarted(r);
+    }
+    const held=stage==='first'?r.first:r.second;
+    if(boundary==='logout'){
+      h.reset();h.state.token='new-patient';h.context.currentUser={id:'p',role:'patient',patientId:'p'};
+      const current=mapBackendPatientToUiPatient({id:'p',fullName:'Current patient'});
+      h.state.patients=[current];h.state.selected=current;h.state.GuardandoSesion=true;h.state.form={new:true};
+      held.resolve(noteSnapshot(name));
+    }else held.reject(error(boundary));
+    assert.equal(await r.pending,false);
+    assert.equal(r.counts.reads,stage==='first'?1:2);assert.equal(r.counts.writes,1);
+    assert.equal(h.state.success.length,0);assert.equal(h.state.warnings.length,0);assert.equal(h.state.errors.length,0);
+    if(boundary==='logout'){
+      assert.equal(h.state.selected.nombre,'Current patient');assert.equal(h.state.selected.sesiones.length,0);
+      assert.equal(h.state.GuardandoSesion,true);assert.deepEqual(h.state.form,{new:true});synced(h);
+    }else{assert.equal(h.state.patients.length,0);assert.equal(h.state.selected,null);assert.equal(h.context.clinicalAccess.current.denied,true);}
+  }
+});
+
+test('note recovery P2: chained saves keep the newer authoritative file despite an older independent detail response',async()=>{
+  const h=professional(),r=retainedNote(h,'createSession');
+  await r.firstStarted.promise;await h.invoke('toggleObjective','o');r.first.resolve(raw);await recoveryStarted(r);
+  r.second.resolve(noteSnapshot('createSession'));assert.equal(await r.pending,true);
+  const old=deferred();h.context.getPatient=()=>old.promise;const stale=h.selected('p');
+  let writes=0;
+  h.context.updatePatientClinicalNote=async()=>{writes++;return {id:'confirmed-note'};};
+  const newer={...noteSnapshot('createSession'),clinicalNotes:[...raw.clinicalNotes,{id:'confirmed-note',content:'SECOND_CONFIRMED_CONTENT'}],
+    tasks:[...noteSnapshot('createSession').tasks,{...item('second-task'),clinicalNoteId:'confirmed-note'}]};
+  h.context.getPatient=async()=>newer;
+  assert.equal(await h.invoke('updateSession','confirmed-note',{content:'second'}),true);
+  const current=h.state.selected;old.resolve(raw);await stale;
+  assert.equal(h.state.selected,current);assert.equal(current.sesiones.find(n=>n.id==='confirmed-note').contenido,'SECOND_CONFIRMED_CONTENT');
+  assert.equal(current.tareas.some(t=>t.id==='confirmed-task'),true);assert.equal(current.tareas.some(t=>t.id==='second-task'),true);
+  assert.equal(current.objetivos[0].completada,true);assert.equal(writes,1);synced(h);
+});
+
+async function loadProfessionalSuccessfully(h) {
+  await h.load();
+  assert.equal(h.state.error,'','unexpected load exceptions must fail the professional success oracle');
+  assert.equal(h.state.loading,false);
+}
+
+test('professional harness P3: successful real cargarDatos maps nonempty waitlist with no hidden catch',async()=>{
+  const h=professional(),waitlist=[{id:'w',patientId:'p',scheduledDate:'2026-04-08',scheduledTime:'11:00:00',priority:1}];
+  h.context.getAppointmentWaitlist=async()=>waitlist;
+  h.context.setAppointmentWaitlist=rows=>{h.state.waitlist=rows;};
+  await loadProfessionalSuccessfully(h);
+  assert.equal(h.state.error,'','a swallowed ReferenceError must fail this success assertion');
+  assert.equal(h.state.loading,false);assert.equal(h.state.patients[0].id,'p');assert.equal(h.state.selected.id,'p');
+  assert.equal(h.state.appointments.length,1);assert.equal(h.state.waitlist[0].id,'w');
+  assert.equal(h.state.waitlist[0].pacienteId,'p');
+});
+
+
+test('professional harness P3: an unexpected mapper exception fails the success oracle, while denied load still clears data',async()=>{
+  const bad=professional();
+  bad.context.getAppointmentWaitlist=async()=>[{id:'w'}];
+  bad.context.mapBackendWaitlistToUiWaitlistEntry=()=>{throw new ReferenceError('intentional mapper exception');};
+  await assert.rejects(()=>loadProfessionalSuccessfully(bad),assert.AssertionError);
+  assert.equal(bad.state.error,'intentional mapper exception');
+  for(const status of [403,404]){
+    const h=professional();h.context.getPatients=async()=>{throw error(status);};
+    await h.load();assert.equal(h.state.patients.length,0);assert.equal(h.state.selected,null);
+    assert.equal(h.context.clinicalAccess.current.denied,true);
   }
 });

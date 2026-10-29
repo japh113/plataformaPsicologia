@@ -52,7 +52,7 @@ test('P2-01: real load keeps primary sections while follow-up is pending, networ
 test('P2-01: real detail refresh preserves primary file and last valid follow-up; recovery replaces only follow-up', async () => {
   const previous = mapBackendPatientToUiPatient({ ...primary,followUp: follow });
   const h = harness({ previous,followRequest: async () => { throw failure(500); } });
-  assert.equal((await h.selected('p')).nombre,'Fictional P');
+  assert.equal((await h.selected('p')).patient.nombre,'Fictional P');
   await flush();
   assert.equal(h.state.selected.seguimiento,previous.seguimiento);
   assert.equal(h.state.selected.seguimientoEstado,'error');

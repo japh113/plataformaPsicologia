@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { mapBackendPatientToUiPatient, mapBackendFollowUpToUiFollowUp, mapBackendTaskToUiTask, mapUiPatientToBackendPatient } from '../../src/mappers/patients.js';
+import { mapBackendWaitlistToUiWaitlistEntry } from '../../src/mappers/appointments.js';
 import { preservePatientFollowUp } from '../../src/utils/patientFollowUp.js';
 
 const app = await readFile(new URL('../../src/App.jsx',import.meta.url),'utf8');
@@ -11,7 +12,7 @@ const primary = { id: 'p',fullName: 'Fictional P',tasks: [{ id: 't',text: 'task'
 export function harness({ previous = null, followRequest = async () => follow, put = async () => ({ ...primary,interviewCompleted: true,
   interview: { birthDate: '1990-01-01',birthPlace: 'Fictional place',completedAt: '2026-10-28T12:00:00Z' } }) } = {}) {
   const state = { patients: previous ? [previous] : [],selected: previous,appointments: [],reminders: [],relationships: [],
-    error: '',loading: false,success: [],errors: [],modal: true,form: null,puts: 0,mainReads: 0,followReads: 0,token: 'session-p' };
+    error: '',loading: false,success: [],warnings: [],errors: [],modal: true,form: null,puts: 0,mainReads: 0,followReads: 0,token: 'session-p' };
   const assign = key => value => { state[key] = typeof value === 'function' ? value(state[key]) : value; };
   const sessionEpoch = { current: 0 };
   const context = {
@@ -24,7 +25,7 @@ export function harness({ previous = null, followRequest = async () => follow, p
     getAppointmentWaitlist: async () => [],getMyAvailability: async () => [],getMyAvailabilityExceptions: async () => [],
     getAppointments: async () => [{ id: 'a',patientId: 'p' }],getMyReminders: async () => ['reminder'],
     getCareRelationships: async () => ['relationship'],refreshBackofficeData: async () => {},
-    mapBackendPatientToUiPatient,mapBackendFollowUpToUiFollowUp,mapBackendTaskToUiTask,mapUiPatientToBackendPatient,preservePatientFollowUp,
+    mapBackendPatientToUiPatient,mapBackendFollowUpToUiFollowUp,mapBackendTaskToUiTask,mapUiPatientToBackendPatient,mapBackendWaitlistToUiWaitlistEntry,preservePatientFollowUp,
     sortAppointments: value => value,mapBackendAppointmentToUiAppointment: value => value,
     setPacientes: assign('patients'),setPacienteSeleccionado: assign('selected'),setAppointments: assign('appointments'),
     setReminders: assign('reminders'),setCareRelationships: assign('relationships'),setErrorCarga: assign('error'),
@@ -34,7 +35,7 @@ export function harness({ previous = null, followRequest = async () => follow, p
     upsertPatientInterview: async (...args) => { state.puts++; return put(...args); },
     mapUiInterviewToBackendInterview: value => value,buildInterviewDraftForm: patient => patient?.entrevista || {},
     setPatientInterviewForm: assign('form'),todayDate: '2026-10-28',
-    showSuccessFeedback: message => state.success.push(message),showErrorFeedback: message => state.errors.push(message),
+    showSuccessFeedback: message => state.success.push(message),showErrorFeedback: message => state.errors.push(message),showWarningFeedback: message => state.warnings.push(message),
     patientProfile: { id: 'p' },patientInterviewForm: {},setShowPatientInterview: assign('modal'),
   };
   for (const setter of new Set(app.match(/\bset[A-Z]\w+/g))) {

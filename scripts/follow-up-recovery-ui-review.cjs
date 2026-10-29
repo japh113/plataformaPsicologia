@@ -8,10 +8,17 @@ async function main() {
     const context = await browser.newContext({ viewport: { width: 1440,height: 1000 },locale: 'es-MX' });
     let mode = 'network',putMode = 'pass';
     const counts = new Map();
+    const expectedUnauthenticatedReads = new WeakSet();
     await context.route(url => url.pathname.startsWith('/api/'),async route => {
       const url = new URL(route.request().url()),path = url.pathname;
       const key = route.request().method() + ' ' + path;
       counts.set(key,(counts.get(key) || 0) + 1);
+      // The injected follow-up 401 clears the token before a concurrent identity
+      // read may start. Only that exact unauthenticated read belongs to this case.
+      if (mode === '401' && path === '/api/auth/contact-changes' && route.request().method() === 'GET' && !route.request().headers().authorization) {
+        expectedUnauthenticatedReads.add(route.request());
+        events.push({ kind: 'identity-after-session-ended',mode,expected: true });
+      }
       if (path.endsWith('/follow-up') && mode !== 'pass') {
         events.push({ kind: 'follow-up',mode,expected: true });
         if (mode === 'network') return route.abort('failed');
@@ -29,7 +36,8 @@ async function main() {
       const path = new URL(response.url()).pathname;
       if (!path.startsWith('/api/') || response.status() < 400) return;
       const expected = (path.endsWith('/follow-up') && response.status() === Number(mode)) ||
-        (path.endsWith('/interview') && response.status() === Number(putMode));
+        (path.endsWith('/interview') && response.status() === Number(putMode)) ||
+        (response.status() === 401 && expectedUnauthenticatedReads.has(response.request()));
       if (!expected) unexpectedApi.push({ path,status: response.status() });
     });
     async function login(id) {
