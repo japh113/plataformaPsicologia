@@ -457,6 +457,97 @@ Un conflicto adicional deja el expediente pendiente de actualización con acció
 
 Sin cambios a backend funcional, SQL/manifiesto/hashes, JWT, permisos #25/#26, DTO seguro, contratos profesionales HTTP, dependencias, configuración CI o recursos habituales. El Issue #21 sigue abierto; entrega en la misma rama/Draft PR, sin merge, auto-merge ni despliegue.
 
+
+## Integridad clínica — bloqueo de notas obsoletas
+
+Encargo sobre a0228e501d86149993aaa1fb5e4a8e41f4ff9665, verificado idéntico al HEAD real del Draft PR #27 y con base main af72a381f4b3a5a0e81df104baecb60226025a11 antes de editar. Esta sección sustituye la dependencia anterior del toast persistente y de window.location.reload como recuperación. Las evidencias previas conservan su SHA.
+
+### Peligro reproducido antes de corregir
+
+La [regresión nueva](../frontend/test/patient-callback-audit.test.js) confirma una edición de nota con tarea, descarta el primer GET por un objetivo completado y rechaza el GET de recuperación con 500. El expediente conserva el contenido anterior. Después retira un objetivo, emite su éxito y cierra el feedback. Invocar el editor anterior con content antiguo y tasks vacío **enviaba una escritura**: la aserción de cero peticiones falló con 1 en vez de 0 sobre el código auditado. Se usó un stub ficticio, nunca datos reales/habituales.
+
+Se contrastó exclusivamente por lectura syncClinicalNoteTasks del servicio backend: una lista tasks vacía retira las tareas activas de esa nota que no están en el payload. El riesgo no era solo visual. No se modifica esa sincronización, el backend ni sus contratos.
+
+### Estado por expediente y cobertura de cada lectura
+
+App mantiene clinicalRecordSync y una referencia inmediata para la guarda de escritura. Cada entrada contiene solo patientId, generación de sesión, generación de acceso, contador local de confirmaciones, pending y status (pending/refreshing/current). No guarda contenido, tareas, vínculos ni copias adicionales del DTO clínico.
+
+Tras confirmar POST/PATCH, si sigue vigente la operación, incrementa el contador y marca pending antes del GET. Cada lectura de detalle captura tanto patientRevisions como ese contador. Solo puede aplicar y resolver la marca cuando:
+
+- Corresponde al paciente solicitado.
+- Token/sesión/generación clínica continúan vigentes.
+- La revisión de actividad sigue siendo la capturada.
+- El contador confirmado no cambió; la lectura comenzó después de la confirmación que pretende reflejar.
+
+Una respuesta anterior a otra confirmación no desbloquea, aunque devuelva HTTP 200. Un listado aceptado tampoco se usa para reconocer la nota pendiente: se exige una lectura de detalle verificable. Los cambios de objetivos/tareas siguen invalidando lecturas mediante las revisiones anteriores, sin borrar esta marca.
+
+Los fallos/conflictos devuelven status a pending únicamente para la misma confirmación vigente. Una confirmación posterior conserva su propia marca. Logout y denegación clínica purgan mapa/ref y datos protegidos. El expediente Q puede seguir editándose aunque P esté pendiente.
+
+### UI, consumidores de escritura y borradores
+
+NotesScreen muestra una advertencia **dentro del expediente**, independiente de uiFeedback, con Recargar expediente. Los toasts vuelven a ser temporales; reemplazarlos, cerrarlos o cambiar de sección no reconoce una nota ni elimina el bloqueo. Se mantienen disponibles consulta de agenda y gestión autorizada de objetivos.
+
+Se bloquean las aperturas desde lista de notas, cabecera, agenda del expediente y entrada agenda→nota de App. Esta última abre el expediente para su consulta/recuperación, sin completar una cita como paso previo a una nota bloqueada. No se habilita un modal inicial desde una copia pendiente.
+
+Las guardas definitivas de createSession/updateSession consultan la referencia antes de llamar a los dos clientes HTTP. Con pending o una versión de borrador anterior devuelven { status: blocked }, sin POST/PATCH, éxito ni cambios persistentes. El consumidor cierra el modal únicamente con true, no con un objeto truthy.
+
+Cada editor captura el contador vigente al abrir. Si aparece otra confirmación, Guardar queda inhabilitado, incluso después de recuperar la ficha, hasta descartar explícitamente ese borrador y abrir la versión actual. El contenido local no se reconstruye silenciosamente; se ofrece Descartar borrador y cerrar. Una generación de apertura impide que la continuación del guardado de un editor anterior cierre o reinicie otro modal abierto entretanto.
+
+La protección cubre todas las llamadas frontend a createPatientClinicalNote y updatePatientClinicalNote, únicas rutas que crean/editan notas y sincronizan su conjunto de tareas. Nota general, ficha e entrevista escriben sus campos propios; cumplimiento/retiro de tareas y objetivos son operaciones independientes autorizadas y no reemplazan el contenido de una nota ni su lista de tareas por un snapshot del editor. No requieren este bloqueo general ni se amplía a ellas.
+
+### Recuperación autorizada
+
+Recargar expediente llama a refreshClinicalRecord y al lector de detalle existente; **no recarga la ventana, no cambia navegación/autenticación y no escribe**. El botón indica Actualizando expediente mientras espera. Cada acción manual realiza como máximo un GET; la única recuperación automática de una nota confirmada conserva el presupuesto anterior de dos GET.
+
+Una lectura aplicada actualiza lista y selección y reconoce exactamente la confirmación capturada. HTTP 500/red o conflict mantienen la marca y permiten otro intento manual. 401/403/404 conservan la invalidación central y purgan los datos; una respuesta anterior no repuebla ni desbloquea la nueva sesión. Un borrador antiguo permanece bloqueado tras una recuperación correcta; un editor reabierto sobre el DTO actual sí puede guardar.
+
+### Regresiones y evidencia de cero escrituras
+
+Las ocho pruebas nuevas, incluidas las de [consumidores reales del editor](../frontend/test/clinical-record-editor.test.js), se ejecutan en frontend npm test. Los arneses extraen callbacks reales, preservan capturas/ref y controlan las promesas; no reimplementan las guardas.
+
+| Secuencia | Oráculo |
+| --- | --- |
+| Nota confirmada → conflict → 500 | Marca pending, sin inventar datos; guardas activas. |
+| Retiro de objetivo, otro éxito/error o cierre de toast | La marca permanece. |
+| Aperturas de nota/nueva nota/agenda mientras pending | Ningún editor obsoleto habilitado. |
+| Callback directo con content antiguo y tasks vacío | Cero escrituras; resultado blocked. |
+| Modal abierto al confirmar otra nota | Borrador conservado, Guardar bloqueado. |
+| Resultado blocked o continuación de editor anterior | No cierra otro modal ni declara guardado. |
+| Recuperación manual 200 vigente | Contenido/tarea/asociación y actividad actuales; lista/selección coherentes; pending false. |
+| Recuperación manual 500 o conflict | Marca conservada y nuevo intento disponible. |
+| Detalle de otro paciente o listado 200 | No reconoce la nota pendiente. |
+| Segunda escritura confirmada durante recuperación | El GET de la primera no limpia la marca de la segunda. |
+| Recuperación correcta con borrador anterior | Cero escrituras hasta abrir expresamente el editor actual. |
+| 401/403/404 o logout/mismo u otro paciente | Estado y datos anteriores purgados; sin efectos tardíos. |
+| P pendiente y edición de Q | Bloqueo específico de P; Q continúa autorizado. |
+
+El [recorrido Chromium](../scripts/patient-callback-ui-review.cjs) conserva los once recorridos anteriores y la recuperación exitosa. El caso de fallo retiene también el PATCH confirmado para abrir otra copia local antes de que App conozca la confirmación: al recibirla observa el borrador anterior, su contenido intacto y Guardar deshabilitado. Lo descarta explícitamente y continúa conflict/500.
+
+Luego retira el objetivo, comprueba su éxito, cierra el toast y navega a Agenda/Historial y Notas clínicas: el aviso del expediente permanece. Intenta activar los botones de nota antigua y nueva nota; observa cero POST/PATCH clínicos adicionales. La guarda directa de App frente a content antiguo/tasks vacío se comprueba además en la unitaria, sin depender del atributo disabled. Por último usa el GET manual, comprueba nota/tarea/vínculo actuales y objetivo retirado, y abre un editor habilitado con los datos actuales.
+
+### Validación nueva por SHA y recursos
+
+Código funcional: [00033f6](https://github.com/japh113/plataformaPsicologia/commit/00033f66fe91cc91db15b5064262cffce12f2e21). Pruebas/recorridos: [5c95146](https://github.com/japh113/plataformaPsicologia/commit/5c95146f6577101bb860129ebadf97dac655c915). La documentación se guarda después, sin alterar ese contenido funcional.
+
+- **58/58 frontend**, cero fallos/canceladas/omitidas, lint/build aprobados. Ocho casos nuevos con variantes parametrizadas; incluye cero llamadas de nota por callback bloqueado, recuperación actual seguida de guardado permitido y preservación de borradores. El oráculo previo al cambio observó **1 escritura obsoleta** y falló; el código corregido exige **0**.
+- Matriz nueva 01ea24f6-1116-4cd0-bfe8-023490d7f1f0: **105/105 unitarias backend, 17/17 episodios, 133/133 integración y 58/58 frontend**, lint/build; cero omitidas. Conserva privacidad #25, permisos #26 y cronología. PostgreSQL tmpfs nuevo, red privada y sin puertos DB.
+- Demo final nueva 2de63168-8cda-4da8-b599-65b97b05bce4: **14/14 Chromium** (seis originales, cinco recuperación, tres callbacks), además de 58/58 frontend/lint/build con la aserción final de edición recuperada. Cero pageerrors; el recorrido de recuperación conserva unexpectedApi vacío.
+- Contadores de los tres recorridos de callbacks: **2 PATCH de nota legítimos**, **0 POST de nota**, 3 PATCH de objetivo (incluye preparación), 1 retiro de objetivo, 1 PUT de ficha retenido y 5 GET de detalle (dos secundarios, dos de recuperación y uno manual). Durante los intentos bloqueados, **0 POST/PATCH clínicos adicionales**. El retiro del objetivo conserva su efecto después de recuperar el contenido y la tarea vinculada. Capturas de aviso persistente y borrador bloqueado inspeccionadas.
+- Auditor estructural de App: **44 callbacks/58 await**, cero guardas posteriores ausentes. Los helpers síncronos de marca/versiones y los consumidores de NotesScreen se revisaron semánticamente y mediante pruebas; el informe AST complementa esos oráculos.
+- Preparación: c136bc8b-a460-419d-a567-c038815df1f4 pasó los once recorridos anteriores y detectó un selector de Guardar mientras el botón decía Guardando; 73f75e03-b2c2-4f0b-8206-9419e01cae30 alcanzó el bloqueo/retirada/cierre de toast y detectó que la agenda estaba filtrada en Próximas. Se ajustaron solo los selectores a Guardando e Historial, sin relajar las aserciones de escritura. Los dos fallos de preparación del arnés VM (salto de línea y redeclaración léxica) se corrigieron antes de la suite aprobada.
+- Verificados retirados los **cuatro proyectos nuevos** de esta revisión, todos sus contenedores/redes/imágenes/volúmenes propios, y las imágenes de frontend/navegador de las pruebas. Los guards comprobaron tags preexistentes sin cambios; ningún recurso habitual se operó.
+- **80 archivos protegidos idénticos byte a byte a a0228e5**: backend funcional, SQL001–007/manifiesto/hashes, cliente de autenticación, lockfiles, decisiones/reglas y CI. Verificador offline aprobado: 40 Markdown, 582 enlaces locales/fragmentos, UTF-8, diez pruebas del contrato de evidencia CI y diff sin errores.
+- Evidencia local ignorada: tmp/issue21-clinical-integrity/red.log, frontend-final.log, matrix.log, ui-final.log, informes JSON y capturas. Pruebas/arneses versionados reproducen las secuencias en otro UUID nuevo. Bundle 510,89 kB, gzip 128,87 kB; aviso no bloqueante conservado.
+
+Actions conserva siete checks y artifacts de 14 días. Esta evidencia es local; el estado del HEAD publicado se consulta después del push y no se sustituye por el resultado de ninguna ejecución anterior.
+
+
+### Límite de la garantía
+
+El mecanismo protege inconsistencias conocidas por la sesión local. No serializa pestañas/dispositivos ni sustituye versiones backend; una operación ya enviada antes de otra confirmación no se puede deshacer, pero su respuesta confirmada obtiene su propio contador y no permite reconocerla con una lectura anterior. No se añade bloqueo permanente de la plataforma: la lectura actual libera el expediente y solo el borrador anterior requiere descarte explícito.
+
+Sin merge, auto-merge, despliegue, migraciones, cierre de #21 ni cambios de producto/CI/permisos. SQL001–007/manifiesto/hashes, backend, JWT, privacidad #25 y objetivos #26 se conservan.
+
 ## Límites de entrega
 
 Sin cambios a SQL 001–007, baseline/seed, manifiesto/hashes, autenticación/JWT, autorización legacy, proyecciones reservadas de #25, permisos de objetivos de #26, decisiones de producto, configuración CI/producción o administración de GitHub. Sin D3, nuevas vinculaciones, episodios paralelos, reconciliación histórica, proveedores ni despliegue.
