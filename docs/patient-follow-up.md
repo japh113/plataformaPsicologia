@@ -270,6 +270,125 @@ Los siete checks de Actions se disparan al publicar los commits en la misma rama
 
 Persisten las observaciones no bloqueantes sobre estados legacy y recorridos específicos fuera de `ci/browser`; no se amplía CI. El aviso de tamaño de bundle se mantiene (aproximadamente 505 kB en esta revisión). No se modifica la historia clínica ni se presenta una respuesta confirmada antigua como permiso actual.
 
+## Revisión final de callbacks — P2-01/P2-02
+
+Base auditada `61b6cce9d958a2523d1c7dd4a609531c39ba8669`, verificada idéntica al HEAD real del Draft PR antes de editar. Esta sección sustituye, para el código actual, la estrategia anterior de conservar solo actividades al recibir un GET obsoleto: **ahora se descarta el DTO completo obsoleto**. Las evidencias anteriores permanecen históricas por SHA.
+
+### Hallazgos corregidos
+
+**P2-01, ficha profesional.** La comprobación anterior estaba dentro de la IIFE síncrona que construía el payload, antes de que finalizara el update. Se construye ahora un objeto normal y, al resolver `await updatePatient`, se comprueba inmediatamente token/generaciones antes de mapear, sincronizar o mostrar éxito. La respuesta profesional confirmada de una sesión anterior no se aplica a la sesión del paciente con el mismo ID. El callback devuelve false como autorización de efectos de UI obsoletos, sin revertir ni repetir el HTTP 200 ya confirmado; no comunica un fallo ficticio a la sesión nueva.
+
+Una respuesta vigente aplica funcionalmente solo riesgo, estado y motivo confirmados, sin sustituir notas, entrevista, actividades ni notas clínicas actuales con otros campos de su snapshot. Catch/finally conservan las guardas y no modifican formularios o flags de la sesión nueva.
+
+**P2-02, revisiones de actividad.** Todas las mutaciones de actividad de App avanzan la revisión al iniciar, confirmar o fallar en la sesión vigente: alta/cumplimiento/retiro de objetivos, cumplimiento/retiro de tareas y creación/edición de notas que sincronizan tareas. Las tareas no se crean por una vía App adicional: su alta/edición profesional se realiza mediante esas notas. No se cambia ningún permiso.
+
+Un GET de detalle/listado iniciado antes de una mutación no sustituye el expediente actual cuando termina después. Un GET iniciado mientras la escritura está pendiente puede incorporar elementos antes de su confirmación; el callback posterior modifica únicamente su campo o elemento sobre el estado vigente. El cumplimiento cambia solo completed, conservando texto/metadatos más recientes. El alta de un objetivo no duplica ni sustituye un ID que el GET ya incorporó, incluso si ese objetivo ya tiene un estado posterior.
+
+### Otros fallos reales encontrados en el alcance
+
+- Los DTO completos de ficha, nota general y entrevista podían arrastrar campos no relacionados obsoletos. Las escrituras ahora aplican solo sus campos confirmados; un GET obsoleto se descarta completo y no incrementa la revisión como si se hubiera aceptado.
+- La nota general conserva un borrador escrito mientras el guardado anterior esperaba respuesta.
+- Una nota clínica confirmada podía notificarse como fallo por un GET secundario fallido. Se conserva el resultado de guardado y se indica expresamente que no se actualizó el expediente, sin repetir POST/PATCH ni inventar IDs de tareas.
+- El consumidor de identidad en App podía recibir el callback de una instancia anterior de IdentityPanel y modificar el nombre de otra sesión. Se liga a la sesión del render, sin alterar identidad/JWT/backend ni bloquear los básicos propios por una denegación clínica.
+- El consumidor agenda→nota podía abrir el paciente capturado antes de completar la cita. Obtiene y comprueba una ficha vigente antes de abrir; si ese GET ya es obsoleto o perdió acceso no navega con la captura anterior. Un fallo de lectura se comunica solo a la sesión vigente; una denegación o cierre previo no recibe feedback antiguo.
+- El lector lateral de pacientes del callback legacy de relaciones usa la misma comprobación de revisiones. Su bloqueo backend continúa intacto; no se habilitan nuevas vinculaciones.
+
+### Matriz sistemática por función
+
+El [auditor AST](../scripts/audit-patient-callbacks.cjs) usa ESLint ya instalado en la imagen frontend, sin dependencias nuevas. Identifica la sentencia completa que contiene cada await y su guarda siguiente; por eso no confunde una comprobación dentro del payload con la guarda posterior a la petición. El informe anterior detecta exactamente el await desprotegido de actualizarPerfilPaciente. El actual revisa **43 callbacks y 55 await**, sin guardas posteriores ausentes; todos los finally inspeccionados con efectos tienen guarda vigente.
+
+La inspección estructural complementa, no sustituye, la revisión semántica siguiente y las pruebas de promesas controladas. Las revisiones por paciente se exigen para datos de expediente/actividad; los callbacks de agenda, espera, disponibilidad y operativa se revisan por sesión/acceso y sus efectos propios, sin redefinir esos dominios.
+
+| Callback | await | Revisión y resultado |
+| --- | --- | --- |
+| `resetSessionState` | 0 | Sin await; invalida generaciones y vacía estado/flags. Conservado. |
+| `invalidateClinicalAccess` | 0 | Sin await; denegación central y limpieza. Conservado. |
+| `commitPatientRows` | 0 | Cambio: rechaza DTO completo obsoleto, avanza solo lecturas aceptadas y sincroniza selección/lista. |
+| `refreshBackofficeData` | 1 | Guarda posterior; datos operativos/relaciones, sin actividades de paciente. Conservado. |
+| `refreshPatientFollowUp` | 1 | Guarda de sesión/acceso/intento y revisión; DTO mínimo aceptado avanza revisión. Conservado. |
+| `cargarDatos` | 4 | Cambio: aplicación común por revisión, sin snapshots obsoletos completos; recheck explícito conservado. |
+| `handleCreateCareRelationship` | 1 | Guarda posterior/catch/finally; no habilita alta/vínculo legacy bloqueado. Conservado. |
+| `handleUpdateCareRelationship` | 1 | Guarda posterior/catch/finally; no cambia permisos ni estados autorizados. Conservado. |
+| `handleRequestCareRelationship` | 1 | Guarda posterior/catch/finally; bloqueo legacy intacto. Conservado. |
+| `handleInviteCareRelationship` | 1 | Guarda posterior/catch/finally; bloqueo legacy intacto. Conservado. |
+| `handleRespondToCareRelationship` | 2 | Cambio: lector lateral captura revisiones y usa commit común; no activa la vía bloqueada. |
+| `handleAcceptCareRelationshipByCode` | 1 | Guarda posterior/catch/finally; permisos intactos. Conservado. |
+| `syncPatientState` | 0 | Cambio: solo (id, updater) funcional; ya no acepta un DTO completo de escritura. |
+| `refreshSelectedPatient` | 1 | Cambio: descarta DTO completo si cambió revisión; avanza y aplica solo una lectura vigente. |
+| `refreshAppointmentsAndWaitlist` | 1 | Guarda posterior/catch; denegación de lector invalida acceso. Sin actividad de expediente. Conservado. |
+| `refreshReminders` | 1 | Guarda posterior/catch; denegación de lector invalida acceso. Conservado. |
+| `guardarNuevoPaciente` | 1 | Guarda posterior/catch/finally; alta unilateral sigue bloqueada en backend. Conservado. |
+| `guardarNotas` | 1 | Cambio: revisión inicio/confirmación/fallo; aplica solo notas confirmadas y conserva borrador posterior. |
+| `actualizarPerfilPaciente` | 1 | Cambio: payload objeto normal; guarda inmediatamente después de await; revisión y parche de tres campos. |
+| `handleIdentityUpdated` | 0 | Cambio: consumidor sin await ligado al token/generación de su render; básico propio disponible sin clínica. |
+| `saveInterview` | 1 | Cambio: revisión inicio/confirmación/fallo y solo entrevista; true persistente no autoriza efectos en otra sesión. |
+| `handleSaveRequiredInterview` | 1 | Guarda del consumidor antes de cerrar modal; no confía solo en true. Conservado. |
+| `toggleTask` | 2 | Revisión inicio/confirmación/fallo; cambio adicional: solo completed, sin sustituir texto/metadatos más recientes. |
+| `removeTask` | 2 | Cambio: revisión inicio/confirmación/fallo y filtro funcional; no restaura tareas retiradas. |
+| `addObjective` | 1 | Cambio: revisión inicio/confirmación/fallo; alta funcional sin duplicar ni reemplazar un ID ya leído. |
+| `toggleObjective` | 1 | Cambio: revisión inicio/confirmación/fallo; solo completed sobre estado vigente. |
+| `removeObjective` | 1 | Cambio: revisión inicio/confirmación/fallo y filtro funcional. |
+| `createSession` | 2 | Cambio: revisión cubre tareas escritas por la nota; distingue confirmación de fallo secundario de lectura. |
+| `updateSession` | 2 | Cambio: revisión cubre edición/retiro de tareas de nota; distingue confirmación y refresco secundario. |
+| `handleCreateAppointment` | 3 | Guardas después de API y refrescos, catch/finally; agenda, sin DTO de paciente. Conservado. |
+| `handleUpdateAppointment` | 3 | Guardas después de API y refrescos, catch/finally; actualización funcional de agenda. Conservado. |
+| `handleCancelFutureRecurringAppointments` | 3 | Guardas después de API/refrescos y catch/finally; reglas de agenda intactas. Conservado. |
+| `handleUpdateAppointmentStatus` | 0 | Sin await propio; delega al callback de agenda protegido. Conservado. |
+| `handleCreateAppointmentWaitlist` | 2 | Guardas después de API/refresco y catch/finally. Conservado. |
+| `handleDeleteAppointmentWaitlist` | 2 | Guardas después de API/refresco y catch/finally. Conservado. |
+| `handleReorderAppointmentWaitlist` | 2 | Guardas después de API/refresco y catch/finally. Conservado. |
+| `handleOpenSessionFromAppointment` | 2 | Cambio: después de confirmar cita obtiene una ficha vigente y no abre la captura antigua; catch con guarda de sesión. |
+| `handleUpdateAvailability` | 1 | Guarda posterior/catch/finally; dominio disponibilidad, sin actividad de expediente. Conservado. |
+| `handleUpsertAvailabilityException` | 1 | Guarda posterior/catch/finally; merge funcional de excepciones. Conservado. |
+| `handleDeleteAvailabilityException` | 1 | Guarda posterior/catch/finally; filtro funcional. Conservado. |
+| `handleCreateAvailabilityExceptionRange` | 1 | Guarda posterior/catch/finally; merge funcional del rango. Conservado. |
+| `handleUpdateAvailabilityExceptionRange` | 1 | Guarda posterior/catch/finally; merge funcional del rango. Conservado. |
+| `handleDeleteAvailabilityExceptionRange` | 1 | Guarda posterior/catch/finally; filtro funcional del rango. Conservado. |
+
+### Reproducciones y cobertura
+
+[Pruebas nuevas](../frontend/test/patient-callback-audit.test.js), dentro de frontend npm test/CI, usan el [arnés de callbacks reales](../frontend/test/helpers/followUpAppHarness.js). Conservan las capturas por render, controlan las promesas y no reimplementan las guardas:
+
+1. PUT profesional retenido → reset → paciente con mismo ID → DTO antiguo: cero mapas del DTO, referencias/colecciones/formulario/flags intactos, sin datos profesionales ni feedback anterior; payload objeto y un solo update.
+2. PUT profesional vigente y otro estado incorporado durante la espera: solo tres campos confirmados cambian.
+3. GET de detalle o listado antiguo → cada alta/PATCH/retiro de objetivo o retiro de tarea confirmado → GET: actividad conservada.
+4. Cada mutación pendiente → GET con tareas/objetivos nuevos y texto reciente → mutación: elementos preservados, sin duplicar el objetivo ya visible ni revertir su estado posterior.
+5. GET iniciado durante PATCH y liberado después de confirmarlo; fallo real y refresco posterior correcto.
+6. Notas que crean/modifican tareas frente a GET anterior; confirmación con GET secundario 500 y rechazo real, sin confundir escritura y refresco.
+7. Nota general con borrador posterior; entrevista confirmada y snapshots profesionales nuevos frente a GET antiguo.
+8. Todas las escrituras afectadas retenidas → 403/404 o logout/nueva sesión → respuesta: no repueblan datos ni modifican feedback/flags nuevos.
+9. Consumidor antiguo de identidad frente a sesión Q, y básicos propios vigentes durante denegación clínica.
+10. Consumidor agenda→nota frente a ficha capturada anterior al await; error 500 vigente y respuestas fallidas después de denegación/logout, sin modificar estado/feedback nuevo.
+
+Se conservan las trece pruebas anteriores de concurrencia y sus secuencias GET/PATCH y P/Q, además de recuperación, 401 y permisos de objetivos. Esta actualización añade **13 pruebas**, con múltiples intercalaciones parametrizadas; la suite normal contiene **43**.
+
+El [recorrido nuevo Chromium](../scripts/patient-callback-ui-review.cjs) retiene un GET profesional real generado tras editar una nota, confirma el PATCH de objetivo y libera/consume el GET antiguo: el checkbox continúa completado. También retiene un PUT profesional confirmado, cambia a paciente del mismo expediente y consume el DTO anterior: no aparece el éxito antiguo ni contenido privado visible. La ausencia de contaminación del estado React se prueba directamente con los callbacks unitarios; la comprobación DOM no se presenta como inspección del estado interno de React.
+
+El [arnés](../scripts/run-patient-callback-ui-review.py) ejecuta esos dos casos y los once recorridos previos. La prueba P/Q con dos PUT pendientes sigue en el arnés separado de concurrencia y requiere otra demo nueva. Las respuestas se liberan mediante compuertas; señales de consumo JSON y barreras de evento observan la aplicación, sin sleeps ni retrasos arbitrarios.
+
+### Validación nueva de esta corrección
+
+Código funcional: [a9b7a0e](https://github.com/japh113/plataformaPsicologia/commit/a9b7a0e921a3afa5e15a39228c2b945b692ab4b7). Pruebas/herramientas: [8080760](https://github.com/japh113/plataformaPsicologia/commit/8080760f8bf3af57d6fbac3335f959dca6e5dcee). La documentación se entrega en un commit posterior, sin modificar el contenido funcional comprobado.
+
+- Frontend final: **43/43**, cero fallos/omitidas, lint y build aprobados. Auditor AST final: **43 callbacks/55 await, cero guardas posteriores ausentes**; el informe sobre 61b6cce detectó el await incorrecto de P2-01. Build: 506,60 kB, gzip 127,61 kB; aviso de tamaño no bloqueante.
+- Backend sobre el mismo contenido funcional final: **105/105 unitarias, 17/17 episodios y 133/133 integración**, cero omitidas. PostgreSQL nuevo de prueba b1c5db8b-8413-4a4c-b913-56ba4ff38b4b. Esa ejecución encontró una expectativa de test incorrecta para el estado inicial de error del arnés; se corrigió a un mensaje de sesión nuevo que debe permanecer intacto. La corrida frontend posterior aprobó 43/43, lint/build y AST en una imagen propia nueva sin red.
+- Chromium en demo nueva 3fc647a5-c16b-4d44-ad75-5e8f98f04ec4: **13/13** (los dos casos nuevos de objetivo/PUT profesional, seis originales y cinco de recuperación), sin pageerrors. Se revisaron visualmente las capturas del objetivo completado y del paciente después del PUT antiguo.
+- Chromium en otra demo nueva 4d7498c9-4321-466e-9e8c-dab6a721871e: **4/4** carreras anteriores A1/A2/C/B; cero errores de página, un PUT P y un PUT Q. Se conservan cumplimiento/grupo nuevo, modal Q durante respuesta P y recuperación solo mediante probe explícito correcto. Total: **17 recorridos**. Estos recorridos preceden al último catch de fallo de lectura de agenda→nota; su camino normal se conserva y el nuevo fallo/denegación/logout se cubre en la suite frontend final.
+- Las corridas preparatorias sobre ef4c11b6-a302-43da-bb52-8bc32f40ee4e y d0e77d75-e1c9-46d4-bf19-e8a5c4f511b5 conservan sus logs locales; no se sustituyen por evidencia histórica. Durante la preparación se corrigieron una omisión del refresco real en el arnés y una expresión rechazada por lint, antes de las corridas aprobadas.
+- Verificados retirados los **cinco proyectos nuevos** usados en esta revisión, sus contenedores/redes/imágenes y cualquier volumen propio. Los runners retiraron sus imágenes Chromium y la imagen frontend final; los tags preexistentes se comprobaron sin cambios. No se operó sobre recursos habituales.
+- **80 archivos protegidos idénticos byte a byte a 61b6cce**: backend funcional/SQL/manifiesto/hashes, cliente API de sesión, lockfiles, decisiones/reglas y CI. Verificador offline aprobado: 40 Markdown, 571 enlaces locales/fragmentos y diez pruebas del contrato de evidencia CI; UTF-8 y diff comprobados.
+- Evidencia local reproducible en tmp/issue21-final-audit (ignorado por Git): matrix-final.log, frontend-final.log, ui-final.log, race-ui.log, informes callbacks-before/current.json y capturas. Los scripts/pruebas sí se versionan. Esta sección informa pruebas locales; el estado de Actions del nuevo HEAD se consulta después del push y no se atribuye el 7/7 histórico al commit nuevo.
+
+
+### Límites y resultado persistente
+
+Las revisiones son locales a este cliente y no serializan escrituras de otras pestañas, dispositivos o profesionales, ni añaden versiones/transacciones backend. Esta corrección no cambia las reglas de edición clínica ni implementa adendas RN-23.
+
+Si una nota se confirmó pero su refresco secundario falló, la UI confirma el guardado e indica recargar la página para recuperar el expediente completo; no fabrica IDs ni declara fallo del POST/PATCH. Las respuestas de una sesión anterior no autorizan efectos en la nueva aunque su escritura sí se haya confirmado.
+
+Se mantienen las observaciones legacy, los recorridos específicos fuera de ci/browser y el aviso no bloqueante de tamaño del bundle. Sin cambios del backend funcional, DTO privado, SQL/hashes, JWT/autenticación, permisos, producto, dependencias ni configuración CI.
+
+
 ## Límites de entrega
 
 Sin cambios a SQL 001–007, baseline/seed, manifiesto/hashes, autenticación/JWT, autorización legacy, proyecciones reservadas de #25, permisos de objetivos de #26, decisiones de producto, configuración CI/producción o administración de GitHub. Sin D3, nuevas vinculaciones, episodios paralelos, reconciliación histórica, proveedores ni despliegue.
