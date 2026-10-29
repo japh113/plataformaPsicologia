@@ -1,4 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import PatientFollowUpNotice from '../components/PatientFollowUpNotice';
+import PatientFollowUp from '../components/PatientFollowUp';
+import { getPatientFollowUpGroups } from '../utils/patientFollowUp';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -174,11 +177,14 @@ export default function NotesScreen({
   notesTemp,
   setNotesTemp,
   onSaveNotes,
+  onRetryFollowUp,
   onToggleTask,
   onDeleteTask,
   onToggleObjective,
   onDeleteObjective,
   onAddObjective,
+  clinicalRecordSync = null,
+  onRefreshClinicalRecord,
   onCreateSession,
   onUpdateSession,
   onSaveInterview,
@@ -194,12 +200,14 @@ export default function NotesScreen({
   processingObjectiveId = null,
 }) {
   const initialMatchedSession = patient?.sesiones?.find((session) => session.citaId === (prefilledAppointmentId || null)) || null;
+  const sessionEditorEpoch = useRef(0);
+  const [draftRecordVersion, setDraftRecordVersion] = useState(clinicalRecordSync?.version || 0);
   const [sessionTaskText, setSessionTaskText] = useState('');
   const [showObjectiveInput, setShowObjectiveInput] = useState(false);
   const [objectiveText, setObjectiveText] = useState('');
   const [activeSection, setActiveSection] = useState(initialMatchedSession || prefilledAppointmentId ? 'sesiones' : 'resumen');
   const [selectedSessionId, setSelectedSessionId] = useState(initialMatchedSession?.id || null);
-  const [showSessionModal, setShowSessionModal] = useState(Boolean(initialMatchedSession || prefilledAppointmentId));
+  const [showSessionModal, setShowSessionModal] = useState(Boolean(initialMatchedSession || prefilledAppointmentId) && !clinicalRecordSync?.pending);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showInterviewModal, setShowInterviewModal] = useState(false);
   const [confirmationModal, setConfirmationModal] = useState(null);
@@ -229,6 +237,10 @@ export default function NotesScreen({
   );
 
   const isPsychologist = currentUser?.role === 'psychologist';
+  const recordPending = isPsychologist && Boolean(clinicalRecordSync?.pending);
+  const draftObsolete = showSessionModal && draftRecordVersion !== (clinicalRecordSync?.version || 0);
+  const sessionWriteBlocked = recordPending || draftObsolete;
+
   const sessions = useMemo(() => sortSessionsDesc(patient?.sesiones || []), [patient?.sesiones]);
   const pendingTasks = useMemo(() => (patient?.tareas || []).filter((task) => !task.completada), [patient?.tareas]);
   const completedTasks = useMemo(() => (patient?.tareas || []).filter((task) => task.completada), [patient?.tareas]);
@@ -316,6 +328,7 @@ export default function NotesScreen({
   const hasCompletedInterview = Boolean(patient.entrevistaCompleta && patientInterview);
   const nextAppointment = upcomingAppointments[0] || null;
   const latestSession = sessions[0] || null;
+  const latestConsultation = getPatientFollowUpGroups(patient).consultations[0] || null;
   const completedAppointmentsWithoutSession = patientAppointments.filter((appointment) => appointment.estado === 'completada' && !appointmentSessionsMap.has(appointment.id));
   const selectedSession = sessions.find((session) => session.id === selectedSessionId) || null;
   const selectedAppointment = patientAppointments.find((appointment) => appointment.id === sessionForm.citaId) || null;
@@ -339,7 +352,7 @@ export default function NotesScreen({
       { id: 'resumen', label: 'Resumen' },
       { id: 'entrevista', label: 'Entrevista' },
       { id: 'agenda', label: 'Agenda' },
-      { id: 'sesiones', label: 'Notas clinicas' },
+      { id: 'sesiones', label: 'Mi seguimiento' },
       { id: 'objetivos', label: 'Objetivos' },
     ];
 
@@ -353,6 +366,7 @@ export default function NotesScreen({
   };
 
   const closeSessionModal = () => {
+    sessionEditorEpoch.current += 1;
     setShowSessionModal(false);
     onDismissSessionActionError?.();
     resetSessionForm();
@@ -381,6 +395,9 @@ export default function NotesScreen({
   };
 
   const openNewSessionModal = (appointmentId = prefilledAppointmentId || '') => {
+    if (recordPending) return;
+    sessionEditorEpoch.current += 1;
+    setDraftRecordVersion(clinicalRecordSync?.version || 0);
     onDismissSessionActionError?.();
     setSelectedSessionId(null);
     setSessionTaskText('');
@@ -449,6 +466,9 @@ export default function NotesScreen({
   };
 
   const handleEditSession = (session) => {
+    if (recordPending) return;
+    sessionEditorEpoch.current += 1;
+    setDraftRecordVersion(clinicalRecordSync?.version || 0);
     onDismissSessionActionError?.();
     setSelectedSessionId(session.id);
     setSessionTaskText('');
@@ -470,7 +490,7 @@ export default function NotesScreen({
   };
 
   const handleOpenSessionFromRecord = async (appointment) => {
-    if (!appointment) {
+    if (!appointment || recordPending) {
       return;
     }
 
@@ -511,7 +531,7 @@ export default function NotesScreen({
   };
 
   const handleSaveSession = async () => {
-    if (!sessionForm.citaId || !sessionForm.contenido.trim() || isSavingSession) {
+    if (sessionWriteBlocked || !sessionForm.citaId || !sessionForm.contenido.trim() || isSavingSession) {
       return;
     }
 
@@ -541,11 +561,12 @@ export default function NotesScreen({
       tasks: sessionTasksPayload,
     };
 
+    const editorEpoch = sessionEditorEpoch.current;
     const wasSaved = selectedSession
-      ? await onUpdateSession(selectedSession.id, payload)
-      : await onCreateSession(payload);
+      ? await onUpdateSession(selectedSession.id, payload, draftRecordVersion)
+      : await onCreateSession(payload, draftRecordVersion);
 
-    if (wasSaved) {
+    if (wasSaved === true && sessionEditorEpoch.current === editorEpoch) {
       closeSessionModal();
     }
   };
@@ -582,6 +603,7 @@ export default function NotesScreen({
         {linkedSession ? (
           <button
             type="button"
+            disabled={recordPending}
             onClick={() => handleEditSession(linkedSession)}
             className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-100"
           >
@@ -590,6 +612,7 @@ export default function NotesScreen({
         ) : appointment.estado !== 'cancelada' ? (
           <button
             type="button"
+            disabled={recordPending}
             onClick={() => handleOpenSessionFromRecord(appointment)}
             className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 transition hover:bg-indigo-100"
           >
@@ -858,13 +881,16 @@ export default function NotesScreen({
     }
   };
 
-  const renderSessionsTab = () => (
+  const renderSessionsTab = () => !isPsychologist ? (
+    <PatientFollowUp patient={patient} onRetryFollowUp={onRetryFollowUp} onToggleTask={onToggleTask} processingTaskId={processingTaskId} />
+  ) : (
     <SectionCard
       title={isPsychologist ? 'Notas clinicas' : 'Seguimiento entre consultas'}
       description={isPsychologist ? 'Historial clinico y tareas asignadas por nota clinica.' : 'Aqui se organiza tu proceso por fecha de seguimiento, con las tareas que debes trabajar entre una cita y otra.'}
       action={isPsychologist ? (
         <button
           type="button"
+          disabled={recordPending}
           onClick={() => openNewSessionModal()}
           className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
         >
@@ -951,6 +977,7 @@ export default function NotesScreen({
                 {isPsychologist && (
                   <button
                     type="button"
+                    disabled={recordPending}
                     onClick={() => handleEditSession(session)}
                     className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                   >
@@ -1296,6 +1323,7 @@ export default function NotesScreen({
   const renderPatientSummaryTab = () => (
     <div className="space-y-5">
       <SectionCard title="Resumen" description="Una vista simple de tu seguimiento actual.">
+        <PatientFollowUpNotice patient={patient} onRetry={() => onRetryFollowUp(patient.id)} />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Proxima cita</p>
@@ -1327,10 +1355,10 @@ export default function NotesScreen({
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ultimo seguimiento</p>
             <p className="mt-2 text-sm font-semibold text-slate-900">
-              {latestSession ? formatSessionDate(latestSession.fecha) : 'Sin seguimiento registrado'}
+              {latestConsultation ? formatSessionDate(latestConsultation.fecha) : patient.seguimiento ? 'Todavía no tienes consultas realizadas' : 'Seguimiento pendiente de actualizar'}
             </p>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              {latestSession ? 'Puedes revisar tus tareas y el historial de seguimientos en la pestaña de Notas clinicas.' : 'Todavia no hay seguimientos registrados en tu expediente.'}
+              {latestConsultation ? 'Revisa tus consultas y tareas en la pestaña Mi seguimiento.' : 'Tus tareas anteriores, si las hay, siguen disponibles en Mi seguimiento.'}
             </p>
           </div>
         </div>
@@ -1395,6 +1423,7 @@ export default function NotesScreen({
               {isPsychologist && (
                 <button
                   type="button"
+                  disabled={recordPending}
                   onClick={() => openNewSessionModal()}
                   className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
                 >
@@ -1404,6 +1433,16 @@ export default function NotesScreen({
             </div>
           </div>
         </div>
+
+        {recordPending && (
+          <div role="alert" aria-label="Expediente pendiente de actualización" className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+            <p className="font-semibold">El expediente necesita actualizarse antes de continuar editando notas clínicas.</p>
+            <p className="mt-2 text-sm">Una nota se guardó, pero la información mostrada puede no estar actualizada. Puedes consultar la agenda y gestionar objetivos.</p>
+            <button type="button" onClick={() => onRefreshClinicalRecord?.(patient.id)} disabled={clinicalRecordSync.status === 'refreshing'} className="mt-3 rounded-xl border border-amber-400 px-3 py-2 font-semibold disabled:opacity-50">
+              {clinicalRecordSync.status === 'refreshing' ? 'Actualizando expediente...' : 'Recargar expediente'}
+            </button>
+          </div>
+        )}
 
         <div className="mt-6 flex flex-wrap gap-2">
           {visibleSections.map((section) => (
@@ -1509,6 +1548,13 @@ export default function NotesScreen({
           onClose={closeSessionModal}
         >
           <div className="space-y-4">
+            {sessionWriteBlocked && (
+              <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                Este borrador no puede guardarse: el expediente cambió o necesita actualizarse. Se conserva tu borrador local; recarga el expediente y descártalo explícitamente antes de volver a abrir la nota actualizada.
+                {recordPending && <button type="button" onClick={() => onRefreshClinicalRecord?.(patient.id)} disabled={clinicalRecordSync.status === 'refreshing'} className="mt-3 block rounded-xl border border-amber-400 px-3 py-2 font-semibold">Recargar expediente</button>}
+                <button type="button" onClick={closeSessionModal} className="mt-3 block rounded-xl border border-amber-400 px-3 py-2 font-semibold">Descartar borrador y cerrar</button>
+              </div>
+            )}
             {sessionActionError && (
               <InlineNotice
                 tone="error"
@@ -1671,7 +1717,7 @@ export default function NotesScreen({
               <button
                 type="button"
                 onClick={handleSaveSession}
-                disabled={isSavingSession || sessionAppointmentOptions.length === 0 || !sessionForm.citaId}
+                disabled={sessionWriteBlocked || isSavingSession || sessionAppointmentOptions.length === 0 || !sessionForm.citaId}
                 className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Save size={16} className="mr-2" />

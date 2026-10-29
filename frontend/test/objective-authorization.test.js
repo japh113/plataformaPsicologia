@@ -14,6 +14,7 @@ function harness(isPsychologist, completed = false) {
   const calls = [], states = [];
   const patient = { id: 'p', objetivos: [{ id: 'o', completada: completed }], tareas: [{ id: 't', completada: false }] };
   const toggle = vm.runInNewContext(source, {
+    beginClinicalOperation: () => () => true,advancePatientRevision: () => {},
     isPsychologist, pacienteSeleccionado: patient, procesandoObjetivoId: null,
     setProcesandoObjetivoId: value => calls.push(['processing', value]),
     updatePatientObjective: async (patientId, objectiveId, payload) => {
@@ -21,7 +22,7 @@ function harness(isPsychologist, completed = false) {
       return { id: objectiveId, completed: payload.completed };
     },
     mapBackendTaskToUiTask: value => ({ id: value.id, completada: value.completed }),
-    syncPatientState: value => states.push(value),
+    syncPatientState: (value, transform) => states.push(transform ? transform(patient) : value),
     showErrorFeedback: () => assert.fail('Unexpected feedback'),
   });
   return { toggle, calls, states, patient };

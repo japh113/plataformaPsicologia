@@ -8,6 +8,7 @@ Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AG
 
 | Tema | Documento y estado |
 | --- | --- |
+| Cronología del paciente | [Mi seguimiento — contrato y evidencia Issue #21](patient-follow-up.md): consultas completadas, tareas verificadas e histórico separado, sin notas profesionales |
 | Cumplimiento de objetivos | [Contrato y evidencia Issue #22](objective-completion-authorization.md): solo psicólogo autorizado escribe; paciente consulta progreso y conserva tareas interactivas |
 | Privacidad API del paciente | [Contrato y evidencia Issue #23](patient-response-privacy.md): proyecciones por rol, lecturas/escrituras, regresiones y demo nueva aislada; Draft PR sin despliegue |
 | Arquitectura | [architecture.md](architecture.md): implementación, fundamentos no activados y futuro separados |

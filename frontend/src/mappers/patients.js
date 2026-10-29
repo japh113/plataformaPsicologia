@@ -105,6 +105,14 @@ export const mapBackendInterviewToUiInterview = (interview) => {
   };
 };
 
+export const mapBackendFollowUpToUiFollowUp = (followUp) => ({
+  consultas: followUp.consultations.map(entry => ({
+    id: String(entry.id), fecha: entry.scheduledDate, hora: entry.scheduledTime,
+    tareaIds: entry.tasks.map(task => String(task.id)),
+  })),
+  tareaIdsSinConsulta: followUp.unassignedTasks.map(task => String(task.id)),
+});
+
 export const mapBackendPatientToUiPatient = (patient) => {
   const fullName = patient.fullName?.trim() || `${patient.firstName || ''} ${patient.lastName || ''}`.trim();
 
@@ -116,6 +124,8 @@ export const mapBackendPatientToUiPatient = (patient) => {
     ultimaSesion: patient.lastClinicalNoteDate || patient.lastSessionDate || null,
     motivo: patient.reasonForConsultation || '',
     notas: patient.notes || '',
+    seguimiento: patient.followUp ? mapBackendFollowUpToUiFollowUp(patient.followUp) : null,
+    seguimientoEstado: patient.followUp ? 'ready' : patient.followUpUnavailable ? 'error' : 'idle',
     tareas: Array.isArray(patient.tasks) ? patient.tasks.map(mapBackendTaskToUiTask) : [],
     objetivos: Array.isArray(patient.objectives) ? patient.objectives.map(mapBackendObjectiveToUiObjective) : [],
     sesiones: Array.isArray(patient.clinicalNotes || patient.sessions)

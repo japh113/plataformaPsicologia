@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listPatients,
+  getPatientFollowUpHandler,
   getPatient,
   createPatientHandler,
   updatePatientHandler,
@@ -21,6 +22,7 @@ const router = Router();
 
 router.get('/', listPatients);
 router.get('/:id', getPatient);
+router.get('/:id/follow-up', getPatientFollowUpHandler);
 router.post('/', createPatientHandler);
 router.put('/:id', updatePatientHandler);
 router.delete('/:id', deletePatientHandler);

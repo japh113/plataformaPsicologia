@@ -1,3 +1,5 @@
+import PatientFollowUpNotice from '../components/PatientFollowUpNotice';
+import { getPatientFollowUpGroups } from '../utils/patientFollowUp';
 import React from 'react';
 import { Activity, AlertCircle, ArrowRight, Bell, Calendar, CheckSquare, ClipboardList, FileText, User } from 'lucide-react';
 import { getRiskColor, sortPatientsByRisk } from '../utils/risk';
@@ -29,25 +31,6 @@ const getReminderLabel = (priority) => {
   if (priority === 'high') return 'Alta';
   if (priority === 'medium') return 'Media';
   return 'Suave';
-};
-
-const groupTasksByClinicalNote = (tasks = []) => {
-  const groups = new Map();
-
-  tasks.forEach((task) => {
-    const key = task.sesionId || `no-note-${task.id}`;
-    const currentGroup = groups.get(key) || {
-      id: key,
-      fechaSesion: task.fechaSesion || null,
-      objetivoSesion: task.objetivoSesion || 'Seguimiento general',
-      tasks: [],
-    };
-
-    currentGroup.tasks.push(task);
-    groups.set(key, currentGroup);
-  });
-
-  return [...groups.values()].sort((left, right) => String(right.fechaSesion || '').localeCompare(String(left.fechaSesion || '')));
 };
 
 const formatClinicalNoteDate = (value) => {
@@ -225,6 +208,7 @@ export default function DashboardScreen({
   onOpenPatient,
   onCompleteInterview,
   onViewAppointments,
+  onRetryFollowUp,
   onToggleTask,
   onRequestCareRelationship,
   onInviteCareRelationship,
@@ -255,10 +239,16 @@ export default function DashboardScreen({
   const pendingTasks = patientProfile?.tareas?.filter((task) => !task.completada).length || 0;
   const completedTasks = patientProfile?.tareas?.filter((task) => task.completada).length || 0;
   const totalTasks = patientProfile?.tareas?.length || 0;
-  const totalClinicalNotes = patientProfile?.sesiones?.length || 0;
+  const followUp = getPatientFollowUpGroups(patientProfile);
+  const totalConsultations = followUp.consultations.length;
   const interviewCompleted = Boolean(patientProfile?.entrevistaCompleta);
   const hasLegacyRelationship = careRelationships.some(relationship => relationship.status === 'active');
-  const patientTaskGroups = groupTasksByClinicalNote(patientProfile?.tareas || []);
+  const patientTaskGroups = !patientProfile?.seguimiento ? (patientProfile?.tareas?.length ? [{
+    id: 'available', tasks: patientProfile.tareas, title: 'Tus tareas',
+  }] : []) : [
+    ...followUp.consultations.map(entry => ({ ...entry, fechaSesion: entry.fecha, title: 'Consulta realizada' })),
+    ...(followUp.unassignedTasks.length ? [{ id: 'unassigned', tasks: followUp.unassignedTasks, title: 'Tareas sin consulta identificada' }] : []),
+  ];
 
   if (!isPsychologist) {
     return (
@@ -313,7 +303,7 @@ export default function DashboardScreen({
                 </>
               ) : pendingTasks > 0 ? (
                 <>
-                  <h3 className="mt-2 text-xl font-black text-slate-900">Retomar tus tareas entre notas clinicas</h3>
+                  <h3 className="mt-2 text-xl font-black text-slate-900">Retomar tus tareas entre consultas</h3>
                   <p className="mt-2 text-sm text-slate-500">Tienes {pendingTasks} tarea(s) en proceso antes de tu siguiente seguimiento.</p>
                 </>
               ) : (
@@ -374,10 +364,10 @@ export default function DashboardScreen({
           </div>
           <div className="bg-slate-50 p-4 md:p-5 rounded-xl shadow-sm border border-slate-200 transition hover:shadow-md">
             <div className="flex items-center justify-between">
-              <h3 className="text-slate-600 font-medium text-sm md:text-base">Notas clinicas</h3>
+              <h3 className="text-slate-600 font-medium text-sm md:text-base">Consultas realizadas</h3>
               <FileText className="text-slate-500" size={24} />
             </div>
-            <p className="text-2xl md:text-3xl font-bold text-slate-900 mt-2">{totalClinicalNotes}</p>
+            <p className="text-2xl md:text-3xl font-bold text-slate-900 mt-2">{patientProfile?.seguimiento ? totalConsultations : '—'}</p>
             <p className="mt-1 text-xs text-slate-500">{completedTasks} tarea(s) completadas en tu proceso</p>
           </div>
         </div>
@@ -387,9 +377,9 @@ export default function DashboardScreen({
             <div className="mb-4 flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg md:text-xl font-bold flex items-center text-slate-900">
-                  <ClipboardList className="mr-2 text-indigo-500" /> Tareas entre notas clinicas
+                  <ClipboardList className="mr-2 text-indigo-500" /> Tareas entre consultas
                 </h2>
-                <p className="mt-1 text-sm text-slate-500">Tus tareas se organizan por nota clinica para que sea mas claro que corresponde a cada seguimiento.</p>
+                <p className="mt-1 text-sm text-slate-500">Tus tareas se organizan por consulta realizada; las tareas anteriores sin vínculo se muestran aparte.</p>
               </div>
               {patientProfile && (
                 <button
@@ -400,6 +390,7 @@ export default function DashboardScreen({
                 </button>
               )}
             </div>
+            {patientProfile && <PatientFollowUpNotice patient={patientProfile} onRetry={() => onRetryFollowUp(patientProfile.id)} />}
             <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
               {patientTaskGroups.length ? (
                 patientTaskGroups.map((group) => {
@@ -409,12 +400,12 @@ export default function DashboardScreen({
                     <div key={group.id} className="rounded-xl border border-slate-200 p-4 transition hover:border-slate-300">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{formatClinicalNoteDate(group.fechaSesion)}</p>
-                          <h3 className="mt-1 text-sm md:text-base font-bold text-slate-900">{group.objetivoSesion || 'Seguimiento general'}</h3>
-                          <p className="mt-1 text-xs text-slate-500">{group.tasks.length} tarea(s) vinculadas a esta nota clinica</p>
+                          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{group.fechaSesion ? formatClinicalNoteDate(group.fechaSesion) : patientProfile?.seguimiento ? 'Tareas anteriores' : 'Agrupación pendiente de actualizar'}</p>
+                          <h3 className="mt-1 text-sm md:text-base font-bold text-slate-900">{group.title}</h3>
+                          <p className="mt-1 text-xs text-slate-500">{group.tasks.length ? `${group.tasks.length} tarea(s)` : 'Sin tareas asignadas'}</p>
                         </div>
-                        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${groupPending > 0 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
-                          {groupPending > 0 ? `${groupPending} pendiente(s)` : 'Completadas'}
+                        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${group.tasks.length === 0 ? 'bg-slate-50 text-slate-600 border-slate-200' : groupPending > 0 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                          {group.tasks.length === 0 ? 'Sin tareas' : groupPending > 0 ? `${groupPending} pendiente(s)` : 'Completadas'}
                         </span>
                       </div>
                       <div className="mt-3 space-y-2">
@@ -440,14 +431,14 @@ export default function DashboardScreen({
                         onClick={() => onOpenPatient(patientProfile)}
                         className="mt-3 inline-flex items-center text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
                       >
-                        Abrir nota clinica <ArrowRight size={16} className="ml-1" />
+                        Ver seguimiento <ArrowRight size={16} className="ml-1" />
                       </button>
                     </div>
                   );
                 })
               ) : (
                 <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
-                  <p className="text-sm font-semibold text-slate-700">No tienes tareas activas entre seguimientos</p>
+                  <p className="text-sm font-semibold text-slate-700">{patientProfile?.seguimiento ? 'No tienes tareas activas entre seguimientos' : 'La agrupación del seguimiento está pendiente de actualizar'}</p>
                   <p className="mt-2 text-sm text-gray-500">Cuando tu psicologo te deje ejercicios o practicas para trabajar antes de la siguiente cita, apareceran agrupados aqui.</p>
                 </div>
               )}
