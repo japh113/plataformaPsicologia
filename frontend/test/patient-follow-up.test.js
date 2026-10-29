@@ -48,13 +48,14 @@ test('real task callback preserves follow-up associations while updating shared 
       followUp: { consultations: [{ id: 'c',scheduledDate: '2026-04-01',tasks: [{ id: 't' }] }],unassignedTasks: [] } });
     let next;
     const toggle = vm.runInNewContext(app.slice(start,end) + '\ntoggleTask;', {
+      beginClinicalOperation: () => () => true,advancePatientRevision: () => {},
       pacienteSeleccionado: patient,procesandoTareaId: null,setProcesandoTareaId: () => {},
       updatePatientTask: async (patientId,taskId,payload) => {
         assert.equal(patientId,'p'); assert.equal(taskId,'t');
         return { id: taskId,text: 'task',completed: payload.completed };
       },
       mapBackendTaskToUiTask: task => ({ id: task.id,texto: task.text,completada: task.completed }),
-      syncPatientState: value => { next = value; },refreshReminders: async () => {},
+      syncPatientState: (id, transform) => { next = transform(patient); },refreshReminders: async () => {},
       showErrorFeedback: () => assert.fail('Unexpected error'),
     });
     await toggle('t');

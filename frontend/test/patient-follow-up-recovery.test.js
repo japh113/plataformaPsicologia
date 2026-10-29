@@ -1,11 +1,10 @@
+import { harness } from './helpers/followUpAppHarness.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
-import { mapBackendPatientToUiPatient, mapBackendFollowUpToUiFollowUp, mapBackendTaskToUiTask } from '../src/mappers/patients.js';
-import { preservePatientFollowUp } from '../src/utils/patientFollowUp.js';
+import { mapBackendPatientToUiPatient } from '../src/mappers/patients.js';
 
-const app = await readFile(new URL('../src/App.jsx',import.meta.url),'utf8');
 const api = await readFile(new URL('../src/api/patients.js',import.meta.url),'utf8');
 const client = await readFile(new URL('../src/api/client.js',import.meta.url),'utf8');
 const follow = { consultations: [{ id: 'c',scheduledDate: '2026-04-08',scheduledTime: '11:00:00',tasks: [] }],unassignedTasks: [] };
@@ -15,47 +14,6 @@ const failure = status => Object.assign(new Error(status ? 'HTTP ' + status : 'N
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise,resolve }; };
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 
-function harness({ previous = null, followRequest = async () => follow, put = async () => ({ ...primary,interviewCompleted: true,
-  interview: { birthDate: '1990-01-01',birthPlace: 'Fictional place',completedAt: '2026-10-28T12:00:00Z' } }) } = {}) {
-  const state = { patients: previous ? [previous] : [],selected: previous,appointments: [],reminders: [],relationships: [],
-    error: '',loading: false,success: [],errors: [],modal: true,form: null,puts: 0,mainReads: 0,followReads: 0,token: 'session-p' };
-  const assign = key => value => { state[key] = typeof value === 'function' ? value(state[key]) : value; };
-  const sessionEpoch = { current: 0 };
-  const context = {
-    currentUser: { id: 'p',role: 'patient',patientId: 'p' },useCallback: fn => fn,
-    getAuthToken: () => state.token,sessionEpoch,followUpRequests: { current: new Map() },
-    getPatientFollowUp: async id => { state.followReads++; assert.equal(id,'p'); return followRequest(); },
-    getPatients: async () => { state.mainReads++; return [primary]; },getPatient: async () => primary,
-    getAppointments: async () => [{ id: 'a',patientId: 'p' }],getMyReminders: async () => ['reminder'],
-    getCareRelationships: async () => ['relationship'],refreshBackofficeData: async () => {},
-    mapBackendPatientToUiPatient,mapBackendFollowUpToUiFollowUp,mapBackendTaskToUiTask,preservePatientFollowUp,
-    sortAppointments: value => value,mapBackendAppointmentToUiAppointment: value => value,
-    setPacientes: assign('patients'),setPacienteSeleccionado: assign('selected'),setAppointments: assign('appointments'),
-    setReminders: assign('reminders'),setCareRelationships: assign('relationships'),setErrorCarga: assign('error'),
-    setCargandoDatos: assign('loading'),setAppointmentWaitlist: () => {},setAvailability: () => {},
-    setAvailabilityDraft: () => {},setAvailabilityExceptions: () => {},
-    guardandoEntrevista: false,setGuardandoEntrevista: assign('saving'),
-    upsertPatientInterview: async (...args) => { state.puts++; return put(...args); },
-    mapUiInterviewToBackendInterview: value => value,buildInterviewDraftForm: patient => patient.entrevista,
-    setPatientInterviewForm: assign('form'),todayDate: '2026-10-28',
-    showSuccessFeedback: message => state.success.push(message),showErrorFeedback: message => state.errors.push(message),
-    patientProfile: { id: 'p' },patientInterviewForm: {},setShowPatientInterview: assign('modal'),
-  };
-  vm.createContext(context);
-  function run(start,end,returned) {
-    const a = app.indexOf(start),b = app.indexOf(end,a);
-    assert.ok(a >= 0 && b > a,start);
-    return vm.runInContext(app.slice(a,b) + '\n' + returned + ';',context);
-  }
-  const refresh = run('  const refreshPatientFollowUp = useCallback','  const cargarDatos = useCallback','refreshPatientFollowUp');
-  context.refreshPatientFollowUp = refresh;
-  const load = run('  const cargarDatos = useCallback','  useEffect(() => {','cargarDatos');
-  const sync = run('  const syncPatientState =','  const syncAppointmentsState =','syncPatientState');
-  context.syncPatientState = sync;
-  const selected = run('  const refreshSelectedPatient =','  const refreshAppointmentsAndWaitlist =','refreshSelectedPatient');
-  const save = run('  const saveInterview =','  const toggleTask =','({ saveInterview,handleSaveRequiredInterview })');
-  return { state,context,refresh,load,selected,...save,sessionEpoch };
-}
 
 test('P2-01: real load keeps primary sections while follow-up is pending, network-failed or HTTP 500; retry only reads follow-up', async () => {
   for (const status of [undefined,500]) {
