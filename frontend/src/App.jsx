@@ -188,7 +188,7 @@ export default function App({onRestrictedSession}) {
   );
 
   useEffect(() => {
-    if (!uiFeedback) {
+    if (!uiFeedback || uiFeedback.reload) {
       return undefined;
     }
 
@@ -199,16 +199,18 @@ export default function App({onRestrictedSession}) {
     return () => window.clearTimeout(timeoutId);
   }, [uiFeedback]);
 
-  const showUiFeedback = (type, message) => {
+  const showUiFeedback = (type, message, reload = false) => {
     setUiFeedback({
       id: Date.now(),
       type,
       message,
+      reload,
     });
   };
 
   const showSuccessFeedback = (message) => showUiFeedback('success', message);
   const showErrorFeedback = (message) => showUiFeedback('error', message);
+  const showWarningFeedback = (message) => showUiFeedback('warning', message, true);
 
   const resetSessionState = () => {
     sessionEpoch.current += 1;
@@ -890,17 +892,17 @@ export default function App({onRestrictedSession}) {
 
   const refreshSelectedPatient = async (patientId) => {
     const isCurrent = beginClinicalOperation();
-    if (!isCurrent()) return null;
+    if (!isCurrent()) return { status: 'invalidated' };
     const revision = patientRevisions.current.get(patientId) || 0;
     try {
       const refreshedPatient = await getPatient(patientId);
-      if (!isCurrent()) return null;
-      if (revision !== (patientRevisions.current.get(patientId) || 0)) return null;
+      if (!isCurrent()) return { status: 'invalidated' };
+      if (revision !== (patientRevisions.current.get(patientId) || 0)) return { status: 'conflict' };
       const uiPatient = mapBackendPatientToUiPatient(refreshedPatient);
       advancePatientRevision(patientId);
       syncPatientState(patientId, previous => preservePatientFollowUp(previous, uiPatient));
       if (currentUser?.role === 'patient') void refreshPatientFollowUp(patientId);
-      return uiPatient;
+      return { status: 'applied', patient: uiPatient };
     } catch (error) {
       if (isCurrent() && [401, 403, 404].includes(error.status)) invalidateClinicalAccess();
       throw error;
@@ -1360,16 +1362,23 @@ export default function App({onRestrictedSession}) {
       if (!isCurrent()) return false;
       advancePatientRevision(patientId);
       confirmed = true;
-      await refreshSelectedPatient(patientId);
+      let refreshed = await refreshSelectedPatient(patientId);
       if (!isCurrent()) return false;
+      // One new GET after a revision conflict; never repeat the confirmed write.
+      if (refreshed.status === 'conflict') {
+        refreshed = await refreshSelectedPatient(patientId);
+        if (!isCurrent()) return false;
+      }
+      if (refreshed.status === 'invalidated') return false;
       setSessionActionError('');
-      showSuccessFeedback('Nota clinica creada correctamente.');
+      if (refreshed.status === 'applied') showSuccessFeedback('Nota clinica creada correctamente.');
+      else showWarningFeedback('La nota clínica se guardó. La actualización del expediente está pendiente; recarga la página para ver los últimos cambios.');
       return true;
     } catch (error) {
       if (!isCurrent()) return false;
       if (confirmed) {
         setSessionActionError('');
-        showSuccessFeedback('La nota clínica se guardó. No se pudo actualizar el expediente; recarga la página para ver los últimos cambios.');
+        showWarningFeedback('La nota clínica se guardó. No se pudo actualizar el expediente; recarga la página para ver los últimos cambios.');
         return true;
       }
       advancePatientRevision(patientId);
@@ -1401,16 +1410,23 @@ export default function App({onRestrictedSession}) {
       if (!isCurrent()) return false;
       advancePatientRevision(patientId);
       confirmed = true;
-      await refreshSelectedPatient(patientId);
+      let refreshed = await refreshSelectedPatient(patientId);
       if (!isCurrent()) return false;
+      // One new GET after a revision conflict; never repeat the confirmed write.
+      if (refreshed.status === 'conflict') {
+        refreshed = await refreshSelectedPatient(patientId);
+        if (!isCurrent()) return false;
+      }
+      if (refreshed.status === 'invalidated') return false;
       setSessionActionError('');
-      showSuccessFeedback('Nota clinica actualizada correctamente.');
+      if (refreshed.status === 'applied') showSuccessFeedback('Nota clinica actualizada correctamente.');
+      else showWarningFeedback('La nota clínica se guardó. La actualización del expediente está pendiente; recarga la página para ver los últimos cambios.');
       return true;
     } catch (error) {
       if (!isCurrent()) return false;
       if (confirmed) {
         setSessionActionError('');
-        showSuccessFeedback('La nota clínica se guardó. No se pudo actualizar el expediente; recarga la página para ver los últimos cambios.');
+        showWarningFeedback('La nota clínica se guardó. No se pudo actualizar el expediente; recarga la página para ver los últimos cambios.');
         return true;
       }
       advancePatientRevision(patientId);
@@ -1653,8 +1669,8 @@ export default function App({onRestrictedSession}) {
 
     try {
       const refreshedPatient = await refreshSelectedPatient(patient.id);
-      if (!isCurrent() || !refreshedPatient) return false;
-      abrirNotas(refreshedPatient, { appointmentId: appointment.id, preferProvided: true });
+      if (!isCurrent() || refreshedPatient.status !== 'applied') return false;
+      abrirNotas(refreshedPatient.patient, { appointmentId: appointment.id, preferProvided: true });
       return true;
     } catch (error) {
       if (!isCurrent()) return false;
@@ -2076,7 +2092,9 @@ export default function App({onRestrictedSession}) {
           <div className={`pointer-events-auto w-full max-w-md rounded-2xl border px-4 py-3 shadow-xl ${
             uiFeedback.type === 'success'
               ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-              : 'border-red-200 bg-red-50 text-red-900'
+              : uiFeedback.type === 'warning'
+                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                : 'border-red-200 bg-red-50 text-red-900'
           }`}>
             <div className="flex items-start justify-between gap-3">
               <p className="whitespace-pre-wrap text-sm leading-6">{uiFeedback.message}</p>
@@ -2088,6 +2106,11 @@ export default function App({onRestrictedSession}) {
                 Cerrar
               </button>
             </div>
+            {uiFeedback.reload && (
+              <button type="button" onClick={() => window.location.reload()} className="mt-3 rounded-full border border-current/30 px-3 py-1 text-sm font-semibold hover:bg-white/50">
+                Recargar expediente
+              </button>
+            )}
           </div>
         </div>
       )}
