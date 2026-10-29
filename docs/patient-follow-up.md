@@ -389,6 +389,74 @@ Si una nota se confirmó pero su refresco secundario falló, la UI confirma el g
 Se mantienen las observaciones legacy, los recorridos específicos fuera de ci/browser y el aviso no bloqueante de tamaño del bundle. Sin cambios del backend funcional, DTO privado, SQL/hashes, JWT/autenticación, permisos, producto, dependencias ni configuración CI.
 
 
+
+## Recuperación de nota confirmada — P2 y arnés P3
+
+Encargo focalizado sobre el HEAD auditado 2d8453b59e92a9388b4e4366f45285b925c643a5, verificado idéntico al Draft PR #27 antes de editar. Las evidencias anteriores conservan su SHA. Esta sección corrige la omisión del resultado descartado del refresco posterior a una nota confirmada; no rehace el aislamiento entre sesiones ni la política de descartar snapshots obsoletos.
+
+### Resultado pequeño y recuperación acotada
+
+El contrato interno de refreshSelectedPatient distingue estos resultados; no cambia contratos HTTP ni DTO profesionales:
+
+| Resultado | Significado | Consumidor de nota confirmada |
+| --- | --- | --- |
+| applied, con patient | Lectura autorizada aplicada a lista y selección | Éxito normal; nota y tareas vienen del DTO leído. |
+| conflict | Cambió la revisión mientras esperaba el GET; no se aplica ningún campo | Inicia un único GET nuevo después del conflicto, si sesión/acceso siguen vigentes. |
+| invalidated | Sesión o generación clínica ya no vigentes | Sin reintento, datos ni feedback para la sesión actual. |
+| Excepción de red/servidor | Fallo real de lectura; 401/403/404 invalidan acceso | Sin reintento; solo si continúa autorizado se conserva confirmación de guardado y se avisa del refresco pendiente. |
+
+createSession y updateSession comprueban cada resultado, además de sus guardas posteriores a await. El presupuesto es **dos GET como máximo por nota confirmada**: lectura secundaria y una recuperación exclusivamente por conflict. Un segundo conflicto termina en advertencia; no hay bucle ni reintentos tras 401/403/404 o logout. Los errores no se convierten en conflict. El consumidor agenda→nota se adapta al mismo resultado y abre solo applied, sin iniciar recuperación automática.
+
+El primer DTO descartado permanece descartado completo. La lectura nueva captura la revisión actual y vuelve a comprobarla al terminar. Si durante ella cambia un objetivo, se retira una tarea, se añade actividad o se acepta otra lectura más reciente, tampoco sustituye ese estado vigente.
+
+Tras recuperación aplicada se muestra éxito normal. Tras otro conflicto o fallo de lectura, el resultado persistente continúa confirmado y la UI muestra una **advertencia ámbar persistente**, hasta cerrarla o cambiar feedback/sesión, con **Recargar expediente**. El botón recarga la página y obtiene de nuevo los datos autorizados. El mensaje nunca declara fallida la escritura confirmada. La recuperación no repite POST/PATCH, no deriva IDs/tareas/vínculos del payload y no añade sincronización entre pestañas o dispositivos.
+
+### Reproducciones deterministas y arreglo P3
+
+Las [pruebas de callbacks](../frontend/test/patient-callback-audit.test.js) forman parte de npm test. Para creación y edición: escritura confirmada con tarea nueva → primer GET retenido → PATCH objetivo completado → primer DTO descartado → segundo GET válido. Se comprueban contenido definitivo, ID de tarea y asociación de nota procedentes del servidor, objetivo completado, actividades recientes, coherencia lista/selección y exactamente una escritura de nota y una de objetivo.
+
+Otras secuencias comprueban segundo PATCH durante recuperación, GET obsoleto después de removeTask/addObjective/toggleObjective, límite de dos lecturas, HTTP 500 de recuperación, 401/403/404 o logout antes/durante la segunda lectura, y guardados encadenados con una lectura independiente antigua. Si la lectura no se aplica, se preservan los elementos actuales y se exige aviso de actualización pendiente; si se invalida acceso, las colecciones protegidas siguen vacías y no se modifican formulario/flags/avisos nuevos.
+
+El [arnés](../frontend/test/helpers/followUpAppHarness.js) incorpora **mapBackendWaitlistToUiWaitlistEntry real**. La carga profesional de prueba usa espera no vacía y comprueba errorCarga vacío, datos aplicados y fin de carga. Otro caso inyecta una excepción inesperada en el mapper y demuestra que el oráculo de carga exitosa falla; no se oculta con un mapper ficticio ni con un catch en el test. Las cargas denegadas 403/404 siguen descartando el expediente. No cambia código profesional de producción para reparar P3.
+
+Antes del cambio de producción, la reproducción de recuperación terminaba en finished en vez de iniciar el segundo GET y la prueba profesional mostraba mapBackendWaitlistToUiWaitlistEntry is not defined en errorCarga. Las compuertas se esperan mediante Promise.race con la finalización del callback: la falta de recuperación causa una aserción fallida, no un test colgado ni un retraso arbitrario.
+
+### Chromium reforzado y evidencia
+
+El [recorrido de callbacks](../scripts/patient-callback-ui-review.cjs) ya no comprueba solo que el objetivo conserve su checkbox:
+
+1. Edita contenido ficticio y añade una tarea por la nota; confirma PATCH y retiene su GET secundario.
+2. Confirma un único PATCH del objetivo a completed true y libera el GET antiguo.
+3. Espera la recuperación; comprueba en el DOM actual el contenido de la nota, la tarea en su tarjeta y en el editor de esa nota, y el objetivo completado. Exige dos GET, una escritura de nota y una de objetivo.
+4. Repite con HTTP 500 en el GET de recuperación: comprueba confirmación/advertencia y botón de recarga; al pulsarlo verifica de nuevo contenido/tarea/objetivo desde datos autorizados actuales, sin otra escritura.
+5. Conserva la respuesta profesional retenida frente a logout/paciente del mismo expediente, sin éxito antiguo ni contenido privado visible.
+
+La preparación independiente del segundo caso cambia explícitamente el objetivo a false fuera de sus contadores; no se confunde esa preparación con una escritura duplicada. Los contadores finales de los dos casos son dos PATCH de nota, dos PATCH de objetivo más uno de preparación, y cuatro GET secundarios/de recuperación. La comprobación de estado React permanece en las unitarias; el navegador verifica DOM actual, no una captura anterior.
+
+El [runner](../scripts/run-patient-callback-ui-review.py) ejecuta primero los once recorridos originales/de recuperación y después estos tres; así las nuevas tareas no alteran los conteos iniciales de la cronología original. El arnés de recuperación registra específicamente el GET de contacto sin Authorization iniciado durante el 401 de seguimiento intencional como consecuencia esperada de sesión invalidada. No acepta otros 401 inesperados ni modifica autenticación; mantiene los oráculos de token eliminado y UI protegida ausente.
+
+### Validación nueva por contenido comprobado
+
+Código funcional: [7f43fda](https://github.com/japh113/plataformaPsicologia/commit/7f43fda8467b050f3e3bd9850617382ce6e9fe12). Pruebas y recorridos: [63484aa](https://github.com/japh113/plataformaPsicologia/commit/63484aaba8851c2da37d9d0aca5e8c65823edb83). La documentación se guarda después, sin modificar el contenido funcional validado.
+
+- **50/50 frontend**, cero fallos/canceladas/omitidas, lint/build aprobados, incluida la carga profesional real y su oráculo negativo. Se añaden siete pruebas con intercalaciones parametrizadas y se mantienen las regresiones anteriores. Auditor estructural: **43 callbacks/57 await, cero guardas posteriores ausentes**; no sustituye las pruebas semánticas.
+- Matriz nueva 3c2b0749-73f3-4b8c-b109-9dcbd872641d: **105/105 unitarias backend, 17/17 episodios y 133/133 integración**, además de 50/50 frontend y lint/build. Incluye privacidad #25, permisos #26 y seguimiento. PostgreSQL nuevo tmpfs, red privada, sin puertos DB; cero omitidas.
+- Demo final nueva 4be74652-aa5c-46aa-9e12-7230a08593bc: **14/14 Chromium** (seis originales, cinco de recuperación y tres de callbacks), más 50/50 frontend/lint/build. Sin pageerrors; el recorrido de recuperación conserva unexpectedApi vacío y registra aparte los fallos intencionales. Los casos de nota exigen los contadores indicados arriba y verifican botón de recarga, contenido/tarea/objetivo actuales. Capturas ficticias de advertencia y recarga inspeccionadas.
+- Demo preparatoria 8debde0d-ec7e-49c7-8a35-f57c99b40583: seis recorridos originales aprobados; el arnés de recuperación detectó dos 401 de contacto posteriores a su invalidación intencional. Se añadió la clasificación estricta por petición sin token, no una excepción global a los 401. Los tres casos nuevos también pasaron de forma independiente antes de la repetición completa final.
+- La primera preparación del test previo se interrumpió por una promesa pendiente; se sustituyó por el oráculo determinista Promise.race y se reprodujeron los dos defectos antes de corregir producción. Un guard de imágenes detectó la retirada concurrente de otra imagen propia de ese ensayo; la repetición secuencial aprobó el control. No se repararon ni alteraron recursos habituales para resolverlo.
+- Verificados retirados los **tres proyectos nuevos**, sus contenedores/redes/imágenes y volúmenes propios, las imágenes/frontend de test y los navegadores etiquetados de esta revisión. Los wrappers y la repetición secuencial verificaron tags preexistentes sin cambios.
+- **80 archivos protegidos idénticos byte a byte a 2d8453b**: backend funcional/SQL001–007/manifiesto/hashes, cliente API de sesión, lockfiles, decisiones/reglas y CI. Verificador offline aprobado: 40 Markdown, 577 enlaces locales/fragmentos, UTF-8 y diez pruebas del contrato de evidencia CI; diff sin errores.
+- Logs locales ignorados: tmp/issue21-note-recovery/red-final.log, matrix.log, ui-final.log, callback-browser-result.json y capturas. Los casos/arneses versionados permiten repetirlos en otro UUID nuevo. Build: 507,54 kB, gzip 127,86 kB; aviso de tamaño no bloqueante conservado.
+
+Actions mantiene siete checks y artifacts de 14 días, sin cambios. Esta evidencia es local; el estado del nuevo HEAD se consulta después del push y no se reutiliza ningún 7/7 anterior como resultado nuevo.
+
+
+### Límites conservados
+
+Un conflicto adicional deja el expediente pendiente de actualización con acción explícita; no se garantiza actualización automática durante una sucesión continua de escrituras. Las revisiones siguen siendo locales a este cliente. La lectura autorizada y sus revisiones protegen los datos actuales; no se añade serialización distribuida ni se cambia la historia clínica.
+
+Sin cambios a backend funcional, SQL/manifiesto/hashes, JWT, permisos #25/#26, DTO seguro, contratos profesionales HTTP, dependencias, configuración CI o recursos habituales. El Issue #21 sigue abierto; entrega en la misma rama/Draft PR, sin merge, auto-merge ni despliegue.
+
 ## Límites de entrega
 
 Sin cambios a SQL 001–007, baseline/seed, manifiesto/hashes, autenticación/JWT, autorización legacy, proyecciones reservadas de #25, permisos de objetivos de #26, decisiones de producto, configuración CI/producción o administración de GitHub. Sin D3, nuevas vinculaciones, episodios paralelos, reconciliación histórica, proveedores ni despliegue.
