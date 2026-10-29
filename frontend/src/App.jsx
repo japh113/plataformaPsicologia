@@ -2080,6 +2080,17 @@ export default function App({onRestrictedSession}) {
     }
 
     if (vistaActiva === 'notas') {
+      if (!pacienteSeleccionado) {
+        return (
+          <section role="status" aria-label="Sin expediente seleccionado" className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
+            <h2 className="text-xl font-bold text-slate-900">Selecciona un expediente</h2>
+            <p className="mt-2 text-sm text-slate-600">El expediente anterior ya no está seleccionado. Vuelve al tablero para elegir un paciente.</p>
+            <button type="button" onClick={() => setVistaActiva('dashboard')} className="mt-4 rounded-xl bg-indigo-600 px-4 py-2.5 font-medium text-white hover:bg-indigo-700">
+              Volver al tablero
+            </button>
+          </section>
+        );
+      }
       return (
         <NotesScreen
           key={`${pacienteSeleccionado?.id || 'notes-screen'}-${sessionDraftAppointmentId || 'none'}`}
