@@ -2,7 +2,7 @@
 
 Run after the isolated demo wrapper succeeds; never targets the habitual stack.
 Only creates/removes its own labeled browser image/container. Evidence goes to
-ignored tmp/issue21-clinical-integrity. The demo lifecycle remains owned by clinical-episodes.sh.
+ignored tmp/issue21-null-selection. The demo lifecycle remains owned by clinical-episodes.sh.
 """
 import json, os, re, subprocess, sys, uuid
 from pathlib import Path
@@ -15,7 +15,7 @@ project = 'psicopanel-episodes-' + run
 episode_images.read_state(project)
 env = dict(os.environ, EPISODE_TEST_RUN_ID=run)
 compose = ['docker', 'compose', '-p', project, '-f', 'compose.episodes-test.yaml']
-work = Path('tmp/issue21-clinical-integrity').resolve()
+work = Path('tmp/issue21-null-selection').resolve()
 work.mkdir(parents=True, exist_ok=True)
 assert work.is_relative_to(Path.cwd().resolve() / 'tmp')
 for service in ['api', 'frontend']:
@@ -35,8 +35,8 @@ for task in ['test', 'lint', 'build']:
     invoke(compose + ['--profile', 'demo', 'run', '--rm', '--no-deps', '-v', str(Path('frontend/test').resolve()) + ':/app/test:ro', 'frontend', 'npm', 'run', task])
 versions = json.loads(Path('scripts/ci/versions.json').read_text())
 review = str(uuid.uuid4())
-label = 'io.psicopanel.issue21.clinical-integrity.review'
-tag = 'psicopanel-issue21-clinical-integrity-browser-' + review + ':isolated'
+label = 'io.psicopanel.issue21.null-selection.review'
+tag = 'psicopanel-issue21-null-selection-browser-' + review + ':isolated'
 dockerfile = work / 'browser.Dockerfile'
 dockerfile.write_text('FROM ' + versions['browserImage'] + '\nWORKDIR /review\nCOPY package*.json ./\nRUN npm ci --ignore-scripts\nLABEL ' + label + '=' + review + '\n')
 assert subprocess.run(['docker', 'image', 'inspect', tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0
@@ -44,7 +44,7 @@ try:
     invoke(['docker', 'build', '-t', tag, '-f', str(dockerfile), 'scripts/ci/browser'])
     info = json.loads(subprocess.check_output(['docker', 'image', 'inspect', tag]))[0]
     assert info['Config']['Labels'][label] == review
-    for driver in ['scripts/follow-up-ui-review.cjs', 'scripts/follow-up-recovery-ui-review.cjs', 'scripts/patient-callback-ui-review.cjs']:
+    for driver in ['scripts/app-null-selection-ui-review.cjs', 'scripts/follow-up-ui-review.cjs', 'scripts/follow-up-recovery-ui-review.cjs', 'scripts/patient-callback-ui-review.cjs']:
         invoke(['docker', 'run', '--rm', '--init', '--label', label + '=' + review,
                 '--network', project + '_app', '--user', str(os.getuid()) + ':' + str(os.getgid()),
                 '--read-only', '--tmpfs', '/tmp:size=1g,mode=1777', '--shm-size=1g',
