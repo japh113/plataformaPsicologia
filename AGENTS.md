@@ -1,6 +1,6 @@
 # AGENTS
 
-Estado operativo al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a`. A/B/C/D1/D2 y PRs #25–#27 integrados; Issues #21–#23 cerrados. [Estado, backlog y cortes históricos](docs/operational-status.md). D2 ya no es un encargo pendiente: [contrato](docs/private-professional-management.md), [evidencia histórica](docs/private-professional-validation.md). D3, nuevas vinculaciones, activación/permisos por episodio y despliegue siguen pendientes. Cada tarea requiere alcance propio; este encargo #40 solo autoriza documentación en rama nueva y PR sin merge. Conservar SQL 001–007 y sus entradas/hashes; CI mantiene siete checks y artifacts técnicos de 14 días.
+Estado operativo al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a`. A/B/C/D1/D2 y PRs #25–#27 integrados; Issues #21–#23 cerrados. [Estado, backlog y cortes históricos](docs/operational-status.md). D2 ya no es un encargo pendiente: [contrato](docs/private-professional-management.md), [evidencia histórica](docs/private-professional-validation.md). D3, nuevas vinculaciones, activación/permisos por episodio y despliegue siguen pendientes. Cada nuevo trabajo requiere alcance y autorización propios. Antes de modificar el repositorio, verificar el estado actual de `main`, los Issues y las instrucciones aplicables. No realizar merges, despliegues ni cambios fuera del alcance autorizado. Conservar SQL 001–007 y sus entradas/hashes; CI mantiene siete checks y artifacts técnicos de 14 días.
 
 ## Contexto y fuentes
 

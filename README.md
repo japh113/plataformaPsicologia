@@ -6,7 +6,7 @@ CI implementada en #14, con aceptación documental #15 y ensayo negativo #16 cer
 
 Plataforma para psicólogos independientes y pacientes: agenda, disponibilidad, espera manual asistida, tareas, objetivos, notas y seguimiento clínico, con backoffice separado.
 
-La aplicación activa es web (React/Vite + Express JavaScript + PostgreSQL). React Native/Expo y TypeScript son dirección futura, sin migración en curso por este encargo.
+La aplicación activa es web (React/Vite + Express JavaScript + PostgreSQL). React Native/Expo y TypeScript son dirección futura; esa dirección no autoriza iniciar una migración.
 
 ## Estado y fuentes
 
@@ -30,7 +30,7 @@ PR #7 restringió el acceso clínico del backoffice; #8 integró fundamentos SQL
 
 Docker local usa Node 24 y PostgreSQL 17; no requiere instalar npm en host. [Preparación y comandos](docs/development.md) con secretos locales propios y dependencias por lockfile. App: http://localhost:5173; API: http://localhost:5000/api; salud: http://localhost:5000/api/health, solo con entorno autorizado levantado.
 
-No ejecutar schema/seed o normalizadores como actualización de bases existentes. No aplicar migraciones sobre la base habitual ni alterar contenedores/volúmenes existentes por este encargo. 001–007 y sus hashes se conservan; 003–007 requieren ejecución explícita y no habilitan permisos por episodio. Guías: [integridad](docs/clinical-data-integrity.md), [autenticación](docs/authentication-security.md), [fundamentos 003](docs/clinical-episodes-foundation.md).
+No ejecutar schema/seed o normalizadores como actualización de bases existentes. Aplicar migraciones sobre la base habitual o alterar contenedores/volúmenes existentes requiere destino verificado y autorización específica. 001–007 y sus hashes se conservan; 003–007 requieren ejecución explícita y no habilitan permisos por episodio. Guías: [integridad](docs/clinical-data-integrity.md), [autenticación](docs/authentication-security.md), [fundamentos 003](docs/clinical-episodes-foundation.md).
 
 Roles reales: patient, psychologist, support, admin y superadmin. Los tres administrativos no tienen acceso clínico global ordinario. Hoy todavía existe autorización legacy por paciente: ni registro, verificación o directorio autorizan clínica nueva por sí solos.
 

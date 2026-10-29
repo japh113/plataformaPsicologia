@@ -6,7 +6,7 @@ Procedimientos contrastados con [compose.yaml](../compose.yaml), [Dockerfile bac
 
 **Pruebas y contribución:** [CONTRIBUTING](../CONTRIBUTING.md) define entrega por rama/PR; el [plan CI-01–07](ci-plan.md) conserva la propuesta histórica y sus criterios. La [implementación CI](ci-implementation.md) está integrada en `main` mediante #14; la [ejecución del merge 39363841602](https://github.com/japh113/plataformaPsicologia/actions/runs/39363841602) aprobó los siete checks. Los PR exclusivamente Markdown también ejecutan automáticamente toda la matriz en runners nuevos, con artifacts del commit realmente probado.
 
-CI-02 fue comprobado con PR #15; CI-07 con el [ensayo negativo #16](https://github.com/japh113/plataformaPsicologia/pull/16), cerrado sin merge. Protect main exige los siete checks, política estricta y sin bypass. La actualización #40 conserva esa configuración, reconsultada de solo lectura. Cada ejecución conserva su SHA; los ensayos funcionales futuros requieren autorización y recursos nuevos aislados. No operar Compose/base habitual por este encargo documental.
+CI-02 fue comprobado con PR #15; CI-07 con el [ensayo negativo #16](https://github.com/japh113/plataformaPsicologia/pull/16), cerrado sin merge. Protect main exige los siete checks, política estricta y sin bypass; modificar esa configuración requiere autorización propia. Cada ejecución conserva su SHA; los ensayos funcionales requieren autorización y recursos nuevos aislados. Operar Compose/base habitual exige destino y autorización explícitos; leer esta guía no los concede.
 
 ## Preparación de entorno local nuevo (solo con autorización)
 
