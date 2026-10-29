@@ -1,4 +1,4 @@
-import { preservePatientActivity } from './utils/patientFollowUp';
+import { preservePatientFollowUp } from './utils/patientFollowUp';
 import IdentityPanel from './components/IdentityPanel';
 import ProfessionalProfileScreen from './screens/ProfessionalProfileScreen';
 import ProfessionalReviewScreen from './screens/ProfessionalReviewScreen';
@@ -284,6 +284,25 @@ export default function App({onRestrictedSession}) {
     setErrorCarga('Ya no tienes acceso a este expediente. Vuelve a comprobar tu sesión.');
   }, []);
 
+  const commitPatientRows = useCallback((rows, revisions, isCurrent) => {
+    if (!isCurrent()) return;
+    const updates = rows.map(row => {
+      const id = String(row.id);
+      const stale = (revisions.get(id) || 0) !== (patientRevisions.current.get(id) || 0);
+      if (stale) return { id, patient: null };
+      advancePatientRevision(id);
+      return { id, patient: mapBackendPatientToUiPatient(row) };
+    });
+    const apply = (previous, entry) => entry?.patient ? preservePatientFollowUp(previous, entry.patient) : previous;
+    setPacientes(previous => !isCurrent() ? previous :
+      updates.map(entry => apply(previous.find(patient => patient.id === entry.id), entry)).filter(Boolean));
+    setPacienteSeleccionado(previous => {
+      if (!isCurrent() || !previous) return previous;
+      const entry = updates.find(update => update.id === previous.id);
+      return entry ? apply(previous, entry) : null;
+    });
+  }, [advancePatientRevision]);
+
   const refreshBackofficeData = useCallback(async () => {
     const isCurrent = beginClinicalOperation();
     if (!isCurrent()) return false;
@@ -405,19 +424,11 @@ export default function App({onRestrictedSession}) {
         setVistaActiva('dashboard');
         isCurrent = beginClinicalOperation();
       }
-      const updates = backendPatients.map(patient => {
-        const id = String(patient.id);
-        const preserveActivity = (revisions.get(id) || 0) !== (patientRevisions.current.get(id) || 0);
-        advancePatientRevision(id);
-        return { id, preserveActivity, patient: mapBackendPatientToUiPatient(
-          recheckedFollowUp && id === String(currentUser.patientId) ? { ...patient, followUp: recheckedFollowUp, tasks: [
-            ...recheckedFollowUp.consultations.flatMap(entry => entry.tasks), ...recheckedFollowUp.unassignedTasks,
-          ] } : patient,
-        ) };
-      });
-      setPacientes(previous => updates.map(({ id, patient, preserveActivity }) => preservePatientActivity(
-        previous.find(existing => existing.id === id), patient, preserveActivity,
-      )));
+      const patientRows = recheckedFollowUp ? backendPatients.map(patient =>
+        String(patient.id) === String(currentUser.patientId) ? { ...patient, followUp: recheckedFollowUp, tasks: [
+          ...recheckedFollowUp.consultations.flatMap(entry => entry.tasks), ...recheckedFollowUp.unassignedTasks,
+        ] } : patient) : backendPatients;
+      commitPatientRows(patientRows, revisions, isCurrent);
       setAppointments(sortAppointments(backendAppointments.map(mapBackendAppointmentToUiAppointment)));
       setReminders(backendReminders);
       setCareRelationships(backendRelationships);
@@ -449,7 +460,7 @@ export default function App({onRestrictedSession}) {
     } finally {
       if (isCurrent()) setCargandoDatos(false);
     }
-  }, [currentUser, refreshBackofficeData, refreshPatientFollowUp, beginClinicalOperation, advancePatientRevision, invalidateClinicalAccess]);
+  }, [currentUser, refreshBackofficeData, refreshPatientFollowUp, beginClinicalOperation, commitPatientRows, invalidateClinicalAccess]);
 
   useEffect(() => {
     const bootstrapSession = async () => {
@@ -796,9 +807,10 @@ export default function App({onRestrictedSession}) {
 
       if (currentUser?.role === 'psychologist' && payload.status === 'active') {
         try {
+          const revisions = new Map(patientRevisions.current);
           const refreshedPatients = await getPatients();
           if (!isCurrent()) return false;
-          setPacientes(refreshedPatients.map(mapBackendPatientToUiPatient));
+          commitPatientRows(refreshedPatients, revisions, isCurrent);
         } catch (error) {
           if (!isCurrent()) return false;
           if ([403, 404].includes(error.status)) {
@@ -853,12 +865,10 @@ export default function App({onRestrictedSession}) {
     }
   };
 
-  const syncPatientState = (patientOrId, transform) => {
-    const id = transform ? patientOrId : patientOrId.id;
-    const update = patient => clinicalAccess.current.denied ? patient :
-      transform ? transform(patient) : preservePatientActivity(patient, patientOrId, true);
-    setPacientes(previous => previous.map(patient => patient.id === id ? update(patient) : patient));
-    setPacienteSeleccionado(previous => previous?.id === id ? update(previous) : previous);
+  const syncPatientState = (patientId, transform) => {
+    const update = patient => clinicalAccess.current.denied ? patient : transform(patient);
+    setPacientes(previous => previous.map(patient => patient.id === patientId ? update(patient) : patient));
+    setPacienteSeleccionado(previous => previous?.id === patientId ? update(previous) : previous);
   };
 
   const syncAppointmentsState = (updater) => {
@@ -885,10 +895,10 @@ export default function App({onRestrictedSession}) {
     try {
       const refreshedPatient = await getPatient(patientId);
       if (!isCurrent()) return null;
+      if (revision !== (patientRevisions.current.get(patientId) || 0)) return null;
       const uiPatient = mapBackendPatientToUiPatient(refreshedPatient);
-      const preserveActivity = revision !== (patientRevisions.current.get(patientId) || 0);
       advancePatientRevision(patientId);
-      syncPatientState(patientId, previous => preservePatientActivity(previous, uiPatient, preserveActivity));
+      syncPatientState(patientId, previous => preservePatientFollowUp(previous, uiPatient));
       if (currentUser?.role === 'patient') void refreshPatientFollowUp(patientId);
       return uiPatient;
     } catch (error) {
@@ -947,7 +957,8 @@ export default function App({onRestrictedSession}) {
 
   const abrirNotas = (paciente, options = {}) => {
     if (clinicalAccess.current.denied) return;
-    const pacienteActualizado = pacientes.find((currentPatient) => currentPatient.id === paciente.id) || paciente;
+    const pacienteActualizado = options.preferProvided ? paciente :
+      pacientes.find((currentPatient) => currentPatient.id === paciente.id) || paciente;
     setPacienteSeleccionado(pacienteActualizado);
     setSessionDraftAppointmentId(options.appointmentId || null);
     setSessionActionError('');
@@ -1010,21 +1021,21 @@ export default function App({onRestrictedSession}) {
 
     const patientToUpdate = pacientes.find((patient) => patient.id === pacienteSeleccionado.id) || pacienteSeleccionado;
 
+    const patientId = patientToUpdate.id;
+    const submittedNotes = notasTemp;
+    advancePatientRevision(patientId);
     setGuardandoNotas(true);
 
     try {
-      const updatedApiPatient = await updatePatient(
-        patientToUpdate.id,
-        { notes: notasTemp },
-      );
+      const updatedApiPatient = await updatePatient(patientId, { notes: submittedNotes });
       if (!isCurrent()) return false;
-
-      const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
-      syncPatientState(updatedPatient);
-      setNotasTemp(updatedApiPatient.notes || '');
+      advancePatientRevision(patientId);
+      syncPatientState(patientId, current => ({ ...current, notas: updatedApiPatient.notes || '' }));
+      setNotasTemp(current => current === submittedNotes ? (updatedApiPatient.notes || '') : current);
       showSuccessFeedback('Expediente actualizado correctamente.');
     } catch (error) {
       if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
       showErrorFeedback(error.message || 'No se pudieron guardar las notas.');
     } finally {
       if (isCurrent()) {
@@ -1041,24 +1052,26 @@ export default function App({onRestrictedSession}) {
     }
 
     const patientToUpdate = pacientes.find((patient) => patient.id === pacienteSeleccionado.id) || pacienteSeleccionado;
+    const patientId = patientToUpdate.id;
+    const mapped = mapUiPatientToBackendPatient({ ...patientToUpdate, ...changes });
+    const payload = { riskLevel: mapped.riskLevel, status: mapped.status, reasonForConsultation: mapped.reasonForConsultation };
+    advancePatientRevision(patientId);
     setGuardandoPerfilPaciente(true);
 
     try {
-      const updatedApiPatient = await updatePatient(
-        patientToUpdate.id,
-        (() => {
-          const mapped = mapUiPatientToBackendPatient({ ...patientToUpdate, ...changes });
-          if (!isCurrent()) return false;
-          return { riskLevel: mapped.riskLevel, status: mapped.status, reasonForConsultation: mapped.reasonForConsultation };
-        })(),
-      );
-
+      const updatedApiPatient = await updatePatient(patientId, payload);
+      // HTTP success confirms persistence; false below means no effect on the current UI.
+      if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
       const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
-      syncPatientState(updatedPatient);
+      syncPatientState(patientId, current => ({
+        ...current, riesgo: updatedPatient.riesgo, estado: updatedPatient.estado, motivo: updatedPatient.motivo,
+      }));
       showSuccessFeedback('Ficha del paciente actualizada.');
       return true;
     } catch (error) {
       if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
       showErrorFeedback(error.message || 'No se pudo actualizar la ficha del paciente.');
       return false;
     } finally {
@@ -1068,10 +1081,17 @@ export default function App({onRestrictedSession}) {
     }
   };
 
+  const isIdentitySessionCurrent = (() => {
+    const token = getAuthToken();
+    const epoch = sessionEpoch.current;
+    return () => Boolean(token) && getAuthToken() === token && sessionEpoch.current === epoch;
+  })();
+
   const handleIdentityUpdated = ({ firstName, lastName }) => {
-    if (currentUser?.role !== 'patient') return;
+    if (!isIdentitySessionCurrent() || currentUser?.role !== 'patient') return;
+    advancePatientRevision(String(currentUser.patientId));
     const nombre = (firstName + ' ' + lastName).trim();
-    setCurrentUser(current => ({ ...current, firstName, lastName, fullName: nombre }));
+    setCurrentUser(current => current?.id === currentUser.id ? { ...current, firstName, lastName, fullName: nombre } : current);
     setPacientes(current => current.map(patient => patient.id === currentUser.patientId ? { ...patient, nombre } : patient));
     setPacienteSeleccionado(current => current?.id === currentUser.patientId ? { ...current, nombre } : current);
   };
@@ -1100,14 +1120,18 @@ export default function App({onRestrictedSession}) {
 
     const isCurrent = beginClinicalOperation();
     if (!isCurrent()) return false;
+    advancePatientRevision(patientId);
     setGuardandoEntrevista(true);
 
     try {
       const updatedApiPatient = await upsertPatientInterview(patientId, mapUiInterviewToBackendInterview(interviewForm));
       // The PUT is confirmed even if this session ends before its response arrives.
       if (!isCurrent()) return true;
+      advancePatientRevision(patientId);
       const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
-      syncPatientState(updatedPatient);
+      syncPatientState(patientId, current => ({
+        ...current, entrevistaCompleta: updatedPatient.entrevistaCompleta, entrevista: updatedPatient.entrevista,
+      }));
 
       if (currentUser?.role === 'patient' && currentUser.patientId === patientId) {
         setPatientInterviewForm(buildInterviewDraftForm(updatedPatient, todayDate));
@@ -1118,7 +1142,10 @@ export default function App({onRestrictedSession}) {
       return true;
     } catch (error) {
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
-      if (isCurrent()) showErrorFeedback((error.message || 'No se pudo guardar la entrevista.') + details);
+      if (isCurrent()) {
+        advancePatientRevision(patientId);
+        showErrorFeedback((error.message || 'No se pudo guardar la entrevista.') + details);
+      }
       return false;
     } finally {
       if (isCurrent()) setGuardandoEntrevista(false);
@@ -1164,7 +1191,7 @@ export default function App({onRestrictedSession}) {
       advancePatientRevision(patientId);
       syncPatientState(patientId, patient => ({
         ...patient,
-        tareas: patient.tareas.map(currentTask => currentTask.id === taskId ? uiTask : currentTask),
+        tareas: patient.tareas.map(currentTask => currentTask.id === taskId ? { ...currentTask, completada: uiTask.completada } : currentTask),
       }));
       await refreshReminders();
       if (!isCurrent()) return false;
@@ -1186,19 +1213,23 @@ export default function App({onRestrictedSession}) {
       return;
     }
 
+    const patientId = pacienteSeleccionado.id;
+    advancePatientRevision(patientId);
     setProcesandoTareaId(taskId);
 
     try {
-      await deletePatientTask(pacienteSeleccionado.id, taskId);
+      await deletePatientTask(patientId, taskId);
       if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
 
-      syncPatientState(pacienteSeleccionado.id, patient => ({
+      syncPatientState(patientId, patient => ({
         ...patient, tareas: patient.tareas.filter(task => task.id !== taskId),
       }));
       await refreshReminders();
       if (!isCurrent()) return false;
     } catch (error) {
       if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
       showErrorFeedback(error.message || 'No se pudo retirar la tarea.');
     } finally {
       if (isCurrent()) {
@@ -1214,19 +1245,24 @@ export default function App({onRestrictedSession}) {
       return false;
     }
 
+    const patientId = pacienteSeleccionado.id;
+    advancePatientRevision(patientId);
     setCreandoObjetivo(true);
 
     try {
-      const createdObjective = await createPatientObjective(pacienteSeleccionado.id, { text: objectiveText });
+      const createdObjective = await createPatientObjective(patientId, { text: objectiveText });
       if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
       const uiObjective = mapBackendTaskToUiTask(createdObjective);
-      syncPatientState(pacienteSeleccionado.id, patient => ({
-        ...patient, objetivos: [...(patient.objetivos || []), uiObjective],
+      syncPatientState(patientId, patient => ({
+        ...patient, objetivos: (patient.objetivos || []).some(objective => objective.id === uiObjective.id)
+          ? patient.objetivos : [...(patient.objetivos || []), uiObjective],
       }));
       showSuccessFeedback('Objetivo agregado correctamente.');
       return true;
     } catch (error) {
       if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
       showErrorFeedback(error.message || 'No se pudo crear el objetivo.');
       return false;
     } finally {
@@ -1249,20 +1285,24 @@ export default function App({onRestrictedSession}) {
       return;
     }
 
+    const patientId = pacienteSeleccionado.id;
+    advancePatientRevision(patientId);
     setProcesandoObjetivoId(objectiveId);
 
     try {
-      const updatedObjective = await updatePatientObjective(pacienteSeleccionado.id, objectiveId, {
+      const updatedObjective = await updatePatientObjective(patientId, objectiveId, {
         completed: !objective.completada,
       });
       if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
 
       const uiObjective = mapBackendTaskToUiTask(updatedObjective);
-      syncPatientState(pacienteSeleccionado.id, patient => ({
-        ...patient, objetivos: (patient.objetivos || []).map(objective => objective.id === objectiveId ? uiObjective : objective),
+      syncPatientState(patientId, patient => ({
+        ...patient, objetivos: (patient.objetivos || []).map(objective => objective.id === objectiveId ? { ...objective, completada: uiObjective.completada } : objective),
       }));
     } catch (error) {
       if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
       showErrorFeedback(error.message || 'No se pudo actualizar el objetivo.');
     } finally {
       if (isCurrent()) {
@@ -1278,18 +1318,22 @@ export default function App({onRestrictedSession}) {
       return;
     }
 
+    const patientId = pacienteSeleccionado.id;
+    advancePatientRevision(patientId);
     setProcesandoObjetivoId(objectiveId);
 
     try {
-      await deletePatientObjective(pacienteSeleccionado.id, objectiveId);
+      await deletePatientObjective(patientId, objectiveId);
       if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
 
-      syncPatientState(pacienteSeleccionado.id, patient => ({
+      syncPatientState(patientId, patient => ({
         ...patient, objetivos: (patient.objetivos || []).filter(objective => objective.id !== objectiveId),
       }));
       showSuccessFeedback('Objetivo retirado; su registro se conserva.');
     } catch (error) {
       if (!isCurrent()) return false;
+      advancePatientRevision(patientId);
       showErrorFeedback(error.message || 'No se pudo retirar el objetivo.');
     } finally {
       if (isCurrent()) {
@@ -1305,19 +1349,30 @@ export default function App({onRestrictedSession}) {
       return false;
     }
 
+    const patientId = pacienteSeleccionado.id;
+    advancePatientRevision(patientId);
     setGuardandoSesion(true);
     setSessionActionError('');
 
+    let confirmed = false;
     try {
-      await createPatientClinicalNote(pacienteSeleccionado.id, payload);
+      await createPatientClinicalNote(patientId, payload);
       if (!isCurrent()) return false;
-      await refreshSelectedPatient(pacienteSeleccionado.id);
+      advancePatientRevision(patientId);
+      confirmed = true;
+      await refreshSelectedPatient(patientId);
       if (!isCurrent()) return false;
       setSessionActionError('');
       showSuccessFeedback('Nota clinica creada correctamente.');
       return true;
     } catch (error) {
       if (!isCurrent()) return false;
+      if (confirmed) {
+        setSessionActionError('');
+        showSuccessFeedback('La nota clínica se guardó. No se pudo actualizar el expediente; recarga la página para ver los últimos cambios.');
+        return true;
+      }
+      advancePatientRevision(patientId);
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
       setSessionActionError((error.message || 'No se pudo crear la nota clinica.') + details);
       return false;
@@ -1335,19 +1390,30 @@ export default function App({onRestrictedSession}) {
       return false;
     }
 
+    const patientId = pacienteSeleccionado.id;
+    advancePatientRevision(patientId);
     setGuardandoSesion(true);
     setSessionActionError('');
 
+    let confirmed = false;
     try {
-      await updatePatientClinicalNote(pacienteSeleccionado.id, sessionId, payload);
+      await updatePatientClinicalNote(patientId, sessionId, payload);
       if (!isCurrent()) return false;
-      await refreshSelectedPatient(pacienteSeleccionado.id);
+      advancePatientRevision(patientId);
+      confirmed = true;
+      await refreshSelectedPatient(patientId);
       if (!isCurrent()) return false;
       setSessionActionError('');
       showSuccessFeedback('Nota clinica actualizada correctamente.');
       return true;
     } catch (error) {
       if (!isCurrent()) return false;
+      if (confirmed) {
+        setSessionActionError('');
+        showSuccessFeedback('La nota clínica se guardó. No se pudo actualizar el expediente; recarga la página para ver los últimos cambios.');
+        return true;
+      }
+      advancePatientRevision(patientId);
       const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
       setSessionActionError((error.message || 'No se pudo actualizar la nota clinica.') + details);
       return false;
@@ -1585,8 +1651,16 @@ export default function App({onRestrictedSession}) {
       }
     }
 
-    abrirNotas(patient, { appointmentId: appointment.id });
-    return true;
+    try {
+      const refreshedPatient = await refreshSelectedPatient(patient.id);
+      if (!isCurrent() || !refreshedPatient) return false;
+      abrirNotas(refreshedPatient, { appointmentId: appointment.id, preferProvided: true });
+      return true;
+    } catch (error) {
+      if (!isCurrent()) return false;
+      setAppointmentActionError(error.message || 'No se pudo abrir el expediente actualizado. Vuelve a intentarlo.');
+      return false;
+    }
   };
 
   const handleUpdateAvailability = async (entries) => {

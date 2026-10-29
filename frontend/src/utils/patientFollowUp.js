@@ -28,16 +28,3 @@ export const preservePatientFollowUp = (previous, next) => {
     seguimientoEstado: next.seguimientoEstado === 'idle' ? previous.seguimientoEstado : next.seguimientoEstado,
   };
 };
-
-// A stale whole-file response may update demographics/interview, not newer activity.
-export const preservePatientActivity = (previous, next, preserveActivity) => {
-  if (previous?.id !== next.id) return next;
-  if (!preserveActivity) return preservePatientFollowUp(previous, next);
-  return {
-    ...next,
-    tareas: previous.tareas,
-    objetivos: previous.objetivos,
-    seguimiento: previous.seguimiento,
-    seguimientoEstado: previous.seguimientoEstado,
-  };
-};
