@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
-import { mapBackendPatientToUiPatient, mapBackendFollowUpToUiFollowUp, mapBackendTaskToUiTask } from '../../src/mappers/patients.js';
-import { preservePatientActivity } from '../../src/utils/patientFollowUp.js';
+import { mapBackendPatientToUiPatient, mapBackendFollowUpToUiFollowUp, mapBackendTaskToUiTask, mapUiPatientToBackendPatient } from '../../src/mappers/patients.js';
+import { preservePatientFollowUp } from '../../src/utils/patientFollowUp.js';
 
 const app = await readFile(new URL('../../src/App.jsx',import.meta.url),'utf8');
 const follow = { consultations: [{ id: 'c',scheduledDate: '2026-04-08',scheduledTime: '11:00:00',tasks: [] }],unassignedTasks: [] };
@@ -21,9 +21,10 @@ export function harness({ previous = null, followRequest = async () => follow, p
     getPatientFollowUp: async id => { state.followReads++; assert.equal(id,context.currentUser.patientId); return followRequest(); },
     getPatients: async () => { state.mainReads++; return [primary]; },getPatient: async () => primary,
     updatePatientTask: async (patientId,taskId,payload) => ({ id: taskId,text: 'task',completed: payload.completed }),
+    getAppointmentWaitlist: async () => [],getMyAvailability: async () => [],getMyAvailabilityExceptions: async () => [],
     getAppointments: async () => [{ id: 'a',patientId: 'p' }],getMyReminders: async () => ['reminder'],
     getCareRelationships: async () => ['relationship'],refreshBackofficeData: async () => {},
-    mapBackendPatientToUiPatient,mapBackendFollowUpToUiFollowUp,mapBackendTaskToUiTask,preservePatientActivity,
+    mapBackendPatientToUiPatient,mapBackendFollowUpToUiFollowUp,mapBackendTaskToUiTask,mapUiPatientToBackendPatient,preservePatientFollowUp,
     sortAppointments: value => value,mapBackendAppointmentToUiAppointment: value => value,
     setPacientes: assign('patients'),setPacienteSeleccionado: assign('selected'),setAppointments: assign('appointments'),
     setReminders: assign('reminders'),setCareRelationships: assign('relationships'),setErrorCarga: assign('error'),
@@ -40,6 +41,8 @@ export function harness({ previous = null, followRequest = async () => follow, p
     if (!context[setter]) context[setter] = assign(setter.slice(3));
   }
   context.setProcesandoTareaId = assign('processingTask');
+  context.setNotasTemp = assign('draft');
+  context.setGuardandoPerfilPaciente = assign('savingProfile');
   vm.createContext(context);
   function run(start,end,returned) {
     const a = app.indexOf(start),b = app.indexOf(end,a);
@@ -47,7 +50,7 @@ export function harness({ previous = null, followRequest = async () => follow, p
     return vm.runInContext(app.slice(a,b) + '\n' + returned + ';',context);
   }
   const guards = run('  const beginClinicalOperation =','  const refreshBackofficeData =',
-    '({ beginClinicalOperation,advancePatientRevision,invalidateClinicalAccess })');
+    '({ beginClinicalOperation,advancePatientRevision,invalidateClinicalAccess,commitPatientRows })');
   Object.assign(context,guards);
   const reset = run('  const resetSessionState =','  const beginClinicalOperation =','resetSessionState');
   const refresh = run('  const refreshPatientFollowUp = useCallback','  const cargarDatos = useCallback','refreshPatientFollowUp');
@@ -56,15 +59,27 @@ export function harness({ previous = null, followRequest = async () => follow, p
   const sync = run('  const syncPatientState =','  const syncAppointmentsState =','syncPatientState');
   context.syncPatientState = sync;
   const selected = run('  const refreshSelectedPatient =','  const refreshAppointmentsAndWaitlist =','refreshSelectedPatient');
+  context.refreshSelectedPatient = selected;
   const appointments = run('  const refreshAppointmentsAndWaitlist =','  const refreshReminders =','refreshAppointmentsAndWaitlist');
   const reminders = run('  const refreshReminders =','  const abrirNotas =','refreshReminders');
   context.refreshReminders = reminders;
-  const task = taskId => {
-    // A new render captures a selected patient; retain that snapshot across await.
-    const invocation = { ...context,pacienteSeleccionado: state.selected,procesandoTareaId: state.processingTask };
-    const a = app.indexOf('  const toggleTask ='),b = app.indexOf('  const removeTask =',a);
-    return vm.runInNewContext(app.slice(a,b) + '\ntoggleTask;',invocation)(taskId);
+  const capture = name => {
+    const invocation = {
+      ...context, pacientes: state.patients, pacienteSeleccionado: state.selected,
+      isPsychologist: context.currentUser.role === 'psychologist',
+      procesandoTareaId: state.processingTask, procesandoObjetivoId: null,
+      creandoObjetivo: false, guardandoPerfilPaciente: false, guardandoNotas: false, guardandoSesion: false,
+      notasTemp: state.draft || '',
+    };
+    const a = app.indexOf('  const ' + name + ' =');
+    const end = /^ {2}(?:};|}, \[[^\n]*\]\);)/m.exec(app.slice(a));
+    assert.ok(a >= 0 && end,name);
+    const declarations = name === 'handleIdentityUpdated'
+      ? app.slice(app.indexOf('  const isIdentitySessionCurrent ='), a) : '';
+    return vm.runInNewContext(declarations + app.slice(a,a + end.index + end[0].length) + '\n' + name + ';',invocation);
   };
+  const invoke = (name, ...args) => capture(name)(...args);
+  const task = taskId => invoke('toggleTask',taskId);
   const save = run('  const saveInterview =','  const toggleTask =','({ saveInterview,handleSaveRequiredInterview })');
-  return { state,context,refresh,load,selected,appointments,reminders,task,reset,...guards,...save,sessionEpoch };
+  return { state,context,refresh,load,selected,appointments,reminders,task,invoke,capture,reset,...guards,...save,sessionEpoch };
 }

@@ -14,7 +14,7 @@ function harness(isPsychologist, completed = false) {
   const calls = [], states = [];
   const patient = { id: 'p', objetivos: [{ id: 'o', completada: completed }], tareas: [{ id: 't', completada: false }] };
   const toggle = vm.runInNewContext(source, {
-    beginClinicalOperation: () => () => true,
+    beginClinicalOperation: () => () => true,advancePatientRevision: () => {},
     isPsychologist, pacienteSeleccionado: patient, procesandoObjetivoId: null,
     setProcesandoObjetivoId: value => calls.push(['processing', value]),
     updatePatientObjective: async (patientId, objectiveId, payload) => {
