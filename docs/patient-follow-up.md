@@ -548,6 +548,59 @@ El mecanismo protege inconsistencias conocidas por la sesión local. No serializ
 
 Sin merge, auto-merge, despliegue, migraciones, cierre de #21 ni cambios de producto/CI/permisos. SQL001–007/manifiesto/hashes, backend, JWT, privacidad #25 y objetivos #26 se conservan.
 
+
+## Render seguro sin paciente seleccionado — P2
+
+Encargo sobre 2d5bef36897f3421fb4e47ff0e67422d1066c9c2, verificado idéntico al HEAD real del Draft PR #27; base main af72a381f4b3a5a0e81df104baecb60226025a11. Las secciones anteriores conservan la evidencia de sus propios SHA. Se mantiene aprobado el bloqueo de notas obsoletas.
+
+### Causa y corrección localizada
+
+commitPatientRows puede dejar pacienteSeleccionado en null cuando el listado ya no contiene al paciente, conservando vistaActiva en notas. Construir clinicalRecordSync[pacienteSeleccionado.id] durante ese render producía Cannot read properties of null (reading 'id'), antes de montar el hijo.
+
+renderMainContent comprueba ahora la selección al entrar a la rama notas, **antes de construir cualquier prop de NotesScreen**. Sin selección muestra Selecciona un expediente y Volver al tablero. El botón cambia de vista desde su evento, no durante el render. No monta un expediente vacío ni conserva su contenido visible como fallback, no usa las props clínicas de P y no convierte la ausencia en logout o denegación.
+
+Con selección válida conserva todas las props anteriores. La revisión acotada de esas props verificó la lectura de id/clinicalRecordSync, la key, notas temporales y sessionDraftAppointmentId. Las dos últimas no desreferencian un paciente ausente y abrir Q las establece para Q, sin reutilizar los datos de P. El guard cubre el bloque entero; no se cambia commitPatientRows, patientRevisions, invalidación, permisos, NotesScreen ni la protección de escritura.
+
+Código funcional: [416c7a4](https://github.com/japh113/plataformaPsicologia/commit/416c7a46e8b31b65a6b323da40ceccfb455b29db), **11 líneas añadidas en App**. Pruebas/runner: [d9c0f4b](https://github.com/japh113/plataformaPsicologia/commit/d9c0f4b318348f906bd47c87d41397ae66766baa). Documentación en un commit posterior sin alterar el contenido funcional comprobado.
+
+### App real montada en la suite normal
+
+La [regresión montada](../frontend/test/app-null-selection.test.js) usa **React 19.2.4 y ReactDOM 19.2.4**, createRoot, act y StrictMode. Se monta App completa; **no se extrae un callback con VM ni se prueba una copia de su lógica**.
+
+El [montaje](../frontend/test/helpers/mountedApp.js) transpila el JSX real con Vite ya instalado y resuelve las API/hijos simulados mediante los hooks de módulos de Node 24. El [host DOM mínimo de pruebas](../frontend/test/helpers/reactDomHost.js) permite al renderer ReactDOM crear/quitar nodos y despachar eventos. No simula hooks, reconciliador, planificación ni actualizaciones de React. No es un navegador ni sustituye la comprobación de layout/DOM real: esta se hace aparte en Chromium. No se añaden dependencias ni se cambian lockfiles/CI.
+
+El doble bootstrap de StrictMode se resuelve en dos objetos de usuario y origina **dos cargas reales concurrentes de App**. Las promesas retienen ambos listados: se entrega P en el primero, se abre su expediente mediante el botón del hijo montado y luego se entrega una lista sin P. React procesa sus actualizaciones bajo act.
+
+Antes de corregir producción, esta secuencia falló exactamente con Cannot read properties of null (reading 'id') en renderMainContent, con stack del renderer react-dom-client.development.js. Después pasa con cero errores, contenido no vacío y sin DOM clínico anterior. El botón propio del fallback funciona y la aplicación sigue navegable sin logout ni error global ficticio.
+
+Los seis casos nuevos, con variantes, forman parte de frontend npm test:
+
+| Caso montado | Resultado comprobado |
+| --- | --- |
+| Dos cargas: P → abrir P → lista vacía | Sin excepción/pantalla blanca/datos clínicos visibles; sesión conservada y vuelta al tablero/listado funcional. |
+| P pendiente → P desaparece → abrir Q | P mantiene su guarda mientras está seleccionado; Q recibe paciente, notas temporales, cita y sync propios, sin heredar el bloqueo de P; Q puede guardar. |
+| Dos listados inicialmente vacíos | Tablero/listado seguros y navegables, sin logout. |
+| El segundo listado conserva P | Expediente y props normales; snapshot anterior no sustituye actividad y el guardado sigue funcionando. |
+| 403 y 404 explícitos | Limpieza y vista de denegación existentes; recheck autorizado conserva su comportamiento y no se sustituye por el fallback de selección. |
+| Logout → otro profesional o paciente P → listado anterior tardío | No se restaura la selección ni información clínica previa; la sesión nueva recibe sus datos propios. |
+
+### Chromium real y validación nueva
+
+El [recorrido nuevo](../scripts/app-null-selection-ui-review.cjs) monta la App real del entorno Vite/StrictMode con API local ficticia. Retiene las dos respuestas auth/me y los dos GET patients; entrega el primer listado autorizado con P, abre su nota y entrega el segundo como lista vacía. Comprueba la vista segura, ausencia de contenido profesional previo, ausencia de error global/denegación, token y controles de sesión conservados. Usa Volver al tablero, navega al listado vacío y, después de una carga autorizada nueva, vuelve a abrir el expediente válido.
+
+Las compuertas observan las peticiones y respuestas reales; no se usan sleeps ni retrasos para crear concurrencia. El caso nuevo realiza **2 cargas auth, 2 listados controlados y 0 escrituras clínicas**. Captura de la vista segura inspeccionada.
+
+- **64/64 frontend**, cero fallos/canceladas/omitidas; lint/build aprobados, incluidas las seis pruebas montadas y todas las anteriores de integridad clínica. Repetición final aprobada con aserciones explícitas de notesTemp y prefilledAppointmentId al pasar de P a Q.
+- Matriz nueva 2837c22a-ff21-4847-a18c-53a9388d8653: **105/105 unitarias backend, 17/17 episodios, 133/133 integración, 64/64 frontend**, lint/build, cero omitidas; incluye privacidad #25, permisos #26 y cronología.
+- Demo nueva a5f5aeae-5290-4366-8c85-b5e0afd8e260: **15/15 Chromium**: caso nuevo y catorce anteriores de cronología, recuperación, integridad y sesiones. Cero pageerrors; recuperación conserva unexpectedApi vacío. Cero POST/PATCH extra durante bloqueo clínico previo.
+- Auditor estructural de App: **44 callbacks/58 await**, cero guardas posteriores ausentes; no hubo cambios a esos callbacks.
+- Se preservaron byte a byte **80 archivos protegidos** frente a 2d5bef3: backend funcional/SQL001–007/manifiesto/hashes, cliente de autenticación, lockfiles, producto y CI. Verificador offline aprobado: 40 Markdown, 588 enlaces locales/fragmentos, UTF-8, diez pruebas del contrato de evidencia CI y diff sin errores.
+- Verificados retirados los **dos proyectos nuevos**, sus contenedores/redes/imágenes/volúmenes propios y todas las imágenes de frontend/browser creadas para este ensayo. Tags preexistentes sin cambios. Ningún recurso habitual operado.
+- El primer armado del fixture detectó una importación bare de React desde un módulo simulado data:; se corrigió la resolución antes de reproducir el error real. Los ensayos siguientes y Chromium aprobaron sin modificar producción adicional.
+- Evidencia local ignorada: tmp/issue21-null-selection/red-resolved.log, frontend-final.log, matrix.log, ui.log y null-selection-browser-result.json. Scripts/pruebas versionados permiten repetir con otro UUID nuevo. Bundle 511,51 kB, gzip 128,99 kB; aviso de tamaño no bloqueante conservado.
+
+La ausencia de selección no acredita pérdida de acceso; una denegación explícita sigue usando la invalidación original. Este cambio no altera la garantía local de integridad clínica ni añade coordinación entre dispositivos. Evidencia local separada de Actions: se consulta CI del nuevo HEAD después del push, sin atribuirle resultados históricos. Siete checks y artifacts de 14 días intactos; Issue #21 abierto, mismo Draft PR, sin merge, auto-merge o despliegue.
+
 ## Límites de entrega
 
 Sin cambios a SQL 001–007, baseline/seed, manifiesto/hashes, autenticación/JWT, autorización legacy, proyecciones reservadas de #25, permisos de objetivos de #26, decisiones de producto, configuración CI/producción o administración de GitHub. Sin D3, nuevas vinculaciones, episodios paralelos, reconciliación histórica, proveedores ni despliegue.
