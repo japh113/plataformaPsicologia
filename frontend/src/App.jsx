@@ -119,6 +119,8 @@ export default function App({onRestrictedSession}) {
   const followUpRequests = useRef(new Map());
   const clinicalAccess = useRef({ generation: 0, denied: false });
   const patientRevisions = useRef(new Map());
+  const clinicalRecordSyncRef = useRef(new Map());
+  const [clinicalRecordSync, setClinicalRecordSync] = useState({});
   const [vistaActiva, setVistaActiva] = useState('dashboard');
   const [pacienteSeleccionado, setPacienteSeleccionado] = useState(null);
   const [sessionDraftAppointmentId, setSessionDraftAppointmentId] = useState(null);
@@ -188,7 +190,7 @@ export default function App({onRestrictedSession}) {
   );
 
   useEffect(() => {
-    if (!uiFeedback || uiFeedback.reload) {
+    if (!uiFeedback) {
       return undefined;
     }
 
@@ -199,23 +201,24 @@ export default function App({onRestrictedSession}) {
     return () => window.clearTimeout(timeoutId);
   }, [uiFeedback]);
 
-  const showUiFeedback = (type, message, reload = false) => {
+  const showUiFeedback = (type, message) => {
     setUiFeedback({
       id: Date.now(),
       type,
       message,
-      reload,
     });
   };
 
   const showSuccessFeedback = (message) => showUiFeedback('success', message);
   const showErrorFeedback = (message) => showUiFeedback('error', message);
-  const showWarningFeedback = (message) => showUiFeedback('warning', message, true);
+  const showWarningFeedback = (message) => showUiFeedback('warning', message);
 
   const resetSessionState = () => {
     sessionEpoch.current += 1;
     clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: false };
     patientRevisions.current.clear();
+    clinicalRecordSyncRef.current.clear();
+    setClinicalRecordSync({});
     followUpRequests.current.clear();
     setVistaActiva('dashboard');
     setPacienteSeleccionado(null);
@@ -272,9 +275,32 @@ export default function App({onRestrictedSession}) {
     patientRevisions.current.set(patientId, (patientRevisions.current.get(patientId) || 0) + 1);
   }, []);
 
+  const setClinicalRecordSyncEntry = useCallback((patientId, entry) => {
+    clinicalRecordSyncRef.current.set(patientId, entry);
+    setClinicalRecordSync(previous => ({ ...previous, [patientId]: entry }));
+  }, []);
+
+  const markClinicalNoteConfirmed = useCallback((patientId) => {
+    const previous = clinicalRecordSyncRef.current.get(patientId);
+    setClinicalRecordSyncEntry(patientId, {
+      patientId, session: sessionEpoch.current, access: clinicalAccess.current.generation,
+      version: (previous?.version || 0) + 1, pending: true, status: 'pending',
+    });
+  }, [setClinicalRecordSyncEntry]);
+
+  const isClinicalRecordPending = (patientId) => Boolean(clinicalRecordSyncRef.current.get(patientId)?.pending);
+
+  const finishClinicalRecordRead = useCallback((patientId, version, status) => {
+    const entry = clinicalRecordSyncRef.current.get(patientId);
+    if (!entry?.pending || entry.version !== version || entry.session !== sessionEpoch.current ||
+        entry.access !== clinicalAccess.current.generation || clinicalAccess.current.denied) return;
+    setClinicalRecordSyncEntry(patientId, { ...entry, pending: status !== 'current', status });
+  }, [setClinicalRecordSyncEntry]);
+
   const invalidateClinicalAccess = useCallback(() => {
     clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: true };
     followUpRequests.current.clear();
+    clinicalRecordSyncRef.current.clear(); setClinicalRecordSync({});
     setPacientes([]); setPacienteSeleccionado(null); setAppointments([]); setReminders([]); setCareRelationships([]);
     setAppointmentWaitlist([]); setAvailability([]); setAvailabilityDraft([]); setAvailabilityExceptions([]);
     setNotasTemp(''); setShowPatientInterview(false); setPatientInterviewForm(buildInterviewDraftForm(null, ''));
@@ -894,18 +920,44 @@ export default function App({onRestrictedSession}) {
     const isCurrent = beginClinicalOperation();
     if (!isCurrent()) return { status: 'invalidated' };
     const revision = patientRevisions.current.get(patientId) || 0;
+    const confirmedVersion = clinicalRecordSyncRef.current.get(patientId)?.version || 0;
+    finishClinicalRecordRead(patientId, confirmedVersion, 'refreshing');
     try {
       const refreshedPatient = await getPatient(patientId);
       if (!isCurrent()) return { status: 'invalidated' };
-      if (revision !== (patientRevisions.current.get(patientId) || 0)) return { status: 'conflict' };
+      if (revision !== (patientRevisions.current.get(patientId) || 0) ||
+          confirmedVersion !== (clinicalRecordSyncRef.current.get(patientId)?.version || 0)) {
+        finishClinicalRecordRead(patientId, confirmedVersion, 'pending');
+        return { status: 'conflict' };
+      }
+      if (String(refreshedPatient.id) !== String(patientId)) throw new Error('El expediente recibido no corresponde al paciente solicitado.');
       const uiPatient = mapBackendPatientToUiPatient(refreshedPatient);
       advancePatientRevision(patientId);
       syncPatientState(patientId, previous => preservePatientFollowUp(previous, uiPatient));
+      finishClinicalRecordRead(patientId, confirmedVersion, 'current');
       if (currentUser?.role === 'patient') void refreshPatientFollowUp(patientId);
       return { status: 'applied', patient: uiPatient };
     } catch (error) {
-      if (isCurrent() && [401, 403, 404].includes(error.status)) invalidateClinicalAccess();
+      if (isCurrent()) {
+        finishClinicalRecordRead(patientId, confirmedVersion, 'pending');
+        if ([401, 403, 404].includes(error.status)) invalidateClinicalAccess();
+      }
       throw error;
+    }
+  };
+
+  const refreshClinicalRecord = async (patientId) => {
+    const isCurrent = beginClinicalOperation();
+    if (!isCurrent() || !isPsychologist || !pacientes.some(patient => patient.id === patientId) ||
+        clinicalRecordSyncRef.current.get(patientId)?.status === 'refreshing') return false;
+    try {
+      const refreshed = await refreshSelectedPatient(patientId);
+      if (!isCurrent()) return false;
+      return refreshed.status === 'applied';
+    } catch (error) {
+      if (!isCurrent()) return false;
+      showErrorFeedback(error.message || 'No se pudo actualizar el expediente. Puedes reintentar.');
+      return false;
     }
   };
 
@@ -1344,7 +1396,7 @@ export default function App({onRestrictedSession}) {
     }
   };
 
-  const createSession = async (payload) => {
+  const createSession = async (payload, recordVersion) => {
     const isCurrent = beginClinicalOperation();
     if (!isCurrent()) return false;
     if (!isPsychologist || !pacienteSeleccionado || guardandoSesion) {
@@ -1352,6 +1404,11 @@ export default function App({onRestrictedSession}) {
     }
 
     const patientId = pacienteSeleccionado.id;
+    const expectedVersion = recordVersion ?? clinicalRecordSync[patientId]?.version ?? 0;
+    if (isClinicalRecordPending(patientId) || expectedVersion !== (clinicalRecordSyncRef.current.get(patientId)?.version || 0)) {
+      setSessionActionError('El expediente necesita actualizarse o este borrador es anterior a otra nota guardada. Recarga el expediente y vuelve a abrir la nota antes de guardar.');
+      return { status: 'blocked' };
+    }
     advancePatientRevision(patientId);
     setGuardandoSesion(true);
     setSessionActionError('');
@@ -1362,6 +1419,7 @@ export default function App({onRestrictedSession}) {
       if (!isCurrent()) return false;
       advancePatientRevision(patientId);
       confirmed = true;
+      markClinicalNoteConfirmed(patientId);
       let refreshed = await refreshSelectedPatient(patientId);
       if (!isCurrent()) return false;
       // One new GET after a revision conflict; never repeat the confirmed write.
@@ -1392,7 +1450,7 @@ export default function App({onRestrictedSession}) {
     }
   };
 
-  const updateSession = async (sessionId, payload) => {
+  const updateSession = async (sessionId, payload, recordVersion) => {
     const isCurrent = beginClinicalOperation();
     if (!isCurrent()) return false;
     if (!isPsychologist || !pacienteSeleccionado || guardandoSesion) {
@@ -1400,6 +1458,11 @@ export default function App({onRestrictedSession}) {
     }
 
     const patientId = pacienteSeleccionado.id;
+    const expectedVersion = recordVersion ?? clinicalRecordSync[patientId]?.version ?? 0;
+    if (isClinicalRecordPending(patientId) || expectedVersion !== (clinicalRecordSyncRef.current.get(patientId)?.version || 0)) {
+      setSessionActionError('El expediente necesita actualizarse o este borrador es anterior a otra nota guardada. Recarga el expediente y vuelve a abrir la nota antes de guardar.');
+      return { status: 'blocked' };
+    }
     advancePatientRevision(patientId);
     setGuardandoSesion(true);
     setSessionActionError('');
@@ -1410,6 +1473,7 @@ export default function App({onRestrictedSession}) {
       if (!isCurrent()) return false;
       advancePatientRevision(patientId);
       confirmed = true;
+      markClinicalNoteConfirmed(patientId);
       let refreshed = await refreshSelectedPatient(patientId);
       if (!isCurrent()) return false;
       // One new GET after a revision conflict; never repeat the confirmed write.
@@ -1643,6 +1707,11 @@ export default function App({onRestrictedSession}) {
     const isCurrent = beginClinicalOperation();
     if (!isCurrent()) return false;
     if (!isPsychologist || !appointment || !patient) {
+      return false;
+    }
+
+    if (isClinicalRecordPending(patient.id)) {
+      abrirNotas(patient);
       return false;
     }
 
@@ -2033,6 +2102,8 @@ export default function App({onRestrictedSession}) {
           onToggleObjective={toggleObjective}
           onDeleteObjective={removeObjective}
           onAddObjective={addObjective}
+          clinicalRecordSync={clinicalRecordSync[pacienteSeleccionado.id] || null}
+          onRefreshClinicalRecord={refreshClinicalRecord}
           onCreateSession={createSession}
           onUpdateSession={updateSession}
           onSaveInterview={saveInterview}
@@ -2106,11 +2177,6 @@ export default function App({onRestrictedSession}) {
                 Cerrar
               </button>
             </div>
-            {uiFeedback.reload && (
-              <button type="button" onClick={() => window.location.reload()} className="mt-3 rounded-full border border-current/30 px-3 py-1 text-sm font-semibold hover:bg-white/50">
-                Recargar expediente
-              </button>
-            )}
           </div>
         </div>
       )}
