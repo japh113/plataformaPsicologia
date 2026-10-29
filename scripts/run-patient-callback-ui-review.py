@@ -2,7 +2,7 @@
 
 Run after the isolated demo wrapper succeeds; never targets the habitual stack.
 Only creates/removes its own labeled browser image/container. Evidence goes to
-ignored tmp/issue21-note-recovery. The demo lifecycle remains owned by clinical-episodes.sh.
+ignored tmp/issue21-clinical-integrity. The demo lifecycle remains owned by clinical-episodes.sh.
 """
 import json, os, re, subprocess, sys, uuid
 from pathlib import Path
@@ -15,7 +15,7 @@ project = 'psicopanel-episodes-' + run
 episode_images.read_state(project)
 env = dict(os.environ, EPISODE_TEST_RUN_ID=run)
 compose = ['docker', 'compose', '-p', project, '-f', 'compose.episodes-test.yaml']
-work = Path('tmp/issue21-note-recovery').resolve()
+work = Path('tmp/issue21-clinical-integrity').resolve()
 work.mkdir(parents=True, exist_ok=True)
 assert work.is_relative_to(Path.cwd().resolve() / 'tmp')
 for service in ['api', 'frontend']:
@@ -35,8 +35,8 @@ for task in ['test', 'lint', 'build']:
     invoke(compose + ['--profile', 'demo', 'run', '--rm', '--no-deps', '-v', str(Path('frontend/test').resolve()) + ':/app/test:ro', 'frontend', 'npm', 'run', task])
 versions = json.loads(Path('scripts/ci/versions.json').read_text())
 review = str(uuid.uuid4())
-label = 'io.psicopanel.issue21.note-recovery.review'
-tag = 'psicopanel-issue21-note-recovery-browser-' + review + ':isolated'
+label = 'io.psicopanel.issue21.clinical-integrity.review'
+tag = 'psicopanel-issue21-clinical-integrity-browser-' + review + ':isolated'
 dockerfile = work / 'browser.Dockerfile'
 dockerfile.write_text('FROM ' + versions['browserImage'] + '\nWORKDIR /review\nCOPY package*.json ./\nRUN npm ci --ignore-scripts\nLABEL ' + label + '=' + review + '\n')
 assert subprocess.run(['docker', 'image', 'inspect', tag], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0

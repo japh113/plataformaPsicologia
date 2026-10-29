@@ -19,6 +19,7 @@ export function harness({ previous = null, followRequest = async () => follow, p
     currentUser: { id: 'p',role: 'patient',patientId: 'p' },useCallback: fn => fn,
     getAuthToken: () => state.token,sessionEpoch,followUpRequests: { current: new Map() },
     clinicalAccess: { current: { generation: 0, denied: false } },patientRevisions: { current: new Map() },
+    clinicalRecordSyncRef: { current: new Map() },clinicalRecordSync: {},setClinicalRecordSync: assign('recordSync'),
     getPatientFollowUp: async id => { state.followReads++; assert.equal(id,context.currentUser.patientId); return followRequest(); },
     getPatients: async () => { state.mainReads++; return [primary]; },getPatient: async () => primary,
     updatePatientTask: async (patientId,taskId,payload) => ({ id: taskId,text: 'task',completed: payload.completed }),
@@ -51,7 +52,7 @@ export function harness({ previous = null, followRequest = async () => follow, p
     return vm.runInContext(app.slice(a,b) + '\n' + returned + ';',context);
   }
   const guards = run('  const beginClinicalOperation =','  const refreshBackofficeData =',
-    '({ beginClinicalOperation,advancePatientRevision,invalidateClinicalAccess,commitPatientRows })');
+    '({ beginClinicalOperation,advancePatientRevision,invalidateClinicalAccess,commitPatientRows,markClinicalNoteConfirmed,isClinicalRecordPending,finishClinicalRecordRead })');
   Object.assign(context,guards);
   const reset = run('  const resetSessionState =','  const beginClinicalOperation =','resetSessionState');
   const refresh = run('  const refreshPatientFollowUp = useCallback','  const cargarDatos = useCallback','refreshPatientFollowUp');
@@ -66,7 +67,7 @@ export function harness({ previous = null, followRequest = async () => follow, p
   context.refreshReminders = reminders;
   const capture = name => {
     const invocation = {
-      ...context, pacientes: state.patients, pacienteSeleccionado: state.selected,
+      ...context, pacientes: state.patients, pacienteSeleccionado: state.selected, clinicalRecordSync: state.recordSync || {},
       isPsychologist: context.currentUser.role === 'psychologist',
       procesandoTareaId: state.processingTask, procesandoObjetivoId: null,
       creandoObjetivo: false, guardandoPerfilPaciente: false, guardandoNotas: false, guardandoSesion: false,

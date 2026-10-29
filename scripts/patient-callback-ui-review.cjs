@@ -7,10 +7,19 @@ async function main(){
  const results=[],errors=[];
  try{
   const context=await browser.newContext({viewport:{width:1440,height:1000},locale:'es-MX'});
-  let detail=null,profile=null,recovery=null;const counts={note:0,objective:0,profile:0,detail:0};
+  let detail=null,profile=null,recovery=null,noteWrite=null;const counts={note:0,notePosts:0,objective:0,objectiveDeletes:0,profile:0,detail:0};
   await context.route(url=>url.pathname.startsWith('/api/'),async route=>{
    const req=route.request(),url=new URL(req.url()),path=url.pathname,target='http://api:5000'+path+url.search;
-   if(path.includes('/clinical-notes/')&&req.method()==='PATCH')counts.note++;
+   if(path.endsWith('/clinical-notes')&&req.method()==='POST')counts.notePosts++;
+   if(path.includes('/objectives/')&&req.method()==='DELETE')counts.objectiveDeletes++;
+   if(path.includes('/clinical-notes/')&&req.method()==='PATCH'){
+    counts.note++;
+    if(noteWrite){
+     const held=noteWrite;noteWrite=null;
+     const response=await route.fetch({url:target});assert.equal(response.status(),200);
+     held.confirmed.resolve();await held.release.promise;await route.fulfill({response});return;
+    }
+   }
    if(path.includes('/objectives/')&&req.method()==='PATCH')counts.objective++;
    let control=null;
    if(path==='/api/patients/p'&&req.method()==='GET'){
@@ -61,7 +70,7 @@ async function main(){
   await login('a');
   await page.locator('aside').getByRole('button',{name:'Mis Pacientes',exact:true}).click();
   await page.getByRole('button',{name:'Expediente',exact:true}).click();
-  async function assertNoteAndTask(content,task){
+  async function assertNoteAndTask(content,task,objectiveRemoved=false){
    await page.getByRole('button',{name:'Notas clinicas',exact:true}).click();
    const taskRow=page.getByText(task,{exact:true});
    await taskRow.waitFor();
@@ -74,7 +83,9 @@ async function main(){
    assert.equal(await modal.locator('input').evaluateAll((inputs,text)=>inputs.some(input=>input.value===text),task),true);
    await modal.getByRole('button').first().click();
    await page.getByRole('button',{name:'Objetivos',exact:true}).click();
-   assert.equal(await page.getByRole('checkbox',{name:'Cumplimiento de Fictional shared objective',exact:true}).isChecked(),true);
+   const objective=page.getByRole('checkbox',{name:'Cumplimiento de Fictional shared objective',exact:true});
+   if(objectiveRemoved)assert.equal(await objective.count(),0);
+   else assert.equal(await objective.isChecked(),true);
   }
   async function editWithConflict(suffix,fail){
    const content='FICTIONAL_PRIVATE_RECOVERED_'+suffix,task='Fictional recovered task '+suffix;
@@ -85,10 +96,29 @@ async function main(){
    await modal.getByPlaceholder('Ej. Registro diario de emociones, practica de respiracion o ejercicio de exposicion gradual...').fill(task);
    await modal.getByRole('button',{name:'Agregar tarea',exact:true}).click();
    const held={confirmed:gate(),release:gate()},next={requested:gate(),fail};detail=held;
+   const heldWrite=fail?{confirmed:gate(),release:gate()}:null;noteWrite=heldWrite;
    const before={...counts};
    await modal.getByRole('button',{name:'Guardar cambios',exact:true}).click();
-   await held.confirmed.promise;
-   await modal.getByRole('button').first().click();
+   if(heldWrite){
+    await heldWrite.confirmed.promise;
+    // Server confirmed, response retained: open a different local editor before App learns of the write.
+    await modal.getByRole('button').first().click();
+    await page.getByRole('button',{name:'Abrir nota clinica',exact:true}).first().click();
+    const previous=await modal.locator('textarea').nth(3).inputValue();
+    assert.notEqual(previous,content);
+    heldWrite.release.resolve();await held.confirmed.promise;
+    await modal.getByText(/Este borrador no puede guardarse/).waitFor();
+    assert.equal(await modal.getByRole('button',{name:/Guardar cambios|Guardando/}).isDisabled(),true);
+    assert.equal(await modal.locator('textarea').nth(3).inputValue(),previous,'do not erase an unrelated open draft');
+    assert.equal(await modal.locator('input').evaluateAll((inputs,text)=>inputs.some(input=>input.value===text),task),false);
+    await modal.getByRole('button',{name:/Guardar cambios|Guardando/}).evaluate(button=>button.click());
+    assert.equal(counts.note-before.note,1);
+    await shot('open-draft-blocked-on-note-confirmation');
+    await modal.getByRole('button',{name:'Descartar borrador y cerrar',exact:true}).click();
+   }else{
+    await held.confirmed.promise;
+    await modal.getByRole('button').first().click();
+   }
    await page.getByRole('button',{name:'Objetivos',exact:true}).click();
    const objective=page.getByRole('checkbox',{name:'Cumplimiento de Fictional shared objective',exact:true});
    const patched=page.waitForResponse(r=>r.request().method()==='PATCH'&&new URL(r.url()).pathname.includes('/objectives/'));
@@ -97,9 +127,30 @@ async function main(){
    recovery=next;held.release.resolve();await next.requested.promise;
    if(fail){
     await page.getByText('La nota clínica se guardó. No se pudo actualizar el expediente; recarga la página para ver los últimos cambios.',{exact:true}).waitFor();
-    await page.getByRole('button',{name:'Recargar expediente',exact:true}).waitFor();
-    assert.equal(await objective.isChecked(),true);
-    await shot('confirmed-note-recovery-pending');
+    const notice=page.getByRole('alert',{name:'Expediente pendiente de actualización',exact:true});
+    await notice.waitFor();assert.equal(await objective.isChecked(),true);
+    // An independent success replaces the warning toast, but not the record-level lock.
+    const retired=page.waitForResponse(r=>r.request().method()==='DELETE'&&new URL(r.url()).pathname.includes('/objectives/'));
+    await page.getByTitle('Retirar objetivo (se conserva el registro)',{exact:true}).click();
+    assert.equal((await retired).status(),200);
+    await page.getByText('Objetivo retirado; su registro se conserva.',{exact:true}).waitFor();
+    assert.equal(await notice.isVisible(),true);
+    await page.getByRole('button',{name:'Cerrar',exact:true}).click();
+    await page.getByRole('button',{name:'Agenda',exact:true}).click();
+    await page.getByRole('button',{name:'Historial',exact:true}).click();
+    assert.equal(await notice.isVisible(),true);
+    const agendaNote=page.getByRole('button',{name:'Ver nota clinica',exact:true}).first();
+    assert.equal(await agendaNote.isDisabled(),true);await agendaNote.evaluate(button=>button.click());
+    await page.getByRole('button',{name:'Notas clinicas',exact:true}).click();
+    const oldNote=page.getByRole('button',{name:'Abrir nota clinica',exact:true}).first();
+    assert.equal(await oldNote.isDisabled(),true);await oldNote.evaluate(button=>button.click());
+    const create=page.getByRole('button',{name:'Nueva nota clinica',exact:true}).first();
+    assert.equal(await create.isDisabled(),true);await create.evaluate(button=>button.click());
+    assert.equal(await page.getByRole('heading',{name:'Editar nota clinica',exact:true}).count(),0);
+    assert.equal(await notice.isVisible(),true);
+    assert.equal(counts.note-before.note,1);assert.equal(counts.notePosts-before.notePosts,0,'zero POST/PATCH while record is blocked');
+    assert.equal(counts.objectiveDeletes-before.objectiveDeletes,1);
+    await shot('record-blocked-after-objective-success-and-toast-close');
    }else{
     await page.getByText('Nota clinica actualizada correctamente.',{exact:true}).waitFor();
     await assertNoteAndTask(content,task);
@@ -108,14 +159,15 @@ async function main(){
    assert.equal(counts.note-before.note,1);assert.equal(counts.objective-before.objective,1);
    assert.equal(counts.detail-before.detail,2,'one secondary GET and one recovery GET');
    if(fail){
-    await page.getByRole('button',{name:'Recargar expediente',exact:true}).click();
-    await page.locator('aside').getByRole('button',{name:'Mis Pacientes',exact:true}).click();
-    await page.getByRole('button',{name:'Expediente',exact:true}).click();
-    await assertNoteAndTask(content,task);
+    const notice=page.getByRole('alert',{name:'Expediente pendiente de actualización',exact:true});
+    await notice.getByRole('button',{name:'Recargar expediente',exact:true}).click();
+    await notice.waitFor({state:'hidden'});
+    await assertNoteAndTask(content,task,true);
+    assert.equal(counts.detail-before.detail,3,'explicit recovery performs exactly one new GET');
     assert.equal(counts.note-before.note,1);assert.equal(counts.objective-before.objective,1);
     await shot('confirmed-note-after-explicit-reload');
    }
-   results.push('Note '+suffix+': one confirmed PATCH with new task -> old GET -> objective PATCH -> '+(fail?'recovery 500, persistent saved/pending warning and explicit reload restores current note/task':'fresh GET restores current note and linked task')+'; objective complete, no duplicate writes: PASS');
+   results.push('Note '+suffix+': one confirmed PATCH with new task -> old GET -> objective PATCH -> '+(fail?'recovery 500 -> objective retired/success toast closed -> persistent record lock and zero obsolete POST/PATCH -> authorized manual GET restores current note/task and editor':'fresh GET restores current note and linked task')+'; objective state retained, no duplicate writes: PASS');
   }
   await editWithConflict('SUCCESS',false);
   // Explicit fixture preparation for a second independent race, outside its write count.

@@ -384,3 +384,142 @@ test('professional harness P3: an unexpected mapper exception fails the success 
     assert.equal(h.context.clinicalAccess.current.denied,true);
   }
 });
+
+
+test('clinical integrity P2: another success and closing feedback cannot allow old content/tasks [] to be written',async()=>{
+  const h=professional(),r=retainedNote(h,'updateSession');
+  await r.firstStarted.promise;await h.invoke('toggleObjective','o');r.first.resolve(raw);await recoveryStarted(r);
+  r.second.reject(error(500));assert.equal(await r.pending,true);
+  assert.equal(h.state.selected.sesiones[0].contenido,raw.clinicalNotes[0].content,'known stale file after confirmed PATCH');
+  h.context.deletePatientObjective=async()=>{};
+  await h.invoke('removeObjective','o');
+  assert.equal(h.state.success.at(-1),'Objetivo retirado; su registro se conserva.');
+  h.context.setUiFeedback(null);
+  let staleWrites=0;
+  h.context.updatePatientClinicalNote=async()=>{staleWrites++;return {id:'old-note'};};
+  h.context.getPatient=async()=>{throw error(500);};
+  const blocked=await h.invoke('updateSession','old-note',{content:raw.clinicalNotes[0].content,tasks:[]});
+  assert.equal(staleWrites,0,'an obsolete editor must never send old content and tasks [] after a confirmed write');
+  assert.equal(blocked.status,'blocked');
+});
+
+
+async function pendingRecord(h=professional(),name='updateSession'){
+  const r=retainedNote(h,name);await r.firstStarted.promise;
+  await h.invoke('toggleObjective','o');r.first.resolve(raw);await recoveryStarted(r);
+  r.second.reject(error(500));assert.equal(await r.pending,true);
+  assert.equal(h.state.recordSync.p.pending,true);assert.equal(h.state.recordSync.p.status,'pending');
+  return h;
+}
+
+test('clinical integrity: pending metadata survives feedback and unrelated activity; only a current detail read resolves it',async()=>{
+  const h=await pendingRecord(),entry=h.state.recordSync.p;
+  assert.deepEqual(Object.keys(entry).sort(),['access','patientId','pending','session','status','version']);
+  assert.equal(JSON.stringify(entry).includes('AUTHORITATIVE'),false);
+  h.context.deletePatientObjective=async()=>{};
+  await h.invoke('removeObjective','o');h.context.showErrorFeedback('Unrelated error');h.context.setUiFeedback(null);
+  assert.equal(h.state.recordSync.p,entry);
+  h.context.getPatient=async()=>{throw error(500);};
+  assert.equal(await h.invoke('refreshClinicalRecord','p'),false);
+  assert.equal(h.state.recordSync.p.pending,true);
+  const held=deferred(),started=deferred();
+  h.context.getPatient=()=>{started.resolve();return held.promise;};
+  const recovery=h.invoke('refreshClinicalRecord','p');await started.promise;
+  assert.equal(h.state.recordSync.p.status,'refreshing');
+  h.context.createPatientObjective=async()=>item('manual-objective',true);
+  await h.invoke('addObjective','Manual objective');
+  const current=h.state.selected;
+  held.resolve(noteSnapshot('updateSession'));assert.equal(await recovery,false);
+  assert.equal(h.state.selected,current);assert.equal(h.state.recordSync.p.pending,true);
+  const authoritative={...noteSnapshot('updateSession'),objectives:[item('manual-objective',true)]};
+  h.context.getPatient=async()=>authoritative;
+  assert.equal(await h.invoke('refreshClinicalRecord','p'),true);
+  assert.equal(h.state.recordSync.p.pending,false);assert.equal(h.state.recordSync.p.status,'current');
+  assert.equal(h.state.selected.sesiones.find(n=>n.id==='old-note').contenido,'AUTHORITATIVE_NOTE_CONTENT');
+  assert.equal(h.state.selected.tareas.find(t=>t.id==='confirmed-task').sesionId,'old-note');
+  assert.equal(h.state.selected.objetivos[0].id,'manual-objective');synced(h);
+  let writes=0;h.context.updatePatientClinicalNote=async()=>{writes++;return {};};
+  assert.equal((await h.invoke('updateSession','old-note',{content:'obsolete',tasks:[]},0)).status,'blocked');
+  assert.equal(writes,0,'an old draft remains blocked after recovery until explicitly reopened');
+  assert.equal(await h.invoke('updateSession','old-note',{content:'AUTHORITATIVE_NOTE_CONTENT',tasks:[{id:'confirmed-task',text:'Fictional confirmed-task'}]},1),true);
+  assert.equal(writes,1,'an explicitly reopened current editor can write again');
+  assert.equal(h.state.recordSync.p.pending,false);assert.equal(h.state.recordSync.p.version,2);
+});
+
+test('clinical integrity: definitive create/update guards are immediate, record-specific and independent of disabled UI',async()=>{
+  const h=await pendingRecord();let writes=0;
+  h.context.createPatientClinicalNote=async()=>{writes++;return {};};
+  h.context.updatePatientClinicalNote=async()=>{writes++;return {};};
+  for(const name of noteNames){
+    const result=await h.invoke(name,...noteArgs(name));
+    assert.equal(result.status,'blocked');
+  }
+  assert.equal(writes,0);
+  const q=mapBackendPatientToUiPatient({...raw,id:'q'});
+  h.state.patients=[...h.state.patients,q];h.state.selected=q;h.context.getPatient=async()=>({...raw,id:'q'});
+  assert.equal(await h.invoke('createSession',{content:'Q current',tasks:[]}),true);
+  assert.equal(writes,1);assert.equal(h.state.recordSync.p.pending,true);
+  assert.equal(h.state.recordSync.q.pending,false);assert.equal(h.state.selected.id,'q');
+  assert.deepEqual(h.state.patients.find(p=>p.id==='q'),h.state.selected);
+});
+
+test('clinical integrity: manual 401/403/404 and logout purge pending metadata and ignore old recovery replies',async()=>{
+  for(const boundary of [401,403,404,'logout-p','logout-q']){
+    const h=await pendingRecord(),held=deferred(),started=deferred();
+    h.context.getPatient=()=>{started.resolve();return held.promise;};
+    const recovery=h.invoke('refreshClinicalRecord','p');await started.promise;
+    const before={success:h.state.success.length,errors:h.state.errors.length,warnings:h.state.warnings.length};
+    if(typeof boundary==='number')held.reject(error(boundary));
+    else{
+      h.reset();const id=boundary==='logout-p'?'p':'q';
+      h.context.currentUser={id,role:'patient',patientId:id};h.state.token='new-session';
+      const next=mapBackendPatientToUiPatient({id,fullName:'New session'});
+      h.state.patients=[next];h.state.selected=next;h.state.form={current:true};
+      held.resolve(noteSnapshot('updateSession'));
+    }
+    assert.equal(await recovery,false);
+    assert.equal(h.context.clinicalRecordSyncRef.current.size,0);
+    assert.deepEqual(Object.keys(h.state.recordSync),[]);
+    assert.deepEqual({success:h.state.success.length,errors:h.state.errors.length,warnings:h.state.warnings.length},before);
+    if(typeof boundary==='number'){assert.equal(h.state.selected,null);assert.equal(h.state.patients.length,0);}
+    else {assert.equal(h.state.selected.nombre,'New session');assert.deepEqual(h.state.form,{current:true});}
+  }
+});
+
+test('clinical integrity: a later confirmed write during recovery cannot be cleared by the earlier read',async()=>{
+  const h=professional(),write1=deferred(),write2=deferred(),reads=[deferred(),deferred(),deferred()],started=reads.map(()=>deferred());
+  let writes=0,readCount=0;
+  h.context.updatePatientClinicalNote=()=>++writes===1?write1.promise:write2.promise;
+  h.context.getPatient=()=>{const index=readCount++;started[index].resolve();return reads[index].promise;};
+  h.context.updatePatientObjective=async()=>item('o',true);
+  const save1=h.invoke('updateSession','old-note',{content:'First',tasks:[]});
+  const save2=h.invoke('updateSession','old-note',{content:'Second',tasks:[]});
+  write1.resolve({id:'old-note'});await started[0].promise;
+  assert.equal(h.state.recordSync.p.version,1);
+  await h.invoke('toggleObjective','o');reads[0].resolve(raw);await started[1].promise;
+  write2.resolve({id:'old-note'});await started[2].promise;
+  assert.equal(h.state.recordSync.p.version,2);assert.equal(h.state.recordSync.p.pending,true);
+  reads[1].resolve(noteSnapshot('updateSession'));assert.equal(await save1,true);
+  assert.equal(h.state.recordSync.p.version,2);assert.equal(h.state.recordSync.p.pending,true);
+  assert.equal(h.state.selected.sesiones[0].contenido,raw.clinicalNotes[0].content);
+  const latest={...noteSnapshot('updateSession'),clinicalNotes:[{id:'old-note',content:'SECOND_CONFIRMED'}]};
+  reads[2].resolve(latest);assert.equal(await save2,true);
+  assert.equal(writes,2);assert.equal(readCount,3);
+  assert.equal(h.state.recordSync.p.pending,false);assert.equal(h.state.recordSync.p.version,2);
+  assert.equal(h.state.selected.sesiones[0].contenido,'SECOND_CONFIRMED');synced(h);
+});
+
+test('clinical integrity: a list HTTP 200 or wrong-patient detail cannot acknowledge a pending confirmed note',async()=>{
+  const h=await pendingRecord();
+  h.context.getPatients=async()=>[noteSnapshot('updateSession')];await loadProfessionalSuccessfully(h);
+  assert.equal(h.state.recordSync.p.pending,true,'list acceptance alone cannot acknowledge a confirmed note');
+  h.context.getPatient=async()=>({...noteSnapshot('updateSession'),id:'q'});
+  assert.equal(await h.invoke('refreshClinicalRecord','p'),false);
+  assert.equal(h.state.recordSync.p.pending,true);assert.equal(h.state.recordSync.p.status,'pending');
+  let opened=0,appointments=0;
+  h.context.abrirNotas=()=>{opened++;};
+  h.context.handleUpdateAppointment=async()=>{appointments++;return true;};
+  assert.equal(await h.invoke('handleOpenSessionFromAppointment',{id:'a',estado:'pendiente',fecha:'2026-04-01'},h.state.selected),false);
+  assert.equal(opened,1,'open read-only record with persistent recovery action');
+  assert.equal(appointments,0,'do not complete an appointment as part of a blocked note-opening flow');
+});
