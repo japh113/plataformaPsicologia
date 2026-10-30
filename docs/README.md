@@ -15,6 +15,7 @@ Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AG
 | Arquitectura | [architecture.md](architecture.md): implementación, fundamentos no activados y futuro separados |
 | Desarrollo y pruebas | [development.md](development.md): Docker/WSL, inicialización nueva, seguridad y destinos aislados |
 | Producto | [Visión](product/vision.md), [decisiones/abiertos](product/decisions.md), [reglas](product/business-rules.md), [roadmap](product/roadmap.md): aprobado no equivale a implementado |
+| Política de datos demo en desarrollo | [ADR-018 y precisión transversal](product/decisions.md#adr-018--demo-desechable-y-migraciones-seguras-para-datos-reales), [RN-28](product/business-rules.md) y [roadmap](product/roadmap.md): sin migración de filas de prueba por cambios técnicos; sí historial SQL y protección de destinos existentes |
 | Episodios paralelos y pareja | [Decisión y trazabilidad ADR-030/RN-62–68](parallel-couple-episodes.md): aprobado como producto; sucesora PostgreSQL, permisos, confidencialidad y flujos pendientes |
 | Plan de entregas | [identity-directory-delivery-plan.md](identity-directory-delivery-plan.md): A/B/C/D1/D2 integrados; D3 pendiente |
 | CI y contribución | [ci-plan.md](ci-plan.md), [CONTRIBUTING](../CONTRIBUTING.md): checks integrados en `main`, [evidencia técnica histórica](ci-validation.md), aislamiento y artifacts; CI-02 demostrado con #15 y CI-07 con #16; Protect main exige los siete checks |
