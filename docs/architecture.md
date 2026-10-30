@@ -80,6 +80,10 @@ La política de día clínico aún usa America/Los_Angeles en partes de aplicaci
 
 Solicitudes/invitaciones nuevas, permisos/activación por episodio, derivaciones, adendas, consentimientos de antecedentes, recuperación excepcional y menores siguen pendientes. No tratar una cuenta verificada o un perfil público como vínculo asistencial. No afirmar que los límites actuales por paciente ya aíslan episodios.
 
+## Propuesta técnica posterior a #44
+
+Corte `main` `8cb08bb82116acec94f7b86fbed6f288cb2f35fb` del 30 de octubre de 2026: [fundamentos propuestos](clinical-episodes-foundation.md#propuesta-técnica-2a--participantes-pertenencia-y-autoría) concretan una sucesora futura de 007 con composición inmutable, tabla de pertenencia, autoría y FK de recursos individuales, historia de cabecera y contenedores internos sin activación. [Autor/sujeto/audiencia y corte legacy](patient-response-privacy.md#vinculación-técnica-propuesta-de-autor-sujeto-y-audiencia) precisan la frontera posterior; [roadmap](product/roadmap.md#incremento-propuesto-de-fundamentos-tras-44) delimita un primer PR pequeño y las dependencias. Son propuestas técnicas por revisar, sin tablas/estado prepared implementados, sin resolver pausados AB-37 ni conceder clínica. La arquitectura vigente descrita arriba permanece por paciente. No inferir instalación, datos migrados o despliegue de esta especificación.
+
 ## Pruebas, documentación y dirección futura
 
 Existen unitarias Node y suites HTTP/PostgreSQL en [backend/test](../backend/test); frontend tiene `npm test`, lint y build. [Desarrollo](development.md) centraliza herramientas y destinos aislados; los ensayos requieren alcance autorizado. B/C conservan evidencia histórica de pruebas/demo en recursos UUID nuevos. El wrapper actual no ejecuta `frontend npm test` ni automatiza por sí solo las revisiones Chromium; [CI integrada](ci-implementation.md) cubre por separado esas brechas.
