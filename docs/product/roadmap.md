@@ -161,6 +161,9 @@ Notas finales/adendas #35 pueden planificarse en paralelo con contrato compatibl
 
 ### Incremento propuesto de fundamentos tras #44
 
+**Implementación posterior autorizada, pendiente de integrar:** el propietario aprobó las seis decisiones de #45, separación de creador/responsable y P2/P3. Esta rama entrega el [subconjunto 008](../clinical-episodes-foundation.md#implementación-del-incremento-008--sin-activación) con [pruebas aisladas](../episode-participants-validation.md). El corte propuesto conservado debajo es su antecedente; no autoriza las siguientes entregas y el motor clínico por episodio sigue deshabilitado.
+
+
 **Corte técnico documental del 30 de octubre de 2026:** `main` `8cb08bb82116acec94f7b86fbed6f288cb2f35fb`, PR #44 integrado, Issues #30/#31/#35/#36/#39 abiertos. Este diseño satisface el insumo de especificación de la entrega 1 anterior; no la autoriza ni la presenta como implementada. [Especificación y alternativas](../clinical-episodes-foundation.md#propuesta-técnica-2a--participantes-pertenencia-y-autoría), [atribución y corte de permisos](../patient-response-privacy.md#vinculación-técnica-propuesta-de-autor-sujeto-y-audiencia). No se crea etapa ni se amplía MVP.
 
 **Un único primer PR de implementación propuesto:** sucesora futura de 007 (hoy candidato 008), cabecera de composición inmutable individual/pareja, CEP materializada, autoría profesional explícita y FK de pertenencia/autor de recursos con sujeto individual ya existentes. Incluye sustitución del índice global de 003 para contenedores internos prepared, barrera DB que impide active/paused/finalized y toda salida de prepared, e historia propia de cabecera para no inventar paciente singular de una pareja. Implementación limitada a SQL sucesora, runner/manifiesto, pruebas y fixtures/documentación pertinentes; no refactor general ni nuevos endpoints/lectores operativos.
