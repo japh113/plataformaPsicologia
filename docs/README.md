@@ -8,6 +8,7 @@ Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AG
 
 | Tema | Documento y estado |
 | --- | --- |
+| Consolidación clínica 2A, base #43 | [ADR-031/D01–D20](product/decisions.md#adr-031--consolidación-clínica-2a-y-admisión-en-dos-modalidades): acuerdos funcionales, equivalencias y pendientes; D21 no aprobada. [Inventario/DTO y permisos](patient-response-privacy.md#consolidación-2a--inventario-y-permisos-objetivo), [admisión/plantillas](stage2a-identity-directory-intake.md#admisión-clínica-y-entrevistas--contrato-objetivo), [dependencias y cortes propuestos](product/roadmap.md#consolidación-2a--dependencias-y-entregas-acotadas); documentación, sin implementación nueva. |
 | Estado operativo y backlog | [Corte #40 y seguimiento #28–#41](operational-status.md): integración, decisiones, pendientes y clasificación histórica |
 | Cronología del paciente | [Mi seguimiento — contrato y evidencia Issue #21](patient-follow-up.md): integrado en #27; Issue #21 cerrado; consultas completadas, tareas e histórico separado sin notas profesionales |
 | Cumplimiento de objetivos | [Contrato y evidencia Issue #22](objective-completion-authorization.md): integrado en #26; Issue #22 cerrado; solo psicólogo autorizado escribe, paciente consulta progreso y conserva tareas interactivas |
