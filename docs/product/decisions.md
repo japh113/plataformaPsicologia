@@ -199,6 +199,12 @@ El modelo actual de rol único no representa doble autorización administrativa/
 
 **Decisión:** usuario confirma que datos presentes en demo local son de prueba y desechables; no construir conciliación manual exclusivamente para salvarlos. Nunca asumir bases reales borrables. Planificar migración segura, legacy y rollout para datos reales (ADR-009); cualquier reinicialización demo exige autorización separada. En aquel encargo documental 003 aún no existía. #8 ya integró su implementación y evidencia aislada; no autoriza despliegue. El presente encargo no toca bases o volúmenes ni ejecuta schema/seeds/migraciones.
 
+**Precisión transversal aprobada por el propietario el 29 de octubre de 2026 — etapa de desarrollo, sin usuarios reales:** PsicoPanel no tiene todavía pacientes ni psicólogos reales utilizando la aplicación; los datos existentes de demostración/pruebas son ficticios y desechables. Cuando cambien el modelo de episodios, participantes, permisos, almacenamiento o infraestructura, **no se deben diseñar migraciones de filas, backfills, conciliaciones, reatribuciones históricas, capas de compatibilidad ni interfaces de recuperación cuyo único fin sea conservar registros demo**. Se pueden generar nuevamente datos ficticios representativos del nuevo diseño, manteniendo las pruebas, los escenarios y las denegaciones reproducibles exigidos por ADR-019.
+
+**Distinción técnica obligatoria:** esta simplificación de *datos* no deroga la evolución versionada del *esquema*: conservar el historial de migraciones SQL 001–007, su manifiesto y las garantías de integridad; los cambios futuros de esquema se documentan con sucesoras cuando sean necesarias. No reescribir migraciones históricas para simular que nunca existieron.
+
+**Límite operacional:** afirmar que la demo es desechable no autoriza borrar, truncar, sobrescribir o restablecer ninguna base, volumen o entorno existente. Cada ejecución necesita destino explícito, aislamiento, comprobación de ausencia de datos reales y autorización para operaciones destructivas; preferir generar un destino de prueba nuevo. Al incorporar datos de personas reales, la política de conservación, derechos, custodia y evolución segura deberá aprobarse antes de operar con ellos. Esta precisión no aprueba ningún cambio de código, datos o infraestructura.
+
 ## ADR-019 — Escenarios demo ficticios y reproducibles por subetapa
 
 **Estado: APROBADA expresamente por el usuario como requisito de futuras implementaciones. Etapas: 2A–2E.**
