@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { runParticipantCases } from './episode-participants.cases.js';
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -322,6 +323,7 @@ test('003: isolated PostgreSQL installation, integrity, races, drift and rollbac
       await migrate(client, { expectedDatabase: name });
       assert.deepEqual(await snapshot(client), before);
     });
+    await runParticipantCases(t, control, clients);
   } finally {
     for (const client of clients) await client.end();
     await control.end();

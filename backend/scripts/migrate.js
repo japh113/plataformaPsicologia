@@ -4,8 +4,8 @@ import { explicitConnection, migrate } from './episode-migration.js';
 export async function main(args = process.argv.slice(2)) {
   const expectedDatabase = args.find(a => a.startsWith('--database='))?.slice(11);
   const target = args.find(a => a.startsWith('--target='))?.slice(9);
-  if (args.length !== 2 || !['003', '004', '005', '006', '007'].includes(target)) {
-    throw new Error('Usage: MIGRATION_DATABASE_URL=... npm run db:migrate -- --target=003|004|005|006|007 --database=NAME');
+  if (args.length !== 2 || !['003', '004', '005', '006', '007', '008'].includes(target)) {
+    throw new Error('Usage: MIGRATION_DATABASE_URL=... npm run db:migrate -- --target=003|004|005|006|007|008 --database=NAME');
   }
   const client = explicitConnection(process.env.MIGRATION_DATABASE_URL, expectedDatabase);
   try {
