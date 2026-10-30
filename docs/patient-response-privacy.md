@@ -268,3 +268,7 @@ Ser PSI en E1 y E2 no reúne sus expedientes. El archivo de E1 se solicita expre
 6. Habilitar únicamente capacidades autorizadas tras cumplir sus contratos de admisión/vinculación/activación, incluida entrevista propia validada backend/DB y AB-37 cuando corresponda; despliegue e instalación requieren autorización propia. No activar desde un flag frontend o por terminar las FK.
 
 Puede haber varios PR internos de adaptación mientras nada nuevo esté habilitado; el corte que concede permisos no puede ser parcial. La [secuencia del roadmap](product/roadmap.md#incremento-propuesto-de-fundamentos-tras-44) mantiene por separado admisión, vinculación y #35. El permiso de admisión limitada no se obtiene de prepared ni de vínculo global. Archivo, adendas, pausa/cierre y publicación conservan D09.1/D10.1 y sus dependencias sin ampliación del primer incremento.
+
+## Incremento interno de autorización posterior a #46
+
+[Componentes, límites, matriz técnica y evidencia nueva](episode-authorization-foundation.md): contexto estructural y denegación por defecto sin rutas ni DTO clínicos habilitados. El inventario anterior conserva su corte; todos los lectores/escritores HTTP siguen autorizando por paciente hasta la transición coordinada.
