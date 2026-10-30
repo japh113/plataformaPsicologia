@@ -138,6 +138,12 @@ El modo demo muestra URL/cuentas ficticias y deja únicamente sus recursos propi
 
 `npm test` en backend selecciona unitarias; `npm run test:integration` requiere entorno opt-in aislado y `test:episodes` prueba SQL/runner y sucesoras. Ejecutarlos fuera del destino verificado puede omitir integración por flags: registrar ejecutadas/omitidas y entorno. En la CI integrada en `main`, cualquier omisión inesperada falla el check. No confundir un comando verde con validación de D o permisos por episodio todavía inexistentes.
 
+## Ensayos de fundamentos 008
+
+El encargo posterior a #45 autoriza ensayos solo en destinos nuevos aislados. [Contrato implementado](clinical-episodes-foundation.md#implementación-del-incremento-008--sin-activación) y [resultados](episode-participants-validation.md) distinguen estructura de autorización clínica. El modo test incluye 008 en la suite existente sin modificar los fixtures HTTP legacy.
+
+Modo nuevo: `bash scripts/clinical-episodes.sh participants-demo`. Genera UUID, verifica tmpfs/red privada/cero puertos DB y propiedad de imágenes; instala antes de cargar fixtures. No inicia API/frontend ni activa episodios. Limpiar solo con el comando UUID impreso y nunca conectar esa base a lectores legacy. No instalar 008 en el entorno habitual ni suplir npm modificando el host.
+
 ## Inicialización, migraciones y evidencia
 
 - Docker PostgreSQL nuevo aplica schema+seed y 001/002 mediante [init.sh](../docker/postgres/init.sh). El marcador solo se crea al terminar; no crearlo manualmente ni borrar el volumen tras un fallo.

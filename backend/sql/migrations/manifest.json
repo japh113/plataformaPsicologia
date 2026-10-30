@@ -33,5 +33,10 @@
     "version": "007",
     "file": "007_private_professional_management.sql",
     "sha256": "d46b783a4ccc5a892f692b13ea03f68bc8b8a3a3e8b86c970d405fddf9a326d5"
+  },
+  {
+    "version": "008",
+    "file": "008_episode_participants_foundation.sql",
+    "sha256": "b8d8447524eff61c5729de711db19340b588a27ad005a6ec842c338cf1271481"
   }
 ]

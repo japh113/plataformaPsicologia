@@ -12,7 +12,7 @@ export async function loadMigrations(root = sqlRoot) {
     if (sha256(sql) !== entry.sha256) throw new Error('Incompatible file checksum: ' + entry.version);
     migrations.push({ ...entry, sql });
   }
-  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007') throw new Error('Incompatible migration versions');
+  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007,008') throw new Error('Incompatible migration versions');
   return migrations;
 }
 
@@ -146,6 +146,31 @@ export async function catalogChecksum(client) {
   ];
   const results = [];
   for (const query of queries) results.push((await client.query(query)).rows);
+  // Preserve the exact historical 003–007 algorithm. Only 008 installs CEP.
+  // SECURITY DEFINER ownership/role membership is part of 008's security boundary.
+  if ((await client.query("SELECT to_regclass('public.clinical_episode_participants') AS relation")).rows[0].relation) {
+    for (const query of [
+      `SELECT c.relname,r.rolname AS owner FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+        JOIN pg_roles r ON r.oid=c.relowner WHERE n.nspname='public'
+        AND c.relname IN ('clinical_episodes','clinical_episode_participants','clinical_episode_history','clinical_episode_history_id_seq') ORDER BY c.relname`,
+      `SELECT p.proname,r.rolname AS owner FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+        JOIN pg_roles r ON r.oid=p.proowner WHERE n.nspname='public' AND p.proname IN
+        ('materialize_episode_participants','check_episode_participant','preserve_episode_record','enforce_clinical_episode_identity','preserve_episode_attribution') ORDER BY p.proname`,
+      `SELECT r.rolname,r.rolsuper,r.rolinherit,r.rolcreaterole,r.rolcreatedb,r.rolcanlogin,r.rolreplication,
+        r.rolbypassrls,r.rolconnlimit,r.rolvaliduntil,r.rolconfig FROM pg_roles r
+        WHERE r.oid=(SELECT proowner FROM pg_proc WHERE oid='public.materialize_episode_participants()'::regprocedure)`,
+      `SELECT parent.rolname AS granted_role,member.rolname AS member,grantor.rolname AS grantor,
+        m.admin_option,m.inherit_option,m.set_option FROM pg_auth_members m
+        JOIN pg_roles parent ON parent.oid=m.roleid JOIN pg_roles member ON member.oid=m.member
+        JOIN pg_roles grantor ON grantor.oid=m.grantor WHERE
+        (SELECT proowner FROM pg_proc WHERE oid='public.materialize_episode_participants()'::regprocedure) IN (m.roleid,m.member)
+        ORDER BY parent.rolname,member.rolname,grantor.rolname`,
+      `SELECT n.nspname,r.rolname AS owner,n.nspacl::text FROM pg_namespace n JOIN pg_roles r ON r.oid=n.nspowner WHERE n.nspname='public'`,
+      `SELECT a.attname,co.collname,cn.nspname FROM pg_attribute a JOIN pg_collation co ON co.oid=a.attcollation
+        JOIN pg_namespace cn ON cn.oid=co.collnamespace WHERE a.attrelid='public.clinical_episodes'::regclass
+        AND a.attname IN ('participant_one_id','participant_two_id') ORDER BY a.attname`,
+    ]) results.push((await client.query(query)).rows);
+  }
   return sha256(JSON.stringify(results));
 }
 
@@ -176,7 +201,7 @@ async function verifyProfessionalReviewView(client, migration) {
 }
 
 export async function migrate(client, { expectedDatabase, target = '003' } = {}) {
-  if (!['003', '004', '005', '006', '007'].includes(target)) throw new Error('Unsupported target version');
+  if (!['003', '004', '005', '006', '007', '008'].includes(target)) throw new Error('Unsupported target version');
   const migrations = await loadMigrations();
   await client.query('BEGIN');
   try {
@@ -195,7 +220,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
         throw new Error('Incompatible recorded migration version/checksum: ' + row.version);
       }
     }
-    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007'].includes(ledger.map(r => r.version).join(','))) {
+    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007', '001,002,003,004,005,006,007,008'].includes(ledger.map(r => r.version).join(','))) {
       throw new Error('Incompatible or incomplete migration ledger');
     }
     if (ledger.length) {
@@ -229,7 +254,9 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
       to_regclass('public.contact_verification_challenges') IS NOT NULL OR
       to_regclass('public.contact_verification_state') IS NOT NULL OR
       EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='patients' AND column_name='global_birth_date') OR
-      to_regclass('public.clinical_episodes') IS NOT NULL OR EXISTS (
+      to_regclass('public.clinical_episodes') IS NOT NULL OR
+      to_regclass('public.clinical_episode_participants') IS NOT NULL OR
+      to_regclass('public.clinical_episode_history') IS NOT NULL OR EXISTS (
         SELECT 1 FROM information_schema.columns WHERE table_schema='public'
         AND table_name IN ('appointments','patient_clinical_notes','patient_tasks','appointment_waitlist_entries')
         AND column_name IN ('episode_id','episode_scope_id')) AS found`)).rows[0].found;
