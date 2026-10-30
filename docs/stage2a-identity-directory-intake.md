@@ -1,5 +1,7 @@
 # Etapa 2A — Identidad, directorio básico y vinculación inicial
 
+**Actualización documental 2A, base `e15610289614c4e8eee03ac4fca875810d1439a3` (#43):** [ADR-031](product/decisions.md#adr-031--consolidación-clínica-2a-y-admisión-en-dos-modalidades) amplía el flujo de entrevistas a dos modalidades. El [contrato de admisión](#admisión-clínica-y-entrevistas--contrato-objetivo) prevalece sobre candidatos que confundan preparación, consulta de admisión y tratamiento ordinario activo. Las propuestas D-01–D-12 siguientes no son las decisiones clínicas D01–D11 ni están aprobadas en bloque.
+
 Estado operativo al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a` (merge #27). A/B/C/D1/D2 y #25–#27 integrados; Issues #21–#23 cerrados. [Resumen vigente, backlog y cortes históricos](operational-status.md). D3, nuevas vinculaciones y activación/permisos por episodio pendientes. #19/#24 documentaron producto de pareja, sin implementar su motor. Integración en Git y pruebas aisladas no acreditan instalación ni despliegue habitual.
 
 Base histórica del diseño: 18 de octubre de 2026, `0077f46` (#9 integrado); los contratos B/C y el estado posterior a #12 actualizan únicamente las porciones entregadas.
@@ -238,3 +240,46 @@ AB-18/24/27 aprobados; D1/D2 integrados con alcance privado y D3 requiere autori
 ## 13. Evidencia documental
 
 PR #9 revisó 77 enlaces locales e intentó lint/build en WSL sin npm; es evidencia histórica, no validación de A. Su restricción a cinco Markdown no rige la reorganización expresamente autorizada ahora. Resultados nuevos, inventario y límites de PR A se registran en [documentation-audit.md](documentation-audit.md), sin afirmar que se ejecutaron pruebas funcionales o bases.
+
+## Admisión clínica y entrevistas — Contrato objetivo
+
+**Producto aprobado, implementación pendiente.** Fuente/precedencia: ADR-031; RN-59–61 y ADR-029 se mantienen íntegros. Esta sección es el detalle canónico de entrevistas/admisión para [#41](https://github.com/japh113/plataformaPsicologia/issues/41), coordinado con [#31](https://github.com/japh113/plataformaPsicologia/issues/31), [#30](https://github.com/japh113/plataformaPsicologia/issues/30) y [privacidad #39](patient-response-privacy.md#matriz-objetivo-por-episodio-participante-y-documento). No cierra esos Issues ni aprueba estados/rutas/SQL concretos.
+
+### Dos modalidades y cuatro fronteras de permiso
+
+1. **Identidad/vinculación:** registro y funciones personales independientes de entrevista. Solicitud/invitación o aceptación parcial no otorgan clínica. Vinculación completa tampoco activa tratamiento.
+2. **Autoadministrada:** PAC responde en portal; guarda borrador privado y **envía explícitamente** la versión destinada al profesional autorizado para esa admisión. Guardar, abrir o cerrar formulario no envía ni valida. PSI nunca recibe el borrador no enviado, tampoco como vista previa, estado de progreso detallado, historial o respuesta de escritura. PAC consulta sus respuestas enviadas y conserva historia; en pareja cada integrante tiene entrevista propia y privada respecto del otro.
+3. **Dirigida:** PSI realiza y documenta la entrevista durante una **primera consulta clínica de admisión**, con consentimientos aplicables y autorización clínica limitada a ese contexto/participante. Registrar profesional/participante, modalidad, fecha y procedencia; distinguir declaraciones de PAC y valoración PSI sin suplantar autoría. No es un formulario rellenado informalmente por el profesional ni un permiso de tratamiento ordinario. El documento profesional no se publica íntegro por llamarse entrevista: respuestas propias y valoración se proyectan separadamente conforme RN-25 y la matriz de privacidad.
+4. **Activación ordinaria:** ambas modalidades necesitan validación profesional explícita, atribuida a episodio, participante y versión exacta. En pareja son necesarias las dos entrevistas y aceptaciones expresas. Verificaciones y demás precondiciones aplicables también siguen vigentes. Enviar, tener campos completos, asistir a admisión o registrar una nota no bastan para activar. Backend y DB deben impedir activación con validación ausente/ajena/obsoleta. No reutilizar entrevista o consentimiento de otro episodio, incluso con el mismo PSI.
+
+La existencia de una consulta clínica de admisión antes de activación **no contradice** exigir entrevista validada antes de tratamiento ordinario; precisa el alcance de «primera consulta» de #41. Requiere una capacidad separada y limitada. El permiso de admisión no permite GET del expediente global del paciente, agenda de otros episodios, tareas u objetivos ordinarios, notas históricas ni acceso recíproco entre integrantes. Acceso indebido tampoco puede obtenerse mediante POST/PUT/PATCH o un JOIN lateral.
+
+**Por concretar antes de implementar la modalidad dirigida:** acto que concede/revoca permiso, evidencia de consentimientos aplicables, documentos y datos mínimos autorizados, alcance de agenda/documentación de esa consulta, efecto de cancelación y conservación/lectura tras abandono. Una propuesta técnica acotada es asignación explícita al contexto de admisión con audiencia verificable, separada de `active`; sus tablas/estados/endpoints no están aprobados. No insertar un episodio ordinario activo provisional para sortear esta definición. No modificar retrospectivamente reglas nota↔cita del runtime: la documentación de admisión debe diseñarse sin convertirla en un bypass de cita completada/no futura.
+
+### Condiciones funcionales y transiciones por especificar
+
+La tabla usa descripciones funcionales; no enumera estados API definitivos ni agrega caducidades.
+
+| Situación/acto | Lectura y escritura permitidas | Condición de avance o límite |
+| --- | --- | --- |
+| Solicitud/invitación pendiente | Partes ven mínimos del flujo y mensaje autorizado. | Sin expediente ni entrevista por la mera solicitud; asignación segura de admisión se especifica con #31. |
+| Borrador autoadministrado | Solo PAC titular lee/escribe. | Envío requiere acto explícito a destinatario/contexto autorizado; no recepción PSI implícita. |
+| Envío autoadministrado | PAC conserva consulta propia; PSI autorizado revisa versión recibida. | No edición silenciosa de respuesta PAC por PSI, ni activación automática. Correcciones deben conservar original/procedencia. |
+| Consulta dirigida | PSI autorizado documenta actividad clínica real; audiencia según clase de dato. | Consentimientos, alcance limitado y trazabilidad anteriores; no depende de fingir tratamiento ordinario activo. |
+| Revisión/corrección | PSI registra juicio de suficiencia propio y comunicación destinada separada de observaciones reservadas. | Cambio de versión antes de activar no hereda validación anterior. Mecanismo de corrección y errores por especificar, sin autoevaluación diagnóstica. |
+| Validación explícita | Profesional responsable valida la versión del participante/episodio correspondiente. | Activar solo con todas las precondiciones backend/DB; parcial de pareja nunca basta. |
+| Cancelación o abandono | Sin acceso nuevo por estado anterior; borrador sigue privado. | Retención y lectura profesional posterior requieren definición D07/D13. No borrar documentación clínica ni crear archivo perpetuo por inferencia. |
+
+El runtime legacy sigue teniendo PUT único por paciente y primera escritura PAC/edición PSI; no tiene estas transiciones, borradores privados persistidos, plantillas o validación nueva. Sus reglas de edición conservadas en ADR-029 no se trasladan como permiso para sobrescribir envíos del nuevo flujo. Tampoco se reinterpretan filas legacy como versiones enviadas/finalizadas. RN-28/ADR-018 evitan construir convivencia/migración solo para salvar demos; esta tarea no toca ninguna base.
+
+### Plantillas predefinidas y versión exacta
+
+Acuerdo D11: plantillas predefinidas, personalización limitada de secciones/preguntas, sujetas a validación clínica. La entrevista enviada conserva exactamente la plantilla usada, preguntas, opciones, orden, versión y respuestas, con procedencia de modalidad/registrador; modificar plantilla no altera entrevistas recibidas. No usar versión histórica para validar automáticamente un episodio nuevo. La documentación dirigida también requiere trazabilidad y conservación de su versión, con valoración profesional separada de las respuestas propias.
+
+Quedan por fijar con revisión clínica los mínimos protegidos, tipos admitidos, límites, opciones y accesibilidad antes de implementar los campos correspondientes. Propuesta técnica: referencia inmutable o snapshot verificable, sin decidir tablas. El editor avanzado de formularios queda fuera del MVP; lógica condicional avanzada, scoring diagnóstico, fórmulas, automatizaciones, adjuntos libres e integraciones no se aprueban por este acuerdo. La elección funcional de plantillas limitadas ya fue aportada por el propietario; no exigir otra investigación general GO/NO-GO para volver a decidirla. #41 conserva pendientes concretos de campos/validación, no autorización para un constructor general.
+
+### Admisión abandonada D13
+
+Se aprueba como intención funcional **condicionada a validación jurídica y clínica**: cierre administrativo tras 90 días sin actividad, con aviso previo; eliminación de borradores elegibles 30 días después del cierre. «Puede cerrarse» no aprueba un cron automático ni impone cierre de tratamiento activo. Es distinto de la caducidad de solicitudes RN-38 y de pausa/finalización RN-21/71.
+
+Antes de implementar: definir actividad relevante, elegibilidad de borradores, aviso/canal y evidencia, alcance del cierre administrativo, custodia/conservación y derechos posteriores. No se inventan otros plazos. El borrador no enviado es privado; una entrevista dirigida es documentación profesional y un envío ya recibido no se trata como borrador desechable por defecto. Nunca eliminar registros de conservación obligatoria. No usar los 14 días de artifacts CI como plazo clínico ni ejecutar purgas sobre demo. Retención/automatización queda en entrega posterior específica y preparación de 5; privacidad/versionado de 2A pueden avanzar sin ese automatismo.

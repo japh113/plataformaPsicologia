@@ -8,6 +8,10 @@ Decisión de producto aprobada por el propietario el 20 de octubre de 2026 y for
 
 ## Tratamiento e identidad del episodio
 
+**Precedencia de la consolidación 2A (base #43):** [ADR-031](product/decisions.md#adr-031--consolidación-clínica-2a-y-admisión-en-dos-modalidades) precisa RN-67/69/71 mediante los acuerdos del propietario. El [inventario y matriz canónicos](patient-response-privacy.md#matriz-objetivo-por-episodio-participante-y-documento) concretan entrevistas privadas por integrante, documentos completos con audiencia, metadatos restringidos y tareas conjuntas con seguimiento independiente. La [admisión](stage2a-identity-directory-intake.md#admisión-clínica-y-entrevistas--contrato-objetivo) admite ambas modalidades, siempre con validación profesional previa a activación ordinaria.
+
+D17 amplía lo que la entrega anterior dejaba fuera: quien permanece puede solicitar episodio individual **nuevo**, incluso con el mismo profesional únicamente si es ética y clínicamente apropiado. No convierte automáticamente el conjunto ni copia información, permisos o consentimientos. D16 exige encuadre de confidencialidad comprensible y manejo profesional de revelaciones/seguridad sin avisos que las divulguen; validación clínica/jurídica pendiente. No resuelve por inferencia pausados AB-37, procedimiento de retiro ni publicación de material privado. Los cortes históricos siguientes se leen con esta precisión, sin alterar su evidencia ni afirmar implementación.
+
 Un paciente global puede participar en varios tratamientos simultáneos, activos o pausados, con distintos profesionales. La existencia de uno no bloquea automáticamente otros. Cada episodio tiene identidad clínica, contexto, participantes explícitos, permisos, notas, citas, tareas, antecedentes, estado y ciclo de vida propios; un único psicólogo responsable por episodio.
 
 | Modalidad aprobada | Participantes y alcance |

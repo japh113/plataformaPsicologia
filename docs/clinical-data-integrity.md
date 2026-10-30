@@ -3,6 +3,8 @@
 > Reporte/procedimiento de 001 conservado como evidencia histórica. La edición con versiones descrita aquí sigue siendo comportamiento previo; el objetivo de adendas/inmutabilidad RN-23 aún está pendiente. Arquitectura actual en [architecture.md](architecture.md) y pruebas/operación en [development.md](development.md). Este PR documental no ejecuta sus procedimientos sobre ninguna base.
 
 Fecha: 16 de octubre de 2026. Base revisada: `main` en `9dbc305`, con Docker integrado.
+
+**Contrato objetivo posterior, #35/2A:** [ADR-013/RN-23 y consolidación ADR-031](product/decisions.md#adr-031--consolidación-clínica-2a-y-admisión-en-dos-modalidades) conservan borrador propio editable, acto explícito de finalización inmutable y adenda vinculada por autor/fecha/motivo, incluso en archivo propio cerrado. El detalle de autoría, DTO, estado actual y pruebas futuras se mantiene en la [matriz clínica](patient-response-privacy.md#tareas-objetivos-notas-y-conservación). La edición de fila con historial descrita aquí no implementa finalización ni permiso por autor/episodio. Cierre con borradores sigue pendiente: no auto-finalizar, sobrescribir original, reasignar autor o publicar adendas nuevas por autorización antigua; su divulgación corresponde a 2C. No migrar registros demo para simular estados históricos (RN-28/ADR-018).
 Trabajo local en `fix/clinical-data-integrity`; sin push, merge ni cambios a la base en uso.
 
 ## Hallazgos de la auditoria
