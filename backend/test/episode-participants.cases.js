@@ -220,4 +220,62 @@ export async function runParticipantCases(t,control,clients){
     await client.query("SET test.fail008='off'");
     await migrate(client,{expectedDatabase:name,target:'008'});
   });
+
+  await t.test('008: column ACL drift is detected without repairing privileges, ledger or clinical data',async()=>{
+    const {client,name}=await fresh();
+    const episode=await preparedEpisode(client);await participantGraph(client,episode);
+    const snapshot=async()=>({
+      ledger:(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows,
+      records:await Promise.all(['patients','users','clinical_episodes','clinical_episode_participants',
+        'appointments','patient_clinical_notes','patient_tasks','appointment_waitlist_entries',
+        'clinical_record_history','clinical_episode_history'].map(async table=>
+        (await client.query('SELECT to_jsonb(t) AS row FROM public.'+table+' t ORDER BY to_jsonb(t)::text')).rows)),
+      acl:(await client.query("SELECT attacl::text FROM pg_attribute WHERE attrelid='clinical_episode_participants'::regclass AND attname='patient_id'")).rows,
+    });
+    const original=await catalogChecksum(client);
+    const tableAcl=(await client.query("SELECT relacl::text FROM pg_class WHERE oid='clinical_episode_participants'::regclass")).rows;
+    await client.query('GRANT SELECT(patient_id) ON clinical_episode_participants TO PUBLIC');
+    assert.deepEqual((await client.query("SELECT relacl::text FROM pg_class WHERE oid='clinical_episode_participants'::regclass")).rows,tableAcl);
+    const drifted=await catalogChecksum(client);assert.notEqual(drifted,original);
+    const before=await snapshot();
+    await assert.rejects(migrate(client,{expectedDatabase:name,target:'008'}),/Schema drift/);
+    assert.equal(await catalogChecksum(client),drifted);assert.deepEqual(await snapshot(),before);
+  });
+  await t.test('008: ledger recorded with pre-column-ACL algorithm is rejected without adoption',async()=>{
+    const {client,name}=await fresh({identities:false});
+    // Reproduce the exact old results in a TEST proxy; production exposes no
+    // compatibility switch and never rewrites recorded catalog checksums.
+    const historicalResults=[];
+    const {createHash}=await import('node:crypto');
+    const current=await catalogChecksum({query:async(sql,params)=>{
+      const result=await client.query(sql,params);
+      if(!sql.includes("to_regclass('public.clinical_episode_participants')") && !sql.includes('a.attacl::text'))
+        historicalResults.push(result.rows);
+      return result;
+    }});
+    const old=createHash('sha256').update(JSON.stringify(historicalResults)).digest('hex');
+    assert.notEqual(current,old);
+    await client.query("UPDATE psicopanel_schema_migrations SET catalog_sha256=$1 WHERE version='008'",[old]);
+    const ledger=(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
+    await assert.rejects(migrate(client,{expectedDatabase:name,target:'008'}),/Schema drift/);
+    assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows,ledger);
+    assert.equal(await catalogChecksum(client),current);
+    assert.equal(await count(client,'clinical_episodes'),0);
+  });
+  await t.test('008: internal context resolves real CEP composition but grants no clinical operation',async()=>{
+    const {resolveEpisodeContext}=await import('../src/modules/episodes/episode.context.js');
+    const {authorizeEpisodeOperation}=await import('../src/modules/episodes/episode.policy.js');
+    const {client}=await fresh();
+    const first=await preparedEpisode(client),second=await preparedEpisode(client,{professional:'b',creator:'b'});
+    const couple=await preparedEpisode(client,{two:'q'});
+    for(const [id,participants,professional,creator] of [[first,['p'],'a','p'],[second,['p'],'b','b'],[couple,['p','q'],'a','p']]){
+      const context=await resolveEpisodeContext(client,{actor:{id:'p',role:'patient',patientId:'p',isActive:true},
+        episodeId:id,operation:'read',resource:{type:'note',id:'1',episodeId:id,subjectPatientId:'p',audience:'professional',state:'draft',authorUserId:professional}});
+      assert.deepEqual(context.episode.participants.map(p=>p.patientId),participants);
+      assert.equal(context.episode.responsibleUserId,professional);
+      assert.equal(context.episode.headerCreatorUserId,creator);
+      assert.equal(context.membership.actorIsParticipant,true);
+      assert.deepEqual(authorizeEpisodeOperation(context),{allowed:false});
+    }
+  });
 }

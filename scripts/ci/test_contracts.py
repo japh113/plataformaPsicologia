@@ -80,3 +80,29 @@ class Contracts(unittest.TestCase):
         for mutate in [lambda s:s.pop(),lambda s:s[2]['cases'].pop(),lambda s:s[2]['cases'].append(s[2]['cases'][0]),lambda s:s[2]['runtime'].update(revision='old'),lambda s:s[2]['cases'][0].update(status='SKIP')]:
             altered=copy.deepcopy(suites);mutate(altered)
             with self.assertRaises(ValueError):validate_suites(altered,'current')
+
+    def test_imported_episode_catalog_rejects_missing_invocation_case_declaration_and_duplicate(self):
+        catalog=json.loads(Path('scripts/ci/episode-cases.json').read_text())
+        entry=Path(catalog['entrypoint']);module=Path(catalog['module'])
+        # Actual source labels are the TAP labels; no second execution is added.
+        import re
+        entry_names=re.findall(r"\btest\(\s*'([^']+)'",entry.read_text())
+        names=entry_names+catalog['cases']
+        report={'tests':[{'name':name,'status':'passed'} for name in names]}
+        complete=inventory(copy.deepcopy(report),[entry])
+        self.assertIn(str(module),complete['sourceFiles'])
+        self.assertTrue(set(catalog['cases']).issubset(complete['declaredCases']))
+        for missing in catalog['cases']:
+            omitted=copy.deepcopy(report)
+            omitted['tests']=[case for case in omitted['tests'] if case['name']!=missing]
+            with self.subTest(missing=missing),self.assertRaises(ValueError):inventory(omitted,[entry])
+        no_call={'tests':[case for case in report['tests'] if case['name'] not in catalog['cases']]}
+        with self.assertRaises(ValueError):inventory(no_call,[entry])
+        duplicate=copy.deepcopy(report);duplicate['tests'].append(report['tests'][-1])
+        with self.assertRaises(ValueError):inventory(duplicate,[entry])
+        original_read=Path.read_text
+        def removed_declaration(path,*args,**kwargs):
+            text=original_read(path,*args,**kwargs)
+            return text.replace("await t.test('"+catalog['cases'][0]+"'", "await omitted('removed'") if path==module else text
+        with patch.object(Path,'read_text',removed_declaration):
+            with self.assertRaises(ValueError):inventory(copy.deepcopy(report),[entry])

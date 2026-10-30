@@ -108,6 +108,19 @@ def export_tap(directory,suites):
         path=Path(directory)/('suite-'+str(i+1)+'.tap');path.write_text('\n'.join(lines)+'\n')
 
 def inventory(report,files):
+    # Imported cases execute inside the guarded entrypoint, not as another test
+    # file. A pinned catalog survives deletion of a declaration or its caller.
+    files=list(files)
+    contract=json.loads(Path('scripts/ci/episode-cases.json').read_text())
+    required=[]
+    if Path(contract['entrypoint']) in [Path(p) for p in files]:
+        module=Path(contract['module'])
+        source=module.read_text()
+        declared=re.findall(r"await t\.test\('([^']+)'",source)
+        required=contract['cases']
+        if len(declared)!=len(set(declared)) or set(declared)!=set(required):
+            raise ValueError('Imported case declarations differ from mandatory catalog')
+        files.append(module)
     expected=set()
     for file in files:
         source=Path(file).read_text()
@@ -115,6 +128,10 @@ def inventory(report,files):
             expected.add(match[2].replace("\\'","'").replace('\\"','"'))
     actual={t['name'] for t in report['tests']}
     if not expected or expected-actual:raise ValueError('Declared test cases did not execute: '+str(sorted(expected-actual)))
+    for name in required:
+        executed=[case for case in report['tests'] if case['name']==name]
+        if len(executed)!=1 or executed[0]['status']!='passed':
+            raise ValueError('Mandatory imported case missing, duplicated or not passed: '+name)
     report['sourceFiles']=[str(p) for p in files]
     report['declaredCases']=sorted(expected)
     return report
