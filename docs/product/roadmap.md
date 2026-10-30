@@ -159,6 +159,38 @@ ARCO/retención, bajas D18/D19, procedimiento adicional D20, derivaciones y cons
 
 Notas finales/adendas #35 pueden planificarse en paralelo con contrato compatible; sus PR deben ser pequeños y propios. La planificación anterior no obliga a agrupar todo en un único PR de código ni concede autorización a ejecutarlo. La [matriz de pruebas futuras](../patient-response-privacy.md#barrera-de-activación-y-pruebas-del-siguiente-pr-de-código) delimita la evidencia de cada capacidad; ADR-019 exige demo ficticia solo conforme se implemente, nunca en este encargo Markdown.
 
+### Incremento propuesto de fundamentos tras #44
+
+**Corte técnico documental del 30 de octubre de 2026:** `main` `8cb08bb82116acec94f7b86fbed6f288cb2f35fb`, PR #44 integrado, Issues #30/#31/#35/#36/#39 abiertos. Este diseño satisface el insumo de especificación de la entrega 1 anterior; no la autoriza ni la presenta como implementada. [Especificación y alternativas](../clinical-episodes-foundation.md#propuesta-técnica-2a--participantes-pertenencia-y-autoría), [atribución y corte de permisos](../patient-response-privacy.md#vinculación-técnica-propuesta-de-autor-sujeto-y-audiencia). No se crea etapa ni se amplía MVP.
+
+**Un único primer PR de implementación propuesto:** sucesora futura de 007 (hoy candidato 008), cabecera de composición inmutable individual/pareja, CEP materializada, autoría profesional explícita y FK de pertenencia/autor de recursos con sujeto individual ya existentes. Incluye sustitución del índice global de 003 para contenedores internos prepared, barrera DB que impide active/paused/finalized y toda salida de prepared, e historia propia de cabecera para no inventar paciente singular de una pareja. Implementación limitada a SQL sucesora, runner/manifiesto, pruebas y fixtures/documentación pertinentes; no refactor general ni nuevos endpoints/lectores operativos.
+
+Solo en PostgreSQL nuevo aislado, con preflight que rechaza filas clínicas preexistentes, sin backfill, conciliación, recuperación o compatibilidad de datos demo. SQL 001–007 y hashes originales intactos. La instalación de esa estructura no es activación ni despliegue; base estructural no se conecta al backend legacy para demostrar nuevos permisos. Las FK admiten fixtures sintéticos de integridad, no operaciones clínicas autorizadas. El índice final anti-duplicado active se diseña pero **no se implementa hasta resolver AB-37**; todo acceso a esa transición permanece cerrado en el primer PR.
+
+**Antes de autorizar ese PR**, aprobar las opciones técnicas concretas de composición/CEP/colación, prepared/default/started_at y barrera DB, FK/autoría individual, historia y preflight expuestas en la especificación. Son elecciones acotadas, sin otra investigación general de producto. No hace falta resolver ahora invitaciones, derivaciones, editor, ARCO, retención D13 o el ciclo completo; sí resolver cada dependencia antes de su futura capacidad. AB-37 queda abierto y no se escoge una política para pausados por inferencia.
+
+**Cierre exigible del primer PR:**
+
+- Cardinalidad exacta y materialización atómica, sin terceros ni alteración de identidad/participantes/responsable; un profesional válido por episodio.
+- Coexistencia estructural de individuales paralelos y pareja, incluidos paciente/profesional repetidos; sin simular tratamientos activos ni validaciones de entrevista.
+- Creadores explícitos, FK nota/cita/tarea/espera al CEP correcto, rechazos de paciente/autor/episodio cruzados y NULL parcial; conservación de reglas actuales cita↔nota e historia, sin recursos conjuntos falsamente duplicados.
+- Barrera prepared exigible por SQL directo; cero nuevos permisos/activación/rutas, AB-23 y JWT/backoffice intactos. Primer PR no da por entregado el aislamiento operativo por episodio.
+- Ensayos PostgreSQL aislados de instalación vacía, replay/deriva/checksum, rollback/fallo/reintento y concurrencia de referencias; fixture poblado rechazado sin reparación. Unitarias backend, integración pertinente, frontend lint/build y demo ADR-019 del alcance conforme a las instrucciones de desarrollo.
+- Demo estructural SQL y demo visual de regresión legacy con fixtures separados, siempre nuevos/propios y sin filas atribuidas expuestas a lectores legacy; pasos, cuentas ficticias, resultados y límites reproducibles. Sin UI nueva ni demostración ficticia de autorización por episodio.
+
+**División posterior dentro de las entregas ya previstas**, sin autorización implícita:
+
+| PR/corte futuro | Dependencia concreta | Cierre antes de habilitar |
+| --- | --- | --- |
+| Fundamentos mínimos (el único próximo PR propuesto) | Revisión/aprobación técnica de esta especificación | Invariantes y ensayos anteriores; active y permisos nuevos cerrados. |
+| Ampliaciones de atribución por dominio, en PR pequeños | Fundamentos; contratos concretos AB-35/D05 cuando se incorporen sesiones/tareas conjuntas | Asistentes/sujetos/destinatarios, realizaciones independientes, historia por episodio y propagación en cada escritor. Nada nuevo habilitado mientras queden lectores legacy. |
+| Permisos/proyecciones y corte completo | Atribución de todos los dominios usados, inventario #39 y reglas de autor/estado | Matriz y salidas completas probadas; retiro coordinado de OR/JOIN legacy, incluidos laterales. No basta cambiar patients. |
+| Admisión/entrevista, entrega 3 | Permisos limitados y plantillas/mínimos/consentimientos concretos; modelo de asignación previo a activar | Ambas modalidades, versiones/autor y validación por integrante; sin clínica ordinaria ni editor avanzado. |
+| Vinculación/activación, entrega 4 | #31 aplicable, permisos completos, admisión y validación backend/DB implementadas; AB-37 resuelto para pareja | Transacción con aceptaciones/verificaciones, sin parciales, concurrencia/idempotencia y barrera SQL de activación sustituida por garantías reales. |
+| Notas finales/adendas #35 y ciclo 2B | Modelo de autor/episodio, concurrencia #32 y conservación D10.1 concretos | Finales inmutables, borradores por estado, resolución al cierre y adendas propias; divulgación de nuevas adendas 2C. No se implementa ahora ese ciclo. |
+
+#36 se coordina para runner/compatibilidad y, antes de cualquier entorno persistente o datos reales, procedimientos específicos de migración/recuperación. No bloquea la estructura aislada por necesidad de salvar demo. D3 sigue independiente. No adelantar derivaciones 2B, intercambio 2C, concurrencia completa 2D, editor o rediseño por estos cortes. Cada futuro PR debe recibir su propia autorización y ensayar solo lo que entrega.
+
 ### Contradicciones reconciliadas y pendientes
 
 | Evidencia previa | Reconciliación documental y precedencia |
