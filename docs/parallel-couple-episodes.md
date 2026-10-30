@@ -39,6 +39,8 @@ Una inasistencia aislada no equivale a abandono: **no convierte automáticamente
 
 La participación es voluntaria y nadie puede ser obligado a continuar contra su voluntad. El abandono definitivo de uno impide continuar normalmente el episodio conjunto. Distinguirlo de pausa temporal, finalización definitiva e inasistencia; el profesional gestiona y documenta las decisiones clínicas y operativas preservando historial, autoría y datos. Confirmaciones, transiciones, avisos y resolución de futuras citas pendientes (AB-28/29/RN-71), sin extrapolar el procedimiento unilateral de terapia individual ni crear cierre automático.
 
+**Precisión posterior D09.1/D10.1, pendiente de implementación del ciclo:** las [reglas canónicas de ADR-031](product/decisions.md#precisiones-aprobadas-d091-y-d101--pausa-reanudación-y-cierre-documental) resuelven las confirmaciones de reanudación: ambos integrantes y el psicólogo, previa revisión de permisos, consentimientos y verificaciones aplicables. La pausa no vence; tras 12 meses de inactividad se solicita revisión profesional sin cierre automático ni nueva actividad clínica conjunta durante pausa. Finalizado no se reabre. La documentación sigue los límites por estado de D10.1; esto no resuelve duplicados de pareja pausada AB-37 ni las demás transiciones/avisos de AB-28/29. No amplía implementación inmediata de 2A.
+
 La conversión a terapia individual con el mismo profesional tras cerrar pareja queda fuera del diseño de esta entrega. No se declara universalmente prohibida ni jurídicamente resuelta; las diferencias clínicas se conservan en la evidencia. La mención de infidelidad activa puede motivar valoración profesional, sin automatismo de continuidad o divulgación.
 
 ## Derivación conjunta y confidencialidad
