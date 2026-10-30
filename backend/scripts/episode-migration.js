@@ -169,6 +169,13 @@ export async function catalogChecksum(client) {
       `SELECT a.attname,co.collname,cn.nspname FROM pg_attribute a JOIN pg_collation co ON co.oid=a.attcollation
         JOIN pg_namespace cn ON cn.oid=co.collnamespace WHERE a.attrelid='public.clinical_episodes'::regclass
         AND a.attname IN ('participant_one_id','participant_two_id') ORDER BY a.attname`,
+      // 008 only: relation ACLs omit column GRANTs (pg_attribute.attacl).
+      // This changes old 008 fingerprints; reject old ledgers without adoption.
+      `SELECT c.relname,a.attnum,a.attname,a.attacl::text
+        FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
+        JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND a.attnum>0 AND NOT a.attisdropped
+        ORDER BY c.relname,a.attnum`,
     ]) results.push((await client.query(query)).rows);
   }
   return sha256(JSON.stringify(results));

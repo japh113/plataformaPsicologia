@@ -1,0 +1,25 @@
+{
+  "entrypoint": "backend/test/clinical-episodes.integration.test.js",
+  "module": "backend/test/episode-participants.cases.js",
+  "cases": [
+    "008: empty install, historical ledger, replay after fixtures and downgrade rejection",
+    "008: direct full-chain installation on a new empty destination",
+    "008: populated preflight refuses without changing rows, schema, ledger or roles",
+    "008: exact materialization, parallel composition and independent creation actor",
+    "008: invalid modalities, cardinality, duplicate patients, roles and creators rejected",
+    "008: prepared barrier rejects every operational state and both start dates",
+    "008: root identity, participants and creation attribution cannot be altered or removed",
+    "008: materialization failure in second participant rolls back the entire statement",
+    "008: effective application connection materializes CEP but has no direct write or definer privilege",
+    "008: valid individual graph, professional authorship and clinical row history preserved",
+    "008: crossed patient, episode, author and NULL scopes rejected in both directions",
+    "008: independent connections serialize competing parent attribution and child writes",
+    "008: concurrent migrations produce one install and one verified replay",
+    "008: owner, membership, function path, privileges and collation drift fail closed",
+    "008: checksum and recorded checksum mismatches rejected",
+    "008: late DDL failure rolls back objects, restricted role and ledger then retries",
+    "008: column ACL drift is detected without repairing privileges, ledger or clinical data",
+    "008: ledger recorded with pre-column-ACL algorithm is rejected without adoption",
+    "008: internal context resolves real CEP composition but grants no clinical operation"
+  ]
+}
