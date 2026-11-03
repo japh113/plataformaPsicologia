@@ -4,6 +4,8 @@ Base verificada el 30 de octubre de 2026: main `10e94f7cd4904a9d9be716d69a153e0c
 
 Fuentes de producto: [ADR-030/031](product/decisions.md#adr-030--episodios-paralelos-pareja-y-derivación-por-tratamiento), [RN-27/28](product/business-rules.md), [dependencias 2A](product/roadmap.md#consolidación-2a--dependencias-y-entregas-acotadas), [privacidad canónica](patient-response-privacy.md#consolidación-2a--inventario-y-permisos-objetivo) y [008 y sus límites](clinical-episodes-foundation.md#implementación-del-incremento-008--sin-activación). No se redefinen acuerdos clínicos ni AB-37.
 
+Actualización posterior a #47: el [incremento de recursos verificables](episode-resource-resolution.md) sustituye las afirmaciones del descriptor por lecturas PostgreSQL de citas, notas, tareas/objetivos y espera, corrige el estado profesional P3 y amplía el catálogo obligatorio. Los resultados y cifras de esta página conservan el corte histórico de #47.
+
 ## Capacidad representada y capacidades bloqueadas
 
 [resolveEpisodeContext](../backend/src/modules/episodes/episode.context.js) consulta en una sentencia parametrizada columnas explícitas de cabecera y CEP: ID, modalidad, estado, participantes, responsable y creador de cabecera independiente. Comprueba composición exacta antes de construir hechos inmutables con allowlist. Actor efectivo (ID, rol, identidad PAC, actividad y aprobación profesional), operación y descriptor de recurso/sujeto/autor/estado/audiencia permanecen separados. El cliente DB se suministra explícitamente, sin importar pool/env. No consulta vínculos globales ni contenido clínico.

@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import jwt from 'jsonwebtoken';
 import { resolveJwtSecret, isLocalDevelopment, assertLocalInitialization } from '../src/config/security.js';
 import { ensureAccountCanAuthenticate, ensureSessionIsCurrent } from '../src/modules/auth/auth.account-status.js';
-import { verifyAuthToken } from '../src/modules/auth/auth.service.js';
+import { getUserById, verifyAuthToken } from '../src/modules/auth/auth.service.js';
 import { authenticate } from '../src/middlewares/authMiddleware.js';
 import db from '../src/config/db.js';
 import env from '../src/config/env.js';
@@ -116,4 +116,60 @@ test('session versions reject legacy, malformed and stale claims without coercio
     assert.doesNotThrow(() => ensureSessionIsCurrent({ sessionVersion }, { sv: sessionVersion }));
   }
   assert.throws(() => ensureSessionIsCurrent({ sessionVersion: 4 }, { sv: 3 }), { status: 401 });
+});
+
+test('episode P3: real user mapping and ordinary middleware agree on active without a clinical grant', async () => {
+  const { resolveEpisodeContext } = await import('../src/modules/episodes/episode.context.js');
+  const { authorizeEpisodeOperation } = await import('../src/modules/episodes/episode.policy.js');
+  const original = db.query;
+  const token = jwt.sign({ sub: 'current-professional', role: 'superadmin', sv: 4 }, env.jwtSecret);
+  try {
+    for (const status of ['active', 'pending_review', 'rejected', 'suspended', 'approved', null]) {
+      db.query = async (sql, params) => {
+        assert.match(sql, /u.is_active = TRUE/);
+        assert.deepEqual(params, ['current-professional']);
+        return { rows: [{
+          id: 'current-professional', role: 'psychologist', is_active: true,
+          first_name: 'Fixture', last_name: 'Professional', session_version: 4,
+          psychologist_approval_status: status,
+        }] };
+      };
+      const user = await getUserById('current-professional');
+      assert.equal(user.isActive, true);
+      assert.equal(user.psychologistStatus, status);
+      assert.equal(user.psychologistProfile.approvalStatus, status ?? 'pending_review');
+      const context = await resolveEpisodeContext({ async query() { return { rows: [{
+        episode_id: '1', modality: 'individual', status: 'prepared',
+        psychologist_user_id: user.id, created_by_user_id: 'account-p',
+        participant_one_id: 'p', participant_two_id: null,
+        patient_id: 'p', slot: 1, participant_psychologist_id: user.id,
+      }] }; } }, { actor: user, episodeId: '1', operation: 'read' });
+      assert.equal(context.membership.actorIsResponsible, true);
+      // Prove active reaches the structural policy gate; approval labels do not.
+      // The final decision is identical (denied) in every case.
+      let structuralChecks = 0;
+      const probe = { ...context, get episode() { structuralChecks++; return context.episode; } };
+      assert.deepEqual(authorizeEpisodeOperation(probe), { allowed: false });
+      assert.equal(structuralChecks > 0, status === 'active');
+      const req = { headers: { authorization: 'Bearer ' + token } };
+      const res = { status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
+      let passed = false;
+      await authenticate(req, res, error => { assert.equal(error, undefined); passed = true; });
+      assert.equal(passed, status === 'active');
+      if (passed) {
+        assert.equal(req.user.role, 'psychologist');
+        assert.equal(req.user.psychologistStatus, 'active');
+        assert.deepEqual(authorizeEpisodeOperation({ ...context, actor: req.user }), { allowed: false });
+      } else assert.equal(res.statusCode, 403);
+    }
+    // getUserById filters inactive users; middleware receives no actor.
+    db.query = async () => ({ rows: [] });
+    assert.equal(await getUserById('current-professional'), null);
+    for (const currentActor of [null, { id: 'current-professional', role: 'psychologist', isActive: false, psychologistStatus: 'active' }]) {
+      const context = await resolveEpisodeContext({ query() { assert.fail('Inactive actor queried DB'); } },
+        { actor: currentActor, episodeId: '1', operation: 'read' });
+      assert.equal(context.episode, null);
+      assert.deepEqual(authorizeEpisodeOperation(context), { allowed: false });
+    }
+  } finally { db.query = original; }
 });

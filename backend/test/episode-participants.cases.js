@@ -7,6 +7,21 @@ import {loadMigrations,migrate,catalogChecksum} from '../scripts/episode-migrati
 import {createSandboxDatabase,installBaseline} from '../scripts/episode-sandbox.js';
 import {participantIdentities,preparedEpisode,participantGraph} from '../scripts/episode-participants-fixture.js';
 
+import {resolveEpisodeContext} from '../src/modules/episodes/episode.context.js';
+import {authorizeEpisodeOperation,episodeOperations} from '../src/modules/episodes/episode.policy.js';
+import {projectEpisodeResource} from '../src/modules/episodes/episode.projections.js';
+
+const structuralResource=async(client,episodeId,type,id,actor={id:'a',role:'psychologist',isActive:true,psychologistStatus:'active'},claims={})=>{
+  const context=await resolveEpisodeContext(client,{actor,episodeId,operation:'read',resource:{...claims,type,id}});
+  for(const operation of [...episodeOperations,'unknown']){
+    assert.deepEqual(authorizeEpisodeOperation({...context,operation}),{allowed:false});
+  }
+  assert.throws(()=>projectEpisodeResource(context,new Proxy({},{
+    get(){assert.fail('Denied projection touched SQL resource content');},
+    ownKeys(){assert.fail('Denied projection enumerated SQL resource content');},
+  })),{message:'Forbidden',status:403});
+  return context;
+};
 const connection=name=>({host:'db',database:name,user:'integrity_test',password:'disposable_test_password'});
 const connect=async(name,extra={})=>{const c=new pg.Client({...connection(name),...extra});await c.connect();await c.query("SET statement_timeout='8s'");return c;};
 const count=async(c,table)=>(await c.query('SELECT count(*)::int AS n FROM public.'+table)).rows[0].n;
@@ -278,4 +293,113 @@ export async function runParticipantCases(t,control,clients){
       assert.deepEqual(authorizeEpisodeOperation(context),{allowed:false});
     }
   });
+  await t.test('resources: PostgreSQL resolves all five types with column-only privileges and no content reads',async()=>{
+    const {client,name}=await fresh(),id=await preparedEpisode(client);
+    const graph=await participantGraph(client,id);
+    const objective=(await client.query("INSERT INTO patient_tasks(patient_id,episode_id,created_by_user_id,kind,text) VALUES('p',$1,'a','objective','PRIVATE_OBJECTIVE_SENTINEL') RETURNING id",[id])).rows[0].id;
+    const role='resource_reader_'+randomUUID().replaceAll('-','');
+    await client.query('CREATE ROLE '+role+" LOGIN PASSWORD 'disposable_resource_reader'");
+    await client.query('GRANT USAGE ON SCHEMA public TO '+role);
+    await client.query('GRANT SELECT ON clinical_episodes,clinical_episode_participants TO '+role);
+    const reader=await connect(name,{user:role,password:'disposable_resource_reader'});clients.push(reader);
+    // Real ACL refusal: no fallback and no context can escape the failed call.
+    await assert.rejects(structuralResource(reader,id,'note',graph.note),error=>error.code==='42501');
+    for(const [table,columns] of [
+      ['appointments','id,episode_id,patient_id,created_by_user_id,status'],
+      ['patient_clinical_notes','id,episode_id,patient_id,created_by_user_id,appointment_id'],
+      ['patient_tasks','id,episode_id,patient_id,created_by_user_id,kind,clinical_note_id'],
+      ['appointment_waitlist_entries','id,episode_id,patient_id,created_by_user_id'],
+    ])await client.query('GRANT SELECT('+columns+') ON '+table+' TO '+role);
+    for(const [type,key] of [...Object.entries(graph),['objective',objective]]){
+      const context=await structuralResource(reader,id,type,key,undefined,{
+        episodeId:'9223372036854775807',subjectPatientId:'q',authorUserId:'b',state:'published',audience:'joint',
+      });
+      assert.equal(context.resource.id,key);assert.equal(context.resource.episodeId,id);
+      assert.equal(context.resource.subjectPatientId,'p');assert.equal(context.resource.authorUserId,'a');
+      assert.equal(context.episode.headerCreatorUserId,'p'); // Creator is not author/responsible.
+      assert.equal(context.resource.verified,true);assert.equal(context.resource.audienceVerified,false);
+      assert.equal(context.resource.audience,null);
+      assert.equal(context.resource.appointmentId,type==='note'?graph.appointment:null);
+      assert.equal(context.resource.clinicalNoteId,type==='task'?graph.note:null);
+      assert.equal(context.resource.kind,['task','objective'].includes(type)?type:null);
+      assert.equal(context.resource.state,type==='appointment'?'completed':null);
+      assert.equal(Object.isFrozen(context.resource),true);
+      assert.doesNotMatch(JSON.stringify(context),/PRIVATE_|Synthetic structural|content|clinical_observations|priority|scheduled_time/);
+    }
+    for(const sql of ['SELECT content FROM patient_clinical_notes','SELECT text FROM patient_tasks','SELECT notes FROM appointments','SELECT priority FROM appointment_waitlist_entries']){
+      await assert.rejects(reader.query(sql),error=>error.code==='42501');
+    }
+  });
+  await t.test('resources: same-patient parallel episodes and different professionals cannot reuse resource attribution',async()=>{
+    const {client}=await fresh();
+    const first=await preparedEpisode(client),second=await preparedEpisode(client,{creator:'a'});
+    const third=await preparedEpisode(client,{professional:'b',creator:'b'});
+    const graph=await participantGraph(client,first);
+    for(const [episode,author] of [[first,'a'],[second,'a'],[third,'b']]){
+      const task=(await client.query("INSERT INTO patient_tasks(patient_id,episode_id,created_by_user_id,text) VALUES('p',$1,$2,'Parallel task') RETURNING id",[episode,author])).rows[0].id;
+      const own=await structuralResource(client,episode,'task',task);
+      assert.equal(own.resource.authorUserId,author);assert.equal(own.resource.episodeId,episode);
+      assert.equal(own.membership.actorIsResponsible,author==='a');
+      for(const other of [first,second,third].filter(id=>id!==episode)){
+        assert.equal((await structuralResource(client,other,'task',task,undefined,{episodeId:other,authorUserId:'a'})).resource,null);
+      }
+    }
+    for(const [type,key] of Object.entries(graph)){
+      assert.equal((await structuralResource(client,second,type,key,undefined,{episodeId:second})).resource,null);
+    }
+  });
+  await t.test('resources: couple membership preserves the individual subject without reciprocal audience',async()=>{
+    const {client}=await fresh(),id=await preparedEpisode(client,{two:'q'});
+    const graph=await participantGraph(client,id);
+    const taskQ=(await client.query("INSERT INTO patient_tasks(patient_id,episode_id,created_by_user_id,text) VALUES('q',$1,'a','Private Q instructions') RETURNING id",[id])).rows[0].id;
+    for(const patientId of ['p','q']){
+      const actor={id:patientId,role:'patient',patientId,isActive:true};
+      const context=await structuralResource(client,id,'note',graph.note,actor,{subjectPatientId:patientId,audience:'participant'});
+      assert.equal(context.membership.actorIsParticipant,true);
+      assert.equal(context.resource.subjectPatientId,'p');
+      assert.equal(context.resource.audienceVerified,false);
+      const q=await structuralResource(client,id,'task',taskQ,actor,{audience:'joint'});
+      assert.equal(q.resource.subjectPatientId,'q');assert.equal(q.resource.audience,null);
+    }
+    assert.equal((await structuralResource(client,id,'objective',graph.task)).resource,null);
+    const foreign=await structuralResource(client,id,'task',taskQ,{id:'outsider',role:'patient',patientId:'r',isActive:true});
+    assert.equal(foreign.membership.actorIsParticipant,false);
+  });
+  await t.test('resources: PostgreSQL composite FKs reject incompatible note-appointment, task-note and authors',async()=>{
+    const {client}=await fresh(),first=await preparedEpisode(client),second=await preparedEpisode(client);
+    const graph=await participantGraph(client,first);
+    // Unused completed appointment: rejection cannot be masked by note uniqueness.
+    const appointment=(await client.query("INSERT INTO appointments(patient_id,episode_id,created_by_user_id,scheduled_date,scheduled_time,status) VALUES('p',$1,'a',CURRENT_DATE-4,'11:00','completed') RETURNING id",[first])).rows[0].id;
+    await assert.rejects(client.query("INSERT INTO patient_clinical_notes(patient_id,appointment_id,episode_id,created_by_user_id,clinical_note_date) VALUES('p',$1,$2,'a',CURRENT_DATE-4)",[appointment,second]),
+      error=>error.code==='23503'&&error.constraint==='notes_appointment_scope_fk');
+    await assert.rejects(client.query("INSERT INTO patient_tasks(patient_id,clinical_note_id,episode_id,created_by_user_id,text) VALUES('p',$1,$2,'a','Wrong note scope')",[graph.note,second]),
+      error=>error.code==='23503'&&error.constraint==='tasks_note_scope_fk');
+    await assert.rejects(client.query("INSERT INTO patient_tasks(patient_id,episode_id,created_by_user_id,text) VALUES('p',$1,'b','Wrong author')",[first]),
+      error=>error.code==='23503');
+    await assert.rejects(client.query("INSERT INTO appointment_waitlist_entries(patient_id,episode_id,created_by_user_id,scheduled_date,scheduled_time) VALUES('q',$1,'a',CURRENT_DATE+5,'12:00')",[first]),
+      error=>error.code==='23503');
+    assert.equal((await client.query('SELECT count(*)::int AS n FROM patient_clinical_notes WHERE appointment_id=$1',[appointment])).rows[0].n,0);
+    assert.equal((await structuralResource(client,second,'note',graph.note)).resource,null);
+  });
+  await t.test('resources: legacy NULL attribution, missing rows and invalid identifiers never become episode facts',async()=>{
+    const {client}=await fresh(),id=await preparedEpisode(client);
+    const appointment=(await client.query("INSERT INTO appointments(patient_id,scheduled_date,scheduled_time,status) VALUES('p',CURRENT_DATE-5,'12:00','completed') RETURNING id")).rows[0].id;
+    const note=(await client.query("INSERT INTO patient_clinical_notes(patient_id,appointment_id,clinical_note_date,content) VALUES('p',$1,CURRENT_DATE-5,'LEGACY_PRIVATE') RETURNING id",[appointment])).rows[0].id;
+    const task=(await client.query("INSERT INTO patient_tasks(patient_id,clinical_note_id,text) VALUES('p',$1,'Legacy task') RETURNING id",[note])).rows[0].id;
+    const objective=(await client.query("INSERT INTO patient_tasks(patient_id,kind,text) VALUES('p','objective','Legacy objective') RETURNING id")).rows[0].id;
+    const waitlist=(await client.query("INSERT INTO appointment_waitlist_entries(patient_id,scheduled_date,scheduled_time) VALUES('p',CURRENT_DATE+6,'12:00') RETURNING id")).rows[0].id;
+    for(const [type,key] of Object.entries({appointment,note,task,objective,waitlist})){
+      const context=await structuralResource(client,id,type,key,undefined,{episodeId:id,subjectPatientId:'p',authorUserId:'a',audience:'professional'});
+      assert.equal(context.resource,null);assert.equal(context.membership.subjectIsParticipant,false);
+      assert.equal((await structuralResource(client,id,type,'9223372036854775807')).resource,null);
+    }
+    for(const bad of [null,'0','-1','01','1 OR TRUE','9223372036854775808',9007199254740992]){
+      assert.equal((await structuralResource(client,id,'note',bad)).resource,null);
+      const context=await structuralResource({query(){assert.fail('Invalid episode key reached PostgreSQL');}},bad,'note',note);
+      assert.equal(context.episode,null);assert.equal(context.resource,null);
+    }
+    assert.equal((await client.query('SELECT episode_id,created_by_user_id FROM patient_clinical_notes WHERE id=$1',[note])).rows[0].episode_id,null);
+    assert.equal((await client.query('SELECT episode_id,created_by_user_id FROM patient_tasks WHERE id=$1',[task])).rows[0].created_by_user_id,null);
+  });
+
 }

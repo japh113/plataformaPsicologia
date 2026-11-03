@@ -20,6 +20,11 @@
     "008: late DDL failure rolls back objects, restricted role and ledger then retries",
     "008: column ACL drift is detected without repairing privileges, ledger or clinical data",
     "008: ledger recorded with pre-column-ACL algorithm is rejected without adoption",
-    "008: internal context resolves real CEP composition but grants no clinical operation"
+    "008: internal context resolves real CEP composition but grants no clinical operation",
+    "resources: PostgreSQL resolves all five types with column-only privileges and no content reads",
+    "resources: same-patient parallel episodes and different professionals cannot reuse resource attribution",
+    "resources: couple membership preserves the individual subject without reciprocal audience",
+    "resources: PostgreSQL composite FKs reject incompatible note-appointment, task-note and authors",
+    "resources: legacy NULL attribution, missing rows and invalid identifiers never become episode facts"
   ]
 }
