@@ -6,7 +6,7 @@ import { authorizeEpisodeOperation, episodeOperations } from '../src/modules/epi
 import { projectEpisodeResource } from '../src/modules/episodes/episode.projections.js';
 
 const patient = id => ({ id: 'account-' + id, role: 'patient', patientId: id, isActive: true });
-const professional = id => ({ id, role: 'psychologist', isActive: true, psychologistStatus: 'approved' });
+const professional = id => ({ id, role: 'psychologist', isActive: true, psychologistStatus: 'active' });
 const composition = (id, patients = ['p'], responsible = 'a', creator = 'account-p') =>
   patients.map((p, i) => ({
     episode_id: id, modality: patients.length === 2 ? 'couple' : 'individual', status: 'prepared',
@@ -18,15 +18,22 @@ const composition = (id, patients = ['p'], responsible = 'a', creator = 'account
 const episodes = [...composition('1'), ...composition('2', ['p'], 'b', 'b'),
   ...composition('3', ['p', 'q']), ...composition('4', ['r'])];
 const descriptor = (episodeId = '1', subjectPatientId = 'p') => ({
-  id: 'private-record-id', episodeId, subjectPatientId, type: 'note',
+  id: '11', episodeId, subjectPatientId, type: 'note',
   authorUserId: 'a', state: 'draft', audience: 'professional',
 });
 const resolve = (input = {}, rows = episodes) => resolveEpisodeContext({
   query: async (sql, params) => {
-    assert.deepEqual(params, [String(input.episodeId ?? '1')]);
-    assert.match(sql, /WHERE e.id=\$1::bigint/);
     assert.doesNotMatch(sql, /SELECT\s+\*|care_relationships|psychologist_patient_access/);
-    return { rows: rows.filter(r => r.episode_id === params[0]) };
+    if (sql.includes('FROM public.clinical_episodes e')) {
+      assert.deepEqual(params, [String(input.episodeId ?? '1')]);
+      return { rows: rows.filter(r => r.episode_id === params[0]) };
+    }
+    const head = rows.find(r => r.episode_id === params[1]);
+    return { rows: head ? [{
+      resource_id: params[0], episode_id: params[1], patient_id: head.participant_one_id,
+      author_user_id: head.psychologist_user_id, state: 'completed',
+      appointment_id: '10', clinical_note_id: '11', kind: params[2],
+    }] : [] };
   },
 }, { actor: patient('p'), episodeId: '1', operation: 'read', resource: descriptor(), ...input });
 const deny = context => {

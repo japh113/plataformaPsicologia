@@ -6,19 +6,19 @@ export const episodeOperations = Object.freeze([
 const resourceTypes = Object.freeze([
   'episode', 'appointment', 'note', 'task', 'objective', 'intake', 'document', 'waitlist',
 ]);
-const audiences = Object.freeze(['professional', 'participant', 'joint', 'private-draft']);
 
 export function authorizeEpisodeOperation(context) {
   if (!context?.actor?.id || !context.actor.isActive ||
       !['patient', 'psychologist'].includes(context.actor.role)) return denied;
-  if (context.actor.role === 'psychologist' && context.actor.psychologistStatus !== 'approved') return denied;
+  if (context.actor.role === 'psychologist' && context.actor.psychologistStatus !== 'active') return denied;
   if (!context.episode || !episodeOperations.includes(context.operation)) return denied;
   if (context.episode.status !== 'prepared') return denied; // Other states have no implemented policy.
   if (context.actor.role === 'patient' && !context.membership?.actorIsParticipant) return denied;
   if (context.actor.role === 'psychologist' && !context.membership?.actorIsResponsible) return denied;
   if (!context.membership?.subjectIsParticipant || !context.resource?.matchesEpisode) return denied;
-  if (!resourceTypes.includes(context.resource.type) || !audiences.includes(context.resource.audience)) return denied;
-  // These labels describe a request, never verified publication/recipients.
+  if (!resourceTypes.includes(context.resource.type) || context.resource.verified !== true ||
+      context.resource.audienceVerified !== true) return denied;
+  // Verified structure still supplies no publication/recipients or grant.
   // Membership, responsibility and authorship are facts, never grants.
   // All prepared operations are denied, including admission and activation.
   // Future capabilities need persisted, verified grants for the operation,

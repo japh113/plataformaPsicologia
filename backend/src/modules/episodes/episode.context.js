@@ -1,10 +1,6 @@
 // Internal structural reader only. Never return this context from an endpoint.
-const scalar = value => typeof value === 'string' && value.length > 0 ? value : null;
-const episodeKey = value => {
-  const key = typeof value === 'bigint' || (typeof value === 'number' && Number.isSafeInteger(value))
-    ? String(value) : value;
-  return typeof key === 'string' && /^[1-9][0-9]{0,18}$/.test(key) && BigInt(key) <= 9223372036854775807n ? key : null;
-};
+import { episodeKey, textKey as scalar } from './episode.identifiers.js';
+import { resolveEpisodeResource } from './episode.resource.js';
 const freeze = object => Object.freeze(object);
 
 // actor must come from current authenticated server session/DB, never req.body.
@@ -32,11 +28,14 @@ export async function resolveEpisodeContext(client, { actor, episodeId, operatio
     const head = rows[0];
     const count = head?.modality === 'individual' ? 1 : head?.modality === 'couple' ? 2 : 0;
     const expected = head ? [head.participant_one_id, head.participant_two_id] : [];
-    if (count && rows.length === count && (count === 2 || head.participant_two_id === null) &&
+    if (count && scalar(head.psychologist_user_id) && scalar(head.created_by_user_id) &&
+        rows.length === count && (count === 2 || head.participant_two_id === null) &&
         new Set(expected.slice(0, count)).size === count &&
         rows.every((row, i) => row.episode_id === id && row.slot === i + 1 &&
           scalar(row.patient_id) && row.patient_id === expected[i] &&
-          row.participant_psychologist_id === head.psychologist_user_id)) {
+          row.participant_psychologist_id === head.psychologist_user_id &&
+          ['modality', 'status', 'psychologist_user_id', 'created_by_user_id',
+            'participant_one_id', 'participant_two_id'].every(key => row[key] === head[key]))) {
       episode = freeze({
         id, modality: head.modality, status: scalar(head.status),
         responsibleUserId: scalar(head.psychologist_user_id),
@@ -45,14 +44,7 @@ export async function resolveEpisodeContext(client, { actor, episodeId, operatio
       });
     }
   }
-  // Descriptor only, not a fetched clinical record or trusted audience/grant.
-  const descriptor = resource ? freeze({
-    type: scalar(resource.type), id: scalar(resource.id),
-    episodeId: episodeKey(resource.episodeId), subjectPatientId: scalar(resource.subjectPatientId),
-    authorUserId: scalar(resource.authorUserId), state: scalar(resource.state),
-    audience: scalar(resource.audience),
-    matchesEpisode: Boolean(episode && episodeKey(resource.episodeId) === episode.id),
-  }) : null;
+  const descriptor = await resolveEpisodeResource(client, episode, resource);
   const member = patientId => Boolean(patientId && episode?.participants.some(p => p.patientId === patientId));
   return freeze({
     actor: effectiveActor, requestedEpisodeId: id, episode,
