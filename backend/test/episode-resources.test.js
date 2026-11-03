@@ -24,7 +24,7 @@ const context = async ({ type = 'note', id = '11', rows = [record], resource, ca
   resolveEpisodeContext({
     async query(sql, params) {
       calls.push({ sql, params });
-      assert.doesNotMatch(sql, /SELECT\s+\*|care_relationships|psychologist_patient_access|\br\.text\b|\b(content|notes|clinical_observations|clinical_note_objective|priority|scheduled_date|scheduled_time|previous_record)\b/i);
+      assert.doesNotMatch(sql, /SELECT\s+\*|care_relationships|psychologist_patient_access|\br\.text\b|\b(content|notes|clinical_observations|clinical_note_objective|priority_position|priority|scheduled_date|scheduled_time|previous_record)\b/i);
       if (sql.includes('FROM public.clinical_episodes e')) return { rows: composition };
       assert.deepEqual(params, ['11', '1', ...(['task', 'objective'].includes(type) ? [type] : [])]);
       return { rows };

@@ -326,7 +326,7 @@ export async function runParticipantCases(t,control,clients){
       assert.equal(Object.isFrozen(context.resource),true);
       assert.doesNotMatch(JSON.stringify(context),/PRIVATE_|Synthetic structural|content|clinical_observations|priority|scheduled_time/);
     }
-    for(const sql of ['SELECT content FROM patient_clinical_notes','SELECT text FROM patient_tasks','SELECT notes FROM appointments','SELECT priority FROM appointment_waitlist_entries']){
+    for(const sql of ['SELECT content FROM patient_clinical_notes','SELECT text FROM patient_tasks','SELECT notes FROM appointments','SELECT priority_position FROM appointment_waitlist_entries']){
       await assert.rejects(reader.query(sql),error=>error.code==='42501');
     }
   });
