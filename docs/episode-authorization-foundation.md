@@ -1,5 +1,7 @@
 # Autorización interna por episodio — Primer incremento
 
+Actualización posterior a #48: [elegibilidad privada de notas individuales](private-note-read-eligibility.md) implementa revalidación transaccional acotada sin lectura operativa; esta página conserva su corte de entrega.
+
 Base verificada el 30 de octubre de 2026: main `10e94f7cd4904a9d9be716d69a153e0c71228f12` (merge [#46](https://github.com/japh113/plataformaPsicologia/pull/46)); el SHA completo se conserva en Git/PR. Rama `feat/episode-authorization-foundation`. Los Issues [#30](https://github.com/japh113/plataformaPsicologia/issues/30), [#31](https://github.com/japh113/plataformaPsicologia/issues/31), [#35](https://github.com/japh113/plataformaPsicologia/issues/35), [#36](https://github.com/japh113/plataformaPsicologia/issues/36) y [#39](https://github.com/japh113/plataformaPsicologia/issues/39) siguen abiertos; se contrastó también el backlog #28–#41. Este incremento autorizado implementa componentes privados, pruebas y las dos correcciones P3. No cierra esos Issues ni habilita clínica.
 
 Fuentes de producto: [ADR-030/031](product/decisions.md#adr-030--episodios-paralelos-pareja-y-derivación-por-tratamiento), [RN-27/28](product/business-rules.md), [dependencias 2A](product/roadmap.md#consolidación-2a--dependencias-y-entregas-acotadas), [privacidad canónica](patient-response-privacy.md#consolidación-2a--inventario-y-permisos-objetivo) y [008 y sus límites](clinical-episodes-foundation.md#implementación-del-incremento-008--sin-activación). No se redefinen acuerdos clínicos ni AB-37.
