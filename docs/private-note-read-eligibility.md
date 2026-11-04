@@ -6,6 +6,9 @@ Contrato aplicable: [ADR-030/031 y D10/D10.1/D12/D14/D16](product/decisions.md#a
 
 Actualización posterior a #51: [ADR-032 y 010](private-note-origins.md) aprueban e implementan únicamente procedencia PostgreSQL de originales nuevos. La decisión sobre ese subconjunto ya está tomada; los pasajes propuestos/históricos siguientes conservan su corte. El evaluador sigue desconectado de esa constancia: audiencia sin verificar, allowed:false, sin contenido ni acceso clínico positivo.
 
+
+Segundo incremento posterior a #53: [resolver de procedencia y privilegios 011](private-note-origin-resolver.md). La evidencia interna se mantiene separada de este evaluador; no cambia su audiencia ni habilita contenido.
+
 ## Capacidad implementada y salida privada
 
 [evaluatePrivateNoteRead](../backend/src/modules/episodes/episode.note-read.js) recibe un proveedor de conexiones seleccionado por el servidor, un token ordinario y exclusivamente episodio, ID de nota y operación `read`. Adquiere una conexión propia y gestiona BEGIN/COMMIT/ROLLBACK/release. No acepta actor, snapshot, versión de sesión, audiencia o concesiones aportadas por el llamador; no devuelve contexto ni identificadores. Se reutiliza el verificador JWT real de autenticación y sus restricciones HS256/contexto ordinario; el rol firmado no decide el rol efectivo.

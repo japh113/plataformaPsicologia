@@ -92,10 +92,19 @@
     "010 P2 parameters: database default replica is detected and a new LOGIN still cannot create an orphan",
     "010 P2 parameters: ordinary parameter grants preserve clean creation COMMIT IMMEDIATE and replay",
     "010 P2 parameters: unrelated parameter grantees do not change another database contract",
-    "010 P2 parameters: pre-fix 010 fingerprint is rejected without adoption or ledger repair"
+    "010 P2 parameters: pre-fix 010 fingerprint is rejected without adoption or ledger repair",
+    "011: fresh install exact restricted LOGIN evidence replay and downgrade denial",
+    "011: upgrade preserves historical ledger bytes rows and unknown legacy without backfill",
+    "011: parallel episodes other authors and couple A B remain exact and clinically denied",
+    "011: real sessions revoked suspended patients and backoffice never expose evidence or clinical projections",
+    "011: actual ACL PUBLIC SET ROLE and owner boundaries deny text history origins and enumeration",
+    "011: missing crossed invalid and duplicate provenance cannot become recognized evidence",
+    "011: privileges memberships SET-only owner function and PUBLIC drift reject without repair",
+    "011: late installation failure rolls back roles grants functions and ledger before retry"
   ],
   "additionalModules": [
     "backend/test/private-note-origins.cases.js",
-    "backend/test/private-note-parameters.cases.js"
+    "backend/test/private-note-parameters.cases.js",
+    "backend/test/private-note-origin-resolver.cases.js"
   ]
 }

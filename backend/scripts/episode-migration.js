@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import pg from 'pg';
+import { originResolverSecurityCatalog, verifyOriginResolverContract } from './note-origin-resolver-contract.js';
 import { accountLockSecurityCatalog, verifyAccountLockContract } from './account-lock-contract.js';
 import { privateNoteSecurityCatalog, verifyPrivateNoteContract } from './private-note-contract.js';
 
@@ -14,7 +15,7 @@ export async function loadMigrations(root = sqlRoot) {
     if (sha256(sql) !== entry.sha256) throw new Error('Incompatible file checksum: ' + entry.version);
     migrations.push({ ...entry, sql });
   }
-  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007,008,009,010') throw new Error('Incompatible migration versions');
+  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007,008,009,010,011') throw new Error('Incompatible migration versions');
   return migrations;
 }
 
@@ -189,6 +190,9 @@ export async function catalogChecksum(client) {
   if ((await client.query("SELECT to_regclass('public.clinical_note_private_origins') AS relation")).rows[0].relation) {
     results.push(...await privateNoteSecurityCatalog(client));
   }
+  if ((await client.query("SELECT to_regprocedure('public.recognize_private_note_origin_v1(bigint,bigint,text,text)') AS name")).rows[0].name) {
+    results.push(...await originResolverSecurityCatalog(client));
+  }
   return sha256(JSON.stringify(results));
 }
 
@@ -219,9 +223,9 @@ async function verifyProfessionalReviewView(client, migration) {
 }
 
 export async function migrate(client, { expectedDatabase, target = '003', accountReaderRole, privateNoteCreatorRole } = {}) {
-  if (!['003', '004', '005', '006', '007', '008', '009', '010'].includes(target)) throw new Error('Unsupported target version');
-  if (accountReaderRole !== undefined && (!['009','010'].includes(target) || typeof accountReaderRole !== 'string' || !accountReaderRole)) throw new Error('Explicit account reader is only supported for 009/010');
-  if (privateNoteCreatorRole !== undefined && (target !== '010' || typeof privateNoteCreatorRole !== 'string' || !privateNoteCreatorRole)) throw new Error('Explicit private note creator is only supported for 010');
+  if (!['003', '004', '005', '006', '007', '008', '009', '010', '011'].includes(target)) throw new Error('Unsupported target version');
+  if (accountReaderRole !== undefined && (!['009','010','011'].includes(target) || typeof accountReaderRole !== 'string' || !accountReaderRole)) throw new Error('Explicit account reader is only supported for 009/010/011');
+  if (privateNoteCreatorRole !== undefined && (!['010','011'].includes(target) || typeof privateNoteCreatorRole !== 'string' || !privateNoteCreatorRole)) throw new Error('Explicit private note creator is only supported for 010/011');
   const migrations = await loadMigrations();
   await client.query('BEGIN');
   try {
@@ -242,7 +246,7 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
         throw new Error('Incompatible recorded migration version/checksum: ' + row.version);
       }
     }
-    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007', '001,002,003,004,005,006,007,008', '001,002,003,004,005,006,007,008,009', '001,002,003,004,005,006,007,008,009,010'].includes(ledger.map(r => r.version).join(','))) {
+    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007', '001,002,003,004,005,006,007,008', '001,002,003,004,005,006,007,008,009', '001,002,003,004,005,006,007,008,009,010', '001,002,003,004,005,006,007,008,009,010,011'].includes(ledger.map(r => r.version).join(','))) {
       throw new Error('Incompatible or incomplete migration ledger');
     }
     if (ledger.length) {
@@ -252,8 +256,11 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
       if (applied.server_major !== major || applied.catalog_sha256 !== await catalogChecksum(client)) {
         throw new Error('Schema drift or incompatible PostgreSQL version; no SQL applied');
       }
-      if (applied.version >= '009') await verifyAccountLockContract(client, migrations[8], accountReaderRole);
-      if (applied.version === '010') await verifyPrivateNoteContract(client, migrations[9], privateNoteCreatorRole);
+      if (applied.version === '011') {
+        const reader = await verifyAccountLockContract(client, migrations[8], accountReaderRole, true);
+        await verifyOriginResolverContract(client, migrations[10], reader);
+      } else if (applied.version >= '009') await verifyAccountLockContract(client, migrations[8], accountReaderRole);
+      if (applied.version >= '010') await verifyPrivateNoteContract(client, migrations[9], privateNoteCreatorRole, applied.version === '011');
       if (applied.version >= '006') await verifyProfessionalReviewView(client, migrations[5]);
       if (applied.version === target) {
         await client.query('COMMIT');
@@ -268,6 +275,11 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
           await verifyAccountLockContract(client, migrations[8], accountReaderRole);
           await verifyPrivateNoteContract(client, next, privateNoteCreatorRole);
         }
+        if (next.version === '011') {
+          const reader = await verifyAccountLockContract(client, migrations[8], accountReaderRole, true);
+          await verifyOriginResolverContract(client, next, reader);
+          await verifyPrivateNoteContract(client, migrations[9], privateNoteCreatorRole, true);
+        }
         await client.query(`INSERT INTO psicopanel_schema_migrations(version,file_name,file_sha256,catalog_sha256,server_major)
           VALUES ($1,$2,$3,$4,$5)`, [next.version,next.file,next.sha256,await catalogChecksum(client),major]);
       }
@@ -277,6 +289,7 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
     const footprints = (await client.query(`SELECT
       EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND left(c.relname,13)='professional_') OR
       EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('reserve_professional_public_id','protect_professional_snapshot','preserve_professional_data','enforce_professional_profile_update','enforce_professional_validity_update','enforce_professional_photo_update','check_professional_pending_version')) OR
+      to_regprocedure('public.recognize_private_note_origin_v1(bigint,bigint,text,text)') IS NOT NULL OR
       to_regprocedure('public.lock_account_session(text)') IS NOT NULL OR
       to_regprocedure('public.create_private_clinical_note_v1(bigint,text,text,bigint,text)') IS NOT NULL OR
       to_regclass('public.clinical_note_private_origins') IS NOT NULL OR
@@ -319,6 +332,11 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
       if (next.version === '010') {
         await verifyAccountLockContract(client, migrations[8], accountReaderRole);
         await verifyPrivateNoteContract(client, next, privateNoteCreatorRole);
+      }
+      if (next.version === '011') {
+        const reader = await verifyAccountLockContract(client, migrations[8], accountReaderRole, true);
+        await verifyOriginResolverContract(client, next, reader);
+        await verifyPrivateNoteContract(client, migrations[9], privateNoteCreatorRole, true);
       }
       await client.query(`INSERT INTO psicopanel_schema_migrations(version,file_name,file_sha256,catalog_sha256,server_major)
         VALUES ($1,$2,$3,$4,$5)`, [next.version,next.file,next.sha256,await catalogChecksum(client),major]);

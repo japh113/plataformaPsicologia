@@ -97,7 +97,7 @@ const creatorInsert=['episode_id','patient_id','created_by_user_id','appointment
 const creatorRead={clinical_episodes:['id','status','psychologist_user_id'],
   clinical_episode_participants:['episode_id','patient_id','psychologist_user_id'],patient_clinical_notes:['id']};
 const verifierRead=['id','episode_id','patient_id','created_by_user_id'];
-export async function verifyPrivateNoteContract(client,migration,requestedCreator) {
+export async function verifyPrivateNoteContract(client,migration,requestedCreator,originResolver=false) {
   const fail=()=>{throw new Error('Schema drift or incompatible 010 private note security contract; no adoption or repair');};
   const {rows:[db]}=await client.query('SELECT oid FROM pg_database WHERE datname=current_database()');
   const creatorOwner='psicopanel_note_creator_owner_'+db.oid,verifierOwner='psicopanel_note_verifier_owner_'+db.oid;
@@ -151,7 +151,16 @@ export async function verifyPrivateNoteContract(client,migration,requestedCreato
     JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped
     WHERE c.oid='public.clinical_note_private_origins'::regclass`)).rows;
   const tableOwner=security[9].find(r=>r.relname==='patient_clinical_notes')?.owner;
-  if(!tableOwner || relationAcl.some(r=>r.owner!==tableOwner || r.attacl!==null))fail();
+  if(!tableOwner || relationAcl.some(r=>r.owner!==tableOwner || (!originResolver && r.attacl!==null)))fail();
+  if(originResolver) {
+    const columnGrants=(await client.query(`SELECT a.attname,r.rolname,g.privilege_type,g.is_grantable
+      FROM pg_attribute a CROSS JOIN LATERAL aclexplode(a.attacl) g
+      LEFT JOIN pg_roles r ON r.oid=g.grantee
+      WHERE a.attrelid='public.clinical_note_private_origins'::regclass AND a.attnum>0 AND NOT a.attisdropped`)).rows;
+    const resolverOwner='psicopanel_origin_resolver_owner_'+db.oid;
+    if(columnGrants.some(g=>g.rolname!==resolverOwner || g.privilege_type!=='SELECT' || g.is_grantable ||
+      !['note_id','episode_id','subject_patient_id','author_user_id','contract_version','registration_kind','registered_by_user_id'].includes(g.attname)))fail();
+  }
   const grants=(await client.query(`SELECT r.rolname,a.grantee,a.privilege_type,a.is_grantable
     FROM pg_class c CROSS JOIN LATERAL aclexplode(c.relacl) a LEFT JOIN pg_roles r ON r.oid=a.grantee
     WHERE c.oid='public.clinical_note_private_origins'::regclass`)).rows;

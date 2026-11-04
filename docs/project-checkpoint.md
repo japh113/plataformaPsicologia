@@ -92,6 +92,9 @@ El caso 6 de [private-note-parameters.cases.js](../backend/test/private-note-par
 
 **Siguiente incremento candidato, sin autorización de implementación:** reconocer internamente la procedencia privada de notas desde la constancia v1 de 010, conservando desconocidos denegados y `allowed:false`, sin texto clínico, nuevas lecturas clínicas, endpoints, permisos positivos, publicación ni activación. El contrato concreto deberá precisar cómo distinguir reconocimiento interno de audiencia operativa aún no habilitada; no cambiar `audienceVerified:false` por inferencia en esta entrega. [Secuencia propuesta tras #50](product/roadmap.md#propuesta-de-incrementos-de-audiencia-tras-50). No crear automáticamente ese PR técnico.
 
+
+**Encargo posterior a #53, aún sin integrar:** el propietario autorizó el segundo incremento. Base reconsultada `054abd1aebf0e200d11c2783914d1205ccd14bd9`; [resolver y 011 en Draft](private-note-origin-resolver.md), pendientes de CI y auditoría independiente de Work. La procedencia reconocida no cambia audiencia operativa, allowed:false, prepared ni despliegue. No inicia el siguiente incremento. Las tablas anteriores conservan su corte integrado.
+
 ## Flujo de desarrollo y actualización
 
 1. El propietario aprueba decisiones de producto y alcance concreto.

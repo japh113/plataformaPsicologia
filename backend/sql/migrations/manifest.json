@@ -48,5 +48,10 @@
     "version": "010",
     "file": "010_private_note_origins.sql",
     "sha256": "abca183d799eba7687d195fc5bd9de36f5ad4d9bb57bb094857e863e73c1fc15"
+  },
+  {
+    "version": "011",
+    "file": "011_private_note_origin_resolver.sql",
+    "sha256": "ac1ab3943559f4d6e2faec587bd4e9185e697404c2ff761b12606e32bf8cbfab"
   }
 ]
