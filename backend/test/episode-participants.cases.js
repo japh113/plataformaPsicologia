@@ -1,3 +1,7 @@
+import jwt from 'jsonwebtoken';
+import env from '../src/config/env.js';
+import {evaluatePrivateNoteRead} from '../src/modules/episodes/episode.note-read.js';
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -10,6 +14,20 @@ import {participantIdentities,preparedEpisode,participantGraph} from '../scripts
 import {resolveEpisodeContext} from '../src/modules/episodes/episode.context.js';
 import {authorizeEpisodeOperation,episodeOperations} from '../src/modules/episodes/episode.policy.js';
 import {projectEpisodeResource} from '../src/modules/episodes/episode.projections.js';
+
+const noteDenied=Object.freeze({structurallyEligible:false,audience:'unverified',eligible:false,allowed:false});
+const noteStructural=Object.freeze({...noteDenied,structurallyEligible:true});
+const noteToken=(sub,sv=0)=>jwt.sign({sub,sv,role:'psychologist'},env.jwtSecret,{expiresIn:'1h'});
+const noteDatabase=(client,afterQuery=null)=>({async getClient(){return {
+  async query(sql,params){const result=await client.query(sql,params);await afterQuery?.(sql);return result;},
+  release(){}, // test owns this independent connection; production checks out a fresh one.
+};}});
+const noteSnapshot=async client=>{
+  const tables=(await client.query("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename")).rows;
+  const result={};
+  for(const {tablename} of tables)result[tablename]=(await client.query('SELECT to_jsonb(t) AS data FROM public."'+tablename+'" t ORDER BY 1')).rows;
+  return result;
+};
 
 const structuralResource=async(client,episodeId,type,id,actor={id:'a',role:'psychologist',isActive:true,psychologistStatus:'active'},claims={})=>{
   const context=await resolveEpisodeContext(client,{actor,episodeId,operation:'read',resource:{...claims,type,id}});
@@ -402,4 +420,137 @@ export async function runParticipantCases(t,control,clients){
     assert.equal((await client.query('SELECT episode_id,created_by_user_id FROM patient_tasks WHERE id=$1',[task])).rows[0].created_by_user_id,null);
   });
 
+  await t.test('notes: persisted individual attribution is eligible structurally without audience, writes or operational access',async()=>{
+    const {client}=await fresh();
+    await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active'),('b','active')");
+    const first=await preparedEpisode(client),second=await preparedEpisode(client),third=await preparedEpisode(client,{professional:'b',creator:'b'});
+    const graph=await participantGraph(client,first);
+    const request={token:noteToken('a'),episodeId:first,noteId:graph.note,operation:'read'};
+    const before=await noteSnapshot(client);
+    assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),request),noteStructural);
+    for(const episodeId of [second,third,'9223372036854775807']){
+      assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),{...request,episodeId}),noteDenied);
+    }
+    assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),{...request,token:noteToken('b')}),noteDenied);
+    assert.deepEqual(await noteSnapshot(client),before);
+    const legacyAppointment=(await client.query("INSERT INTO appointments(patient_id,scheduled_date,scheduled_time,status) VALUES('p',CURRENT_DATE-5,'12:00','completed') RETURNING id")).rows[0].id;
+    const legacyNote=(await client.query("INSERT INTO patient_clinical_notes(patient_id,appointment_id,clinical_note_date) VALUES('p',$1,CURRENT_DATE-5) RETURNING id",[legacyAppointment])).rows[0].id;
+    const legacyBefore=await noteSnapshot(client);
+    assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),{...request,noteId:legacyNote}),noteDenied);
+    assert.deepEqual(await noteSnapshot(client),legacyBefore);
+    for(const table of ['clinical_record_history','clinical_episode_history','psicopanel_schema_migrations']){
+      assert.deepEqual((await noteSnapshot(client))[table],before[table]);
+    }
+    const context=await structuralResource(client,first,'note',graph.note);
+    assert.throws(()=>projectEpisodeResource({...context,...noteStructural},new Proxy({},{
+      get(){assert.fail('Eligibility must not read note content, observations, objectives, identifiers, history or derivatives');},
+      ownKeys(){assert.fail('Eligibility must not enumerate a row');},
+    })),{message:'Forbidden',status:403});
+  });
+  await t.test('notes: PostgreSQL account, approval and session revalidation overrides signed roles and cached eligibility',async()=>{
+    const {client}=await fresh(),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+    await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
+    const request={token:noteToken('a'),episodeId:id,noteId:graph.note,operation:'read'};
+    assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),request),noteStructural);
+    for(const status of ['suspended','rejected','pending_review']){
+      await client.query("UPDATE psychologist_profiles SET approval_status=$1 WHERE user_id='a'",[status]);
+      const sv=(await client.query("SELECT session_version FROM users WHERE id='a'")).rows[0].session_version;
+      assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),{...request,token:noteToken('a',sv)}),noteDenied);
+      await client.query("UPDATE psychologist_profiles SET approval_status='active' WHERE user_id='a'");
+      assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),request),noteDenied);
+    }
+    let sv=(await client.query("SELECT session_version FROM users WHERE id='a'")).rows[0].session_version;
+    assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),{...request,token:noteToken('a',sv)}),noteStructural);
+    await client.query("UPDATE users SET is_active=FALSE WHERE id='a'");
+    sv=(await client.query("SELECT session_version FROM users WHERE id='a'")).rows[0].session_version;
+    assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),{...request,token:noteToken('a',sv)}),noteDenied);
+    await client.query("UPDATE users SET is_active=TRUE WHERE id='a'");
+    for(const [actor,role] of [['extra_support','support'],['extra_superadmin','superadmin']]){
+      await client.query("INSERT INTO users(id,first_name,email,password_hash,role) VALUES($1,$1,$2,'synthetic',$3)",[actor,actor+'@notes.invalid',role]);
+    }
+    for(const actor of ['p','admin','extra_support','extra_superadmin','missing']){
+      assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),{...request,token:noteToken(actor)}),noteDenied);
+    }
+    await client.query("DELETE FROM psychologist_profiles WHERE user_id='a'");
+    sv=(await client.query("SELECT session_version FROM users WHERE id='a'")).rows[0].session_version;
+    assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),{...request,token:noteToken('a',sv)}),noteDenied);
+  });
+  await t.test('notes: column privileges enforce locking and metadata-only reads without text or history access',async()=>{
+    const {client,name}=await fresh(),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+    await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
+    const role='note_reader_'+randomUUID().replaceAll('-','');
+    await client.query('CREATE ROLE '+role+" LOGIN PASSWORD 'disposable_note_reader'");
+    await client.query('GRANT USAGE ON SCHEMA public TO '+role);
+    await client.query('GRANT SELECT(id,role,is_active,session_version) ON users TO '+role);
+    const reader=await connect(name,{user:role,password:'disposable_note_reader'});clients.push(reader);
+    const request={token:noteToken('a'),episodeId:id,noteId:graph.note,operation:'read'};
+    await assert.rejects(evaluatePrivateNoteRead(noteDatabase(reader),request),e=>e.code==='42501');
+    assert.equal((await reader.query('SELECT 1 AS alive')).rows[0].alive,1); // transaction rolled back
+    await client.query('GRANT UPDATE(session_version) ON users TO '+role);
+    await client.query('GRANT SELECT(user_id,approval_status) ON psychologist_profiles TO '+role);
+    await client.query('GRANT SELECT ON clinical_episodes,clinical_episode_participants TO '+role);
+    await assert.rejects(evaluatePrivateNoteRead(noteDatabase(reader),request),e=>e.code==='42501');
+    await client.query('GRANT SELECT(id,episode_id,patient_id,created_by_user_id,appointment_id) ON patient_clinical_notes TO '+role);
+    const before=await noteSnapshot(client);
+    assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(reader),request),noteStructural);
+    assert.deepEqual(await noteSnapshot(client),before);
+    for(const sql of ['SELECT content FROM patient_clinical_notes','SELECT clinical_observations FROM patient_clinical_notes','SELECT clinical_note_objective FROM patient_clinical_notes','SELECT previous_record FROM clinical_record_history']){
+      await assert.rejects(reader.query(sql),e=>e.code==='42501');
+    }
+  });
+  await t.test('notes: independent user revocations commit before evaluation and invalidate the locked session',async()=>{
+    for(const update of ["session_version=session_version+1","is_active=FALSE","password_hash='new-synthetic-hash'"]){
+      const {client,name}=await fresh(),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+      await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
+      const reader=await connect(name);
+      try{
+        const pid=(await reader.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+        await client.query('BEGIN');
+        await client.query("UPDATE users SET "+update+" WHERE id='a'");
+        const evaluating=evaluatePrivateNoteRead(noteDatabase(reader),{token:noteToken('a'),episodeId:id,noteId:graph.note,operation:'read'});
+        // Attach rejection handling immediately, even if a synchronization assertion fails.
+        const checked=evaluating.then(value=>assert.deepEqual(value,noteDenied));checked.catch(()=>{});
+        await waitForLock(control,pid);
+        await client.query('COMMIT');await checked;
+      }finally{await client.query('ROLLBACK');await reader.end();}
+    }
+  });
+  await t.test('notes: profile-first revocations serialize through users without profile lock inversion',async()=>{
+    for(const statement of ["UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id='a'","DELETE FROM psychologist_profiles WHERE user_id='a'"]){
+      const {client,name}=await fresh(),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+      await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
+      const reader=await connect(name);
+      try{
+        await client.query('BEGIN');await client.query(statement);
+        const pid=(await reader.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+        const checked=evaluatePrivateNoteRead(noteDatabase(reader),{token:noteToken('a'),episodeId:id,noteId:graph.note,operation:'read'}).then(value=>assert.deepEqual(value,noteDenied));checked.catch(()=>{});
+        await waitForLock(control,pid);await client.query('COMMIT');await checked;
+      }finally{await client.query('ROLLBACK');await reader.end();}
+    }
+  });
+  await t.test('notes: evaluator-first blocks profile trigger revocation until diagnostic transaction ends',async()=>{
+    const {client,name}=await fresh(),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+    await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
+    const writer=await connect(name);
+    let unlock;const gate=new Promise(resolve=>{unlock=resolve;});
+    let locked;const acquired=new Promise(resolve=>{locked=resolve;});
+    const request={token:noteToken('a'),episodeId:id,noteId:graph.note,operation:'read'};
+    const database=noteDatabase(client,async sql=>{
+      if(sql.includes('FROM public.users')){locked();await gate;}
+    });
+    const evaluating=evaluatePrivateNoteRead(database,request);evaluating.catch(()=>{});
+    let revoking;
+    try{
+      await Promise.race([acquired,evaluating.then(()=>assert.fail('Evaluation ended before account lock'))]);
+      const pid=(await writer.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      revoking=writer.query("UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id='a'");revoking.catch(()=>{});
+      await waitForLock(control,pid);
+      unlock();
+      // Plain MVCC profile read sees active while trigger is blocked on users.
+      // It never waits for the writer's profile lock and no content is read.
+      assert.deepEqual(await evaluating,noteStructural);await revoking;
+      assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),request),noteDenied);
+      assert.equal((await client.query("SELECT session_version FROM users WHERE id='a'")).rows[0].session_version,1);
+    }finally{unlock();await Promise.allSettled([evaluating,revoking]);await writer.end();}
+  });
 }

@@ -25,6 +25,12 @@
     "resources: same-patient parallel episodes and different professionals cannot reuse resource attribution",
     "resources: couple membership preserves the individual subject without reciprocal audience",
     "resources: PostgreSQL composite FKs reject incompatible note-appointment, task-note and authors",
-    "resources: legacy NULL attribution, missing rows and invalid identifiers never become episode facts"
+    "resources: legacy NULL attribution, missing rows and invalid identifiers never become episode facts",
+    "notes: persisted individual attribution is eligible structurally without audience, writes or operational access",
+    "notes: PostgreSQL account, approval and session revalidation overrides signed roles and cached eligibility",
+    "notes: column privileges enforce locking and metadata-only reads without text or history access",
+    "notes: independent user revocations commit before evaluation and invalidate the locked session",
+    "notes: profile-first revocations serialize through users without profile lock inversion",
+    "notes: evaluator-first blocks profile trigger revocation until diagnostic transaction ends"
   ]
 }

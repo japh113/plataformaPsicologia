@@ -1,5 +1,7 @@
 # Recursos individuales verificables por episodio
 
+Actualización posterior a #48: [elegibilidad privada de notas individuales](private-note-read-eligibility.md) implementa revalidación transaccional acotada sin lectura operativa; esta página conserva su corte de entrega.
+
 Base comprobada: main `ef5aa7c2a5aadd47997df0dd91197caaf7e0a9c2`, integración de [#47](https://github.com/japh113/plataformaPsicologia/pull/47). Los Issues [#30](https://github.com/japh113/plataformaPsicologia/issues/30), [#31](https://github.com/japh113/plataformaPsicologia/issues/31), [#35](https://github.com/japh113/plataformaPsicologia/issues/35), [#36](https://github.com/japh113/plataformaPsicologia/issues/36) y [#39](https://github.com/japh113/plataformaPsicologia/issues/39) fueron reconsultados y permanecen abiertos. Este incremento implementa únicamente resolución estructural privada y pruebas, sin cerrar esos contratos.
 
 Se conservan [ADR-030/031](product/decisions.md#adr-031--consolidación-clínica-2a-y-admisión-en-dos-modalidades), RN-27/28, [privacidad](patient-response-privacy.md#consolidación-2a--inventario-y-permisos-objetivo), [fundamentos 008](clinical-episodes-foundation.md#implementación-del-incremento-008--sin-activación) y la [matriz completa de transición legacy](episode-authorization-foundation.md#matriz-técnica-de-transición). AB-37 y D20 no se modifican.
