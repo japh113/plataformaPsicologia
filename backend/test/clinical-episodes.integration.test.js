@@ -1,4 +1,6 @@
 import test from 'node:test';
+import { runPrivateNoteParameterCases } from './private-note-parameters.cases.js';
+import { runPrivateNoteCases } from './private-note-origins.cases.js';
 import { runParticipantCases } from './episode-participants.cases.js';
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
@@ -324,6 +326,8 @@ test('003: isolated PostgreSQL installation, integrity, races, drift and rollbac
       assert.deepEqual(await snapshot(client), before);
     });
     await runParticipantCases(t, control, clients);
+    await runPrivateNoteCases(t, control);
+    await runPrivateNoteParameterCases(t, control);
   } finally {
     for (const client of clients) await client.end();
     await control.end();

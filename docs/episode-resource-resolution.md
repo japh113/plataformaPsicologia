@@ -6,6 +6,8 @@ Base comprobada: main `ef5aa7c2a5aadd47997df0dd91197caaf7e0a9c2`, integración d
 
 Se conservan [ADR-030/031](product/decisions.md#adr-031--consolidación-clínica-2a-y-admisión-en-dos-modalidades), RN-27/28, [privacidad](patient-response-privacy.md#consolidación-2a--inventario-y-permisos-objetivo), [fundamentos 008](clinical-episodes-foundation.md#implementación-del-incremento-008--sin-activación) y la [matriz completa de transición legacy](episode-authorization-foundation.md#matriz-técnica-de-transición). AB-37 y D20 no se modifican.
 
+Actualización posterior a #51: [010](private-note-origins.md) registra procedencia privada en PostgreSQL para originales nuevos, sin conectarla a este resolver. Aquí se conservan audience:null y audienceVerified:false, sin consulta de constancias ni cambios de proyección/permisos.
+
 ## Fuente de verdad y contrato privado
 
 [resolveEpisodeContext](../backend/src/modules/episodes/episode.context.js) verifica cabecera/CEP y llama a [resolveEpisodeResource](../backend/src/modules/episodes/episode.resource.js). El llamador interno selecciona solo `resource.type` e `id`; `episodeId,subjectPatientId,authorUserId,state,audience` del descriptor no se leen como prueba, ni siquiera mediante getters. El episodio solicitado es un parámetro separado y obligatorio para resolver recursos.

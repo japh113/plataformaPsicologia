@@ -4,6 +4,8 @@ Antecedente #49, verificado el 3 de noviembre de 2026: `origin/main` `3206b38a5d
 
 Contrato aplicable: [ADR-030/031 y D10/D10.1/D12/D14/D16](product/decisions.md#adr-031--consolidación-clínica-2a-y-admisión-en-dos-modalidades), [RN-27/28](product/business-rules.md), [inventario de privacidad](patient-response-privacy.md#consolidación-2a--inventario-y-permisos-objetivo), [resolución de recursos](episode-resource-resolution.md) y [frontera denegadora y transición completa legacy](episode-authorization-foundation.md#matriz-técnica-de-transición). No se modifican decisiones clínicas, AB-37 ni contratos de archivo.
 
+Actualización posterior a #51: [ADR-032 y 010](private-note-origins.md) aprueban e implementan únicamente procedencia PostgreSQL de originales nuevos. La decisión sobre ese subconjunto ya está tomada; los pasajes propuestos/históricos siguientes conservan su corte. El evaluador sigue desconectado de esa constancia: audiencia sin verificar, allowed:false, sin contenido ni acceso clínico positivo.
+
 ## Capacidad implementada y salida privada
 
 [evaluatePrivateNoteRead](../backend/src/modules/episodes/episode.note-read.js) recibe un proveedor de conexiones seleccionado por el servidor, un token ordinario y exclusivamente episodio, ID de nota y operación `read`. Adquiere una conexión propia y gestiona BEGIN/COMMIT/ROLLBACK/release. No acepta actor, snapshot, versión de sesión, audiencia o concesiones aportadas por el llamador; no devuelve contexto ni identificadores. Se reutiliza el verificador JWT real de autenticación y sus restricciones HS256/contexto ordinario; el rol firmado no decide el rol efectivo.

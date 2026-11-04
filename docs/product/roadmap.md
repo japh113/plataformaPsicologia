@@ -224,11 +224,11 @@ Aprovisionamiento operativo de rol/conexión/destino y compatibilidad de escrito
 
 ### Propuesta de incrementos de audiencia tras #50
 
-**Propuesta documental pendiente de aprobación del propietario**, base `main` `9f6884c35ca4a5a41f6416a6d93640df5973eeba` con #50 integrado. Fuente de alternativas A/B/C, esquema, matriz, riesgos y aceptación: [contrato de audiencia verificable](../patient-response-privacy.md#propuesta-2a--contrato-de-audiencia-verificable). No crea reglas funcionales nuevas ni cierra #30/#35/#36/#39/#41.
+**Antecedente documental #51; el subconjunto inicial está aprobado por [ADR-032](decisions.md#adr-032--original-profesional-privado-y-procedencia-técnica-v1) e implementado internamente en [010](../private-note-origins.md).** Los incrementos restantes requieren autorización propia. Base `main` `9f6884c35ca4a5a41f6416a6d93640df5973eeba` con #50 integrado. Fuente de alternativas A/B/C, esquema, matriz, riesgos y aceptación: [contrato de audiencia verificable](../patient-response-privacy.md#propuesta-2a--contrato-de-audiencia-verificable). No crea reglas funcionales nuevas ni cierra #30/#35/#36/#39/#41.
 
 Secuencia de encargos separados propuesta:
 
-1. Persistencia de evidencia privada para originales nuevos: contrato v1, inscripción atómica, FK/escritores restringidos e integridad mediante sucesora revisada, sin modificar 001–009. Primer valor técnico bajo prepared en PostgreSQL nuevo aislado/vacío autorizado; sin backfill, lectura o activación.
+1. **Implementado internamente en esta rama, sin flujo operativo:** persistencia de evidencia privada para originales nuevos: contrato v1, inscripción atómica, FK/escritores restringidos e integridad mediante sucesora revisada, sin modificar 001–009. Contrato v1 y solución P2 del verificador diferido en [procedencia privada](../private-note-origins.md). Ensayos bajo prepared en PostgreSQL nuevo aislado autorizado; sin backfill, lectura o activación.
 2. Resolver interno de notas: acreditar audiencia desde esa evidencia; desconocidos denegados, allowed:false, sin proyección de texto.
 3. Versiones/clasificación/destinatarios y revocaciones de materiales, cuando se aprueben capacidad/política. Puede empezar con material nuevo sin datos privados; derivados de notas esperan #35 y autorizaciones/revisión aplicables.
 4. Proyección interna transaccional de un dominio, con versión estable, estados/permisos aprobados, guardas/roles y todos sus escritores/revocadores. No reutilizar el diagnóstico post-COMMIT de #49/#50 para consultar después.
