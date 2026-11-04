@@ -37,6 +37,8 @@ Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AG
 
 ## Seguridad, procedimientos y evidencia conservados
 
+- [Primer incremento de seguridad pública de autenticación](public-auth-hardening.md): correo acotado, política local de solicitudes, límites operativos y pruebas; entrega Draft sin despliegue.
+
 - [clinical-data-integrity.md](clinical-data-integrity.md): política y evidencia de 001; distinguir edición versionada actual de objetivo de adendas.
 - [authentication-security.md](authentication-security.md): contratos 002 y evidencia histórica, con nota de actualización de roles #7.
 - [clinical-episodes-foundation.md](clinical-episodes-foundation.md): SQL/runner 003, destinos explícitos y aislamiento; no activa permisos por episodio.

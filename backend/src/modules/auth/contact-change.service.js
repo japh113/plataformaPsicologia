@@ -1,3 +1,4 @@
+import { isValidEmail } from './email.validation.js';
 import { randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import db from '../../config/db.js';
@@ -87,7 +88,7 @@ export async function startContactChange(actor,payload) {
   only(payload,['operationId','channel','contact','password','replaceRequestId']);
   if (!uuid(payload.operationId) || !['email','sms'].includes(payload.channel) || (payload.replaceRequestId && !uuid(payload.replaceRequestId))) throw fail('Solicitud de cambio inválida.');
   const candidate=payload.channel==='email'?normalizeEmail(payload.contact):normalizePhone(payload.contact);
-  if (!candidate || (payload.channel==='email' && (candidate.length>254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate)))) throw fail('Introduce un correo válido o un teléfono con prefijo internacional.');
+  if (!candidate || (payload.channel==='email' && !isValidEmail(candidate))) throw fail('Introduce un correo válido o un teléfono con prefijo internacional.');
   ensurePatientIdentityOwner(actor);
   assertDeliveryConfigured();
   return withIdentity(actor,async(client,identity,now)=>{
