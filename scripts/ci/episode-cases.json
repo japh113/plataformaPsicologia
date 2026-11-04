@@ -53,6 +53,36 @@
     "009 P2-01 F: clean PostgreSQL permits ordinary PUBLIC functions and install replay with minimum roles",
     "009 P2-01 G: inherited SET-only administrative roles and routine ownership remain incompatible",
     "009 P2-01: unsafe PUBLIC capabilities before installation are rejected instead of fingerprinted as safe",
-    "009 P2-01: audited pre-fix fingerprint is rejected without ledger adoption on a clean installation"
+    "009 P2-01: audited pre-fix fingerprint is rejected without ledger adoption on a clean installation",
+    "010: frozen 009 fingerprints and security rules remain valid before upgrade",
+    "010: fresh full-chain installation replay downgrade and metadata-only ledger",
+    "010: 009 upgrade preserves unknown legacy and previously attributed rows without backfill",
+    "010: restricted real LOGIN atomically creates exact private provenance at COMMIT",
+    "010: wrong episode patient author appointment status and future date leave no rows",
+    "010: direct attributed writers and forged session variables cannot mint provenance",
+    "010: no late duplicate foreign or legacy registration capability is exposed",
+    "010: composite FKs unique keys NOT NULL and version checks independently reject forged tuples",
+    "010: provenance UPDATE DELETE TRUNCATE and all current accredited note edits are blocked",
+    "010: note insertion and origin insertion failures roll back the entire statement",
+    "010: missing materialization fails deferred COMMIT under the dedicated verifier identity",
+    "010: SET CONSTRAINTS after creator return detects missing provenance and rolls back",
+    "010: IMMEDIATE before insertion and after creator return both validate without reader write grants",
+    "010: explicit rollback and verifier errors remove both note and provenance",
+    "010: creator reader PUBLIC and restricted owners have only their specified effective capabilities",
+    "010: application connections cannot alter owners functions constraints or trigger execution",
+    "010: parallel individuals different professionals and couple A B originals remain separate and denied",
+    "010: function owner ACL membership inherited and column drift reject replay without repair",
+    "010: incompatible ledger is rejected without repairing hashes or privileges",
+    "010: late migration failure rolls back DDL roles grants and ledger before clean retry",
+    "010: caller temporary objects cannot shadow legacy appointment checks or origin tables",
+    "010: unsafe missing configured or assumable creator roles are rejected without adoption",
+    "010: source checksum tampering is rejected before any database operation",
+    "010: unsafe default table grants fail the new contract and roll back without reinterpreting 009",
+    "010: actual CLI requires explicit destination and creator then installs and replays",
+    "010: untracked private-origin footprints are refused before foundation adoption",
+    "010: concurrent independent migration connections serialize installation and verified replay"
+  ],
+  "additionalModules": [
+    "backend/test/private-note-origins.cases.js"
   ]
 }

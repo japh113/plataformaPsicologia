@@ -114,13 +114,13 @@ def inventory(report,files):
     contract=json.loads(Path('scripts/ci/episode-cases.json').read_text())
     required=[]
     if Path(contract['entrypoint']) in [Path(p) for p in files]:
-        module=Path(contract['module'])
-        source=module.read_text()
+        modules=[Path(contract['module'])]+[Path(p) for p in contract.get('additionalModules',[])]
+        source='\n'.join(module.read_text() for module in modules)
         declared=re.findall(r"await t\.test\('([^']+)'",source)
         required=contract['cases']
         if len(declared)!=len(set(declared)) or set(declared)!=set(required):
             raise ValueError('Imported case declarations differ from mandatory catalog')
-        files.append(module)
+        files.extend(modules)
     expected=set()
     for file in files:
         source=Path(file).read_text()

@@ -91,6 +91,8 @@ class Contracts(unittest.TestCase):
         report={'tests':[{'name':name,'status':'passed'} for name in names]}
         complete=inventory(copy.deepcopy(report),[entry])
         self.assertIn(str(module),complete['sourceFiles'])
+        for extra in catalog.get('additionalModules',[]):
+            self.assertIn(str(Path(extra)),complete['sourceFiles'])
         self.assertTrue(set(catalog['cases']).issubset(complete['declaredCases']))
         for missing in catalog['cases']:
             omitted=copy.deepcopy(report)
