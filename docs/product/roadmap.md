@@ -222,6 +222,20 @@ La [corrección P2-01](../private-note-read-eligibility.md#corrección-p2-01--pr
 
 Aprovisionamiento operativo de rol/conexión/destino y compatibilidad de escritores siguen pendientes bajo #36. Sin instalación habitual, lectura de contenido, permisos positivos, activación, nuevas rutas, publicación ni corte parcial del fallback. Audiencia verificable y autorización/proyección clínica transaccional requieren entregas propias.
 
+### Propuesta de incrementos de audiencia tras #50
+
+**Propuesta documental pendiente de aprobación del propietario**, base `main` `9f6884c35ca4a5a41f6416a6d93640df5973eeba` con #50 integrado. Fuente de alternativas A/B/C, esquema, matriz, riesgos y aceptación: [contrato de audiencia verificable](../patient-response-privacy.md#propuesta-2a--contrato-de-audiencia-verificable). No crea reglas funcionales nuevas ni cierra #30/#35/#36/#39/#41.
+
+Secuencia de encargos separados propuesta:
+
+1. Persistencia de evidencia privada para originales nuevos: contrato v1, inscripción atómica, FK/escritores restringidos e integridad mediante sucesora revisada, sin modificar 001–009. Primer valor técnico bajo prepared en PostgreSQL nuevo aislado/vacío autorizado; sin backfill, lectura o activación.
+2. Resolver interno de notas: acreditar audiencia desde esa evidencia; desconocidos denegados, allowed:false, sin proyección de texto.
+3. Versiones/clasificación/destinatarios y revocaciones de materiales, cuando se aprueben capacidad/política. Puede empezar con material nuevo sin datos privados; derivados de notas esperan #35 y autorizaciones/revisión aplicables.
+4. Proyección interna transaccional de un dominio, con versión estable, estados/permisos aprobados, guardas/roles y todos sus escritores/revocadores. No reutilizar el diagnóstico post-COMMIT de #49/#50 para consultar después.
+5. Integración completa de lectores/escritores/derivados y retirada coordinada del fallback antes de habilitar operaciones. Conservar AB-23 y permisos actuales hasta el corte integral probado.
+
+Prepared permite evidencia/denegación internas, sin permiso de admisión ni clínica. Admisión limitada necesita contrato/consentimientos propios; activación mantiene entrevista propia suficiente y validada backend/DB por cada integrante. Archivo/estados/adendas #35/2B, divulgación 2C y revisión jurídica dependiente conservan sus puertas propias. D12–D16 no amplían automáticamente MVP; sin editor avanzado, intercambio general, ARCO, proveedores o despliegue por este diseño. La [matriz de futuros PR y pruebas](../patient-response-privacy.md#implementación-posterior-propuesta-y-aceptación) delimita cierre por incremento, sin tests ejecutables de contrato pendiente.
+
 ## Etapa 2B — Derivación con resumen, cambio directo y pausas/cierre
 
 **Delimitación ADR-030, pendiente:** derivaciones por tratamiento, sin alterar otros episodios de ninguno de sus participantes. Pareja requiere confirmación expresa de ambos pacientes y requisitos profesionales/resumen revisable de la vía vigente; autorización adicional separada. Negativa impide completar y resolución posterior sigue abierta AB-33. Planificar historia/autoría inmutables y agenda del tratamiento: voluntariedad, abandono definitivo y distinción pausa/cierre/inasistencia aprobados; procedimiento AB-28/29 pendiente, sin extender unilateralidad individual a pareja. Depende de participantes, privacidad y permisos seguros de 2A; confidencialidad AB-30 y entrevista AB-32 bloquean sus respectivos flujos.
