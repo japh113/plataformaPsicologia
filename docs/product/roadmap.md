@@ -218,6 +218,8 @@ La CI del Draft PR realizará su matriz habitual y se consulta por su HEAD; esta
 
 Incremento técnico posterior a #49, base main `50969e5957c4165bfd18a02b68805d9252a0abfa`: [009 y evaluador interno](../private-note-read-eligibility.md#2a-sec--revocaciones-con-privilegios-mínimos) encapsulan FOR SHARE bajo propietario NOLOGIN restringido y EXECUTE del lector, sin UPDATE directo de users/session_version. Incluye huella sucesora conservando 003–008, instalación/upgrade vacío aislado, negativos efectivos de ACL/abuso y carreras PostgreSQL con locks hasta COMMIT/ROLLBACK. Su cierre técnico se justifica por la evidencia del HEAD del Draft; no declara resuelta la autorización integral de 2A ni cierra #30/#35/#36/#39.
 
+La [corrección P2-01](../private-note-read-eligibility.md#corrección-p2-01--privilegios-administrativos-de-rutinas) amplía exclusivamente el contrato 009 a ACL y permisos efectivos de rutinas administrativas en todos los esquemas, sin adoptar huellas 009 previas ni ampliar permisos clínicos. La evidencia del HEAD auditado anterior conserva su alcance histórico.
+
 Aprovisionamiento operativo de rol/conexión/destino y compatibilidad de escritores siguen pendientes bajo #36. Sin instalación habitual, lectura de contenido, permisos positivos, activación, nuevas rutas, publicación ni corte parcial del fallback. Audiencia verificable y autorización/proyección clínica transaccional requieren entregas propias.
 
 ## Etapa 2B — Derivación con resumen, cambio directo y pausas/cierre
