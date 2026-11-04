@@ -413,6 +413,16 @@ Fuente de esta tabla: resúmenes funcionales confirmados expresamente por el pro
 
 **Pendientes delimitados:** publicación de aportaciones privadas y protección de terceros; visibilidad recíproca de realización de tareas conjuntas; alcance del permiso de admisión dirigida y consentimientos aplicables; lectura profesional tras cancelación/admisión cerrada; mínimos clínicos de plantilla; archivo/identidad vigente; mecanismos de D09.1/D10.1, incluida trazabilidad/conservación diferenciada del texto descartado y procedimiento excepcional auditado; duplicados de pareja pausada AB-37; elegibilidad/retención D13 y procedimientos D18–D20. La regla funcional de resolución de borradores al cierre ya está aprobada en D10.1. No reabrir los principios aprobados para resolver mecanismos. D07/D12–D20 no constituyen dictamen jurídico ni obligación automática de implementar cada flujo en 2A.
 
+## ADR-032 — Original profesional privado y procedencia técnica v1
+
+**Estado: APROBADA por decisión expresa del propietario en el encargo de primera implementación posterior a #51.** Base `main` `9c31900dd1fed3b7c277eff00b781ef1a7415db6`. Complementa ADR-030/031, D10/D10.1 y D12–D16, sin alterar sus dependencias ni aprobar D21.
+
+1. **Modelo híbrido C mínimo:** las notas clínicas originales son documentación profesional privada. Futuros materiales destinados a pacientes serán recursos separados, sin publicar ni modificar el original. No se autoriza todavía un sistema de documentos compartidos.
+2. **Procedencia técnica verificable v1:** una nota nueva creada mediante el mecanismo restringido nace atómicamente con constancia persistente del contrato privado, episodio, paciente y autor correspondientes. Esta evidencia no prueba identidad humana ni consentimiento. Legacy y notas creadas fuera del mecanismo permanecen desconocidas; sin inscripción retroactiva ni clasificación por DEFAULT.
+3. **Desarrollo incremental:** se autoriza exclusivamente la protección PostgreSQL interna y pruebas ficticias aisladas. Se mantienen prepared, allowed:false, audiencia operativa sin verificar y HTTP/frontend actuales. Resolver de audiencia, lectura positiva, edición privada/finalización/adendas #35, documentos destinados/publicación/revocación y consentimiento requieren incrementos posteriores autorizados.
+
+[Contrato v1, roles, validador diferido, migración 010 y matriz de pruebas](../private-note-origins.md). Implementación en esta rama, sin instalación habitual ni despliegue. La privacidad del original no significa contenido finalizado: bloquear escritores legacy sobre las notas acreditadas no implementa el ciclo de #35 ni congela las notas antiguas. El resto del diseño documental de #51 conserva carácter propuesto.
+
 ## Resolución D1 — Persistencia y división interna
 
 **Antecedente aprobado para D1:** D1 fundamentos privados/006, D2 gestión privada y estado restringido, D3 directorio; en ese encargo solo D1 autorizado en rama nueva, pruebas nuevas aisladas y PR Draft sin merge. [Contrato y mecanismos concretos](../professional-persistence.md). No se aprueban API, autenticación o publicación por implicación.
