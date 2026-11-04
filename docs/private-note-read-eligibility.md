@@ -1,6 +1,6 @@
 # Elegibilidad interna de lectura privada de notas individuales
 
-Base verificada el 3 de noviembre de 2026: `origin/main` `3206b38a5d013d6682f9f4ee27c6d83cd67d8e3a`, merge [#48](https://github.com/japh113/plataformaPsicologia/pull/48). Los Issues [#30](https://github.com/japh113/plataformaPsicologia/issues/30), [#35](https://github.com/japh113/plataformaPsicologia/issues/35), [#36](https://github.com/japh113/plataformaPsicologia/issues/36) y [#39](https://github.com/japh113/plataformaPsicologia/issues/39) siguen abiertos. Este incremento no los resuelve.
+Antecedente #49, verificado el 3 de noviembre de 2026: `origin/main` `3206b38a5d013d6682f9f4ee27c6d83cd67d8e3a`, merge [#48](https://github.com/japh113/plataformaPsicologia/pull/48). Los Issues [#30](https://github.com/japh113/plataformaPsicologia/issues/30), [#35](https://github.com/japh113/plataformaPsicologia/issues/35), [#36](https://github.com/japh113/plataformaPsicologia/issues/36) y [#39](https://github.com/japh113/plataformaPsicologia/issues/39) siguen abiertos. Este incremento no los resuelve. El contrato sucesor [2A-SEC/009](#2a-sec--revocaciones-con-privilegios-mínimos) elimina el UPDATE directo del lector; las cifras de #49 al final conservan su alcance histórico.
 
 Contrato aplicable: [ADR-030/031 y D10/D10.1/D12/D14/D16](product/decisions.md#adr-031--consolidación-clínica-2a-y-admisión-en-dos-modalidades), [RN-27/28](product/business-rules.md), [inventario de privacidad](patient-response-privacy.md#consolidación-2a--inventario-y-permisos-objetivo), [resolución de recursos](episode-resource-resolution.md) y [frontera denegadora y transición completa legacy](episode-authorization-foundation.md#matriz-técnica-de-transición). No se modifican decisiones clínicas, AB-37 ni contratos de archivo.
 
@@ -27,14 +27,14 @@ El inventario identifica `content,clinicalObservations,clinicalNoteObjective,nex
 
 Por tanto, se conserva la resolución de #48: `audience:null,audienceVerified:false`, normalizada a `unverified` en el resultado. Se rechaza audiencia desconocida, dirigida al paciente o compartida. Ni el token ni argumentos adicionales pueden cambiarla. No se consulta ni se presume una concesión externa; esta evaluación tampoco es una vía de transferencia o publicación.
 
-**Decisión necesaria para ampliar este subconjunto:** aprobar una clasificación verificable por registro/documento, su procedencia, custodia, inmutabilidad/versionado y coordinación con futuras publicaciones/revocaciones; o aprobar explícitamente un contrato de tipo exclusivamente privado que haga imposible mezclar categorías. No se introduce persistencia adicional, tabla genérica de concesiones, nueva migración ni valor privado supuesto. La lectura operativa sigue bloqueada también por prepared y por la frontera pública.
+**Decisión necesaria para ampliar este subconjunto:** aprobar una clasificación verificable por registro/documento, su procedencia, custodia, inmutabilidad/versionado y coordinación con futuras publicaciones/revocaciones; o aprobar explícitamente un contrato de tipo exclusivamente privado que haga imposible mezclar categorías. No se introduce persistencia de audiencias, tabla genérica de concesiones ni valor privado supuesto. 009 incorpora exclusivamente el mecanismo de bloqueo y sus privilegios. La lectura operativa sigue bloqueada también por prepared y por la frontera pública.
 
 ## Revalidación y concurrencia
 
 READ COMMITTED se elige expresamente: BEGIN por sí solo **no** aporta una instantánea estable. La garantía procede del lock de cuenta y de las invariantes 001/003/008, no de reutilizar un contexto anterior.
 
 1. Verificar firma, contexto ordinario y sv del token antes de adquirir conexión. IDs inválidos, operaciones distintas de read y tokens inválidos no consultan DB.
-2. BEGIN ISOLATION LEVEL READ COMMITTED; seleccionar de users solamente ID, rol, actividad y session_version con **FOR SHARE**. KEY SHARE no basta: permitiría una actualización no clave de session_version.
+2. BEGIN ISOLATION LEVEL READ COMMITTED; invocar public.lock_account_session($1::text) de 009 para obtener exclusivamente ID, rol, actividad y session_version con **FOR SHARE**, en esa misma conexión/transacción. KEY SHARE no basta: permitiría una actualización no clave de session_version.
 3. Leer user_id/approval_status de psychologist_profiles mediante SELECT ordinario, sin lock de fila; comprobar aprobación active, cuenta y versión contra el token mediante los contratos existentes. Sin aprobación o sesión vigente no se resuelve clínica.
 4. Resolver de nuevo cabecera, CEP y nota con las consultas explícitas existentes, sin texto, observaciones, objetivos, historia, agregados ni vínculos globales.
 5. Revalidar firma/caducidad del token tras las esperas y consultas; evaluar solo los hechos recién leídos. COMMIT y devolver exclusivamente diagnóstico denegador; los errores SQL/ACL/locks provocan rollback, liberación y propagación sin fallback.
@@ -53,7 +53,7 @@ En cambio, todo abandono de active, eliminación del perfil activo o cambio de s
 | Edición concurrente de texto profesional | No se lee texto ni versión; solo atribución inmutable. Este contrato no permite proyectar contenido ni afirmar una versión estable. |
 | Audiencia/publicación/consentimiento | Sin evidencia persistida, resultado unverified y denegación. Su futura mutación requiere contrato propio. |
 
-El lock exige SELECT de las columnas leídas y privilegio UPDATE en al menos una columna de users según PostgreSQL; las pruebas conceden únicamente UPDATE(session_version) a un rol efímero del sandbox. El evaluador no ejecuta UPDATE, reparaciones ni DDL. No se alteran privilegios del entorno habitual.
+PostgreSQL exige SELECT de las columnas leídas y UPDATE en alguna columna para FOR SHARE. #49 concedía UPDATE(session_version) a un lector efímero; esa dependencia queda sustituida por 009: solo el propietario NOLOGIN posee ese UPDATE y el lector invoca la función fija con EXECUTE. El evaluador no ejecuta UPDATE, reparaciones ni DDL. No se alteran privilegios del entorno habitual.
 
 **Frontera temporal:** el diagnóstico devuelto después de COMMIT no sigue siendo evidencia vigente ni puede almacenarse como grant. No hay ventana de lectura clínica porque el incremento no consulta contenido y todas las proyecciones siguen denegadas. Antes de habilitar una lectura futura se deberá implementar autorización, consulta de la versión autorizada y proyección dentro de la misma transacción protegida, reteniendo los locks hasta terminar; además, coordinar todos los escritores nuevos de ciclo de vida, audiencia y revocación. No basta añadir una rama allowed:true ni consultar texto después de esta función. Las garantías futuras no se presentan como implementadas.
 
@@ -74,7 +74,7 @@ python3 -B -m unittest discover -s scripts/ci -p 'test_*.py'
 bash scripts/clinical-episodes.sh test
 ```
 
-## Evidencia y dependencias de habilitación
+## Evidencia histórica de #49 y dependencias de habilitación
 
 Ejecución local nueva del 3 de noviembre de 2026: 11/11 contratos offline CI; arnés completo con 47/47 tests de episodios, 136/136 unitarias backend, 133/133 de integración y 64/64 frontend; lint/build aprobados. Cero fallos, cancelaciones u omisiones. El build conserva el aviso existente de bundle mayor de 500 kB. También pasaron 25/25 unitarias privadas sin dependencias con Node Windows v25.9.0.
 
@@ -83,3 +83,66 @@ Destino propio: proyecto Docker `psicopanel-episodes-4e87a099-f531-4041-87ab-ab3
 La evidencia CI se registra en el Draft PR y en los resultados del HEAD exacto. Los informes #46–#48 conservan sus cortes históricos. No confundir pruebas sintéticas positivas, diagnóstico estructural real y acceso operativo inexistente.
 
 Quedan pendientes audiencia verificable, autorización operativa y versión/proyección bajo transacción, estados y escritores clínicos compatibles, archivo propio, notas finales/adendas #35, admisión/entrevista validada backend/DB y retirada coordinada de **todos** los lectores/fallback legacy. No se reutiliza este evaluador desde pacientes, citas, tareas, espera o recordatorios. AB-23, privacidad #25, objetivos #26, seguimiento #27, backoffice y rutas HTTP actuales permanecen intactos. Se conservan SQL 001–008, manifiesto/hashes, frontend y lockfiles. Sin migración habitual, merge, auto-merge o despliegue.
+
+## 2A-SEC — Revocaciones con privilegios mínimos
+
+Base de este incremento: main `50969e5957c4165bfd18a02b68805d9252a0abfa`, merge [#49](https://github.com/japh113/plataformaPsicologia/pull/49), comprobado el 3 de noviembre de 2026. Se revisaron #46–#49, backlog #28–#41 y #36. Las cifras anteriores son evidencia histórica de #49.
+
+### Opciones consideradas antes de codificar
+
+- SECURITY DEFINER con consulta fija FOR SHARE, propietario NOLOGIN dedicado y lector LOGIN explícito sin membresías: opción seleccionada, inicialmente sujeta a pruebas reales. Conserva los revocadores 002/007 y la transacción del llamador; encapsula el UPDATE exigido por PostgreSQL.
+- UPDATE directo del lector: descartado porque permite alterar arbitrariamente session_version y agotar el entero, afectando revocaciones posteriores.
+- FOR KEY SHARE: no bloquea las actualizaciones no clave de la versión.
+- Advisory locks: exigirían adaptar todos los escritores, incluidos triggers y SQL directo; por sí solos no conservan la barrera existente.
+- Conexión separada o snapshot sin lock: no conserva la protección hasta el fin de la evaluación.
+
+La semántica corresponde a la documentación primaria de PostgreSQL 17: [privilegios SELECT](https://www.postgresql.org/docs/17/sql-select.html), [SECURITY DEFINER y search_path](https://www.postgresql.org/docs/17/sql-createfunction.html#SQL-CREATEFUNCTION-SECURITY) y [locks de filas hasta fin de transacción](https://www.postgresql.org/docs/17/explicit-locking.html#LOCKING-ROWS). Las comprobaciones de abajo prueban esas propiedades con conexiones independientes; no se deducen solo del SQL.
+
+### Contrato SQL y roles
+
+[009](../backend/sql/migrations/009_minimal_account_lock.sql) crea public.lock_account_session(text). Es SQL VOLATILE, STRICT, PARALLEL UNSAFE, SECURITY DEFINER con search_path=pg_catalog,pg_temp. Su cuerpo fijo selecciona exclusivamente id/role/is_active/session_version de public.users WHERE id=$1 FOR SHARE OF u. No contiene UPDATE, SQL dinámico, callbacks, nombres o columnas elegidos por el llamador, ni lectura de credenciales/contactos/contenido. ID ausente, NULL o cadena de inyección no selecciona cuentas adicionales.
+
+| Papel | Contrato y privilegios |
+| --- | --- |
+| Aprovisionador | Administrador superusuario explícito, solo para instalar en un destino nuevo aislado vacío. No es el lector ni una garantía sobre la cuenta del backend habitual. |
+| Propietario de función | Nuevo psicopanel_account_lock_owner_<OID de base>, NOLOGIN, NOINHERIT, NOSUPERUSER, NOCREATEDB, NOCREATEROLE, NOREPLICATION, NOBYPASSRLS; sin membresías entrantes/salientes. USAGE public, SELECT de las cuatro columnas y UPDATE(session_version) de users. No posee users ni tablas clínicas. Nombre preexistente hace fallar la instalación, sin adopción. |
+| Rol autorizado de ejecución | LOGIN NOINHERIT explícito, preaprovisionado sin objetos, ACL explícitas ni membresías; sin atributos administrativos/configuración de rol. Recibe USAGE public y EXECUTE de esta firma, sin grant option ni EXECUTE público. Recibe solo SELECT por columna de las cuatro tablas estructurales requeridas por el evaluador, enumeradas en 009. No SELECT directo de users, DML, textos, historia, secuencias, propiedad ni capacidad de asumir al propietario. |
+| Rol de conexión | Es el LOGIN autenticado por PostgreSQL que entrega el proveedor de conexiones del servidor. En los ensayos coincide con el rol autorizado de ejecución; no usa un LOGIN administrador seguido de SET ROLE para acreditar privilegios mínimos. El helper cambia temporalmente de identidad efectiva, no de conexión ni transacción. |
+
+El SELECT estructural concedido al lector abarca únicamente user_id/approval_status del perfil, los siete campos de cabecera utilizados por el contexto, los cuatro de CEP y los cinco de atribución de nota/cita. Son hechos privados internos, no permiso clínico ni DTO publicable. La capacidad no se entrega a usuarios HTTP, pacientes, parejas o backoffice. Los superusuarios PostgreSQL conservan sus facultades intrínsecas; el rol administrativo ajeno de la prueba es un LOGIN sin privilegios de superusuario.
+
+La función conserva el lock en la transacción del llamador tras devolver sus filas. evaluatePrivateNoteRead la invoca después de BEGIN READ COMMITTED y antes del SELECT MVCC del perfil, en el mismo client. Mantiene validaciones JWT inicial/final, rol/actividad/aprobación/sv persistidos, resolución estructural, COMMIT/ROLLBACK/release y allowed:false. No existe una conexión auxiliar ni un UPDATE para bloquear; el diagnóstico después de COMMIT sigue sin autorizar lecturas futuras.
+
+### Instalación explícita e integridad
+
+[Runner/CLI](../backend/scripts/migrate.js): target 009 exige al instalar --account-reader=ROLE, además de URL y nombre de base explícitos. No crea contraseñas ni toma un rol implícito de env. Ejemplo de forma del comando, únicamente dentro del destino aislado autorizado y con MIGRATION_DATABASE_URL ya preparado sin imprimirlo:
+
+```bash
+npm run db:migrate -- --target=009 --database=BASE_AISLADA_NUEVA --account-reader=LOGIN_RESTRINGIDO_NUEVO
+```
+
+001–008 y sus entradas/hashes permanecen intactos; el manifiesto añade 009. 009 permite cadena completa desde el baseline 001/002 o upgrade desde 008 compatible, **solo vacío y aislado**: bloquea las tablas públicas y rechaza filas salvo ledger. No instala sobre bases habituales, adopta roles/esquemas, rescata demos ni concilia autorías. Replay de 009 con fixtures verifica sin repetir DDL, cambiar grants o exigir vaciar tablas. Puede omitir el argumento de lector en replay, pero si se aporta debe coincidir exactamente. Downgrade a 008 se rechaza antes de validar como histórico.
+
+El algoritmo de catalogChecksum para instalaciones 003–008 sigue igual, corroborado contra una [copia congelada de main #49](../backend/test/fixtures/catalog-checksum-003-008.js) en PostgreSQL real para cada versión. Solo si existe el objeto 009 se añade su [catálogo de seguridad](../backend/scripts/account-lock-contract.js): definición/firma/atributos/search_path, propietario, ACL sin PUBLIC y sin grant option, atributos de propietario/lector, grafo de membresías y derechos efectivos por columna, esquema, base, funciones y secuencias. La huella 008 anterior no se recalcula ni sustituye durante el upgrade. Un 009 no satisface una validación 008.
+
+Antes de registrar 009 se verifica también el contrato contra su SQL checksum-verificado, el nombre esperado del propietario y la matriz exacta de privilegios efectivos. Esto impide registrar como correcto un grant peligroso heredado de defaults del aprovisionador. Replay rechaza cuerpo/owner/ACL/roles/membresías/columna alterados o ledger incompatible, sin reparación ni adopción. La transacción/advisory lock del runner conserva rollback de objetos, grants, rol nuevo y ledger y serializa dos instalaciones concurrentes.
+
+**Dependencia operativa pendiente:** el pool actual usa DATABASE_URL o PGUSER, y Compose configura el mismo nombre para backend e inicialización POSTGRES_USER. No se ha inspeccionado ni modificado la DB habitual ni se acredita un rol mínimo allí. El uso operativo requerirá aprovisionar la conexión restringida, destino compatible y contrato de todos los escritores según [#36](https://github.com/japh113/plataformaPsicologia/issues/36), con autorización separada. Este PR no cambia el pool global ni convierte el backend legacy en lector mínimo.
+
+### Pruebas exigibles y evidencia de este incremento
+
+El [catálogo PostgreSQL](../scripts/ci/episode-cases.json) conserva las 30 etiquetas previas y añade 13: 43 casos importados obligatorios y 60 tests de episodios contando la suite y los casos 003 existentes. Los seis notes previos ejecutan realmente 009; las carreras usan LOGIN restringido. Los casos unitarios simulados siguen identificados aparte.
+
+- Instalación nueva, upgrade vacío 008→009 con ledger anterior idéntico, replay tras fixtures, downgrade denegado; compatibilidad real de huellas 003–008; rechazo de archivo/ledger incompatible sin adopción, roles inseguros/destino poblado, 20 variantes de deriva y dos migraciones concurrentes en destino nuevo. Fallo DDL tardío revierte grants, propietario, objetos y ledger; reintento instala.
+- LOGIN autorizado devuelve exactamente las cuatro columnas; UPDATE al máximo entero, incrementos repetidos, valor anterior/negativo, contraseña, actividad y rol fallan con 42501, conservando snapshot de tablas. Derechos efectivos y membresías corroboran ausencia de UPDATE y de acceso al propietario. Roles ajenos no tienen EXECUTE, PUBLIC no tiene ACL y el propietario no puede iniciar sesión.
+- Reemplazo/propiedad/SET ROLE/GRANT del propietario y funciones internas ajenas denegados. Argumentos/columnas extra, ID inexistente, NULL e inyección no amplían datos. Tabla temporal users y search_path hostil no cambian la cuenta seleccionada.
+- Función retornada, llamador todavía abierto: actualización independiente espera hasta COMMIT o ROLLBACK. Revocador primero observa espera y sesión revocada; evaluador primero bloquea contraseña/inactividad/sv y suspensión/DELETE de perfil. SELECT MVCC del perfil no invierte locks; evaluación posterior deniega. ROLLBACK del revocador conserva sesión anterior.
+- Esperas corroboradas mediante pg_stat_activity y pg_blocking_pids, con barreras de promesas después del retorno real de función; no se acredita concurrencia solo con sleeps. Timeout 55P03, cancelación real pg_cancel_backend 57014 y error tras retorno fuerzan rollback/release y dejan conexión reutilizable y sin lock retenido.
+
+La demo ADR-019 es el grafo SQL ficticio prepared y su evaluación automatizada con lector real; no inicia API/frontend sobre episodios atribuidos. El resultado siempre deniega y la audiencia permanece sin verificar. Resolver 2A-SEC no resuelve autorización clínica integral: siguen pendientes audiencia/versiones/publicación, permisos y proyección de contenido protegidos, activación/admisión y entrevista validada, notas/adendas y transición completa de lectores/escritores legacy.
+
+Ejecución local nueva del 3 de noviembre de 2026: 60/60 episodios, 136/136 unitarias backend, 133/133 integración HTTP legacy, 64/64 frontend; lint/build aprobados, cero fallos/cancelaciones/omisiones. Los 11 contratos offline de CI también aprobaron. Se conserva el aviso previo de bundle >500 kB. La matriz de navegador B/C/D2 y los siete checks/artifacts de 14 días se comprueban en el Draft del HEAD definitivo, sin reutilizar evidencia histórica.
+
+Proyecto aprobado local: psicopanel-episodes-e97a9ff2-c9bb-44b7-8fc4-dab453d8e5e9, PostgreSQL 17 nuevo, tmpfs, red privada y cero puertos DB; bases nuevas por caso. El wrapper terminó con exit 0, verificó imágenes preexistentes y eliminó contenedores/redes/imágenes propios. Inventarios de contenedores y volúmenes preexistentes antes/después idénticos; sin recursos propios persistentes. Dos ensayos iniciales se limpiaron también: 0e59f095-878e-4fd2-8995-78887a8eb8b2 agotó conexiones del arnés conservadas hasta fin de suite; 8eba328a-b5a0-4b0d-be77-930ceaaae365 detectó un inyector de fallo tardío que no disparaba. Se corrigió cierre por caso y selección verificable del evento de prueba, sin relajar ACL, preflight ni catálogo.
+
+Este resultado resuelve la dependencia técnica 2A-SEC dentro del alcance aislado probado. No acredita instalación, aprovisionamiento mínimo ni despliegue habituales, y no concede ninguna operación clínica. PR Draft para auditoría independiente, sin merge ni auto-merge.

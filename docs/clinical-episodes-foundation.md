@@ -1,5 +1,9 @@
 # Fundamentos de episodios clínicos — migración 003
 
+## Incremento 009 — Bloqueo de cuentas con privilegios mínimos
+
+[2A-SEC, contrato, roles, runner y pruebas](private-note-read-eligibility.md#2a-sec--revocaciones-con-privilegios-mínimos): sucesora de 008 para la coordinación interna de revocaciones de #49. Añade una función SECURITY DEFINER de solo cuatro hechos y propietario dedicado, sin UPDATE directo del lector. Conserva SQL/hashes y algoritmos históricos 001–008; cadena nueva y upgrade vacío aislado con lector explícito. No autoriza instalar en recursos habituales ni activar clínica, rescatar demo o alterar el fallback legacy.
+
 ## Implementación del incremento 008 — Sin activación
 
 Base: main `8670d8857f0a748955336a8f3565b9b4afe1eeb0`, con PR #45 integrado. El encargo posterior aprueba sus seis decisiones técnicas y las correcciones P2/P3. **Implementado en esta rama, pendiente de revisión e integración:** [008](../backend/sql/migrations/008_episode_participants_foundation.sql), runner, fixtures y pruebas. No acredita instalación habitual, despliegue ni aislamiento clínico operativo. [Evidencia nueva y límites](episode-participants-validation.md).

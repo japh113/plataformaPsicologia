@@ -54,7 +54,7 @@ La política de día clínico aún usa America/Los_Angeles en partes de aplicaci
 
 ## SQL integrado y fundamentos no activados
 
-[Schema](../backend/sql/schema.sql) es baseline legacy con transformaciones; [seed](../backend/sql/seed.sql) contiene demo y cambios de filas. No son upgrades seguros de bases existentes. Inicialización local Docker nueva ejecuta schema+seed y luego 001/002; db:schema agrega 001/002. [initialize-production.js](../backend/scripts/initialize-production.js) exige base vacía, sin seed, e instala schema/001/002. **Ninguno instala 003–008 automáticamente.**
+[Schema](../backend/sql/schema.sql) es baseline legacy con transformaciones; [seed](../backend/sql/seed.sql) contiene demo y cambios de filas. No son upgrades seguros de bases existentes. Inicialización local Docker nueva ejecuta schema+seed y luego 001/002; db:schema agrega 001/002. [initialize-production.js](../backend/scripts/initialize-production.js) exige base vacía, sin seed, e instala schema/001/002. **Ninguno instala 003–009 automáticamente.**
 
 | Migración integrada | Garantía implementada en SQL | Límite |
 | --- | --- | --- |
@@ -66,8 +66,9 @@ La política de día clínico aún usa America/Los_Angeles en partes de aplicaci
 | [006](../backend/sql/migrations/006_professional_directory_foundation.sql) | Persistencia profesional privada, snapshots, decisiones y preferencias | D1/#17 integrado; instalación habitual sin acreditar. |
 | [007](../backend/sql/migrations/007_private_professional_management.sql) | Gestión privada D2, revocación restringida, preferencias y reservas fotográficas | D2/#18 integrado; no publica perfiles ni acredita instalación habitual. |
 | [008](../backend/sql/migrations/008_episode_participants_foundation.sql) | En esta rama: cabecera individual/pareja, CEP con privilegio mínimo, creador independiente, FK/autoría individual, prepared sin fechas e historia por episodio | Sin activación, permisos nuevos ni despliegue; solo destino vacío aislado. [Evidencia](episode-participants-validation.md). |
+| [009](../backend/sql/migrations/009_minimal_account_lock.sql) | 2A-SEC: lock de cuenta encapsulado, propietario NOLOGIN y lector LOGIN explícito sin UPDATE de users; catálogo/ACL/roles verificados | Solo destino vacío aislado; sin permisos clínicos, endpoints ni configuración del pool habitual. [Contrato y evidencia](private-note-read-eligibility.md#2a-sec--revocaciones-con-privilegios-mínimos). |
 
-[Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) reconocen 001–008 y targets explícitos 003/004/005/006/007/008; conservan destino, checksums históricos, ledger, lock, transacción y huella de la última versión. No admiten downgrade ni adopción de estructuras no registradas. La vista D1 se verifica también sobre 007 con requisito TEMP. Procedimiento histórico en [fundamentos 003](clinical-episodes-foundation.md); [contrato D2](private-professional-management.md).
+[Runner](../backend/scripts/episode-migration.js) y [CLI](../backend/scripts/migrate.js) reconocen 001–009 y targets explícitos 003/004/005/006/007/008/009; conservan destino, checksums históricos, ledger, lock, transacción y huella de la última versión. No admiten downgrade ni adopción de estructuras no registradas. La vista D1 se verifica también sobre 007 con requisito TEMP. Procedimiento histórico en [fundamentos 003](clinical-episodes-foundation.md); [contrato D2](private-professional-management.md).
 
 ## Persistencia D1 integrada y gestión privada D2
 
