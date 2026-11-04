@@ -42,7 +42,7 @@ Nuevas unitarias, incluidas automáticamente por el runner existente:
 
 - [Correos](../backend/test/email.validation.test.js): normales, inválidos, frontera 254/255, Unicode, repeticiones CodeQL y entradas acotadas de hasta 100000 caracteres; mensajes y login por presencia.
 - [Limitador](../backend/test/public-auth-limiter.test.js): presupuesto, 429, Retry-After, reloj controlado, reinicio, clientes independientes, IPv4-mapped, IPv6 /64, proxies manipulados, saturación y fallos cerrados.
-- [HTTP](../backend/test/public-auth-routes.test.js): Router/controladores reales con límites pequeños y reloj controlado, CORS/preflight, 400/401/503, presupuesto compartido y spies de PostgreSQL/bcrypt que demuestran ausencia de ejecución al rechazar. Sin base ni carga criptográfica, sin sleeps.
+- [HTTP](../backend/test/public-auth-routes.test.js): Router público/controladores reales con límites pequeños y reloj controlado, CORS/preflight, 400/401/503, presupuesto compartido y spies de PostgreSQL/bcrypt que demuestran ausencia de ejecución al rechazar. Sin base ni carga criptográfica, sin sleeps.
 
 Ejecución local inicial: Node **25.9.0**, copia temporal propia con dependencias por lockfile, sin SQL ejecutado ni conexiones a base. **154/155** pasan; el único fallo es la prueba preexistente `professional-photo-path.test.js`, que no resuelve `pg` desde su copia con symlink en una ruta temporal Windows. No se modifica D2 para suplir esa diferencia de plataforma. Las 16 pruebas nuevas (incluidos cuatro subtests HTTP) pasan. La CI en Ubuntu/Node **24.22.0** es la comprobación completa requerida, no esta ejecución Windows.
 

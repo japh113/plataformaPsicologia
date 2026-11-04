@@ -24,7 +24,7 @@ import {
 } from './auth.controller.js';
 import { authenticate, authorizeClinical } from '../../middlewares/authMiddleware.js';
 
-export const createAuthRouter = (publicAuthLimits = createPublicAuthLimiters()) => {
+export const createPublicAuthRouter = (publicAuthLimits = createPublicAuthLimiters()) => {
   const router = Router();
 
   router.post('/login', publicAuthLimits.login, loginHandler);
@@ -32,28 +32,30 @@ export const createAuthRouter = (publicAuthLimits = createPublicAuthLimiters()) 
   router.post('/password-reset/confirm', publicAuthLimits.passwordReset, confirmPasswordResetHandler);
   router.post('/register/patient', publicAuthLimits.registration, registerPatientHandler);
   router.post('/register/psychologist', publicAuthLimits.registration, registerPsychologistHandler);
-  router.get('/contact-changes', authenticate, getContactChangeHandler);
-  router.post('/contact-changes', authenticate, startContactChangeHandler);
-  router.post('/contact-changes/:requestId/:operation', authenticate, operateContactChangeHandler);
-  router.get('/identity', authenticate, getOwnIdentityHandler);
-  router.patch('/identity', authenticate, updateOwnIdentityHandler);
-  router.post('/verification/:channel/request', authenticate, requestVerificationHandler);
-  router.post('/verification/:channel/confirm', authenticate, confirmVerificationHandler);
-  router.get('/me', authenticate, meHandler);
-  router.get('/psychologists/available', authenticate, listAvailablePsychologistsHandler);
-  router.get('/users', authenticate, listBackofficeUsersHandler);
-  router.get('/audit-logs', authenticate, listAuditLogsHandler);
-  router.get('/care-relationships', authenticate, listCareRelationshipsHandler);
-  router.post('/care-relationships', authenticate, createCareRelationshipHandler);
-  router.post('/care-relationships/request', authenticate, authorizeClinical, requestCareRelationshipHandler);
-  router.post('/care-relationships/invite', authenticate, authorizeClinical, inviteCareRelationshipHandler);
-  router.post('/care-relationships/accept-code', authenticate, authorizeClinical, acceptCareRelationshipInviteHandler);
-  router.patch('/care-relationships/:relationshipId', authenticate, updateCareRelationshipHandler);
-  router.patch('/care-relationships/:relationshipId/respond', authenticate, authorizeClinical, respondToCareRelationshipHandler);
-  router.get('/psychologists/pending', authenticate, listPendingPsychologistsHandler);
-  router.patch('/psychologists/:userId/review', authenticate, reviewPsychologistHandler);
-
   return router;
 };
 
-export default createAuthRouter();
+const router = Router();
+router.use(createPublicAuthRouter());
+router.get('/contact-changes', authenticate, getContactChangeHandler);
+router.post('/contact-changes', authenticate, startContactChangeHandler);
+router.post('/contact-changes/:requestId/:operation', authenticate, operateContactChangeHandler);
+router.get('/identity', authenticate, getOwnIdentityHandler);
+router.patch('/identity', authenticate, updateOwnIdentityHandler);
+router.post('/verification/:channel/request', authenticate, requestVerificationHandler);
+router.post('/verification/:channel/confirm', authenticate, confirmVerificationHandler);
+router.get('/me', authenticate, meHandler);
+router.get('/psychologists/available', authenticate, listAvailablePsychologistsHandler);
+router.get('/users', authenticate, listBackofficeUsersHandler);
+router.get('/audit-logs', authenticate, listAuditLogsHandler);
+router.get('/care-relationships', authenticate, listCareRelationshipsHandler);
+router.post('/care-relationships', authenticate, createCareRelationshipHandler);
+router.post('/care-relationships/request', authenticate, authorizeClinical, requestCareRelationshipHandler);
+router.post('/care-relationships/invite', authenticate, authorizeClinical, inviteCareRelationshipHandler);
+router.post('/care-relationships/accept-code', authenticate, authorizeClinical, acceptCareRelationshipInviteHandler);
+router.patch('/care-relationships/:relationshipId', authenticate, updateCareRelationshipHandler);
+router.patch('/care-relationships/:relationshipId/respond', authenticate, authorizeClinical, respondToCareRelationshipHandler);
+router.get('/psychologists/pending', authenticate, listPendingPsychologistsHandler);
+router.patch('/psychologists/:userId/review', authenticate, reviewPsychologistHandler);
+
+export default router;
