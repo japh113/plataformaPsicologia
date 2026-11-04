@@ -1,6 +1,8 @@
 # Roadmap de producto y arquitectura
 
-Estado operativo al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a`. A/B/C/D1/D2 y #25–#27 integrados; Issues #21–#23 cerrados. 2A sigue parcial; D3 y activación/permisos por episodio pendientes. [Estado, riesgos y backlog #28–#41](../operational-status.md). Esta actualización de estado no modifica etapas, requisitos ni decisiones.
+Punto de continuidad al 4 de noviembre de 2026: [checkpoint tras #51/#52](../project-checkpoint.md), `main` verificado `9238406b0c441fef8b1cbaec7f78b0ba1288b102`. 2A parcial, fundamentos internos 008–010 integrados, sin nuevas lecturas clínicas, activación ni despliegue acreditado. Reconsultar GitHub antes de cada encargo; el checkpoint enlaza las fuentes canónicas y no autoriza el siguiente incremento.
+
+Corte histórico al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a`. A/B/C/D1/D2 y #25–#27 integrados; Issues #21–#23 cerrados. 2A sigue parcial; D3 y activación/permisos por episodio pendientes. [Estado, riesgos y backlog #28–#41](../operational-status.md). Esta actualización de estado no modifica etapas, requisitos ni decisiones.
 
 Corte histórico de consolidación clínica documental del 28 de octubre de 2026: base verificada `main` `021c12e2481a3a2c4f74b65a37e468c28634bc92`. [Evidencia anonimizada](../couple-clinical-evidence.md); producto aprobado, implementación y revisión jurídica pendientes. Esta actualización solo modifica Markdown.
 
@@ -161,7 +163,7 @@ Notas finales/adendas #35 pueden planificarse en paralelo con contrato compatibl
 
 ### Incremento propuesto de fundamentos tras #44
 
-**Implementación posterior autorizada, pendiente de integrar:** el propietario aprobó las seis decisiones de #45, separación de creador/responsable y P2/P3. Esta rama entrega el [subconjunto 008](../clinical-episodes-foundation.md#implementación-del-incremento-008--sin-activación) con [pruebas aisladas](../episode-participants-validation.md). El corte propuesto conservado debajo es su antecedente; no autoriza las siguientes entregas y el motor clínico por episodio sigue deshabilitado.
+**Estado posterior: 008 integrado; el corte de propuesta se conserva debajo.** El propietario aprobó las seis decisiones de #45, separación de creador/responsable y P2/P3. La entrega implementó el [subconjunto 008](../clinical-episodes-foundation.md#implementación-del-incremento-008--sin-activación) con [pruebas aisladas](../episode-participants-validation.md). El corte propuesto conservado debajo es su antecedente; no autoriza las siguientes entregas y el motor clínico por episodio sigue deshabilitado.
 
 
 **Corte técnico documental del 30 de octubre de 2026:** `main` `8cb08bb82116acec94f7b86fbed6f288cb2f35fb`, PR #44 integrado, Issues #30/#31/#35/#36/#39 abiertos. Este diseño satisface el insumo de especificación de la entrega 1 anterior; no la autoriza ni la presenta como implementada. [Especificación y alternativas](../clinical-episodes-foundation.md#propuesta-técnica-2a--participantes-pertenencia-y-autoría), [atribución y corte de permisos](../patient-response-privacy.md#vinculación-técnica-propuesta-de-autor-sujeto-y-audiencia). No se crea etapa ni se amplía MVP.
@@ -228,7 +230,7 @@ Aprovisionamiento operativo de rol/conexión/destino y compatibilidad de escrito
 
 Secuencia de encargos separados propuesta:
 
-1. **Implementado internamente en esta rama, sin flujo operativo:** persistencia de evidencia privada para originales nuevos: contrato v1, inscripción atómica, FK/escritores restringidos e integridad mediante sucesora revisada, sin modificar 001–009. Contrato v1 y solución P2 del verificador diferido en [procedencia privada](../private-note-origins.md). Ensayos bajo prepared en PostgreSQL nuevo aislado autorizado; sin backfill, lectura o activación.
+1. **Integrado en #52, sin flujo operativo:** persistencia de evidencia privada para originales nuevos: contrato v1, inscripción atómica, FK/escritores restringidos e integridad mediante sucesora revisada, sin modificar 001–009. Contrato v1 y solución P2 del verificador diferido en [procedencia privada](../private-note-origins.md). Ensayos bajo prepared en PostgreSQL nuevo aislado autorizado; sin backfill, lectura o activación.
 2. Resolver interno de notas: acreditar audiencia desde esa evidencia; desconocidos denegados, allowed:false, sin proyección de texto.
 3. Versiones/clasificación/destinatarios y revocaciones de materiales, cuando se aprueben capacidad/política. Puede empezar con material nuevo sin datos privados; derivados de notas esperan #35 y autorizaciones/revisión aplicables.
 4. Proyección interna transaccional de un dominio, con versión estable, estados/permisos aprobados, guardas/roles y todos sus escritores/revocadores. No reutilizar el diagnóstico post-COMMIT de #49/#50 para consultar después.
@@ -314,6 +316,6 @@ No implementar esta etapa antes de decidir las verificaciones presenciales y el 
 | --- | --- |
 | Cerrar decisiones de producto, revisar escenarios y delimitar encargos | ChatGPT para planificación con el usuario y referencia explícita a estos documentos |
 | Contrastar código, implementar etapas autorizadas y verificar localmente | Codex local sobre una rama acotada y datos de prueba aislados |
-| Segunda revisión de permisos, arquitectura o evidencia | Work solo cuando aporte valor independiente al alcance; no es un paso obligatorio |
+| Auditoría independiente y verificación del HEAD definitivo | Work conforme al [flujo de continuidad](../project-checkpoint.md#flujo-de-desarrollo-y-actualización) |
 
-No existe obligación de usar las tres herramientas ni de delegar agentes. La herramienta se elige según la tarea. Antes del siguiente prompt de implementación deben resolverse los asuntos abiertos que afecten a 2A; el resto conserva estado abierto y su etapa bloqueante en [decisions.md](decisions.md).
+Este flujo de continuidad requiere auditoría independiente de Work antes de la decisión de integración del propietario; no exige delegar agentes ni usar todas las herramientas para cada tarea auxiliar. Antes del siguiente prompt de implementación deben resolverse los asuntos abiertos que afecten a 2A; el resto conserva estado abierto y su etapa bloqueante en [decisions.md](decisions.md).
