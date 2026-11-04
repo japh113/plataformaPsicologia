@@ -68,6 +68,27 @@ export async function privateNoteSecurityCatalog(client) {
     `SELECT c.relname,owner.rolname AS owner,c.relacl::text FROM pg_class c JOIN pg_roles owner ON owner.oid=c.relowner
       WHERE c.oid IN('public.clinical_note_private_origins'::regclass,'public.patient_clinical_notes'::regclass)
       AND cardinality($1::text[])>0 ORDER BY c.relname`,
+    // 010 only. Parameter ACLs are shared across the CLUSTER, not one DB.
+    // Keep only this integrity switch and grants affecting PUBLIC/relevant roles;
+    // unrelated roles/ordinary parameters must not invalidate another 010 DB.
+    `SELECT r.rolname,
+      pg_catalog.has_parameter_privilege(r.oid,'session_replication_role','SET') AS can_set,
+      pg_catalog.has_parameter_privilege(r.oid,'session_replication_role','ALTER SYSTEM') AS can_alter_system
+      FROM pg_roles r WHERE r.oid IN(${graph}) ORDER BY r.rolname`,
+    `SELECT p.parname,pg_get_userbyid(a.grantor) AS grantor,
+      CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END AS grantee,
+      a.privilege_type,a.is_grantable FROM pg_catalog.pg_parameter_acl p
+      CROSS JOIN LATERAL pg_catalog.aclexplode(p.paracl) a
+      WHERE p.parname='session_replication_role' AND (a.grantee=0 OR a.grantee IN(${graph}))
+      ORDER BY p.parname,grantor,grantee,a.privilege_type,a.is_grantable`,
+    `SELECT name,setting,reset_val,boot_val,context,pending_restart FROM pg_catalog.pg_settings
+      WHERE name='session_replication_role' AND cardinality($1::text[])>0`,
+    `SELECT d.datname,CASE WHEN s.setrole=0 THEN 'ALL' ELSE pg_get_userbyid(s.setrole) END AS role,
+      config FROM pg_catalog.pg_db_role_setting s LEFT JOIN pg_catalog.pg_database d ON d.oid=s.setdatabase
+      CROSS JOIN LATERAL unnest(s.setconfig) config
+      WHERE s.setdatabase IN(0,(SELECT oid FROM pg_database WHERE datname=current_database()))
+        AND (s.setrole=0 OR s.setrole IN(${graph})) AND config LIKE 'session_replication_role=%'
+      ORDER BY d.datname NULLS FIRST,role,config`,
   ])results.push((await client.query(query,[names])).rows);
   return results;
 }
@@ -81,6 +102,10 @@ export async function verifyPrivateNoteContract(client,migration,requestedCreato
   const {rows:[db]}=await client.query('SELECT oid FROM pg_database WHERE datname=current_database()');
   const creatorOwner='psicopanel_note_creator_owner_'+db.oid,verifierOwner='psicopanel_note_verifier_owner_'+db.oid;
   const security=await privateNoteSecurityCatalog(client);
+  const enabled=value=>['origin','local'].includes(value);
+  if(security[10].some(r=>r.can_set || r.can_alter_system) || security[11].length ||
+    security[12].length!==1 || !enabled(security[12][0].setting) || !enabled(security[12][0].reset_val) ||
+    security[13].some(r=>!enabled(r.config.split('=')[1])))fail();
   if(security[2].length!==names.length)fail();
   const bodies=new Map([...migration.sql.matchAll(/CREATE FUNCTION public[.](\w+)[(][\s\S]*?AS \$\$([\s\S]*?)\$\$;/g)].map(m=>[m[1],m[2]]));
   for(const fn of security[2]) {

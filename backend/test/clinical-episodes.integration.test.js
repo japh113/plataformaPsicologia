@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { runPrivateNoteParameterCases } from './private-note-parameters.cases.js';
 import { runPrivateNoteCases } from './private-note-origins.cases.js';
 import { runParticipantCases } from './episode-participants.cases.js';
 import { spawnSync } from 'node:child_process';
@@ -326,6 +327,7 @@ test('003: isolated PostgreSQL installation, integrity, races, drift and rollbac
     });
     await runParticipantCases(t, control, clients);
     await runPrivateNoteCases(t, control);
+    await runPrivateNoteParameterCases(t, control);
   } finally {
     for (const client of clients) await client.end();
     await control.end();

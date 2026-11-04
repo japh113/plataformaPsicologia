@@ -53,6 +53,10 @@ CREATE FUNCTION public.create_private_clinical_note_v1(
 SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE appointment_date DATE; new_note_id BIGINT;
 BEGIN
+  -- Fail before any resource lookup or INSERT. Never normalize the caller's mode.
+  IF pg_catalog.current_setting('session_replication_role') NOT IN ('origin','local') THEN
+    RAISE EXCEPTION 'PRIVATE_NOTE_ORIGIN: Trigger-disabling replication mode is forbidden';
+  END IF;
   SELECT a.scheduled_date INTO appointment_date
     FROM public.clinical_episodes e
     JOIN public.clinical_episode_participants p ON p.episode_id=e.id

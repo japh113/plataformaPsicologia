@@ -80,9 +80,22 @@
     "010: unsafe default table grants fail the new contract and roll back without reinterpreting 009",
     "010: actual CLI requires explicit destination and creator then installs and replays",
     "010: untracked private-origin footprints are refused before foundation adoption",
-    "010: concurrent independent migration connections serialize installation and verified replay"
+    "010: concurrent independent migration connections serialize installation and verified replay",
+    "010 P2 parameters: rejected creator really commits an orphan under replica and old checks omit the grant",
+    "010 P2 parameters: direct SET grant changes new fingerprint rejects verification and replay without repair",
+    "010 P2 parameters: PUBLIC SET or ALTER SYSTEM before install rolls back 010 and preserves historical 009",
+    "010 P2 parameters: PUBLIC grants after install expand all three roles and reject replay without revocation",
+    "010 P2 parameters: both NOLOGIN owners reject direct SET and ALTER SYSTEM capabilities",
+    "010 P2 parameters: inherited effective privilege and SET ROLE membership cannot preserve the contract",
+    "010 P2 parameters: actual replica session is rejected before INSERT with no normalization or partial rows",
+    "010 P2 parameters: effective replica on migration connection invalidates contract and replay",
+    "010 P2 parameters: database default replica is detected and a new LOGIN still cannot create an orphan",
+    "010 P2 parameters: ordinary parameter grants preserve clean creation COMMIT IMMEDIATE and replay",
+    "010 P2 parameters: unrelated parameter grantees do not change another database contract",
+    "010 P2 parameters: pre-fix 010 fingerprint is rejected without adoption or ledger repair"
   ],
   "additionalModules": [
-    "backend/test/private-note-origins.cases.js"
+    "backend/test/private-note-origins.cases.js",
+    "backend/test/private-note-parameters.cases.js"
   ]
 }
