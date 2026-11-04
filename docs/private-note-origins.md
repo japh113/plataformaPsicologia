@@ -2,6 +2,9 @@
 
 Base verificada local/remota: `main` `9c31900dd1fed3b7c277eff00b781ef1a7415db6`, merge de [#51](https://github.com/japh113/plataformaPsicologia/pull/51). El encargo posterior autoriza esta primera implementación interna y un único PR Draft. [ADR-032](product/decisions.md#adr-032--original-profesional-privado-y-procedencia-técnica-v1) registra las tres decisiones expresas del propietario. No se cierran #30/#35/#36/#39.
 
+
+Actualización del segundo incremento autorizado: [resolver interno y SQL 011](private-note-origin-resolver.md). Reconoce procedencia técnica v1 por tupla exacta, sin conectar lectores operativos ni verificar su audiencia. Los pasajes y evidencias de 010 siguientes conservan su corte histórico.
+
 ## Alcance implementado
 
 [010](../backend/sql/migrations/010_private_note_origins.sql) añade `clinical_note_private_origins`, una constancia de nacimiento bajo contrato privado, y la función interna `public.create_private_clinical_note_v1(bigint,text,text,bigint,text)`. Recibe episodio, paciente, autor profesional, cita y contenido ficticio; devuelve únicamente el ID creado. No acepta ID de nota existente, registrador, clasificación, versión ni instante elegibles por el cliente.
@@ -88,7 +91,6 @@ bash scripts/clinical-episodes.sh test
 Se conservan los siete checks, los inventarios previos, las regresiones backend/HTTP/frontend/navegador y artifacts de 14 días. Resultados y artifacts deben consultarse para el HEAD definitivo del Draft, diferenciando SHA de rama y merge de prueba de GitHub. Tras iniciar Docker por indicación del propietario se ejecuta también la matriz local en proyectos UUID nuevos y efímeros, con tmpfs, red privada y cero puertos DB, sin iniciar ni alterar el entorno habitual. Sintaxis JS, contratos Python y validación documental locales se registran separadamente de PostgreSQL real local y CI; no se reutiliza evidencia histórica como nueva. La limpieza y preservación de recursos previos se verifican por el arnés de cada runner.
 
 Pendientes: conectar el resolver de audiencia en otro PR; autorización/consulta/proyección transaccionales y corte completo del fallback #30/#39; editor privado/finalización/adendas #35; aprovisionamiento y operación persistente #36; materiales separados, revisión/autorizaciones/publicación/revocación y versiones históricas con decisiones propias. Admisión, entrevista validada backend/DB, activación y despliegue siguen deshabilitados y requieren sus entregas. D12–D16 no aprueban automáticamente esos mecanismos.
-
 
 ## Corrección P2 — ACL de parámetros y modo de replicación
 

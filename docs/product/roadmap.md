@@ -231,7 +231,7 @@ Aprovisionamiento operativo de rol/conexión/destino y compatibilidad de escrito
 Secuencia de encargos separados propuesta:
 
 1. **Integrado en #52, sin flujo operativo:** persistencia de evidencia privada para originales nuevos: contrato v1, inscripción atómica, FK/escritores restringidos e integridad mediante sucesora revisada, sin modificar 001–009. Contrato v1 y solución P2 del verificador diferido en [procedencia privada](../private-note-origins.md). Ensayos bajo prepared en PostgreSQL nuevo aislado autorizado; sin backfill, lectura o activación.
-2. Resolver interno de notas: acreditar audiencia desde esa evidencia; desconocidos denegados, allowed:false, sin proyección de texto.
+2. **Implementado en la entrega Draft posterior a #53, pendiente de auditoría/integración:** [resolver interno de procedencia y 011](../private-note-origin-resolver.md). Reconoce professional_private desde constancia v1 exacta; desconocidos denegados. Evidencia interna distinta de audiencia operativa: audienceVerified:false, allowed:false, sin proyección de texto ni conexión a lectores operativos.
 3. Versiones/clasificación/destinatarios y revocaciones de materiales, cuando se aprueben capacidad/política. Puede empezar con material nuevo sin datos privados; derivados de notas esperan #35 y autorizaciones/revisión aplicables.
 4. Proyección interna transaccional de un dominio, con versión estable, estados/permisos aprobados, guardas/roles y todos sus escritores/revocadores. No reutilizar el diagnóstico post-COMMIT de #49/#50 para consultar después.
 5. Integración completa de lectores/escritores/derivados y retirada coordinada del fallback antes de habilitar operaciones. Conservar AB-23 y permisos actuales hasta el corte integral probado.
