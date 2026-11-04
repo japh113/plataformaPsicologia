@@ -8,6 +8,7 @@ import os from 'node:os';
 import pg from 'pg';
 import {randomUUID} from 'node:crypto';
 import {loadMigrations,migrate,catalogChecksum} from '../scripts/episode-migration.js';
+import {catalogChecksum as historicalChecksum} from './fixtures/catalog-checksum-003-008.js';
 import {createSandboxDatabase,installBaseline} from '../scripts/episode-sandbox.js';
 import {participantIdentities,preparedEpisode,participantGraph} from '../scripts/episode-participants-fixture.js';
 
@@ -43,9 +44,10 @@ const structuralResource=async(client,episodeId,type,id,actor={id:'a',role:'psyc
 const connection=name=>({host:'db',database:name,user:'integrity_test',password:'disposable_test_password'});
 const connect=async(name,extra={})=>{const c=new pg.Client({...connection(name),...extra});await c.connect();await c.query("SET statement_timeout='8s'");return c;};
 const count=async(c,table)=>(await c.query('SELECT count(*)::int AS n FROM public.'+table)).rows[0].n;
-const waitForLock=async(control,pid)=>{
+const waitForLock=async(control,pid,blocker=null)=>{
   for(let n=0;n<300;n++){
-    if((await control.query('SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1',[pid])).rows[0]?.wait_event_type==='Lock')return;
+    const row=(await control.query('SELECT wait_event_type,pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE pid=$1',[pid])).rows[0];
+    if(row?.wait_event_type==='Lock' && row.blockers.length && (blocker===null || row.blockers.includes(blocker)))return;
     await new Promise(r=>setTimeout(r,10));
   }
   assert.fail('Independent connection did not wait for a PostgreSQL lock');
@@ -57,9 +59,15 @@ export async function runParticipantCases(t,control,clients){
   const fresh=async({target='008',identities=true,beforeMigration=null}={})=>{
     const name='psicopanel_episode_'+randomUUID().replaceAll('-','');
     const client=await createSandboxDatabase(control,name);clients.push(client);
-    await installBaseline(client);if(beforeMigration)await beforeMigration(client);await migrate(client,{expectedDatabase:name,target});
+    await installBaseline(client);if(beforeMigration)await beforeMigration(client);
+    let readerRole;
+    if(target==='009'){
+      readerRole='account_reader_'+randomUUID().replaceAll('-','');
+      await client.query('CREATE ROLE '+readerRole+" LOGIN NOINHERIT PASSWORD 'disposable_note_reader'");
+    }
+    if(target)await migrate(client,{expectedDatabase:name,target,accountReaderRole:readerRole});
     if(identities)await participantIdentities(client);
-    return {client,name};
+    return {client,name,readerRole};
   };
   await t.test('008: empty install, historical ledger, replay after fixtures and downgrade rejection',async()=>{
     const {client,name}=await fresh({target:'007',identities:false});
@@ -421,7 +429,7 @@ export async function runParticipantCases(t,control,clients){
   });
 
   await t.test('notes: persisted individual attribution is eligible structurally without audience, writes or operational access',async()=>{
-    const {client}=await fresh();
+    const {client}=await fresh({target:'009'});
     await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active'),('b','active')");
     const first=await preparedEpisode(client),second=await preparedEpisode(client),third=await preparedEpisode(client,{professional:'b',creator:'b'});
     const graph=await participantGraph(client,first);
@@ -448,7 +456,7 @@ export async function runParticipantCases(t,control,clients){
     })),{message:'Forbidden',status:403});
   });
   await t.test('notes: PostgreSQL account, approval and session revalidation overrides signed roles and cached eligibility',async()=>{
-    const {client}=await fresh(),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+    const {client}=await fresh({target:'009'}),id=await preparedEpisode(client),graph=await participantGraph(client,id);
     await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
     const request={token:noteToken('a'),episodeId:id,noteId:graph.note,operation:'read'};
     assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),request),noteStructural);
@@ -476,21 +484,19 @@ export async function runParticipantCases(t,control,clients){
     assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),{...request,token:noteToken('a',sv)}),noteDenied);
   });
   await t.test('notes: column privileges enforce locking and metadata-only reads without text or history access',async()=>{
-    const {client,name}=await fresh(),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+    const {client,name,readerRole}=await fresh({target:'009'}),id=await preparedEpisode(client),graph=await participantGraph(client,id);
     await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
-    const role='note_reader_'+randomUUID().replaceAll('-','');
-    await client.query('CREATE ROLE '+role+" LOGIN PASSWORD 'disposable_note_reader'");
-    await client.query('GRANT USAGE ON SCHEMA public TO '+role);
-    await client.query('GRANT SELECT(id,role,is_active,session_version) ON users TO '+role);
-    const reader=await connect(name,{user:role,password:'disposable_note_reader'});clients.push(reader);
+    const reader=await connect(name,{user:readerRole,password:'disposable_note_reader'});clients.push(reader);
     const request={token:noteToken('a'),episodeId:id,noteId:graph.note,operation:'read'};
+    // EXECUTE coordinates the lock; no users SELECT or UPDATE is granted.
+    assert.equal((await client.query("SELECT has_column_privilege($1,'users','session_version','UPDATE') AS allowed",[readerRole])).rows[0].allowed,false);
+    await client.query('REVOKE EXECUTE ON FUNCTION public.lock_account_session(text) FROM '+readerRole);
     await assert.rejects(evaluatePrivateNoteRead(noteDatabase(reader),request),e=>e.code==='42501');
-    assert.equal((await reader.query('SELECT 1 AS alive')).rows[0].alive,1); // transaction rolled back
-    await client.query('GRANT UPDATE(session_version) ON users TO '+role);
-    await client.query('GRANT SELECT(user_id,approval_status) ON psychologist_profiles TO '+role);
-    await client.query('GRANT SELECT ON clinical_episodes,clinical_episode_participants TO '+role);
+    assert.equal((await reader.query('SELECT 1 AS alive')).rows[0].alive,1);
+    await client.query('GRANT EXECUTE ON FUNCTION public.lock_account_session(text) TO '+readerRole);
+    await client.query('REVOKE SELECT(appointment_id) ON patient_clinical_notes FROM '+readerRole);
     await assert.rejects(evaluatePrivateNoteRead(noteDatabase(reader),request),e=>e.code==='42501');
-    await client.query('GRANT SELECT(id,episode_id,patient_id,created_by_user_id,appointment_id) ON patient_clinical_notes TO '+role);
+    await client.query('GRANT SELECT(appointment_id) ON patient_clinical_notes TO '+readerRole);
     const before=await noteSnapshot(client);
     assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(reader),request),noteStructural);
     assert.deepEqual(await noteSnapshot(client),before);
@@ -500,9 +506,9 @@ export async function runParticipantCases(t,control,clients){
   });
   await t.test('notes: independent user revocations commit before evaluation and invalidate the locked session',async()=>{
     for(const update of ["session_version=session_version+1","is_active=FALSE","password_hash='new-synthetic-hash'"]){
-      const {client,name}=await fresh(),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+      const {client,name,readerRole}=await fresh({target:'009'}),id=await preparedEpisode(client),graph=await participantGraph(client,id);
       await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
-      const reader=await connect(name);
+      const reader=await connect(name,{user:readerRole,password:'disposable_note_reader'});
       try{
         const pid=(await reader.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
         await client.query('BEGIN');
@@ -517,9 +523,9 @@ export async function runParticipantCases(t,control,clients){
   });
   await t.test('notes: profile-first revocations serialize through users without profile lock inversion',async()=>{
     for(const statement of ["UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id='a'","DELETE FROM psychologist_profiles WHERE user_id='a'"]){
-      const {client,name}=await fresh(),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+      const {client,name,readerRole}=await fresh({target:'009'}),id=await preparedEpisode(client),graph=await participantGraph(client,id);
       await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
-      const reader=await connect(name);
+      const reader=await connect(name,{user:readerRole,password:'disposable_note_reader'});
       try{
         await client.query('BEGIN');await client.query(statement);
         const pid=(await reader.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
@@ -529,14 +535,15 @@ export async function runParticipantCases(t,control,clients){
     }
   });
   await t.test('notes: evaluator-first blocks profile trigger revocation until diagnostic transaction ends',async()=>{
-    const {client,name}=await fresh(),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+    const {client,name,readerRole}=await fresh({target:'009'}),id=await preparedEpisode(client),graph=await participantGraph(client,id);
     await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
     const writer=await connect(name);
+    const reader=await connect(name,{user:readerRole,password:'disposable_note_reader'});
     let unlock;const gate=new Promise(resolve=>{unlock=resolve;});
     let locked;const acquired=new Promise(resolve=>{locked=resolve;});
     const request={token:noteToken('a'),episodeId:id,noteId:graph.note,operation:'read'};
-    const database=noteDatabase(client,async sql=>{
-      if(sql.includes('FROM public.users')){locked();await gate;}
+    const database=noteDatabase(reader,async sql=>{
+      if(sql.includes('FROM public.lock_account_session')){locked();await gate;}
     });
     const evaluating=evaluatePrivateNoteRead(database,request);evaluating.catch(()=>{});
     let revoking;
@@ -551,6 +558,306 @@ export async function runParticipantCases(t,control,clients){
       assert.deepEqual(await evaluating,noteStructural);await revoking;
       assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(client),request),noteDenied);
       assert.equal((await client.query("SELECT session_version FROM users WHERE id='a'")).rows[0].session_version,1);
-    }finally{unlock();await Promise.allSettled([evaluating,revoking]);await writer.end();}
+    }finally{unlock();await Promise.allSettled([evaluating,revoking]);await writer.end();await reader.end();}
+  });
+
+  // Previous cases are complete; release their per-database clients before
+  // expanding the security matrix. Never increase the cluster connection limit.
+  await Promise.all(clients.splice(0).map(client=>client.end()));
+
+  await t.test('009: historical 003-008 fingerprints remain byte-compatible with the frozen main algorithm',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    for(const target of ['003','004','005','006','007','008']){
+      const {client,name}=await fresh({target,identities:false});
+      assert.equal(await catalogChecksum(client),await historicalChecksum(client));
+      assert.equal((await migrate(client,{expectedDatabase:name,target})).status,'already-applied');
+    }
+  });
+  await t.test('009: new full-chain install and empty 008 upgrade preserve ledger and replay without downgrade',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    for(const upgrade of [false,true]){
+      let client,name,readerRole,before=[];
+      if(upgrade){
+        ({client,name}=await fresh({identities:false}));
+        before=(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
+        readerRole='upgrade_reader_'+randomUUID().replaceAll('-','');
+        await client.query('CREATE ROLE '+readerRole+" LOGIN NOINHERIT PASSWORD 'disposable_note_reader'");
+        await migrate(client,{expectedDatabase:name,target:'009',accountReaderRole:readerRole});
+      }else ({client,name,readerRole}=await fresh({target:'009',identities:false}));
+      const ledger=(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
+      assert.equal(ledger.length,9);
+      if(upgrade)assert.deepEqual(ledger.slice(0,8),before);
+      assert.equal(ledger.at(-1).catalog_sha256,await catalogChecksum(client));
+      assert.notEqual(await catalogChecksum(client),await historicalChecksum(client));
+      await participantIdentities(client);await preparedEpisode(client);
+      assert.equal((await migrate(client,{expectedDatabase:name,target:'009',accountReaderRole:readerRole})).status,'already-applied');
+      assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows,ledger);
+      await assert.rejects(migrate(client,{expectedDatabase:name,target:'008'}),/downgrade/);
+    }
+  });
+  await t.test('009: unsafe provisioning roles and populated destinations are refused without adoption',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    for(const mode of ['missing','superuser','inherit','membership','ownership','column-grant','populated']){
+      const {client,name}=await fresh({identities:mode==='populated'});
+      const role='unsafe_reader_'+randomUUID().replaceAll('-','');
+      if(mode!=='missing'){
+        await client.query('CREATE ROLE '+role+' LOGIN NOINHERIT');
+        if(mode==='superuser')await client.query('ALTER ROLE '+role+' SUPERUSER');
+        if(mode==='inherit')await client.query('ALTER ROLE '+role+' INHERIT');
+        if(mode==='membership')await client.query('GRANT pg_read_all_data TO '+role);
+        if(mode==='ownership')await client.query('ALTER TABLE users OWNER TO '+role);
+        if(mode==='column-grant')await client.query('GRANT UPDATE(session_version) ON users TO '+role);
+      }
+      const before=await catalogChecksum(client),ledger=(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
+      await assert.rejects(migrate(client,{expectedDatabase:name,target:'009',accountReaderRole:mode==='missing'?undefined:role}),/009 requires|Schema drift/);
+      assert.equal(await catalogChecksum(client),before);
+      assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows,ledger);
+      assert.equal((await client.query("SELECT to_regprocedure('public.lock_account_session(text)') AS f")).rows[0].f,null);
+    }
+  });
+  await t.test('009: function owner ACL column grants and role membership drift reject replay without repairs',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    const mutations=[
+      ()=>'ALTER FUNCTION public.lock_account_session(text) SECURITY INVOKER',
+      ()=>"ALTER FUNCTION public.lock_account_session(text) SET search_path=public,pg_temp",
+      ()=>"CREATE OR REPLACE FUNCTION public.lock_account_session(account_id text) RETURNS TABLE(id text,role text,is_active boolean,session_version integer) LANGUAGE sql VOLATILE STRICT SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$ SELECT u.id,u.role,u.is_active,u.session_version FROM public.users u FOR SHARE $$",
+      ()=>'ALTER FUNCTION public.lock_account_session(text) OWNER TO integrity_test',
+      ()=>'GRANT EXECUTE ON FUNCTION public.lock_account_session(text) TO PUBLIC',
+      ({readerRole})=>'REVOKE EXECUTE ON FUNCTION public.lock_account_session(text) FROM '+readerRole,
+      ({readerRole})=>'GRANT EXECUTE ON FUNCTION public.lock_account_session(text) TO '+readerRole+' WITH GRANT OPTION',
+      ({readerRole})=>'GRANT UPDATE(session_version) ON users TO '+readerRole,
+      ({readerRole})=>'GRANT SELECT(password_hash) ON users TO '+readerRole,
+      ({readerRole})=>'ALTER ROLE '+readerRole+' SUPERUSER',
+      ({readerRole})=>'GRANT pg_write_all_data TO '+readerRole+' WITH INHERIT TRUE, SET TRUE',
+      ({owner})=>'ALTER ROLE '+owner+' LOGIN',
+      ({owner})=>'ALTER ROLE '+owner+' CREATEDB',
+      ({owner})=>'ALTER ROLE '+owner+' CREATEROLE',
+      ({owner})=>'ALTER ROLE '+owner+' BYPASSRLS',
+      ({owner})=>'ALTER ROLE '+owner+' REPLICATION',
+      ({owner})=>'GRANT pg_read_all_data TO '+owner,
+      ({owner})=>'GRANT '+owner+' TO integrity_test',
+      ({owner})=>'GRANT UPDATE(password_hash) ON users TO '+owner,
+      ()=> 'DROP FUNCTION public.lock_account_session(text)',
+    ];
+    for(const mutation of mutations){
+      const state=await fresh({target:'009',identities:false});
+      const {client,name}=state;
+      state.owner=(await client.query("SELECT pg_get_userbyid(proowner) AS owner FROM pg_proc WHERE oid='public.lock_account_session(text)'::regprocedure")).rows[0].owner;
+      await client.query(mutation(state));
+      const before=await catalogChecksum(client),ledger=(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
+      await assert.rejects(migrate(client,{expectedDatabase:name,target:'009'}),/drift|incompatible/);
+      assert.equal(await catalogChecksum(client),before);
+      assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows,ledger);
+    }
+  });
+  await t.test('009: incompatible ledger and source checksum fail closed without adopting a historical fingerprint',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    for(const tamper of ['catalog','source','incomplete']){
+      const {client,name}=await fresh({target:'009',identities:false});
+      if(tamper==='catalog')await client.query("UPDATE psicopanel_schema_migrations SET catalog_sha256=$1 WHERE version='009'",[await historicalChecksum(client)]);
+      if(tamper==='source')await client.query("UPDATE psicopanel_schema_migrations SET file_sha256='invalid' WHERE version='009'");
+      if(tamper==='incomplete')await client.query("DELETE FROM psicopanel_schema_migrations WHERE version='008'");
+      const before=(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
+      await assert.rejects(migrate(client,{expectedDatabase:name,target:'009'}),/drift|checksum|incomplete/);
+      assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows,before);
+    }
+    const dir=await fs.mkdtemp(os.tmpdir()+'/psicopanel-009-checksum-');
+    try{
+      for(const file of await fs.readdir(new URL('../sql/migrations/',import.meta.url)))await fs.copyFile(new URL('../sql/migrations/'+file,import.meta.url),dir+'/'+file);
+      await fs.appendFile(dir+'/009_minimal_account_lock.sql','\n-- tamper\n');
+      await assert.rejects(loadMigrations(new URL('file://'+dir+'/')),/checksum/);
+    }finally{await fs.rm(dir,{recursive:true,force:true});}
+  });
+  await t.test('009: late DDL failure rolls back full installation objects grants owner and ledger then retries',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    const {client,name}=await fresh({target:'007',identities:false,beforeMigration:async c=>{
+      await c.query(`CREATE FUNCTION fail_account_lock_install() RETURNS event_trigger LANGUAGE plpgsql AS $$
+        BEGIN IF current_setting('test.fail009',true)='on' AND to_regprocedure('public.lock_account_session(text)') IS NOT NULL AND has_column_privilege(current_setting('psicopanel.account_reader'),'public.patient_clinical_notes','appointment_id','SELECT') THEN RAISE EXCEPTION 'synthetic late 009 DDL failure'; END IF; END $$;
+        CREATE EVENT TRIGGER fail_account_lock_install ON ddl_command_end EXECUTE FUNCTION fail_account_lock_install()`);
+    }});
+    const role='rollback_reader_'+randomUUID().replaceAll('-','');
+    await client.query('CREATE ROLE '+role+' LOGIN NOINHERIT');
+    const oid=(await client.query('SELECT oid FROM pg_database WHERE datname=current_database()')).rows[0].oid;
+    const before=await catalogChecksum(client),ledger=(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
+    await client.query("SET test.fail009='on'");
+    await assert.rejects(migrate(client,{expectedDatabase:name,target:'009',accountReaderRole:role}),/synthetic late 009 DDL failure/);
+    assert.equal(await catalogChecksum(client),before);
+    assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows,ledger);
+    assert.equal((await client.query('SELECT FROM pg_roles WHERE rolname=ANY($1::text[])',[[`psicopanel_account_lock_owner_${oid}`,`psicopanel_cep_owner_${oid}`]])).rowCount,0);
+    assert.equal((await client.query("SELECT has_function_privilege($1,'public.materialize_episode_participants()','EXECUTE')",[role]).catch(e=>({code:e.code}))).code,'42883');
+    await client.query("SET test.fail009='off'");
+    await migrate(client,{expectedDatabase:name,target:'009',accountReaderRole:role});
+  });
+  await t.test('009: concurrent migrations on a new destination serialize one installation and one verified replay',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    const {client,name}=await fresh({target:null,identities:false});
+    const role='concurrent_reader_'+randomUUID().replaceAll('-','');
+    await client.query('CREATE ROLE '+role+' LOGIN NOINHERIT');
+    const other=await connect(name);
+    try{
+      const options={expectedDatabase:name,target:'009',accountReaderRole:role};
+      const results=await Promise.all([migrate(client,options),migrate(other,options)]);
+      assert.deepEqual(results.map(r=>r.status).sort(),['already-applied','applied']);
+      assert.equal((await client.query('SELECT count(*)::int AS n FROM psicopanel_schema_migrations')).rows[0].n,9);
+    }finally{await other.end();}
+  });
+  await t.test('009: restricted LOGIN can lock but cannot abuse session versions sensitive fields ownership or other definers',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    const {client,name,readerRole}=await fresh({target:'009'});
+    const owner=(await client.query("SELECT pg_get_userbyid(proowner) AS owner FROM pg_proc WHERE oid='public.lock_account_session(text)'::regprocedure")).rows[0].owner;
+    const reader=await connect(name,{user:readerRole,password:'disposable_note_reader'});
+    try{
+      const before=await noteSnapshot(client);
+      const rows=(await reader.query("SELECT id,role,is_active,session_version FROM public.lock_account_session($1::text)",['a'])).rows;
+      assert.deepEqual(rows,[{id:'a',role:'psychologist',is_active:true,session_version:0}]);
+      for(const id of [null,'missing',"a' OR '1'='1"]){
+        assert.equal((await reader.query('SELECT id FROM public.lock_account_session($1::text)',[id])).rowCount,0);
+      }
+      for(const sql of [
+        "UPDATE users SET session_version=2147483647 WHERE id='a'",
+        "UPDATE users SET session_version=session_version+1 WHERE id='a'",
+        "UPDATE users SET session_version=0 WHERE id='a'",
+        "UPDATE users SET session_version=-1 WHERE id='a'",
+        "UPDATE users SET password_hash='tampered' WHERE id='a'",
+        "UPDATE users SET is_active=FALSE WHERE id='a'",
+        "UPDATE users SET role='superadmin' WHERE id='a'",
+        'SELECT password_hash FROM users',
+        'SELECT session_version FROM users',
+        'ALTER TABLE users OWNER TO '+readerRole,
+        'ALTER FUNCTION public.lock_account_session(text) OWNER TO '+readerRole,
+        "CREATE OR REPLACE FUNCTION public.lock_account_session(account_id text) RETURNS TABLE(id text,role text,is_active boolean,session_version integer) LANGUAGE sql AS $$ SELECT 'x','x',true,0 $$",
+        'SET ROLE '+owner,
+        'SET SESSION AUTHORIZATION '+owner,
+        'GRANT '+owner+' TO '+readerRole,
+        'SELECT public.materialize_episode_participants()',
+        'SELECT public.check_episode_participant()',
+      ])await assert.rejects(reader.query(sql),e=>e.code==='42501',sql);
+      for(let n=0;n<3;n++)await assert.rejects(reader.query("UPDATE users SET session_version=session_version+1 WHERE id='a'"),e=>e.code==='42501');
+      for(const sql of ["SELECT password_hash FROM public.lock_account_session('a')","SELECT id FROM public.lock_account_session('a','password_hash')"]){
+        await assert.rejects(reader.query(sql),e=>['42703','42883'].includes(e.code));
+      }
+      const effective=(await client.query(`SELECT has_column_privilege($1,'users','session_version','UPDATE') AS direct_update,
+        has_any_column_privilege($1,'users','UPDATE') AS any_update,pg_has_role($1,$2,'MEMBER') AS member,
+        EXISTS(SELECT FROM pg_proc p CROSS JOIN LATERAL aclexplode(p.proacl) a WHERE p.oid='public.lock_account_session(text)'::regprocedure AND a.grantee=0) AS public_execute`,[readerRole,owner])).rows[0];
+      assert.deepEqual(effective,{direct_update:false,any_update:false,member:false,public_execute:false});
+      assert.deepEqual(await noteSnapshot(client),before);
+      await reader.query("CREATE TEMP TABLE users(id text,role text,is_active boolean,session_version integer); INSERT INTO users VALUES('a','superadmin',false,2147483647); SET search_path=pg_temp,public");
+      assert.deepEqual((await reader.query("SELECT id,role,is_active,session_version FROM public.lock_account_session('a')")).rows,rows);
+    }finally{await reader.end();}
+  });
+  await t.test('009: unrelated and administrative LOGIN roles lack EXECUTE and cannot assume the restricted owner',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    const {client,name}=await fresh({target:'009'});
+    const owner=(await client.query("SELECT pg_get_userbyid(proowner) AS owner FROM pg_proc WHERE oid='public.lock_account_session(text)'::regprocedure")).rows[0].owner;
+    for(const prefix of ['unrelated','administrative']){
+      const role=prefix+'_'+randomUUID().replaceAll('-','');
+      await client.query('CREATE ROLE '+role+" LOGIN NOINHERIT PASSWORD 'disposable_note_reader'");
+      const reader=await connect(name,{user:role,password:'disposable_note_reader'});
+      try{
+        assert.equal((await reader.query("SELECT has_function_privilege(current_user,'public.lock_account_session(text)','EXECUTE') AS allowed")).rows[0].allowed,false);
+        await assert.rejects(reader.query("SELECT id FROM public.lock_account_session('a')"),e=>e.code==='42501');
+        await assert.rejects(reader.query('SET ROLE '+owner),e=>e.code==='42501');
+      }finally{await reader.end();}
+    }
+    await assert.rejects(connect(name,{user:owner,password:'disposable_note_reader'}),e=>['28000','28P01'].includes(e.code));
+  });
+  await t.test('009: function-returned lock survives until caller COMMIT or ROLLBACK with independent blockers',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    for(const end of ['COMMIT','ROLLBACK']){
+      const {client,name,readerRole}=await fresh({target:'009'});
+      const reader=await connect(name,{user:readerRole,password:'disposable_note_reader'}),writer=await connect(name);
+      let updating;
+      try{
+        const pid=(await writer.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+        const readerPid=(await reader.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+        await reader.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+        await reader.query("SELECT id FROM public.lock_account_session('a')");
+        // Function has returned. Only its caller's transaction is still open.
+        updating=writer.query("UPDATE users SET session_version=session_version+1 WHERE id='a'");updating.catch(()=>{});
+        await waitForLock(control,pid,readerPid);
+        assert.equal((await client.query("SELECT session_version FROM users WHERE id='a'")).rows[0].session_version,0);
+        await reader.query(end);await updating;
+        assert.equal((await client.query("SELECT session_version FROM users WHERE id='a'")).rows[0].session_version,1);
+      }finally{await reader.query('ROLLBACK');await Promise.allSettled([updating]);await reader.end();await writer.end();}
+    }
+  });
+  await t.test('009: evaluator-first blocks password inactivity version and profile DELETE until protected transaction ends',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    for(const statement of ["UPDATE users SET password_hash='new-hash' WHERE id='a'","UPDATE users SET is_active=FALSE WHERE id='a'","UPDATE users SET session_version=session_version+1 WHERE id='a'","DELETE FROM psychologist_profiles WHERE user_id='a'"]){
+      const {client,name,readerRole}=await fresh({target:'009'}),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+      await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
+      const reader=await connect(name,{user:readerRole,password:'disposable_note_reader'}),writer=await connect(name);
+      let unlock,locked,revoking;
+      const gate=new Promise(r=>{unlock=r;}),acquired=new Promise(r=>{locked=r;});
+      const request={token:noteToken('a'),episodeId:id,noteId:graph.note,operation:'read'};
+      const evaluating=evaluatePrivateNoteRead(noteDatabase(reader,async sql=>{if(sql.includes('FROM public.lock_account_session')){locked();await gate;}}),request);evaluating.catch(()=>{});
+      try{
+        await Promise.race([acquired,evaluating.then(()=>assert.fail('No account lock acquired'))]);
+        const pid=(await writer.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+        const readerPid=(await reader.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+        revoking=writer.query(statement);revoking.catch(()=>{});
+        await waitForLock(control,pid,readerPid);unlock();
+        assert.deepEqual(await evaluating,noteStructural);await revoking;
+        assert.deepEqual(await evaluatePrivateNoteRead(noteDatabase(reader),request),noteDenied);
+      }finally{unlock();await Promise.allSettled([evaluating,revoking]);await reader.end();await writer.end();}
+    }
+  });
+  await t.test('009: revoker ROLLBACK restores current-session evaluation after a verified lock wait',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    const {client,name,readerRole}=await fresh({target:'009'}),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+    await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
+    const reader=await connect(name,{user:readerRole,password:'disposable_note_reader'});
+    let checked;
+    try{
+      await client.query('BEGIN');await client.query("UPDATE users SET session_version=session_version+1 WHERE id='a'");
+      const pid=(await reader.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      checked=evaluatePrivateNoteRead(noteDatabase(reader),{token:noteToken('a'),episodeId:id,noteId:graph.note,operation:'read'});checked.catch(()=>{});
+      await waitForLock(control,pid);await client.query('ROLLBACK');
+      assert.deepEqual(await checked,noteStructural);
+      assert.equal((await client.query("SELECT session_version FROM users WHERE id='a'")).rows[0].session_version,0);
+    }finally{await client.query('ROLLBACK');await Promise.allSettled([checked]);await reader.end();}
+  });
+  await t.test('009: lock timeout cancellation and post-lock errors rollback release and leave connections reusable',async subtest=>{
+    const start=clients.length;
+    subtest.after(async()=>{await Promise.all(clients.splice(start).map(client=>client.end()));});
+    for(const mode of ['timeout','cancel','after-lock']){
+      const {client,name,readerRole}=await fresh({target:'009'}),id=await preparedEpisode(client),graph=await participantGraph(client,id);
+      await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES('a','active')");
+      const reader=await connect(name,{user:readerRole,password:'disposable_note_reader'});
+      const pid=(await reader.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+      let released=false,pending;
+      const database={async getClient(){return {async query(sql,params){const result=await reader.query(sql,params);if(mode==='after-lock' && sql.includes('FROM public.lock_account_session'))throw Object.assign(new Error('Synthetic interruption after function return'),{code:'57014'});return result;},release(){released=true;}};}};
+      const request={token:noteToken('a'),episodeId:id,noteId:graph.note,operation:'read'};
+      try{
+        if(mode!=='after-lock'){
+          await client.query('BEGIN');await client.query("UPDATE users SET session_version=session_version+1 WHERE id='a'");
+          if(mode==='timeout')await reader.query("SET lock_timeout='750ms'");
+        }
+        pending=evaluatePrivateNoteRead(database,request);pending.catch(()=>{});
+        if(mode!=='after-lock'){
+          await waitForLock(control,pid);
+          if(mode==='cancel')assert.equal((await control.query('SELECT pg_cancel_backend($1) AS cancelled',[pid])).rows[0].cancelled,true);
+        }
+        await assert.rejects(pending,e=>e.code===(mode==='timeout'?'55P03':'57014'));
+        assert.equal(released,true);
+        assert.equal((await reader.query('SELECT 1 AS alive')).rows[0].alive,1);
+        assert.equal((await control.query('SELECT state FROM pg_stat_activity WHERE pid=$1',[pid])).rows[0].state,'idle');
+        await client.query('ROLLBACK');
+        await client.query("SET lock_timeout='1s'");
+        await client.query("UPDATE users SET session_version=session_version+1 WHERE id='a'");
+      }finally{await client.query('ROLLBACK');await Promise.allSettled([pending]);await reader.end();}
+    }
   });
 }

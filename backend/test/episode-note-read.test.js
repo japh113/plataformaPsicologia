@@ -15,7 +15,7 @@ const fake = ({ account = {}, profile = {}, failAt = null, afterRead = null } = 
       calls.push({ sql, params });
       if (failAt && sql.includes(failAt)) throw Object.assign(new Error('Synthetic SQL failure'), { code: '42501' });
       assert.doesNotMatch(sql, /SELECT\s+\*|\b(?:INSERT|UPDATE|DELETE)\s+(?:INTO|FROM|public\.)|care_relationships|psychologist_patient_access|\b(?:content|clinical_observations|clinical_note_objective|previous_record)\b/i);
-      if (sql.includes('FROM public.users')) return { rows: account === null ? [] : [{ id: 'a', role: 'psychologist', is_active: true, session_version: 0, ...account }] };
+      if (sql.includes('FROM public.lock_account_session')) return { rows: account === null ? [] : [{ id: 'a', role: 'psychologist', is_active: true, session_version: 0, ...account }] };
       if (sql.includes('FROM public.psychologist_profiles')) return { rows: profile === null ? [] : [{ user_id: 'a', approval_status: 'active', ...profile }] };
       if (sql.includes('FROM public.clinical_episodes')) return { rows: [{
         episode_id: '1', modality: 'individual', status: 'prepared', psychologist_user_id: 'a',
@@ -40,7 +40,9 @@ test('note transaction: real JWT verifier, persisted role, explicit transaction 
   }
   assert.deepEqual(await evaluatePrivateNoteRead(database, request), structural);
   assert.equal(calls[0].sql, 'BEGIN ISOLATION LEVEL READ COMMITTED');
-  assert.match(calls[1].sql, /FOR SHARE/);
+  assert.match(calls[1].sql, /FROM public\.lock_account_session\(\$1::text\)/);
+  assert.deepEqual(calls[1].params, ['a']);
+  assert.doesNotMatch(calls[1].sql, /FOR (?:SHARE|UPDATE)|FROM public\.users/);
   assert.doesNotMatch(calls[2].sql, /FOR (?:SHARE|UPDATE)/);
   assert.deepEqual(calls.slice(-2).map(c => c.sql), ['COMMIT', 'release']);
 });
@@ -75,7 +77,7 @@ test('note transaction: expired while awaiting SQL does not preserve earlier aut
   finally { Date.now = original; }
 });
 test('note transaction: SQL and privilege errors rollback, release and produce no fallback', async () => {
-  for (const failAt of ['FROM public.users', 'FROM public.psychologist_profiles', 'FROM public.clinical_episodes', 'FROM public.patient_clinical_notes']) {
+  for (const failAt of ['FROM public.lock_account_session', 'FROM public.psychologist_profiles', 'FROM public.clinical_episodes', 'FROM public.patient_clinical_notes']) {
     const { database, calls } = fake({ failAt });
     await assert.rejects(evaluatePrivateNoteRead(database, input()), { code: '42501' });
     assert.deepEqual(calls.slice(-2).map(c => c.sql), ['ROLLBACK', 'release']);

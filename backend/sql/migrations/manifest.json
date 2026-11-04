@@ -38,5 +38,10 @@
     "version": "008",
     "file": "008_episode_participants_foundation.sql",
     "sha256": "b8d8447524eff61c5729de711db19340b588a27ad005a6ec842c338cf1271481"
+  },
+  {
+    "version": "009",
+    "file": "009_minimal_account_lock.sql",
+    "sha256": "cd1a11ed4054329e707ada8bc577e672c3298741cf6b289639f6037ba43b9d7b"
   }
 ]
