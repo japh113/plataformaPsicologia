@@ -1,5 +1,7 @@
 # Estado operativo y backlog — corte documental #40
 
+Continuidad posterior: [checkpoint del 4 de noviembre de 2026, tras #51/#52](project-checkpoint.md). Este informe conserva íntegros su fecha, base y resultados del corte #40; no describe el HEAD remoto actual.
+
 Corte de consulta: **29 de octubre de 2026**. Base remota `main`: [`a1720245083008399a3543ca4b794ec4d1289d5a`](https://github.com/japh113/plataformaPsicologia/commit/a1720245083008399a3543ca4b794ec4d1289d5a), merge de #27, comprobada por API de rama y checkout Git. Este documento atiende [Issue #40](https://github.com/japh113/plataformaPsicologia/issues/40). Es una referencia fechada: antes de otro encargo consultar HEAD y metadatos reales, sin convertir esta tarea en una auditoría general periódica.
 
 **Integrado** significa código/documentación incorporados a Git. **Aprobado como producto** conserva la decisión, pero no acredita implementación. **Pendiente** identifica trabajo o decisiones por resolver; un Issue abierto no autoriza ejecutarlos. Ninguno de estos estados acredita migraciones instaladas, capacidades activadas o despliegue en una instancia habitual.

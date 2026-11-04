@@ -1,6 +1,8 @@
 # PsicoPanel
 
-Estado operativo al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a` (merge #27). A/B/C/D1/D2 y #25–#27 integrados; Issues #21–#23 cerrados. [Resumen vigente, backlog y cortes históricos](docs/operational-status.md). D3, nuevas vinculaciones y activación/permisos por episodio pendientes. #19/#24 documentaron producto de pareja, sin implementar su motor. Integración en Git y pruebas aisladas no acreditan instalación ni despliegue habitual.
+Punto de continuidad al 4 de noviembre de 2026: [checkpoint tras #51/#52](docs/project-checkpoint.md), `main` verificado `9238406b0c441fef8b1cbaec7f78b0ba1288b102`. 2A parcial, fundamentos internos 008–010 integrados, sin nuevas lecturas clínicas, activación ni despliegue acreditado. Reconsultar GitHub antes de cada encargo; el checkpoint enlaza las fuentes canónicas y no autoriza el siguiente incremento.
+
+Corte histórico al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a` (merge #27). A/B/C/D1/D2 y #25–#27 integrados; Issues #21–#23 cerrados. [Resumen vigente, backlog y cortes históricos](docs/operational-status.md). D3, nuevas vinculaciones y activación/permisos por episodio pendientes. #19/#24 documentaron producto de pareja, sin implementar su motor. Integración en Git y pruebas aisladas no acreditan instalación ni despliegue habitual.
 
 CI implementada en #14, con aceptación documental #15 y ensayo negativo #16 cerrado sin merge. Protect main exige siete checks con política estricta y sin bypass, reconsultado de solo lectura para #40. Los resultados históricos conservan su SHA; cada PR documental ejecuta su propia matriz completa en runners nuevos.
 
@@ -30,7 +32,7 @@ PR #7 restringió el acceso clínico del backoffice; #8 integró fundamentos SQL
 
 Docker local usa Node 24 y PostgreSQL 17; no requiere instalar npm en host. [Preparación y comandos](docs/development.md) con secretos locales propios y dependencias por lockfile. App: http://localhost:5173; API: http://localhost:5000/api; salud: http://localhost:5000/api/health, solo con entorno autorizado levantado.
 
-No ejecutar schema/seed o normalizadores como actualización de bases existentes. Aplicar migraciones sobre la base habitual o alterar contenedores/volúmenes existentes requiere destino verificado y autorización específica. 001–007 y sus hashes se conservan; 003–007 requieren ejecución explícita y no habilitan permisos por episodio. Guías: [integridad](docs/clinical-data-integrity.md), [autenticación](docs/authentication-security.md), [fundamentos 003](docs/clinical-episodes-foundation.md).
+No ejecutar schema/seed o normalizadores como actualización de bases existentes. Aplicar migraciones sobre la base habitual o alterar contenedores/volúmenes existentes requiere destino verificado y autorización específica. 001–010 y sus hashes se conservan; 003–010 requieren ejecución explícita y no habilitan permisos por episodio. Guías: [integridad](docs/clinical-data-integrity.md), [autenticación](docs/authentication-security.md), [fundamentos 003](docs/clinical-episodes-foundation.md).
 
 Roles reales: patient, psychologist, support, admin y superadmin. Los tres administrativos no tienen acceso clínico global ordinario. Hoy todavía existe autorización legacy por paciente: ni registro, verificación o directorio autorizan clínica nueva por sí solos.
 
