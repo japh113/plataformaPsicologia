@@ -46,18 +46,28 @@ export async function accountLockSecurityCatalog(client) {
     `SELECT r.rolname,n.nspname,has_schema_privilege(r.oid,n.oid,'USAGE') AS can_use,
       has_schema_privilege(r.oid,n.oid,'CREATE') AS can_create,owner.rolname AS owner,n.nspacl::text
       FROM pg_roles r CROSS JOIN pg_namespace n JOIN pg_roles owner ON owner.oid=n.nspowner
-      WHERE r.oid IN (${rootRoles}) AND n.nspname!~'^pg_' AND n.nspname<>'information_schema'
+      WHERE r.oid IN (${rootRoles}) AND n.nspname!~'^pg_(toast_)?temp_'
       ORDER BY r.rolname,n.nspname`,
     `SELECT r.rolname,has_database_privilege(r.oid,d.oid,'CREATE') AS can_create,
       has_database_privilege(r.oid,d.oid,'CONNECT') AS can_connect,
       has_database_privilege(r.oid,d.oid,'TEMP') AS can_temp,owner.rolname AS owner,d.datacl::text
       FROM pg_roles r CROSS JOIN pg_database d JOIN pg_roles owner ON owner.oid=d.datdba
       WHERE r.oid IN (${rootRoles}) AND d.datname=current_database() ORDER BY r.rolname`,
+    // P2-01: no namespace exclusion. initprivs is the initdb/extension
+    // baseline, NOT the currently mutable ACL. A GRANT to PUBLIC must not
+    // redefine a previously restricted routine as safe during installation.
     `SELECT r.rolname,n.nspname,p.proname,pg_get_function_identity_arguments(p.oid) AS arguments,
-      owner.rolname AS owner,p.proacl::text,has_function_privilege(r.oid,p.oid,'EXECUTE') AS can_execute
+      owner.rolname AS owner,p.proacl::text,i.privtype,i.initprivs::text,
+      p.prokind,p.prosecdef,p.proconfig,p.prosrc,p.probin,p.prosqlbody::text,
+      l.lanname,l.lanpltrusted,p.oid<16384 AS bootstrap,
+      i.objoid IS NOT NULL AND NOT EXISTS(SELECT FROM aclexplode(i.initprivs) a
+        WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS initially_restricted,
+      has_function_privilege(r.oid,p.oid,'EXECUTE') AS can_execute,
+      p.oid=to_regprocedure('${signature}') AS account_lock
       FROM pg_roles r CROSS JOIN pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-      JOIN pg_roles owner ON owner.oid=p.proowner WHERE r.oid IN (${rootRoles})
-      AND n.nspname!~'^pg_' AND n.nspname<>'information_schema'
+      JOIN pg_roles owner ON owner.oid=p.proowner JOIN pg_language l ON l.oid=p.prolang
+      LEFT JOIN pg_init_privs i ON i.classoid='pg_proc'::regclass AND i.objoid=p.oid AND i.objsubid=0
+      WHERE r.oid IN (${rootRoles})
       ORDER BY r.rolname,n.nspname,p.proname,arguments`,
     `SELECT r.rolname,n.nspname,c.relname,
       has_sequence_privilege(r.oid,c.oid,'USAGE') AS can_use,
@@ -104,6 +114,19 @@ export async function verifyAccountLockContract(client, migration, requestedRead
       r.rolreplication || r.rolbypassrls || r.rolconfig !== null || r.rolcanlogin !== (r.rolname === reader))) fail();
   if ((await client.query('SELECT FROM pg_auth_members WHERE roleid=ANY($1::oid[]) OR member=ANY($1::oid[])', [roles.map(r => r.oid)])).rowCount) fail();
   const security = await accountLockSecurityCatalog(client);
+  // PostgreSQL 17 FirstNormalObjectId=16384 (access/transam.h) separates
+  // initdb native code from user/extension native code. Trust a healthy initdb
+  // catalog, not arbitrary C/internal/untrusted routines added to any schema.
+  // Trusted invokers cannot confer their owner's privileges; additional
+  // definers (even trigger functions) are incompatible with this capability.
+  if (security[7].some(r => r.can_execute && !r.account_lock &&
+      (r.initially_restricted || r.prosecdef || (!r.bootstrap && !r.lanpltrusted)))) fail();
+  // Fail closed if the expected PG17 initial ACL baseline is absent. Do not
+  // silently fall back to a mutable current ACL or accept a reduced catalog.
+  for (const name of ['pg_read_file','pg_read_binary_file','pg_ls_dir','pg_stat_file','lo_import','lo_export']) {
+    if (!security[7].some(r => r.nspname === 'pg_catalog' && r.proname === name &&
+        r.bootstrap && r.privtype === 'i' && r.initially_restricted)) fail();
+  }
   for (const row of security[3]) {
     const owner = row.rolname === fn.owner;
     const expectedSelect = (owner ? row.relname === 'users' && ['id','role','is_active','session_version'].includes(row.attname)

@@ -7,7 +7,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import pg from 'pg';
 import {randomUUID} from 'node:crypto';
-import {loadMigrations,migrate,catalogChecksum} from '../scripts/episode-migration.js';
+import {loadMigrations,migrate,catalogChecksum,sha256} from '../scripts/episode-migration.js';
+import {accountLockSecurityCatalog as preP2Catalog} from './fixtures/account-lock-catalog-pre-p2.js';
+import {verifyAccountLockContract} from '../scripts/account-lock-contract.js';
 import {catalogChecksum as historicalChecksum} from './fixtures/catalog-checksum-003-008.js';
 import {createSandboxDatabase,installBaseline} from '../scripts/episode-sandbox.js';
 import {participantIdentities,preparedEpisode,participantGraph} from '../scripts/episode-participants-fixture.js';
@@ -51,6 +53,19 @@ const waitForLock=async(control,pid,blocker=null)=>{
     await new Promise(r=>setTimeout(r,10));
   }
   assert.fail('Independent connection did not wait for a PostgreSQL lock');
+};
+
+const verify009=async client=>verifyAccountLockContract(client,(await loadMigrations())[8]);
+const functionPrivilege=async(client,role,signature)=>(await client.query(
+  "SELECT has_function_privilege($1,$2,'EXECUTE') AS allowed",[role,signature])).rows[0].allowed;
+const lockOwner=async client=>(await client.query("SELECT pg_get_userbyid(proowner) AS owner FROM pg_proc WHERE oid='public.lock_account_session(text)'::regprocedure")).rows[0].owner;
+const reject009WithoutRepair=async({client,name},before)=>{
+  const drifted=await catalogChecksum(client),ledger=(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
+  if(before)assert.notEqual(drifted,before);
+  await assert.rejects(verify009(client),/009 account lock security contract/);
+  await assert.rejects(migrate(client,{expectedDatabase:name,target:'009'}),/drift|incompatible/);
+  assert.equal(await catalogChecksum(client),drifted);
+  assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows,ledger);
 };
 
 // Called within the existing guarded suite: same newly created cluster, fresh DB
@@ -859,5 +874,158 @@ export async function runParticipantCases(t,control,clients){
         await client.query("UPDATE users SET session_version=session_version+1 WHERE id='a'");
       }finally{await client.query('ROLLBACK');await Promise.allSettled([pending]);await reader.end();}
     }
+  });
+
+  await t.test('009 P2-01 A: direct administrative EXECUTE changes effective privilege and rejects verifier and replay',async subtest=>{
+    const start=clients.length;subtest.after(async()=>{await Promise.all(clients.splice(start).map(c=>c.end()));});
+    const state=await fresh({target:'009',identities:false}),{client,readerRole}=state;
+    const fn='pg_catalog.pg_read_file(text)',before=await catalogChecksum(client),old=await preP2Catalog(client),data=await noteSnapshot(client);
+    assert.equal(await functionPrivilege(client,readerRole,fn),false);
+    await client.query('GRANT EXECUTE ON FUNCTION '+fn+' TO '+readerRole);
+    assert.equal(await functionPrivilege(client,readerRole,fn),true);
+    assert.deepEqual(await preP2Catalog(client),old); // reproduces audited blind spot
+    await reject009WithoutRepair(state,before);
+    assert.equal(await functionPrivilege(client,readerRole,fn),true); // no automatic revoke
+    assert.deepEqual(await noteSnapshot(client),data);
+  });
+  await t.test('009 P2-01 B: PUBLIC administrative EXECUTE expands both roles and cannot become a valid replay',async subtest=>{
+    const start=clients.length;subtest.after(async()=>{await Promise.all(clients.splice(start).map(c=>c.end()));});
+    const state=await fresh({target:'009',identities:false}),{client,readerRole}=state,owner=await lockOwner(client);
+    const fn='pg_catalog.pg_read_file(text)',before=await catalogChecksum(client),old=await preP2Catalog(client);
+    for(const role of [readerRole,owner])assert.equal(await functionPrivilege(client,role,fn),false);
+    await client.query('GRANT EXECUTE ON FUNCTION '+fn+' TO PUBLIC');
+    for(const role of [readerRole,owner])assert.equal(await functionPrivilege(client,role,fn),true);
+    assert.deepEqual(await preP2Catalog(client),old);
+    await reject009WithoutRepair(state,before);
+    for(const role of [readerRole,owner])assert.equal(await functionPrivilege(client,role,fn),true);
+  });
+  await t.test('009 P2-01 C: restricted function owner cannot acquire administrative EXECUTE',async subtest=>{
+    const start=clients.length;subtest.after(async()=>{await Promise.all(clients.splice(start).map(c=>c.end()));});
+    const state=await fresh({target:'009',identities:false}),{client}=state,owner=await lockOwner(client);
+    const fn='pg_catalog.pg_read_file(text)',before=await catalogChecksum(client);
+    assert.equal(await functionPrivilege(client,owner,fn),false);
+    await client.query('GRANT EXECUTE ON FUNCTION '+fn+' TO '+owner);
+    assert.equal(await functionPrivilege(client,owner,fn),true);
+    await reject009WithoutRepair(state,before);
+  });
+  await t.test('009 P2-01 D: file large-object backup replication configuration and statistics signatures are individually protected',async subtest=>{
+    const start=clients.length;subtest.after(async()=>{await Promise.all(clients.splice(start).map(c=>c.end()));});
+    const signatures=[
+      'pg_read_file(text,boolean)','pg_read_file(text,bigint,bigint)','pg_read_file(text,bigint,bigint,boolean)',
+      'pg_read_binary_file(text)','pg_read_binary_file(text,boolean)','pg_read_binary_file(text,bigint,bigint)','pg_read_binary_file(text,bigint,bigint,boolean)',
+      'pg_stat_file(text)','pg_stat_file(text,boolean)','pg_ls_dir(text)','pg_ls_dir(text,boolean,boolean)',
+      'lo_import(text)','lo_import(text,oid)','lo_export(oid,text)',
+      'pg_ls_tmpdir()','pg_ls_tmpdir(oid)','pg_reload_conf()','pg_rotate_logfile()',
+      'pg_backup_start(text,boolean)','pg_backup_stop(boolean)','pg_switch_wal()',
+      'pg_replication_origin_create(text)','pg_log_backend_memory_contexts(integer)','pg_stat_reset()',
+    ];
+    for(const [i,signature] of signatures.entries()){
+      const state=await fresh({target:'009',identities:false}),{client,readerRole}=state,fn='pg_catalog.'+signature;
+      const before=await catalogChecksum(client);
+      assert.equal(await functionPrivilege(client,readerRole,fn),false,fn);
+      await client.query('GRANT EXECUTE ON FUNCTION '+fn+' TO '+(i%2?'PUBLIC':readerRole));
+      assert.equal(await functionPrivilege(client,readerRole,fn),true,fn);
+      await reject009WithoutRepair(state,before);
+    }
+  });
+  await t.test('009 P2-01 E: other schemas cannot hide elevated SQL wrappers native aliases or definer triggers',async subtest=>{
+    const start=clients.length;subtest.after(async()=>{await Promise.all(clients.splice(start).map(c=>c.end()));});
+    const setup=async c=>{
+      await c.query(`CREATE SCHEMA admin_bridge; GRANT USAGE ON SCHEMA admin_bridge TO PUBLIC;
+        CREATE FUNCTION admin_bridge.file_bridge(text) RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog AS $$ SELECT pg_catalog.pg_read_file($1) $$;
+        CREATE FUNCTION admin_bridge.program_bridge() RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN COPY (SELECT 1) TO PROGRAM 'true'; END $$;
+        CREATE FUNCTION admin_bridge.definer_trigger() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN RETURN NEW; END $$;
+        REVOKE ALL ON FUNCTION admin_bridge.file_bridge(text),admin_bridge.program_bridge(),admin_bridge.definer_trigger() FROM PUBLIC`);
+      const source=(await c.query("SELECT prosrc FROM pg_proc WHERE oid='pg_catalog.pg_read_file(text)'::regprocedure")).rows[0].prosrc;
+      assert.match(source,/^[a-z_]+$/);
+      await c.query("CREATE FUNCTION admin_bridge.native_bridge(text) RETURNS text LANGUAGE internal AS '"+source+"'; REVOKE ALL ON FUNCTION admin_bridge.native_bridge(text) FROM PUBLIC");
+    };
+    for(const [i,fn] of ['admin_bridge.file_bridge(text)','admin_bridge.program_bridge()','admin_bridge.native_bridge(text)','admin_bridge.definer_trigger()'].entries()){
+      const state=await fresh({target:'009',identities:false,beforeMigration:setup}),{client,readerRole}=state;
+      await verify009(client);
+      const before=await catalogChecksum(client);
+      assert.equal(await functionPrivilege(client,readerRole,fn),false);
+      await client.query('GRANT EXECUTE ON FUNCTION '+fn+' TO '+(i%2?'PUBLIC':readerRole));
+      assert.equal(await functionPrivilege(client,readerRole,fn),true);
+      await reject009WithoutRepair(state,before);
+    }
+  });
+  await t.test('009 P2-01 F: clean PostgreSQL permits ordinary PUBLIC functions and install replay with minimum roles',async subtest=>{
+    const start=clients.length;subtest.after(async()=>{await Promise.all(clients.splice(start).map(c=>c.end()));});
+    const {client,name,readerRole}=await fresh({target:'009',identities:false}),owner=await lockOwner(client);
+    for(const role of [readerRole,owner]){
+      for(const fn of ['pg_catalog.length(text)','pg_catalog.set_config(text,text,boolean)','pg_catalog.pg_cancel_backend(integer)','pg_catalog.pg_terminate_backend(integer,bigint)']){
+        assert.equal(await functionPrivilege(client,role,fn),true,fn); // normal ACL; internal checks still apply
+      }
+      for(const fn of ['pg_catalog.pg_read_file(text)','pg_catalog.lo_export(oid,text)'])assert.equal(await functionPrivilege(client,role,fn),false);
+    }
+    const reader=await connect(name,{user:readerRole,password:'disposable_note_reader'});
+    try{assert.equal((await reader.query("SELECT pg_catalog.length('ordinary') AS n")).rows[0].n,8);}finally{await reader.end();}
+    await verify009(client);
+    assert.equal((await migrate(client,{expectedDatabase:name,target:'009'})).status,'already-applied');
+  });
+  await t.test('009 P2-01 G: inherited SET-only administrative roles and routine ownership remain incompatible',async subtest=>{
+    const start=clients.length;subtest.after(async()=>{await Promise.all(clients.splice(start).map(c=>c.end()));});
+    for(const [i,privileged] of ['pg_read_server_files','pg_write_server_files','pg_execute_server_program','pg_monitor','pg_signal_backend'].entries()){
+      const state=await fresh({target:'009',identities:false}),{client,readerRole}=state,owner=await lockOwner(client);
+      const target=i%2?owner:readerRole,before=await catalogChecksum(client);
+      assert.equal((await client.query("SELECT pg_has_role($1,$2,'USAGE') AS allowed",[target,privileged])).rows[0].allowed,false);
+      await client.query('GRANT '+privileged+' TO '+target+' WITH INHERIT TRUE, SET TRUE');
+      assert.equal((await client.query("SELECT pg_has_role($1,$2,'USAGE') AS allowed",[target,privileged])).rows[0].allowed,true);
+      await reject009WithoutRepair(state,before);
+    }
+    for(const mode of ['set-only','transitive','ownership','catalog-create']){
+      const state=await fresh({target:'009',identities:false}),{client,readerRole}=state,before=await catalogChecksum(client);
+      if(mode==='ownership'){
+        await client.query('ALTER FUNCTION pg_catalog.pg_read_file(text) OWNER TO '+readerRole);
+        assert.equal(await functionPrivilege(client,readerRole,'pg_catalog.pg_read_file(text)'),true);
+      }else if(mode==='catalog-create')await client.query('GRANT CREATE ON SCHEMA pg_catalog TO '+readerRole);
+      else{
+        const parent='p2_parent_'+randomUUID().replaceAll('-','');
+        await client.query('CREATE ROLE '+parent+' NOLOGIN');
+        if(mode==='transitive'){
+          const ancestor='p2_ancestor_'+randomUUID().replaceAll('-','');
+          await client.query('CREATE ROLE '+ancestor+' NOLOGIN');
+          await client.query('GRANT EXECUTE ON FUNCTION pg_catalog.pg_read_file(text) TO '+ancestor);
+          await client.query('GRANT '+ancestor+' TO '+parent+' WITH INHERIT TRUE, SET TRUE');
+        }else await client.query('GRANT EXECUTE ON FUNCTION pg_catalog.pg_read_file(text) TO '+parent);
+        await client.query('GRANT '+parent+' TO '+readerRole+' WITH INHERIT '+(mode==='set-only'?'FALSE':'TRUE')+', SET TRUE');
+        assert.equal(await functionPrivilege(client,readerRole,'pg_catalog.pg_read_file(text)'),mode!=='set-only');
+        assert.equal((await client.query("SELECT pg_has_role($1,$2,'MEMBER') AS allowed",[readerRole,parent])).rows[0].allowed,true);
+      }
+      await reject009WithoutRepair(state,before);
+    }
+  });
+  await t.test('009 P2-01: unsafe PUBLIC capabilities before installation are rejected instead of fingerprinted as safe',async subtest=>{
+    const start=clients.length;subtest.after(async()=>{await Promise.all(clients.splice(start).map(c=>c.end()));});
+    for(const mode of ['pg_read_file','lo_export','wrapper']){
+      const {client,name}=await fresh({target:'008',identities:false,beforeMigration:async c=>{
+        if(mode==='wrapper')await c.query(`CREATE SCHEMA admin_bridge; GRANT USAGE ON SCHEMA admin_bridge TO PUBLIC;
+          CREATE FUNCTION admin_bridge.unsafe() RETURNS text LANGUAGE sql SECURITY DEFINER AS $$ SELECT pg_catalog.pg_read_file('not-executed') $$`);
+        else await c.query('GRANT EXECUTE ON FUNCTION pg_catalog.'+(mode==='lo_export'?'lo_export(oid,text)':'pg_read_file(text)')+' TO PUBLIC');
+      }});
+      const role='p2_install_'+randomUUID().replaceAll('-','');await client.query('CREATE ROLE '+role+' LOGIN NOINHERIT');
+      const before=await catalogChecksum(client),ledger=(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
+      const fn=mode==='wrapper'?'admin_bridge.unsafe()':'pg_catalog.'+(mode==='lo_export'?'lo_export(oid,text)':'pg_read_file(text)');
+      assert.equal(await functionPrivilege(client,role,fn),true);
+      await assert.rejects(migrate(client,{expectedDatabase:name,target:'009',accountReaderRole:role}),/009 account lock security contract/);
+      assert.equal(await catalogChecksum(client),before);
+      assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows,ledger);
+      assert.equal((await client.query("SELECT to_regprocedure('public.lock_account_session(text)') AS fn")).rows[0].fn,null);
+      assert.equal(await functionPrivilege(client,role,fn),true); // no repair of preexisting grant
+    }
+  });
+  await t.test('009 P2-01: audited pre-fix fingerprint is rejected without ledger adoption on a clean installation',async subtest=>{
+    const start=clients.length;subtest.after(async()=>{await Promise.all(clients.splice(start).map(c=>c.end()));});
+    const {client,name}=await fresh({target:'009',identities:false}),parts=[];
+    const historical=await historicalChecksum({async query(sql,params){const result=await client.query(sql,params);if(!sql.includes("SELECT to_regclass('public.clinical_episode_participants')"))parts.push(result.rows);return result;}});
+    assert.equal(sha256(JSON.stringify(parts)),historical);
+    const old=sha256(JSON.stringify([...parts,...await preP2Catalog(client)]));
+    assert.notEqual(old,await catalogChecksum(client));
+    await verify009(client); // safe current state, incompatible recorded algorithm
+    await client.query("UPDATE psicopanel_schema_migrations SET catalog_sha256=$1 WHERE version='009'",[old]);
+    const before=(await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
+    await assert.rejects(migrate(client,{expectedDatabase:name,target:'009'}),/Schema drift/);
+    assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows,before);
   });
 }

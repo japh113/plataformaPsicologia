@@ -44,6 +44,15 @@
     "009: function-returned lock survives until caller COMMIT or ROLLBACK with independent blockers",
     "009: evaluator-first blocks password inactivity version and profile DELETE until protected transaction ends",
     "009: revoker ROLLBACK restores current-session evaluation after a verified lock wait",
-    "009: lock timeout cancellation and post-lock errors rollback release and leave connections reusable"
+    "009: lock timeout cancellation and post-lock errors rollback release and leave connections reusable",
+    "009 P2-01 A: direct administrative EXECUTE changes effective privilege and rejects verifier and replay",
+    "009 P2-01 B: PUBLIC administrative EXECUTE expands both roles and cannot become a valid replay",
+    "009 P2-01 C: restricted function owner cannot acquire administrative EXECUTE",
+    "009 P2-01 D: file large-object backup replication configuration and statistics signatures are individually protected",
+    "009 P2-01 E: other schemas cannot hide elevated SQL wrappers native aliases or definer triggers",
+    "009 P2-01 F: clean PostgreSQL permits ordinary PUBLIC functions and install replay with minimum roles",
+    "009 P2-01 G: inherited SET-only administrative roles and routine ownership remain incompatible",
+    "009 P2-01: unsafe PUBLIC capabilities before installation are rejected instead of fingerprinted as safe",
+    "009 P2-01: audited pre-fix fingerprint is rejected without ledger adoption on a clean installation"
   ]
 }
