@@ -144,6 +144,10 @@ El encargo posterior a #45 autoriza ensayos solo en destinos nuevos aislados. [C
 
 Modo nuevo: `bash scripts/clinical-episodes.sh participants-demo`. Genera UUID, verifica tmpfs/red privada/cero puertos DB y propiedad de imágenes; instala antes de cargar fixtures. No inicia API/frontend ni activa episodios. Limpiar solo con el comando UUID impreso y nunca conectar esa base a lectores legacy. No instalar 008 en el entorno habitual ni suplir npm modificando el host.
 
+## Ensayos 2A-SEC / 009
+
+El mismo modo test incluye 009 en bases UUID nuevas del clúster aislado, con LOGIN lector real y propietario NOLOGIN. [Contrato de aprovisionamiento, comandos y pruebas](private-note-read-eligibility.md#2a-sec--revocaciones-con-privilegios-mínimos). target 009 exige --account-reader en instalación, rol preaprovisionado restringido y tablas públicas vacías salvo ledger. Nunca usar el rol de inicialización habitual como prueba de mínimo privilegio ni ejecutar 009 sobre esa base. No instalar herramientas en host ni cambiar Compose habitual.
+
 ## Inicialización, migraciones y evidencia
 
 - Docker PostgreSQL nuevo aplica schema+seed y 001/002 mediante [init.sh](../docker/postgres/init.sh). El marcador solo se crea al terminar; no crearlo manualmente ni borrar el volumen tras un fallo.

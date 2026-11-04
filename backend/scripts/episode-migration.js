@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import pg from 'pg';
+import { accountLockSecurityCatalog, verifyAccountLockContract } from './account-lock-contract.js';
 
 export const sha256 = value => createHash('sha256').update(value).digest('hex');
 const sqlRoot = new URL('../sql/migrations/', import.meta.url);
@@ -12,7 +13,7 @@ export async function loadMigrations(root = sqlRoot) {
     if (sha256(sql) !== entry.sha256) throw new Error('Incompatible file checksum: ' + entry.version);
     migrations.push({ ...entry, sql });
   }
-  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007,008') throw new Error('Incompatible migration versions');
+  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007,008,009') throw new Error('Incompatible migration versions');
   return migrations;
 }
 
@@ -178,6 +179,11 @@ export async function catalogChecksum(client) {
         ORDER BY c.relname,a.attnum`,
     ]) results.push((await client.query(query)).rows);
   }
+  // Append only if 009 actually exists. Repository updates must NEVER change
+  // the historical 003-008 algorithm for an installation still at those versions.
+  if ((await client.query("SELECT to_regprocedure('public.lock_account_session(text)') AS function")).rows[0].function) {
+    results.push(...await accountLockSecurityCatalog(client));
+  }
   return sha256(JSON.stringify(results));
 }
 
@@ -207,14 +213,16 @@ async function verifyProfessionalReviewView(client, migration) {
   }
 }
 
-export async function migrate(client, { expectedDatabase, target = '003' } = {}) {
-  if (!['003', '004', '005', '006', '007', '008'].includes(target)) throw new Error('Unsupported target version');
+export async function migrate(client, { expectedDatabase, target = '003', accountReaderRole } = {}) {
+  if (!['003', '004', '005', '006', '007', '008', '009'].includes(target)) throw new Error('Unsupported target version');
+  if (accountReaderRole !== undefined && (target !== '009' || typeof accountReaderRole !== 'string' || !accountReaderRole)) throw new Error('Explicit account reader is only supported for 009');
   const migrations = await loadMigrations();
   await client.query('BEGIN');
   try {
     await client.query("SET LOCAL search_path = public, pg_catalog");
     await client.query("SET LOCAL lock_timeout = '10s'");
     await client.query("SET LOCAL statement_timeout = '120s'");
+    await client.query("SELECT set_config('psicopanel.account_reader',$1,true)", [accountReaderRole ?? '']);
     // Shares the initializer's lock to exclude concurrent fresh initialization.
     await client.query('SELECT pg_advisory_xact_lock(728194601)');
     await verifyDestination(client, expectedDatabase);
@@ -227,7 +235,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
         throw new Error('Incompatible recorded migration version/checksum: ' + row.version);
       }
     }
-    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007', '001,002,003,004,005,006,007,008'].includes(ledger.map(r => r.version).join(','))) {
+    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007', '001,002,003,004,005,006,007,008', '001,002,003,004,005,006,007,008,009'].includes(ledger.map(r => r.version).join(','))) {
       throw new Error('Incompatible or incomplete migration ledger');
     }
     if (ledger.length) {
@@ -237,6 +245,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
       if (applied.server_major !== major || applied.catalog_sha256 !== await catalogChecksum(client)) {
         throw new Error('Schema drift or incompatible PostgreSQL version; no SQL applied');
       }
+      if (applied.version === '009') await verifyAccountLockContract(client, migrations[8], accountReaderRole);
       if (applied.version >= '006') await verifyProfessionalReviewView(client, migrations[5]);
       if (applied.version === target) {
         await client.query('COMMIT');
@@ -246,6 +255,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
         await client.query("SELECT set_config('psicopanel.migration_target',$1,true)", [next.version]);
         await client.query(next.sql);
         if (next.version === '006') await verifyProfessionalReviewView(client, next);
+        if (next.version === '009') await verifyAccountLockContract(client, next, accountReaderRole);
         await client.query(`INSERT INTO psicopanel_schema_migrations(version,file_name,file_sha256,catalog_sha256,server_major)
           VALUES ($1,$2,$3,$4,$5)`, [next.version,next.file,next.sha256,await catalogChecksum(client),major]);
       }
@@ -255,6 +265,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
     const footprints = (await client.query(`SELECT
       EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND left(c.relname,13)='professional_') OR
       EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname IN ('reserve_professional_public_id','protect_professional_snapshot','preserve_professional_data','enforce_professional_profile_update','enforce_professional_validity_update','enforce_professional_photo_update','check_professional_pending_version')) OR
+      to_regprocedure('public.lock_account_session(text)') IS NOT NULL OR
       to_regclass('public.contact_change_requests') IS NOT NULL OR
       to_regclass('public.contact_change_notices') IS NOT NULL OR
       to_regclass('public.contact_change_events') IS NOT NULL OR
@@ -290,6 +301,7 @@ export async function migrate(client, { expectedDatabase, target = '003' } = {})
       await client.query("SELECT set_config('psicopanel.migration_target',$1,true)", [next.version]);
       await client.query(next.sql);
       if (next.version === '006') await verifyProfessionalReviewView(client, next);
+      if (next.version === '009') await verifyAccountLockContract(client, next, accountReaderRole);
       await client.query(`INSERT INTO psicopanel_schema_migrations(version,file_name,file_sha256,catalog_sha256,server_major)
         VALUES ($1,$2,$3,$4,$5)`, [next.version,next.file,next.sha256,await catalogChecksum(client),major]);
     }

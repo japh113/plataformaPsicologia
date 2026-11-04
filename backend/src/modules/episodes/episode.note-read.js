@@ -25,11 +25,12 @@ export async function evaluatePrivateNoteRead(database, { token, episodeId, note
   const client = await database.getClient();
   try {
     await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
-    // SHARE (not KEY SHARE) conflicts with all users UPDATEs, including the
-    // version bump performed by 002/007 profile-revocation triggers.
+    // 009 encapsulates SHARE under a restricted owner. The caller has EXECUTE,
+    // never UPDATE(session_version). The row lock survives function return
+    // until this very connection commits/rolls back, including trigger waits.
     const accounts = (await client.query(`
       SELECT id, role, is_active, session_version
-      FROM public.users WHERE id=$1 FOR SHARE
+      FROM public.lock_account_session($1::text)
     `, [session.sub])).rows;
     const account = accounts.length === 1 ? accounts[0] : null;
     let result = denied;
