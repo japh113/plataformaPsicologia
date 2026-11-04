@@ -29,6 +29,8 @@ Por tanto, se conserva la resolución de #48: `audience:null,audienceVerified:fa
 
 **Decisión necesaria para ampliar este subconjunto:** aprobar una clasificación verificable por registro/documento, su procedencia, custodia, inmutabilidad/versionado y coordinación con futuras publicaciones/revocaciones; o aprobar explícitamente un contrato de tipo exclusivamente privado que haga imposible mezclar categorías. No se introduce persistencia de audiencias, tabla genérica de concesiones ni valor privado supuesto. 009 incorpora exclusivamente el mecanismo de bloqueo y sus privilegios. La lectura operativa sigue bloqueada también por prepared y por la frontera pública.
 
+El [diseño documental posterior a #50](patient-response-privacy.md#propuesta-2a--contrato-de-audiencia-verificable) compara clasificación persistida, privacidad por tipo y modelo híbrido. Recomienda para aprobación original privado con evidencia de procedencia y materiales destinados separados; concreta versiones, destinatarios, publicación/revocación y guardas futuras. Es propuesta pendiente, sin evidencia nueva persistida: este evaluador conserva audienceVerified:false, allowed:false, prepared y privilegios actuales. Consulta/proyección futuras deben permanecer en una única transacción protegida, sin reutilizar este diagnóstico tras COMMIT.
+
 ## Revalidación y concurrencia
 
 READ COMMITTED se elige expresamente: BEGIN por sí solo **no** aporta una instantánea estable. La garantía procede del lock de cuenta y de las invariantes 001/003/008, no de reutilizar un contexto anterior.
