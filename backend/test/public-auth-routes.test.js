@@ -1,12 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { performance } from 'node:perf_hooks';
 import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import authRoutes, { createPublicAuthRouter } from '../src/modules/auth/auth.routes.js';
-import { createPublicAuthLimiters } from '../src/modules/auth/public-auth-limiter.js';
+import { createPublicAuthLimiters, PUBLIC_AUTH_POLICIES } from '../src/modules/auth/public-auth-limiter.js';
+import { validatePatientRegistrationPayload, validatePsychologistRegistrationPayload } from '../src/modules/auth/auth.validators.js';
 import db from '../src/config/db.js';
 import env from '../src/config/env.js';
+
+const registrationCases = [
+  {
+    path: '/register/patient',
+    payload: { firstName: 'Ficticia', email: 'fictional@test.invalid', password: 'Private-123!', birthDate: '1990-01-01', phone: '+525512345678' },
+    validate: validatePatientRegistrationPayload,
+  },
+  {
+    path: '/register/psychologist',
+    payload: { firstName: 'Ficticia', email: 'fictional@test.invalid', password: 'Private-123!', professionalTitle: 'Psicóloga' },
+    validate: validatePsychologistRegistrationPayload,
+  },
+];
 
 // Real Express routing and controllers, no PostgreSQL, clocks or crypto workloads.
 test('public HTTP limits precede database/bcrypt and preserve CORS and ordinary errors', async t => {
@@ -53,9 +68,12 @@ test('public HTTP limits precede database/bcrypt and preserve CORS and ordinary 
     await t.test('both registrations share one quota; rejected valid bodies never reach crypto/DB', async () => {
       assert.equal((await request('/register/patient')).status, 400);
       assert.equal((await request('/register/psychologist')).status, 400);
-      for (const path of ['/register/patient', '/register/psychologist']) {
-        const response = await request(path, { firstName: 'Ficticia', email: 'fictional@test.invalid', password: 'Private-123!', professionalTitle: 'Psicóloga', birthDate: '1990-01-01', phone: '+525512345678' });
+      const callsBefore = { queries, clients, hashes, comparisons };
+      for (const { path, payload, validate } of registrationCases) {
+        assert.deepEqual(validate(payload), [], path + ' fixture must satisfy its production validator');
+        const response = await request(path, payload);
         assert.equal(response.status, 429);
+        assert.deepEqual({ queries, clients, hashes, comparisons }, callsBefore, path + ' must stop before DB/bcrypt');
       }
       assert.equal(clients, 0); assert.equal(hashes, 0);
       current = 5000;
@@ -86,6 +104,53 @@ test('public HTTP limits precede database/bcrypt and preserve CORS and ordinary 
     Object.assign(db, { query: original.query, getClient: original.getClient });
     Object.assign(bcrypt, { hash: original.hash, compare: original.compare });
     env.localDevelopment = original.localDevelopment;
+    await new Promise(resolve => server.close(resolve));
+  }
+});
+
+// Mount only the production export: a separately mounted public factory would
+// conceal an accidental removal of router.use(createPublicAuthRouter()).
+test('default auth router connects public routes and enforces the shared registration budget', async t => {
+  t.mock.method(performance, 'now', () => 0);
+  const unexpected = () => { throw new Error('Production router must stop before DB/bcrypt'); };
+  const guarded = [
+    t.mock.method(db, 'query', unexpected),
+    t.mock.method(db, 'getClient', unexpected),
+    t.mock.method(bcrypt, 'hash', unexpected),
+    t.mock.method(bcrypt, 'compare', unexpected),
+  ];
+  const app = express();
+  app.use(express.json());
+  app.use('/api/auth', authRoutes);
+  app.use((req, res) => res.status(404).json({ success: false, message: 'Not found' }));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  const request = async (path, body = {}) => {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/auth${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    return { status: response.status, headers: response.headers, body: await response.json() };
+  };
+  try {
+    for (const path of ['/login', '/password-reset/request', '/password-reset/confirm']) {
+      assert.equal((await request(path)).status, 400, path + ' must reach its public validator');
+    }
+    // Use the unchanged production quota: only 30 invalid, cheap requests and two
+    // blocked valid fixtures. A frozen monotonic clock prevents window rollover.
+    const { limit, windowMs } = PUBLIC_AUTH_POLICIES.registration;
+    for (let i = 0; i < limit; i++) {
+      const { path } = registrationCases[i % registrationCases.length];
+      assert.equal((await request(path)).status, 400, path + ' must reach its public validator');
+    }
+    for (const { path, payload, validate } of registrationCases) {
+      assert.deepEqual(validate(payload), [], path + ' fixture must be valid');
+      const blocked = await request(path, payload);
+      assert.equal(blocked.status, 429, path + ' must use the production limiter');
+      assert.equal(blocked.headers.get('Retry-After'), String(windowMs / 1000));
+      assert.deepEqual(blocked.body, { success: false, message: 'Too many requests. Please try again later.', details: null });
+    }
+    for (const operation of guarded) assert.equal(operation.mock.callCount(), 0);
+  } finally {
     await new Promise(resolve => server.close(resolve));
   }
 });
