@@ -153,6 +153,9 @@ await test('D07','Histórico con entrevista pendiente','Identidad accesible; ent
  const code=(await rpc('mailbox',{email:'p@episodes.invalid',channel:'sms'})).secret;
  await ident().getByRole('textbox',{name:'Código SMS',exact:true}).fill(code);
  await click(page,ident().getByRole('button',{name:'Confirmar teléfono',exact:true}),'/api/auth/verification/sms/confirm',200);
+ // HTTP completion can precede React's commit. Await both visible badges before
+ // the exact count assertion; no sleep or relaxation of the verified-state check.
+ await ident().getByText('Verificado',{exact:true}).nth(1).waitFor({state:'visible'});
  assert.equal(await ident().getByText('Verificado',{exact:true}).count(),2);
  await text('Desconocida en el registro histórico');
  const r=await api(page,'/patients/p');assert.equal(r.body.data.interviewCompleted,false);

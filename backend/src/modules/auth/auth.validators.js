@@ -1,7 +1,7 @@
 import { registrationErrors } from './identity.validation.js';
-const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
+import { isValidEmail } from './email.validation.js';
 
-const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const normalizeString = (value) => (typeof value === 'string' ? value.trim() : '');
 
 export const validateLoginPayload = (payload = {}) => {
   const errors = [];
@@ -23,7 +23,7 @@ export const validatePasswordResetRequestPayload = (payload = {}) => {
 
   if (!email) {
     errors.push('email is required');
-  } else if (!isValidEmail(email)) {
+  } else if (!isValidEmail(payload.email)) {
     errors.push('email must be valid');
   }
 
@@ -63,7 +63,7 @@ export const validatePsychologistRegistrationPayload = (payload = {}) => {
 
   if (!email) {
     errors.push('email is required');
-  } else if (!isValidEmail(email)) {
+  } else if (!isValidEmail(payload.email)) {
     errors.push('email must be valid');
   }
 
@@ -148,7 +148,7 @@ export const validateInviteCareRelationshipPayload = (payload = {}) => {
 
   if (!patientEmail) {
     errors.push('patientEmail is required');
-  } else if (!isValidEmail(patientEmail)) {
+  } else if (!isValidEmail(payload.patientEmail)) {
     errors.push('patientEmail must be valid');
   }
 

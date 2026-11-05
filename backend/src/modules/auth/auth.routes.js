@@ -1,3 +1,4 @@
+import { createPublicAuthLimiters } from './public-auth-limiter.js';
 import { getContactChangeHandler,startContactChangeHandler,operateContactChangeHandler } from './contact-change.controller.js';
 import { getOwnIdentityHandler, updateOwnIdentityHandler, requestVerificationHandler, confirmVerificationHandler } from './identity.controller.js';
 import { Router } from 'express';
@@ -23,13 +24,19 @@ import {
 } from './auth.controller.js';
 import { authenticate, authorizeClinical } from '../../middlewares/authMiddleware.js';
 
-const router = Router();
+export const createPublicAuthRouter = (publicAuthLimits = createPublicAuthLimiters()) => {
+  const router = Router();
 
-router.post('/login', loginHandler);
-router.post('/password-reset/request', requestPasswordResetHandler);
-router.post('/password-reset/confirm', confirmPasswordResetHandler);
-router.post('/register/patient', registerPatientHandler);
-router.post('/register/psychologist', registerPsychologistHandler);
+  router.post('/login', publicAuthLimits.login, loginHandler);
+  router.post('/password-reset/request', publicAuthLimits.passwordReset, requestPasswordResetHandler);
+  router.post('/password-reset/confirm', publicAuthLimits.passwordReset, confirmPasswordResetHandler);
+  router.post('/register/patient', publicAuthLimits.registration, registerPatientHandler);
+  router.post('/register/psychologist', publicAuthLimits.registration, registerPsychologistHandler);
+  return router;
+};
+
+const router = Router();
+router.use(createPublicAuthRouter());
 router.get('/contact-changes', authenticate, getContactChangeHandler);
 router.post('/contact-changes', authenticate, startContactChangeHandler);
 router.post('/contact-changes/:requestId/:operation', authenticate, operateContactChangeHandler);

@@ -1,3 +1,4 @@
+import { isValidEmail } from './email.validation.js';
 // Product reference for Mexican patient registration B only; not the clinical agenda.
 // Civil date comes from the server instant in this zone, never host/client timezone.
 const registrationDateFormatter = new Intl.DateTimeFormat('en', {
@@ -35,7 +36,7 @@ export function registrationErrors(payload = {}, now) {
     if (typeof (payload[name] ?? '') !== 'string' || (payload[name] || '').trim().length > 100) errors.push(name + ' must be text up to 100 characters');
   }
   if (!payload.firstName?.trim?.()) errors.push('firstName is required');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(payload.email)) || String(payload.email).length > 254) errors.push('email must be valid');
+  if (!isValidEmail(payload.email)) errors.push('email must be valid');
   if (typeof payload.password !== 'string' || payload.password.length < 8 || Buffer.byteLength(payload.password) > 72) errors.push('password must be 8 characters to 72 bytes');
   const dobError = adultBirthDateError(payload.birthDate, now);
   if (dobError) errors.push(dobError);
