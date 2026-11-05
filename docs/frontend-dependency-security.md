@@ -8,7 +8,7 @@ Encargo del propietario del 5 de noviembre de 2026. Base `main` reconsultada por
 | --- | --- | --- | --- |
 | Vite (directa) | 8.0.16 | 8.1.6 | Primera versión corregida indicada para alertas #3–#7; rango directo `^8.1.6`. |
 | postcss-selector-parser (transitiva) | 6.1.4 | 6.1.5 | Corrección indicada para #9; compartido por Tailwind 3.4.19 (`^6.1.2`) y postcss-nested 6.2.0 (`^6.1.1`). |
-| rolldown y sus 16 bindings opcionales por plataforma | 1.0.3 | 1.1.5 | Vite 8.1.6 requiere `~1.1.5`. |
+| rolldown y sus 15 bindings opcionales por plataforma | 1.0.3 | 1.1.5 | Vite 8.1.6 requiere `~1.1.5`. |
 | @oxc-project/types | 0.133.0 | 0.139.0 | Dependencia exacta de Rolldown 1.1.5. |
 | picomatch privado de Vite | 4.0.4 | 4.0.7 | Nuevo mínimo de Vite `^4.0.5`, resuelto por npm. |
 | @napi-rs/wasm-runtime | 1.2.5 | 1.2.7 | Resolución npm de la rama opcional WASI de Rolldown. |
