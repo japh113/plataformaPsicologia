@@ -37,6 +37,8 @@ Entrada general en [README raíz](../README.md); instrucciones de trabajo en [AG
 
 ## Seguridad, procedimientos y evidencia conservados
 
+- [Seguridad de dependencias backend](backend-dependency-security.md): body-parser 1.20.9 compatible con Express 4, regresión HTTP y diagnóstico de raíz conservada; entrega Draft sin despliegue.
+
 - [Primer incremento de seguridad pública de autenticación](public-auth-hardening.md): correo acotado, política local de solicitudes, límites operativos y pruebas; entrega Draft sin despliegue.
 
 - [clinical-data-integrity.md](clinical-data-integrity.md): política y evidencia de 001; distinguir edición versionada actual de objetivo de adendas.
