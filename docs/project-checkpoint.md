@@ -121,3 +121,7 @@ El propietario autorizó un único Draft `chore/remove-obsolete-root-npm`: retir
 ## Encargo frontend posterior a #57 — candidato #58
 
 El 5 de noviembre de 2026 se reconsultó `main`: `2725b81e89733e6c24f7bff59a5c4ac4fc65eebd`, #57 integrado, sin PRs abiertos al iniciar. El propietario autorizó un único Draft `fix/security-frontend-dependencies`: Vite 8.0.16 → 8.1.6 y postcss-selector-parser 6.1.4 → 6.1.5, sin merge, despliegue ni cambios de producto/backend/SQL. [Resolución, compatibilidad, validación nueva y riesgos residuales](frontend-dependency-security.md). La evidencia CI del HEAD final y sus artifacts se registra en el PR; auditoría independiente y decisión de integración pendientes. Este encargo no inicia otro incremento.
+
+## Encargo backend posterior a #58 — candidato #59
+
+Base remota reconsultada el 5 de noviembre de 2026: `ec0ced404420e48572350f8f832d4968bd536dbe`, #58 integrado, sin PRs abiertos ni cambios locales al iniciar. El propietario autoriza un único Draft `fix/security-backend-minimatch`, solo si se valida compatibilidad. [Diagnóstico, alternativas, override Nodemon acotado, regresiones y evidencia nueva](backend-minimatch-security.md): minimatch 10.2.5 → 11.0.1, sin cambios frontend/backend funcional/SQL/infraestructura. Resultados CI del HEAD final en el comentario de entrega del PR; auditoría independiente y decisión de integración pendientes, sin merge/despliegue ni siguiente incremento.
