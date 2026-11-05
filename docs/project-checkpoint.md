@@ -111,3 +111,9 @@ Checks: `ci/docs`, `ci/backend-unit`, `ci/frontend`, `ci/postgres`, `ci/browser`
 Para Markdown: contrastar GitHub/código, enlaces/fragmentos/IDs, decisiones y diff; comprobar SQL/manifiesto intactos. No ejecutar manualmente bases ni demos. Este checkpoint no presenta los resultados históricos #51/#52 como una ejecución nueva: las comprobaciones y CI de su propio PR se registran en ese PR. Para código, aplicar [desarrollo](development.md) y las pruebas/demos ficticias pertinentes en destinos nuevos autorizados.
 
 Actualizar este documento al cambiar el punto de continuidad: fecha, SHA remoto consultado, integraciones, pendientes y enlaces, contrastando de nuevo GitHub. No reemplazar fuentes de decisiones ni reescribir informes anteriores. Si el estado remoto difiere, registrar el nuevo corte antes de implementar.
+
+## Encargo acotado posterior a #56 — instalación npm raíz
+
+Base remota reconsultada el 4 de noviembre de 2026: `2636f3ed94fa98a916b714cff7b3e7e20b415685`, merge de #56; #54 (resolver interno/011) y #55 (endurecimiento de autenticación pública) también integrados. Este corte no reemplaza las tablas históricas anteriores ni acredita despliegue o activación clínica.
+
+El propietario autorizó un único Draft `chore/remove-obsolete-root-npm`: retirar los dos manifiestos raíz tras auditar consumidores, conservar íntegros backend/frontend y su instalación por aplicación, sin merge ni despliegue. [Inventario, justificación y evidencia del encargo](backend-dependency-security.md#retirada-de-la-instalación-raíz-posterior-a-56). Cambios locales ajenos preservados en su checkout original. Se exigen siete checks y auditoría independiente de Work antes de decisión del propietario; no se afirma cierre de alertas antes del reanálisis de GitHub.

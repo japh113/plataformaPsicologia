@@ -10,7 +10,9 @@ CI-02 fue comprobado con PR #15; CI-07 con el [ensayo negativo #16](https://gith
 
 ## Preparación de entorno local nuevo (solo con autorización)
 
-No hace falta instalar Node.js, npm ni PostgreSQL en el host. Las imagenes de desarrollo usan Node 24 y PostgreSQL 17; las dependencias se instalan con `npm ci` usando los lockfiles existentes.
+No hace falta instalar Node.js, npm ni PostgreSQL en el host. Las imagenes de desarrollo usan Node 24 y PostgreSQL 17; las dependencias se instalan con `npm ci` usando los lockfiles propios de `backend/` y `frontend/`.
+
+La raíz no es un paquete npm: se retiraron su manifiesto y lockfile obsoletos en el [encargo posterior a #56](backend-dependency-security.md#retirada-de-la-instalación-raíz-posterior-a-56). No ejecutar `npm ci` ni `npm install` desde raíz; la instalación manual se hace en cada aplicación, como se muestra abajo. Los comandos Docker/Compose sí se lanzan desde raíz y conservan sus contextos por aplicación.
 
 ### Requisitos en Windows / Ubuntu WSL 2
 
