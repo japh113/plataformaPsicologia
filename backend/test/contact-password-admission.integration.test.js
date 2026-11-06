@@ -174,7 +174,7 @@ test('012 contact bcrypt admission: isolated PostgreSQL HTTP and multiple proces
       const a=await account(),p=payload(),before=calls,state=await snapshot();let killed=false;
       const result=await intercept(async({sql,args,c})=>{
         if(sql.startsWith('INSERT INTO contact_change_requests')&&!killed){
-          killed=true;await client.query('SELECT pg_terminate_backend($1)',[c.processID]);
+          killed=true;await c.end(); // Real connection closure, without an unhandled idle-driver error race.
         }
         return c.query(sql,args);
       },()=>start(a,p));
