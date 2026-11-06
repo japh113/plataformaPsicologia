@@ -60,7 +60,7 @@ conservan su coste anterior; no se afirma que todo el sistema CI sea lineal.
   El resultado satisfactorio de un extractor no acredita por sí solo ejecución:
   se mantiene la comparación con TAP y el rechazo de evidencia incompleta.
 
-## Validación local nueva
+## Validación inicial del HEAD 6a43a7c — anterior a la auditoría P1
 
 `python3 -B -m unittest discover -s scripts/ci -p 'test_*.py'`: **23/23**, las
 11 pruebas previas y 12 nuevas de [regresión](../scripts/ci/test_inventory_source.py).
@@ -91,6 +91,73 @@ regresión acotada, la justificación asintótica procede del avance del cursor.
 
 La validación documental comprueba enlaces, decisiones protegidas y SQL/hashes.
 No se ejecutan bases, migraciones, demos ni contenedores habituales localmente.
+
+## Corrección P1 solicitada por Work sobre 6a43a7c
+
+Work emitió **SOLICITAR CAMBIOS**: `default` caía en el caso genérico de
+identificador/valor. Por ello, la barra de `export default /.../` podía tratarse
+como división y las comillas de la regex como una cadena. Esa cadena podía
+ocultar una declaración literal o el contenido de la regex podía crear un nombre
+ficticio. La CI del HEAD auditado no cubría esta regresión y no acredita esta
+corrección.
+
+La distinción entre división y regex depende del contexto sintáctico, según la
+[gramática léxica ECMAScript](https://tc39.es/ecma262/multipage/ecmascript-language-lexical-grammar.html#sec-ecmascript-language-lexical-grammar).
+`export default` permite una expresión, como recoge la
+[gramática de exportaciones](https://tc39.es/ecma262/multipage/ecmascript-language-scripts-and-modules.html#sec-exports).
+La corrección separa prefijos de expresión (`default`, `new`, `extends` y los
+anteriores), palabras de control, valores y prefijos reservados no soportados.
+Estos últimos pasan a estado ambiguo, que rechaza una barra, en lugar de
+presumir que son identificadores ordinarios. Después de punto se conserva la
+lectura de una propiedad: `object.default / 2` sigue siendo división.
+
+También se rechaza una barra tras un salto de línea si el token anterior parece
+un valor o `]`: por ejemplo, una declaración import sin punto y coma puede
+terminar en una cadena y admitir una sentencia regex en la línea siguiente.
+Se tienen en cuenta LF/CR/LS/PS y saltos dentro de comentarios. Es una
+restricción conservadora: puede rechazar una división válida a través de un
+salto de línea. El corpus actual no la necesita; no se pretende resolver ASI ni
+ampliar el lector a un parser completo. El error se propaga desde `inventory()`
+y nunca convierte los nombres acumulados hasta ese punto en evidencia exitosa.
+
+Resultados nuevos de las reproducciones:
+
+| Caso | Extracción corregida | Contrato con TAP real de Node |
+| --- | --- | --- |
+| A, multilineal y en una línea | `hidden`, `visible` | Node ejecuta solo `visible`; `inventory()` rechaza la omisión de `hidden`. |
+| B, regex con texto `test('phantom',x)` | Solo `visible` | Node ejecuta `visible`; inventario completo aceptado sin `phantom`. |
+| Límite de sentencia import sin punto y coma | Error seguro por contexto ambiguo | Node acepta la sintaxis y ejecuta `visible`; `inventory()` rechaza el análisis parcial. |
+
+Matiz de reproducción del HEAD auditado: A en una línea reproducía el falso
+negativo; el formato multilínea proporcionado ya provocaba rechazo por cadena
+sin terminar. La versión corregida identifica ambas declaraciones en los dos
+formatos. B reproducía el falso positivo. No se presenta ese rechazo antiguo
+como solución del error de clasificación.
+
+Validación nueva: **28/28 contratos Python**, sin omisiones (23 anteriores y
+cinco métodos nuevos). Las regresiones usan **25 módulos ficticios**, cada uno
+validado con `node --check` y ejecutado con TAP real: A/B, 17 contextos de
+expresión, cuatro límites de sentencia no soportados y propiedades reservadas.
+Comprueban `inventory()`, no solo `test_names()`. Continúan las pruebas de
+comentarios/cadenas/plantillas, malformaciones, omisiones y catálogo obligatorio.
+La regresión acotada añade texto regex con `phantom` seguido de declaraciones
+repetidas; no ejecuta la regex vulnerable. El avance y coste esperado O(n) se
+conservan; las comprobaciones de comentarios añaden un número constante de
+recorridos de segmentos disjuntos.
+
+En local, Python usa un wrapper temporal de Node 24.22.0 en contenedores nuevos,
+sin red, DB ni montajes, con raíz de solo lectura, memoria de 128 MiB, un CPU y
+64 procesos máximos. Cada comando Node tiene timeout de 10 segundos y heap de
+64 MiB. No se instala Node en el host. En CI se usa el Node ya provisionado por
+el workflow; no se añade configuración ni dependencia.
+
+Comparación nueva con el extractor original de la base, solo sobre fuentes
+válidas actuales y bajo límites de recursos: **49 archivos / 469 nombres**, por
+archivo, orden y duplicados, con el mismo SHA-256 `ad05a52…7aa1b` documentado
+arriba. El catálogo permanece en **99 obligatorios**. La ejecución de estos y
+los cuatro subtests dinámicos, los siete checks, CodeQL y artifacts debe
+corresponder al **nuevo HEAD**; se registra en el PR y no se sustituye por los
+runs aprobados de `6a43a7c`.
 
 ## CI, CodeQL y entrega
 

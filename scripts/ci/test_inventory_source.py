@@ -10,6 +10,91 @@ from inventory_source import test_names
 
 
 class InventorySource(unittest.TestCase):
+    def _node_report(self, source):
+        # CI already supplies Node. Locally the same commands may use an
+        # ephemeral, resource-limited Node container through PATH; no packages.
+        base = ['node', '--max-old-space-size=64', '--input-type=module']
+        syntax = subprocess.run([*base, '--check'], input=source, capture_output=True, text=True, timeout=10)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+        result = subprocess.run([*base, '--test-reporter=tap'], input=source, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = parse_tap(result.stdout)
+        self.assertTrue(report['complete'])
+        self.assertEqual([t['name'] for t in report['tests']], ['visible'])
+        self.assertFalse(report['failed'] or report['skipped'] or report['cancelled'])
+        return report
+
+    def _inventory_source(self, source, report):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'fixture.mjs'
+            path.write_text(source)
+            return inventory(report, [path])
+
+    def test_export_default_regex_cannot_hide_an_unexecuted_literal(self):
+        lines = ["import test from 'node:test';", 'export default /"/;',
+                 "if (false) test('hidden', () => {});", '/"/;',
+                 "test('visible', () => {});"]
+        # Test both the exact multiline report and the one-line form, which
+        # previously swallowed hidden inside the apparent quoted string.
+        for separator in ['\n', ' ']:
+            with self.subTest(separator=repr(separator)):
+                source = separator.join(lines)
+                report = self._node_report(source)
+                self.assertEqual(list(test_names(source)), ['hidden', 'visible'])
+                with self.assertRaisesRegex(ValueError, 'Declared test cases did not execute:.*hidden'):
+                    self._inventory_source(source, report)
+
+    def test_export_default_regex_does_not_declare_phantom_tests(self):
+        source = '''import test from 'node:test';
+          export default /test('phantom',x)/;
+          const text="test('string phantom',x)";
+          const template=`test('template phantom',x)`;
+          /* test('comment phantom',x) */
+          test('visible',()=>{});'''
+        report = self._node_report(source)
+        self.assertEqual(list(test_names(source)), ['visible'])
+        self.assertEqual(self._inventory_source(source, report)['declaredCases'], ['visible'])
+
+    def test_equivalent_regex_expression_prefixes_preserve_inventory_rejection(self):
+        prefixes = [
+            'export default /"/;',
+            'const value = new /"/.constructor();',
+            'class Derived extends /"/.constructor {}',
+            'const value = typeof /"/;', 'const value = void /"/;',
+            'const value = delete /"/.unused;',
+            'function f() { return /"/; }', 'function f() { throw /"/; }',
+            'function* f() { yield /"/; }', 'async function f() { await /"/; }',
+            'const value = "x" instanceof /"/.constructor;',
+            'const value = "x" in /"/;', 'if (true) /"/;',
+            'switch (1) { case /"/: break; }', 'do /"/; while (false);',
+            'if (false) {} else /"/;', 'const f = () => /"/;',
+        ]
+        for prefix in prefixes:
+            with self.subTest(prefix=prefix):
+                source = ("import test from 'node:test'; " + prefix +
+                          " if(false) test('hidden',()=>{}); /\"/; test('visible',()=>{});")
+                report = self._node_report(source)
+                self.assertEqual(list(test_names(source)), ['hidden', 'visible'])
+                with self.assertRaisesRegex(ValueError, 'Declared test cases did not execute:.*hidden'):
+                    self._inventory_source(source, report)
+
+    def test_unsupported_statement_boundaries_fail_before_accepting_partial_inventory(self):
+        for separator in ['\n', '/*\n*/', '\u2028', '// ASI\n']:
+            with self.subTest(separator=repr(separator)):
+                source = ("import test from 'node:test'; import 'node:test'" + separator +
+                          "/\"/; if(false) test('hidden',()=>{}); /\"/; test('visible',()=>{});")
+                report = self._node_report(source)
+                with self.assertRaisesRegex(ValueError, 'Ambiguous slash across line terminator'):
+                    self._inventory_source(source, report)
+
+    def test_reserved_property_names_remain_values_for_division(self):
+        source = '''import test from 'node:test';
+          const object={default:8,new:8,extends:8,import:8};
+          const values=[object.default / 2,object.new / 2,object.extends / 2,object.import / 2];
+          test('visible',()=>{});'''
+        report = self._node_report(source)
+        self.assertEqual(self._inventory_source(source, report)['declaredCases'], ['visible'])
+
     def test_literal_names_and_multiple_declarations(self):
         source = '''test('first: punctuation, spaces! (A/B)',()=>{});
           await t.test("second — ñ", async()=>{}); test ( 'third',()=>{});'''
@@ -114,6 +199,7 @@ for size in [128,1024,8192]:
     label='\\a'*size
     assert list(test_names("test('"+label+"',()=>{});"))==[label]
     assert len(list(test_names("test('x',()=>{});"*size)))==size
+    assert list(test_names("export default /test('phantom',x)/;"+"test('x',()=>{});"*size))==['x']*size
     for source in ["test('"+label, "test('"+label+"\\", '/*'+label, '`'+label]:
         try:list(test_names(source))
         except ValueError:pass
