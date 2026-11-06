@@ -1,3 +1,4 @@
+import {installContactAdmissionSchema} from '../scripts/contact-admission-sandbox.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -19,7 +20,7 @@ test('PR12 review P2 regressions on new PostgreSQL and real HTTP',{skip:process.
  let server,pool,index=0;
  const password='Review-Fixture-Only-437!';
  try{
-  await installBaseline(client);await migrate(client,{expectedDatabase:name,target:'005'});
+  await installBaseline(client);await installContactAdmissionSchema(client,name);
   pool=new pg.Pool({host:'db',database:name,user:env.dbUser,password:env.dbPassword});db.query=(sql,values)=>pool.query(sql,values);db.getClient=()=>pool.connect();
   server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
   const request=async(path,token,body)=>{const response=await fetch('http://127.0.0.1:'+server.address().port+'/api/auth'+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:response.status,body:await response.json()};};

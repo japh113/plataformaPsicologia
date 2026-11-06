@@ -1,3 +1,4 @@
+import {installContactAdmissionSchema} from '../scripts/contact-admission-sandbox.js';
 import { spawn } from 'node:child_process';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -80,7 +81,7 @@ test('004: adult identity, private verification, concurrency and legacy barrier 
       } finally { await fs.rm(dir, { recursive: true }); }
       await assert.rejects(migrate(client, { expectedDatabase: name, target: '999' }), /Unsupported/);
     });
-    await migrate(client, { expectedDatabase: name, target: '005' });
+    await installContactAdmissionSchema(client,name);
     pool = new pg.Pool({ host: 'db', database: name, user: env.dbUser, password: env.dbPassword });
     db.query = (sql, values) => pool.query(sql, values);
     db.getClient = () => pool.connect();

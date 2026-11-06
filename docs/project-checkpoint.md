@@ -129,3 +129,8 @@ Base remota reconsultada el 5 de noviembre de 2026: `ec0ced404420e48572350f8f832
 ## Encargo frontend posterior a #59 — candidato #60
 
 Base remota reconsultada el 5 de noviembre de 2026: `5422162b73297b40f5a6759f5e3efbbd4afb42d1`, #59 integrado, workspace limpio y sin PRs abiertos al iniciar. Encargo autorizado: un único Draft `fix/security-frontend-zod`, actualización transitiva Zod 4.3.6 → 4.6.7 exclusivamente en el lockfile frontend y trazabilidad documental. [Resolución mínima, compatibilidad CJS/ESM/Hooks, auditoría y grafo de producción](frontend-dependency-security.md#corrección-zod-posterior-a-59--candidato-60). Pruebas locales aisladas: 64/64, lint/build correctos y cero avisos `npm audit`; siete checks y evidencia del HEAD final se registran en el PR. Auditoría independiente y decisión de integración pendientes. Sin merge, despliegue, cambios clínicos ni siguiente incremento; los cortes anteriores siguen siendo históricos.
+
+
+## Encargo de seguridad posterior a #61 — candidato #62
+
+Base remota reconsultada el 6 de noviembre de 2026: `3d89863cebb592fb250d7dd6014bf46b8e1b0782`. El propietario aprobó el [diseño revisado de admisión bcrypt](contact-bcrypt-admission-design.md) y autorizó un único Draft independiente. [Implementación y evidencia](contact-bcrypt-admission-validation.md): reserva durable, diez admisiones por titular/900 segundos, dos transacciones con revalidación, contraseña y consumo técnico también en replays, 012 sin alterar SQL histórico y retención exclusiva de admisiones de más de 24 horas. CI/CodeQL y artifacts del HEAD final se registran en el PR. Sin merge, instalación habitual, despliegue, fotografías ni siguiente incremento; clínica y barreras actuales conservadas.

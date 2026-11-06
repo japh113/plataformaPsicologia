@@ -1,3 +1,4 @@
+import {installContactAdmissionSchema} from '../scripts/contact-admission-sandbox.js';
 import { spawn,spawnSync } from 'node:child_process';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -44,6 +45,7 @@ test('005 secure contact changes: real PostgreSQL, HTTP, races and interrupted d
     }finally{await next.end();}
    }
   });
+  await installContactAdmissionSchema(client,name);
   pool=new pg.Pool({host:'db',database:name,user:env.dbUser,password:env.dbPassword});db.query=(sql,values)=>pool.query(sql,values);db.getClient=()=>pool.connect();
   server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
   const req=async(path,token,body,method=body===undefined?'GET':'POST')=>{
