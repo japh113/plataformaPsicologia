@@ -126,6 +126,12 @@ test('012 contact bcrypt admission: isolated PostgreSQL HTTP and multiple proces
       const result=await start(a,p);assert.equal(result.status,200);assert.equal(result.body.data.request.status,'cancelled');
       assert.equal(calls-before,3);assert.equal(await count(a),4);assert.equal(await count(a,'started'),1);
     });
+    await t.test('012 a globally reused operation ID preserves generic conflict and consumes only its own account budget',async()=>{
+      const a=await account(),b=await account(),p=payload();assert.equal((await start(a,p)).status,200);
+      const before=calls,state=await snapshot(),result=await start(b,{...p,contact:'other-holder@fixture.invalid'});
+      assert.equal(result.status,409);assert.equal(calls-before,1);assert.equal(await count(b),1);
+      assert.equal(JSON.stringify(result.body).includes(a.user.email),false);assert.deepEqual(await snapshot(),state);
+    });
     await t.test('012 repeated correct reauthentication shares starts sessions and channels budget',async()=>{
       const a=await account(),p=payload();assert.equal((await start(a,p)).status,200);
       const second=await login(a.user.email),before=calls;

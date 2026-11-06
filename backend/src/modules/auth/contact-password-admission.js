@@ -83,7 +83,8 @@ export function createContactPasswordOperation({database=db,nowNs=()=>process.hr
       if(client&&inTransaction&&!discard) {
         try {await client.query('ROLLBACK');}catch{discard=true;}
       }
-      if(error.status)throw error;
+      // Preserve the controller's generic, privacy-safe uniqueness conflict.
+      if(error.status||error.code==='23505')throw error;
       throw unavailable();
     } finally {if(client)client.release(discard?new Error('Contact password connection unavailable'):undefined);}
   };
