@@ -23,8 +23,9 @@ test('012 contact bcrypt admission: isolated PostgreSQL HTTP and multiple proces
   let pool,server,calls=0,index=0;
   const password='Fictional-Admission-Only-482!';
   try {
-    await installBaseline(client);await syntheticFixture(client);
+    await installBaseline(client);
     const options=await installContactAdmissionSchema(client,name);
+    await syntheticFixture(client);
     pool=new pg.Pool({host:'db',database:name,user:env.dbUser,password:env.dbPassword,max:4});
     db.query=(sql,args)=>pool.query(sql,args);db.getClient=()=>pool.connect();
     bcrypt.compare=(...args)=>{calls++;return originalCompare(...args);};
@@ -116,6 +117,14 @@ test('012 contact bcrypt admission: isolated PostgreSQL HTTP and multiple proces
       const other=payload();other.replaceRequestId=p.operationId;
       assert.equal((await start(a,other)).status,429);assert.equal(calls-before,10);
       assert.equal((await req('/me',a.token)).status,200);
+    });
+    await t.test('012 terminal and conflicting idempotent starts still require a fresh reserved password',async()=>{
+      const a=await account(),p=payload();assert.equal((await start(a,p)).status,200);const before=calls;
+      assert.equal((await start(a,{...p,contact:'different@fixture.invalid'})).status,409);
+      assert.equal((await start(a,{...p,password:'Wrong-Replay-Only'})).status,400);
+      assert.equal((await req('/contact-changes/'+p.operationId+'/cancel',a.token,{})).status,200);
+      const result=await start(a,p);assert.equal(result.status,200);assert.equal(result.body.data.request.status,'cancelled');
+      assert.equal(calls-before,3);assert.equal(await count(a),4);assert.equal(await count(a,'started'),1);
     });
     await t.test('012 repeated correct reauthentication shares starts sessions and channels budget',async()=>{
       const a=await account(),p=payload();assert.equal((await start(a,p)).status,200);
@@ -225,6 +234,12 @@ test('012 contact bcrypt admission: isolated PostgreSQL HTTP and multiple proces
       const before=calls;assert.equal((await start(a,p)).status,429);assert.equal(calls,before);
       await client.query("UPDATE contact_change_events SET created_at=clock_timestamp()-INTERVAL '901 seconds' WHERE user_id=$1 AND action='password_admitted'",[a.user.id]);
       assert.equal((await start(a,p)).status,200);assert.equal(calls-before,1);assert.equal(await count(a),11);
+    });
+    await t.test('012 Retry-After releases the correct slot with more than ten synthetic events',async()=>{
+      const a=await account(),before=calls;
+      await client.query("INSERT INTO contact_change_events(user_id,action,created_at) SELECT $1,'password_admitted',clock_timestamp()-((900-g)*INTERVAL '1 second') FROM generate_series(1,12) g",[a.user.id]);
+      const result=await start(a);assert.equal(result.status,429);assert.ok(result.retryAfter>=2&&result.retryAfter<=3);
+      assert.equal(calls,before);assert.equal(await count(a),12);
     });
     await t.test('012 retention removes only admissions older than 24 hours and preserves active windows and security history',async()=>{
       const a=await account();

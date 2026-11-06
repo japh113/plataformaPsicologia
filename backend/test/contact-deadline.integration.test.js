@@ -16,7 +16,7 @@ test('P2-4 notification deadline survives delayed COMMIT on isolated PostgreSQL'
  const control=await db.getClient(),name='psicopanel_episode_contact_deadline',client=await createSandboxDatabase(control,name);
  const originalQuery=db.query,originalGet=db.getClient;let pool;
  try {
-  await installBaseline(client);await syntheticFixture(client);await installContactAdmissionSchema(client,name);
+  await installBaseline(client);await installContactAdmissionSchema(client,name);await syntheticFixture(client);
   pool=new pg.Pool({host:'db',database:name,user:env.dbUser,password:env.dbPassword});db.query=(sql,values)=>pool.query(sql,values);
   const reset=()=>{db.query=(sql,values)=>pool.query(sql,values);db.getClient=()=>pool.connect();};
   const fixture=async(initial=1000)=>{

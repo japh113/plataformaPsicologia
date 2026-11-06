@@ -26,7 +26,7 @@ El fingerprint del JWT no sustituye contraseña. Las reservas son privadas a la 
 
 El runner mantiene catálogo/ledger y vuelve a aplicar contratos especiales de 009–011 cuando la versión instalada es 012; se generalizan condiciones antes exclusivas de 011. Las pruebas negativas conceden permisos indebidos a lector/creador/propietario del resolver y, aun actualizando la huella de prueba, requieren rechazo por el contrato especial correspondiente.
 
-[Preparación aislada](../backend/scripts/contact-admission-sandbox.js) aprovisiona dos LOGIN distintos NOINHERIT con credencial ficticia y aplica cadena completa mediante el runner original, sin relajar sus precondiciones. Los fixtures HTTP de contacto, identidad, revisión y deadline y la demo de identidad usan realmente 012. Los casos históricos que prueban instalación/rollback/deriva de 005 se conservan en 005 y se actualiza el destino principal a 012 antes de iniciar HTTP. No se cambia infraestructura CI para eludir pruebas.
+[Preparación aislada](../backend/scripts/contact-admission-sandbox.js) aprovisiona dos LOGIN distintos NOINHERIT con credencial ficticia y aplica cadena completa mediante el runner original, sin relajar sus precondiciones. Los fixtures HTTP de contacto, identidad, revisión y deadline y la demo de identidad usan realmente 012. Los casos históricos que prueban instalación/rollback/deriva de 005 se conservan en 005 y se conservan sus bases pobladas separadas; HTTP utiliza otro destino nuevo, con cadena 012 instalada antes de crear fixtures. Nunca vaciar ni adoptar una base poblada para superar 008/009. No se cambia infraestructura CI para eludir pruebas.
 
 ## Retención técnica aprobada dentro del encargo
 

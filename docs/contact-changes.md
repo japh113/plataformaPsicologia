@@ -99,3 +99,8 @@ Crea UUID, imágenes propias, PostgreSQL 17 tmpfs, DB sin puertos públicos y pu
 Prueba visual reproducible: modo contact-review con red app interna, imagen propia [Dockerfile](../docker/contact-review.Dockerfile), [runner](../scripts/run-contact-ui-review.py) y [driver](../scripts/contact-ui-review.cjs). No instala herramientas en host. Alias frontend.localhost privado para secure context del navegador. La revisión documenta los fixtures de tiempo acelerado y no atribuye 72 horas reales de espera a una prueba simulada.
 
 Limpieza solo con el UUID propio impreso por el wrapper; guardas de propiedad, sin prune ni recursos habituales. [Evidencia](contact-change-validation.md) registra destinos, resultados y limitaciones reales.
+
+
+## Candidato #62 — admisión bcrypt antes de las operaciones con contraseña
+
+Incremento autorizado posterior al corte histórico de este contrato, en Draft sin merge ni despliegue: [diseño aprobado](contact-bcrypt-admission-design.md) e [implementación, retención y evidencia](contact-bcrypt-admission-validation.md). Agrega diez admisiones técnicas por titular/900 segundos, confirmadas antes de bcrypt, conservando cinco fallos y cuotas funcionales. Cada POST idempotente de inicio mantiene contraseña obligatoria y consume admisión técnica, sin duplicar inicio funcional/aviso ni renovar autoridad. 429 antes de comparar y sin mutaciones funcionales; reservas confirmadas no se reembolsan. Solo eventos password_admitted de más de 24 horas son elegibles para limpieza técnica acotada; no cambia retención de fallos o eventos funcionales. SQL histórico, clínica, AB-23 y barreras de permisos conservados.
