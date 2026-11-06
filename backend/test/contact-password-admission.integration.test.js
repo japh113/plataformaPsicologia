@@ -8,6 +8,7 @@ import pg from 'pg';
 import app from '../src/app.js';
 import db from '../src/config/db.js';
 import env from '../src/config/env.js';
+import {testDeliveries} from '../src/modules/auth/verification.delivery.js';
 import {migrate,catalogChecksum,loadMigrations} from '../scripts/episode-migration.js';
 import {createSandboxDatabase,installBaseline,syntheticFixture} from '../scripts/episode-sandbox.js';
 import {installContactAdmissionSchema} from '../scripts/contact-admission-sandbox.js';
@@ -134,10 +135,19 @@ test('012 contact bcrypt admission: isolated PostgreSQL HTTP and multiple proces
     });
     await t.test('012 repeated correct reauthentication shares starts sessions and channels budget',async()=>{
       const a=await account(),p=payload();assert.equal((await start(a,p)).status,200);
+      assert.equal((await req('/contact-changes/'+p.operationId+'/resend',a.token,{operationId:randomUUID()})).status,200);
+      const delivery=testDeliveries().filter(m=>m.userId===a.user.id&&m.purpose==='contact_change').at(-1);
+      assert.equal((await req('/contact-changes/'+p.operationId+'/verify',a.token,{secret:delivery.secret})).status,200);
       const second=await login(a.user.email),before=calls;
       for(let i=0;i<9;i++)assert.equal((await reauth(i%2?a:second,p.operationId)).status,200);
       const state=await snapshot();assert.equal((await reauth(a,p.operationId)).status,429);
       assert.equal(calls-before,9);assert.equal(await count(a),10);assert.deepEqual(await snapshot(),state);
+      // Already verified/authorized contact can still be confirmed without a
+      // new password admission. New session/version AND channel cannot reset it.
+      assert.equal((await req('/contact-changes/'+p.operationId+'/confirm',second.token,{})).status,200);
+      const fresh=await login(p.contact),beforeSms=calls;
+      assert.equal((await start(fresh,{...payload(),channel:'sms',contact:'+525500123456'})).status,429);
+      assert.equal(calls,beforeSms);assert.equal(await count(fresh),10);assert.equal((await req('/me',fresh.token)).status,200);
       const b=await account();assert.equal((await start(b)).status,200);
     });
     await t.test('012 idempotent wrong and malformed passwords retain five failure limit',async()=>{
