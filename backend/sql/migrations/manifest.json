@@ -53,5 +53,10 @@
     "version": "011",
     "file": "011_private_note_origin_resolver.sql",
     "sha256": "ac1ab3943559f4d6e2faec587bd4e9185e697404c2ff761b12606e32bf8cbfab"
+  },
+  {
+    "version": "012",
+    "file": "012_contact_password_admission.sql",
+    "sha256": "6f941a0f3affcd8d9945d754e024f751341428a6d33fce1988e669283393c75e"
   }
 ]

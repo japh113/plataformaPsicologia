@@ -1,3 +1,4 @@
+import {purgeContactPasswordAdmissions} from './contact-password-admission.js';
 import {randomUUID} from 'node:crypto';
 import db from '../../config/db.js';
 import {resolveChange} from './contact-change.service.js';
@@ -7,6 +8,7 @@ import {monotonicNow,remainingMilliseconds,deadlineFromDatabase} from './contact
 
 // No external delivery in this path: scheduled independently even while a batch runs.
 export async function maintainContactChangeData({batchSize=100}={}) {
+  await purgeContactPasswordAdmissions();
   let keyUnavailable=false;
   const users=(await db.query(`SELECT DISTINCT user_id FROM contact_change_requests
     WHERE status='pending' ORDER BY user_id`)).rows;
