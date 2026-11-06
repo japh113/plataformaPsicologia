@@ -1,6 +1,7 @@
 """Fail-closed evidence contracts. Export structured allowlisted fields only."""
 import hashlib,json,os,re,signal,subprocess,time
 from pathlib import Path
+from inventory_source import test_names
 JOBS=['docs','backend-unit','frontend','postgres','browser']
 OUT=Path('tmp/ci-export')
 PRIVATE=Path('tmp/ci-private')
@@ -124,8 +125,7 @@ def inventory(report,files):
     expected=set()
     for file in files:
         source=Path(file).read_text()
-        for match in re.finditer(r"\btest\(\s*(['\"])((?:\\.|(?!\1).)*)\1",source,re.S):
-            expected.add(match[2].replace("\\'","'").replace('\\"','"'))
+        expected.update(test_names(source))
     actual={t['name'] for t in report['tests']}
     if not expected or expected-actual:raise ValueError('Declared test cases did not execute: '+str(sorted(expected-actual)))
     for name in required:

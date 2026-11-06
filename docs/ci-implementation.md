@@ -22,6 +22,8 @@ Artifacts por componente `ci-COMPONENT-RUN-ATTEMPT-SHA`; índice `ci-results-RUN
 
 [common.py](../scripts/ci/common.py) y [evidence.py](../scripts/ci/evidence.py) exportan únicamente JSON estructurado, TAP reconstruido sin diagnósticos y PNG declarados por el driver con inputs y textos de contacto enmascarados, más SHA256SUMS. No suben logs brutos, buzones, cuerpos HTTP, tokens/OTP, candidatos/destinos, `.env`, dumps, storage state, HAR, traces o vídeo. Los logs privados solo existen temporalmente en el runner para diagnóstico; no son artifacts. Los checks de saneamiento incluyen fixtures sensibles rechazados. El índice exige artifacts de los cinco componentes para el mismo run/intento/SHA, hashes correctos y limpieza confirmada en jobs aprobados.
 
+Encargo posterior a #60: [corrección acotada del extractor de nombres ante ReDoS](ci-inventory-security.md). Conserva el catálogo obligatorio, comparación con TAP y formatos de evidencia; no amplía el inventario a nombres dinámicos ni modifica los siete checks.
+
 `ci/required` usa `always()`, depende de la matriz completa y de evidencia. Solo acepta success, índice íntegro y reportes aprobados de todos los componentes; cualquier fallo, cancelación, omisión, neutral/desconocido o archivo ausente impide aprobar. La conclusión conjunta de la matriz se contrasta además con los cinco reportes individuales. Los artifacts de una suite fallida se intentan conservar, pero nunca convierten esa suite en éxito.
 
 ## Verificación y estado
