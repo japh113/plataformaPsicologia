@@ -125,9 +125,12 @@ test('004: adult identity, private verification, concurrency and legacy barrier 
       assert.equal(freshProfessional.status, 202);
       assert.deepEqual(existingPatientEmail.body, freshProfessional.body);
       session = await login(credentials.email); second = await login(credentials.email); userId = session.user.id;
-      for (const table of ['care_relationships','psychologist_patient_access','clinical_episodes','patient_intakes']) {
+      for (const table of ['care_relationships','psychologist_patient_access','patient_intakes','clinical_episode_participants']) {
         assert.equal((await client.query('SELECT 1 FROM ' + table + ' WHERE patient_id=$1', [session.user.patientId])).rowCount, 0, table);
       }
+      // HTTP runs against 012: 008 replaced the legacy patient_id header with
+      // explicit participant slots. Check BOTH header slots as well as CEP.
+      assert.equal((await client.query('SELECT 1 FROM clinical_episodes WHERE participant_one_id=$1 OR participant_two_id=$1',[session.user.patientId])).rowCount,0,'clinical_episodes');
       const identity = await request('/auth/identity', session.token);
       assert.equal(identity.body.data.birthDate, credentials.birthDate);
       assert.equal(identity.body.data.emailVerifiedAt, null); assert.equal(identity.body.data.phoneVerifiedAt, null);
