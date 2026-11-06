@@ -1,175 +1,160 @@
 # Inventario CI: corrección de ReDoS — candidato #61
 
-Encargo independiente del propietario, base remota reconsultada `main`
-`8b3adc5b965df4dffe85e089b7d206840daa2076` (merge de #60). Al iniciar,
-workspace limpio; 29 alertas CodeQL abiertas sobre esa base: 28
-`js/missing-rate-limiting` y una `py/redos`. Solo se corrige
-[#1](https://github.com/japh113/plataformaPsicologia/security/code-scanning/1).
-Las otras 28 no se modifican ni se consideran resueltas.
+Encargo del propietario sobre `main`
+`8b3adc5b965df4dffe85e089b7d206840daa2076`, dentro del mismo
+[PR Draft #61](https://github.com/japh113/plataformaPsicologia/pull/61).
+Solo se corrige [CodeQL #1, py/redos](https://github.com/japh113/plataformaPsicologia/security/code-scanning/1).
+No se modifican las otras 28 alertas ni se cierra manualmente la alerta de main.
 
-## Causa y alternativa seleccionada
+## Causa y reevaluación arquitectónica R1/R2
 
-La regex de [common.py](../scripts/ci/common.py) repetía dos alternativas que
-podían consumir los mismos caracteres escapados. Un literal sin cierre podía
-provocar backtracking exponencial. Las fuentes vienen del checkout del PR;
-el timeout de los subprocesos de pruebas no protege la ejecución posterior de
-`inventory()` en el proceso Python.
+La regex original de [common.py](../scripts/ci/common.py) repetía alternativas
+capaces de consumir los mismos escapes; un literal sin cierre podía causar
+backtracking exponencial. El timeout de ejecución de pruebas no protegía este
+análisis posterior en Python.
 
-[inventory_source.py](../scripts/ci/inventory_source.py) sustituye únicamente
-la extracción de nombres por un lector léxico determinista sin dependencias ni
-evaluación de JavaScript. Los cursores avanzan sin retroceder; comentarios,
-cadenas, regexes y texto de plantillas se consumen una vez. Las interpolaciones
-de plantillas vuelven a código, para no ocultar llamadas con nombre literal.
-Los nombres entre comillas simples/dobles conservan la normalización histórica:
-solo se sustituyen las secuencias de comilla escapada, sin interpretar otros
-escapes como JavaScript.
+El primer lexer propio (`6a43a7c`) clasificaba mal `export default /.../`.
+La corrección `87087c9` superó sus regresiones y CI, pero Work encontró dos P1
+independientes: R1 perdía el contexto de propiedad ante `#default`; R2 lo perdía
+ante U+FEFF, espacio de JavaScript que Python `str.isspace()` no reconoce.
+En ambos casos confundía división con regex y podía ocultar `hidden`, aceptando
+un TAP parcial. Esos resultados anteriores no acreditan la corrección actual.
 
-El coste esperado del lector es **O(n)** en caracteres de fuente y O(n) de
-memoria en el peor caso, contando nombres y pilas de anidación. Las búsquedas de
-fin de comentario operan sobre segmentos disjuntos y no se reinician desde
-posiciones anteriores. La ordenación y comparaciones del inventario exterior
-conservan su coste anterior; no se afirma que todo el sistema CI sea lineal.
+Antes de editar se compararon estas estrategias:
 
-## Contrato y límites explícitos
+| Estrategia | Evaluación |
+| --- | --- |
+| A: lexer propio determinista | El avance lineal evita ReDoS, pero no demuestra integridad. División/regex, ASI, propiedades privadas, escapes de identificador y Unicode requieren contexto gramatical. No existe una delimitación suficientemente fiable del subconjunto aceptado por el lector anterior; añadir palabras o espacios repetiría el problema. Se descarta. |
+| B: Espree/Acorn del lock frontend | Son parsers mantenidos y disponibles tras instalar frontend, pero varios jobs actuales no lo instalan. Exigir esa instalación en todos ampliaría CI; no se elige. |
+| B: Acorn incluido en Node fijado por CI | Node 24.22.0 ya contiene Acorn 8.18.0. Se verificó en el runtime exacto. Permite analizar el archivo completo sin instalar paquetes, añadir dependencias, copiar un parser ni modificar workflows. Se elige con comprobación estricta de versiones y fallo cerrado. |
 
-- Se reconocen llamadas `test(...)`, incluidas las de miembro como `t.test`,
-  cuyo primer argumento es un literal simple/doble. Se permite espacio y
-  comentarios entre tokens. Tras el literal debe seguir la coma de argumentos.
-- Un literal iniciado pero sin cierre, escape colgante, composición del nombre
-  o región léxica incompleta produce `ValueError`; no se entrega un inventario
-  parcial como éxito. Los mensajes no incluyen el texto de fuente.
-- Comentarios y contenido de cadenas/plantillas no crean pruebas ficticias.
-  No se introduce un parser completo: las ambigüedades conocidas entre división
-  y regex que requieren contexto no soportado se rechazan explícitamente
-  (por ejemplo, slash tras `}`, `of`, etiqueta de break/continue o paréntesis
-  de await). Clases regex anidadas también se rechazan. La sintaxis futura fuera
-  de este subconjunto puede necesitar una ampliación revisada del lector.
-- Por confirmación expresa del propietario, **nombres dinámicos, plantillas
-  como nombre y variantes no reconocidas por el contrato anterior no se añaden
-  al inventario estático**. Los dos sitios existentes de subtests interpolados
-  de `contact-deadline.integration.test.js` permanecen intactos; su prueba padre
-  literal sigue inventariada. Su ejecución efectiva se verifica en la CI de
-  integración, sin omitir la suite ni cambiar sus controles TAP.
-- El catálogo [episode-cases.json](../scripts/ci/episode-cases.json), su
-  comprobación de declaraciones, unicidad y exigencia de exactamente una
-  ejecución aprobada por caso obligatorio permanecen intactos. Las declaraciones
-  ordinarias siguen colapsando a un conjunto como antes; no se introduce una
-  política nueva de duplicados generales.
-- No cambian descubrimiento, `parse_tap()`, aceptación de evidencia, nombres y
-  formatos de artifacts, hashes, SHA/base/HEAD, saneamiento ni los siete checks.
-  El resultado satisfactorio de un extractor no acredita por sí solo ejecución:
-  se mantiene la comparación con TAP y el rechazo de evidencia incompleta.
+La documentación de [Acorn](https://github.com/acornjs/acorn/blob/master/acorn/README.md)
+explica que tokenizar JavaScript moderno requiere contexto del parser. Se usa
+`parse`, con `ecmaVersion: 2025` y `sourceType: module`, sin recuperación,
+plugins, modo loose ni análisis de fragmentos.
 
-## Validación inicial del HEAD 6a43a7c — anterior a la auditoría P1
+## Implementación y contrato
 
-`python3 -B -m unittest discover -s scripts/ci -p 'test_*.py'`: **23/23**, las
-11 pruebas previas y 12 nuevas de [regresión](../scripts/ci/test_inventory_source.py).
-Incluyen simples/dobles, escapes, Unicode/puntuación, múltiples declaraciones,
-comentarios/cadenas/regexes, interpolaciones, nombres dinámicos excluidos,
-literales incompletos/compuestos, regiones no soportadas, discrepancia con TAP,
-inventario vacío, duplicados ordinarios y lectura del catálogo obligatorio.
-Las pruebas existentes conservan omisión, duplicación y falta de invocación de
-casos importados, evidencia incompleta, hashes y saneamiento.
+[inventory_source.py](../scripts/ci/inventory_source.py) llama al adaptador
+[inventory-parser.cjs](../scripts/ci/inventory-parser.cjs) mediante argumentos
+fijos, sin shell. El programa ejecutado es el adaptador; la fuente de pruebas
+solo entra por stdin. No se evalúa, importa ni ejecuta esa fuente para extraer
+nombres. Se eliminan `NODE_OPTIONS` y `NODE_PATH` del entorno del subproceso.
 
-Comparación puntual con el extractor original obtenido por `git show` de la
-base: **49 archivos, 469 coincidencias; igualdad exacta por archivo, orden y
-duplicados**. Corpus: `backend/test` y `frontend/test`, solo archivos directos
-`*.test.js` y `*.cases.js`. SHA-256 del JSON UTF-8 compacto de pares ordenados
-`[ruta, nombres]`, `ensure_ascii=False`:
+El adaptador requiere el builtin
+`node:internal/deps/acorn/acorn/dist/acorn` con `--expose-internals` y exige
+Node **24.22.0** y Acorn **8.18.0**. El prefijo `node:` impide resolver un paquete
+homónimo del checkout. La ausencia del builtin, cambio de versión o cualquier
+error produce rechazo: **no existe fallback al lexer**.
+
+Se analiza todo el módulo antes de recorrer su AST. El recorrido iterativo
+incluye ramas no ejecutadas, cuerpos de funciones, miembros privados e
+interpolaciones de plantillas. Solo los nodos de llamada a `test`, incluidos
+miembros no computados como `t.test`, pueden declarar nombres. El uso de
+`new test(...)` se rechaza explícitamente. Se ordenan por posición del argumento
+literal en la fuente (también en llamadas encadenadas), conservando orden y
+duplicados. El texto dentro de strings,
+comentarios, regexes y partes estáticas de plantillas no crea llamadas AST.
+
+- Solo se inventarían nombres literales entre comillas simples o dobles.
+  Se conserva la normalización histórica del texto crudo: reemplazar comillas
+  escapadas, sin decodificar otros escapes como JavaScript.
+- Un nombre que empieza por literal pero está compuesto, un literal sin segundo
+  argumento o cualquier sintaxis inválida rechaza el archivo entero. No se
+  entrega siquiera un prefijo válido antes de detectar el error.
+- Por decisión expresa del propietario, los nombres dinámicos siguen fuera del
+  inventario estático; se excluyen plantillas y expresiones sin literales de
+  cadena internos,
+  sin intentar resolverlas. Si el argumento compuesto contiene un literal de
+  cadena fuera de una plantilla, se rechaza explícitamente, también entre
+  paréntesis. Esta política conservadora se calcula sobre el AST completo y
+  evita omitir composiciones como `('name').trim()`; puede rechazar algunos
+  nombres dinámicos con strings internos. No se resuelven alias.
+  Los dos sitios interpolados existentes en
+  [contact-deadline.integration.test.js](../backend/test/contact-deadline.integration.test.js)
+  permanecen intactos. Su padre literal se inventaría y sus cuatro ejecuciones
+  reales se contrastan en la evidencia nueva de CI.
+- El catálogo [episode-cases.json](../scripts/ci/episode-cases.json) y sus
+  comprobaciones no cambian: declaraciones, unicidad y exactamente una ejecución
+  aprobada de cada uno de los 99 obligatorios. Los duplicados ordinarios siguen
+  colapsando a un conjunto en `inventory()` como antes.
+- No cambian descubrimiento, controles TAP, aceptación de evidencia incompleta,
+  hashes, saneamiento, identidad de artifacts ni los siete checks. El AST
+  enumera declaraciones; la comparación existente con TAP exige su ejecución.
+
+## Recursos, reproducibilidad y limitaciones
+
+Cada fuente tiene un máximo de **1 MiB UTF-8**, comprobado antes del subproceso;
+el adaptador también comprueba el tamaño. Cada análisis dispone de **10 segundos**
+y heap V8 de **64 MiB**. Un timeout, fallo de memoria, profundidad excesiva o
+error de sintaxis rechaza el inventario; nunca habilita un análisis parcial.
+El límite del heap no pretende limitar toda la memoria nativa de Node.
+
+El recorrido del AST es O(n) y la ordenación de k nombres O(k log k); ambos
+usan O(n) de memoria respecto al árbol producido. No se afirma una garantía
+lineal universal para Acorn: la validación gramatical/regex pertenece al parser
+mantenido y está acotada operacionalmente por tamaño, timeout y heap. No se usa
+la regex vulnerable ni se ejecutan las regexes del código analizado.
+Python guarda solo análisis completos satisfactorios en una caché LRU de 32
+fuentes, por contenido y no por ruta; el tamaño máximo limita su memoria.
+Esto evita reanalizar los módulos obligatorios en las 99 regresiones de omisión.
+
+La API interna de Node **no es un contrato público estable**. Una actualización
+de Node o de su Acorn requiere reevaluación y cambio explícito de las versiones
+permitidas; mientras tanto fallará cerrada. Sintaxis de Node fuera de ECMAScript
+2025 admitido por este parser también se rechaza. Son límites de disponibilidad
+explícitos, sin interpretación alternativa de regiones desconocidas.
+
+## Regresiones y equivalencia
+
+Validación local final: **35/35 contratos Python**, sin omisiones (28 anteriores
+adaptados a AST y siete métodos nuevos), con **79 módulos ficticios** validados
+por `node --check` y ejecutados con TAP real. Comando:
+`python3 -B -m unittest discover -s scripts/ci -p 'test_*.py'`.
+La validación documental final cubre 53 Markdown y 1115 enlaces locales;
+decisiones protegidas y SQL/manifiesto/hashes permanecen intactos.
+
+[Las regresiones](../scripts/ci/test_inventory_source.py) comprueban sintaxis con
+Node 24.22.0, ejecución TAP real, extracción y `inventory()` para R1, R2 y A/B:
+
+| Familia | Resultado exigido |
+| --- | --- |
+| R1: `#default`, `#new`, `#extends`, `#return`, `#if`; campos, métodos y getters | Se extraen `hidden` y `visible`; Node solo ejecuta `visible`; el inventario rechaza la omisión. |
+| R2: U+FEFF y el conjunto de espacios/terminadores ECMAScript, comentarios entre tokens | Mismo rechazo de TAP que omite `hidden`, sin perder contexto de propiedad. |
+| A: `export default /"/`, una línea y varias | Se detecta `hidden` y se rechaza la omisión. |
+| B: regex con texto `test('phantom',x)` | Solo `visible`; el inventario completo se acepta sin inventar `phantom`. |
+| ASI, Unicode y propiedades escapadas, clases regex anidadas y otros contextos | AST completo; se conserva detección de `hidden` y rechazo del TAP parcial. |
+| Sintaxis inválida, nombres compuestos, runtime/parser ausentes o distintos, timeout y respuesta inválida | Rechazo completo sin nombres parciales ni texto de fuente en errores. |
+
+Se conservan escapes, orden, duplicados, nombres dinámicos fuera de contrato,
+omisiones, catálogo obligatorio, saneamiento y evidencia incompleta. Las entradas
+repetitivas de tamaños 128, 1024 y 8192 se prueban **solo con el extractor nuevo**
+en un hijo con límite CPU y timeout; cada Node conserva sus límites individuales.
+No se ejecutan entradas de agotamiento contra la regex vulnerable ni el host.
+
+La comparación puntual con el extractor original de la base se limita al corpus
+válido actual: **49 archivos / 469 nombres**, igualdad por archivo, orden y
+duplicados. JSON UTF-8 compacto de pares ordenados `[ruta, nombres]`,
+`ensure_ascii=False`, SHA-256 esperado de ese corte:
 `ad05a52d99da04cfc5c048885d00c66823f3df089452a7eb744510f6cec7aa1b`.
-Estos valores describen la base auditada, no son constantes exigidas a futuros
-inventarios. La regex vulnerable no se incorpora a los tests nuevos ni se
-ejecuta periódicamente contra fuentes de futuros PRs.
+La regex original se ejecuta únicamente en un hijo acotado sobre ese corpus
+conocido; no se incorpora a regresiones periódicas de futuros PRs.
 
-La comparación original se ejecutó solo sobre el corpus válido actual en un
-subproceso con timeout de cinco segundos, CPU de dos segundos y memoria de
-128 MiB. Las regresiones de complejidad ejecutan **solo el lector nuevo** bajo
-los mismos límites: tamaños 128, 1024 y 8192, escapes repetidos, múltiples
-declaraciones y fuentes malformadas. No se ejecutaron entradas de agotamiento
-contra la regex original ni pruebas de carga; los límites temporales son una
-regresión acotada, la justificación asintótica procede del avance del cursor.
-
-La validación documental comprueba enlaces, decisiones protegidas y SQL/hashes.
-No se ejecutan bases, migraciones, demos ni contenedores habituales localmente.
-
-## Corrección P1 solicitada por Work sobre 6a43a7c
-
-Work emitió **SOLICITAR CAMBIOS**: `default` caía en el caso genérico de
-identificador/valor. Por ello, la barra de `export default /.../` podía tratarse
-como división y las comillas de la regex como una cadena. Esa cadena podía
-ocultar una declaración literal o el contenido de la regex podía crear un nombre
-ficticio. La CI del HEAD auditado no cubría esta regresión y no acredita esta
-corrección.
-
-La distinción entre división y regex depende del contexto sintáctico, según la
-[gramática léxica ECMAScript](https://tc39.es/ecma262/multipage/ecmascript-language-lexical-grammar.html#sec-ecmascript-language-lexical-grammar).
-`export default` permite una expresión, como recoge la
-[gramática de exportaciones](https://tc39.es/ecma262/multipage/ecmascript-language-scripts-and-modules.html#sec-exports).
-La corrección separa prefijos de expresión (`default`, `new`, `extends` y los
-anteriores), palabras de control, valores y prefijos reservados no soportados.
-Estos últimos pasan a estado ambiguo, que rechaza una barra, en lugar de
-presumir que son identificadores ordinarios. Después de punto se conserva la
-lectura de una propiedad: `object.default / 2` sigue siendo división.
-
-También se rechaza una barra tras un salto de línea si el token anterior parece
-un valor o `]`: por ejemplo, una declaración import sin punto y coma puede
-terminar en una cadena y admitir una sentencia regex en la línea siguiente.
-Se tienen en cuenta LF/CR/LS/PS y saltos dentro de comentarios. Es una
-restricción conservadora: puede rechazar una división válida a través de un
-salto de línea. El corpus actual no la necesita; no se pretende resolver ASI ni
-ampliar el lector a un parser completo. El error se propaga desde `inventory()`
-y nunca convierte los nombres acumulados hasta ese punto en evidencia exitosa.
-
-Resultados nuevos de las reproducciones:
-
-| Caso | Extracción corregida | Contrato con TAP real de Node |
-| --- | --- | --- |
-| A, multilineal y en una línea | `hidden`, `visible` | Node ejecuta solo `visible`; `inventory()` rechaza la omisión de `hidden`. |
-| B, regex con texto `test('phantom',x)` | Solo `visible` | Node ejecuta `visible`; inventario completo aceptado sin `phantom`. |
-| Límite de sentencia import sin punto y coma | Error seguro por contexto ambiguo | Node acepta la sintaxis y ejecuta `visible`; `inventory()` rechaza el análisis parcial. |
-
-Matiz de reproducción del HEAD auditado: A en una línea reproducía el falso
-negativo; el formato multilínea proporcionado ya provocaba rechazo por cadena
-sin terminar. La versión corregida identifica ambas declaraciones en los dos
-formatos. B reproducía el falso positivo. No se presenta ese rechazo antiguo
-como solución del error de clasificación.
-
-Validación nueva: **28/28 contratos Python**, sin omisiones (23 anteriores y
-cinco métodos nuevos). Las regresiones usan **25 módulos ficticios**, cada uno
-validado con `node --check` y ejecutado con TAP real: A/B, 17 contextos de
-expresión, cuatro límites de sentencia no soportados y propiedades reservadas.
-Comprueban `inventory()`, no solo `test_names()`. Continúan las pruebas de
-comentarios/cadenas/plantillas, malformaciones, omisiones y catálogo obligatorio.
-La regresión acotada añade texto regex con `phantom` seguido de declaraciones
-repetidas; no ejecuta la regex vulnerable. El avance y coste esperado O(n) se
-conservan; las comprobaciones de comentarios añaden un número constante de
-recorridos de segmentos disjuntos.
-
-En local, Python usa un wrapper temporal de Node 24.22.0 en contenedores nuevos,
-sin red, DB ni montajes, con raíz de solo lectura, memoria de 128 MiB, un CPU y
-64 procesos máximos. Cada comando Node tiene timeout de 10 segundos y heap de
-64 MiB. No se instala Node en el host. En CI se usa el Node ya provisionado por
-el workflow; no se añade configuración ni dependencia.
-
-Comparación nueva con el extractor original de la base, solo sobre fuentes
-válidas actuales y bajo límites de recursos: **49 archivos / 469 nombres**, por
-archivo, orden y duplicados, con el mismo SHA-256 `ad05a52…7aa1b` documentado
-arriba. El catálogo permanece en **99 obligatorios**. La ejecución de estos y
-los cuatro subtests dinámicos, los siete checks, CodeQL y artifacts debe
-corresponder al **nuevo HEAD**; se registra en el PR y no se sustituye por los
-runs aprobados de `6a43a7c`.
+La validación local usa Python y un wrapper temporal de Node en contenedores
+nuevos sin red ni DB, raíz de solo lectura, 128 MiB, un CPU, 64 procesos y solo
+`scripts/ci` montado de solo lectura. No se instala nada en host ni se tocan
+recursos habituales. En CI se usa el Node ya provisionado por cada job.
 
 ## CI, CodeQL y entrega
 
-Los siete resultados, análisis CodeQL Python/JavaScript-TypeScript/Actions,
-HEAD final, base, merge sintético y enlaces de artifacts de 14 días se registran
-en el PR Draft. La validación local anterior no sustituye esos checks ni la
-auditoría independiente de ChatGPT/Work. No se afirma el cierre de #1 en `main`:
-solo podrá contrastarse tras una integración decidida por el propietario y un
-nuevo análisis de GitHub. No se suprime ni descarta ninguna alerta manualmente.
+El HEAD final, total de regresiones, resultados nuevos de los siete checks,
+CodeQL Python/JavaScript-TypeScript/Actions, merge de prueba y artifacts de
+14 días se registran en el PR y la entrega. La evidencia se comprueba contra el
+nuevo HEAD; los runs de `87087c9` y `6a43a7c` son históricos. La alerta #1 de
+main no se cierra manualmente; solo se comprueba la referencia del PR.
 
 No cambian backend/frontend funcional, autenticación, permisos, clínica,
-SQL 001–011/manifiesto/hashes, Dockerfiles, Compose, workflows o configuración de
+SQL 001–011/manifiesto/hashes, Dockerfiles, Compose, workflows ni reglas de
 seguridad. Se conservan AB-23, `prepared`, `allowed:false`,
-`audienceVerified:false` y originales privados. Sin merge, despliegue ni trabajo
-de rate limiting; el siguiente incremento requiere autorización propia.
+`audienceVerified:false` y originales privados. Sin merge ni despliegue;
+el propietario decide integración tras revisión del HEAD final por ChatGPT/Work.
