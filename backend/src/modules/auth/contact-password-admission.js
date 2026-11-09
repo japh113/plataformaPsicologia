@@ -36,7 +36,11 @@ export function createContactPasswordOperation({database=db,nowNs=()=>process.hr
     if(!actor.sessionHash)throw fail('Inicia sesión nuevamente.',401,'CONTACT_PASSWORD_SESSION');
     let client,inTransaction=false,discard=false,used=false;
     const begin=async()=>{
-      await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');inTransaction=true;
+      // A rejected BEGIN may already have opened a transaction on the server.
+      // Never return that connection to the pool, even if no ack was received.
+      try {await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');}
+      catch(error){discard=true;throw error;}
+      inTransaction=true;
       await client.query("SET LOCAL lock_timeout='2s'");
       await client.query("SET LOCAL statement_timeout='5s'");
       await client.query("SET LOCAL synchronous_commit='on'");

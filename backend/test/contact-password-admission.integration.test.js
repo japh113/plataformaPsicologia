@@ -1,3 +1,4 @@
+import {exerciseContactTransactionFault,assertDiscarded} from './fixtures/contact-transaction-scenario.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fork,spawnSync} from 'node:child_process';
@@ -284,6 +285,63 @@ test('012 contact bcrypt admission: isolated PostgreSQL HTTP and multiple proces
         assert.equal(calls-before+otherCalls,9);assert.equal(await count(a),10);
         assert.equal((await reauth(a,p.operationId,password,remote)).status,429);
       } finally {child.kill('SIGTERM');await once(child,'exit',{signal:AbortSignal.timeout(10000)});}
+    });
+
+    const proxyActor=await account();
+    const fault=proxyOptions=>exerciseContactTransactionFault({database:db,observer:client,
+      connection:{database:name,user:env.dbUser,password:env.dbPassword},
+      request:()=>start(proxyActor),snapshot,count:()=>count(proxyActor),comparisons:()=>calls,proxyOptions});
+    await t.test('P2 real pg BEGIN A response timeout discards live idle transaction before pool reuse',async()=>{
+      const r=await fault({command:'BEGIN',occurrence:1,mode:'delay'});
+      assertDiscarded(r);assert.equal(r.wire.acceptedStatus,'T');assert.equal(r.transportAtRelease,true);
+      assert.equal(r.releaseState,'idle in transaction');assert.ok(r.driverErrors.some(s=>/Query read timeout/.test(s)));
+      assert.equal(r.queries.includes('ROLLBACK'),false);assert.equal(r.admissions,0);assert.equal(r.comparisons,0);assert.deepEqual(r.after,r.before);
+    });
+    await t.test('P2 real pg BEGIN B response timeout discards connection and preserves committed admission',async()=>{
+      const r=await fault({command:'BEGIN',occurrence:2,mode:'delay'});
+      assertDiscarded(r);assert.equal(r.wire.acceptedStatus,'T');assert.equal(r.transportAtRelease,true);
+      assert.equal(r.releaseState,'idle in transaction');assert.ok(r.driverErrors.some(s=>/Query read timeout/.test(s)));
+      assert.equal(r.queries.includes('ROLLBACK'),false);assert.equal(r.admissions,1);assert.equal(r.comparisons,0);assert.deepEqual(r.after,r.before);
+    });
+    await t.test('P2 real transport disconnect is distinct from delayed BEGIN acknowledgment',async()=>{
+      const r=await fault({command:'BEGIN',occurrence:1,mode:'disconnect'});
+      assertDiscarded(r);assert.equal(r.wire.acceptedStatus,'T');assert.equal(r.wire.transportAtFault,true);
+      assert.equal(r.transportAtRelease,false);assert.ok(r.driverErrors.some(s=>/Connection terminated/.test(s)));
+      assert.equal(r.driverErrors.some(s=>/Query read timeout/.test(s)),false);
+      assert.equal(r.admissions,0);assert.equal(r.comparisons,0);assert.deepEqual(r.after,r.before);
+    });
+    await t.test('P2 confirmed BEGIN followed by real SET LOCAL error rolls back and reuses only clean connection',async()=>{
+      for(const occurrence of [1,4]) {
+        const r=await fault({command:'SET',occurrence,mode:'set-error'});
+        assert.equal(r.response.status,503);assert.equal(r.releaseError,undefined);assert.equal(r.releaseState,'idle');
+        assert.equal(r.oldPid,r.nextPid);assert.equal(r.nextState,'idle');assert.ok(r.queries.includes('ROLLBACK'));
+        assert.equal(r.admissions,occurrence===1?0:1);assert.equal(r.comparisons,0);assert.deepEqual(r.after,r.before);
+      }
+    });
+    await t.test('P2 real rollback disconnect after acknowledged BEGIN discards connection in both stages',async()=>{
+      for(const occurrence of [1,4]) {
+        const r=await fault({command:'SET',occurrence,mode:'rollback-disconnect'});
+        assertDiscarded(r);assert.ok(r.queries.includes('ROLLBACK'));
+        assert.equal(r.admissions,occurrence===1?0:1);assert.equal(r.comparisons,0);assert.deepEqual(r.after,r.before);
+      }
+    });
+    await t.test('P2 real uncertain COMMIT A and B continue discarding without refund or password retries',async()=>{
+      for(const occurrence of [1,2]) {
+        const r=await fault({command:'COMMIT',occurrence,mode:'delay'});
+        assertDiscarded(r);assert.equal(r.wire.acceptedStatus,'I');assert.equal(r.transportAtRelease,true);
+        assert.ok(r.driverErrors.some(s=>/Query read timeout/.test(s)));assert.equal(r.queries.includes('ROLLBACK'),false);
+        assert.equal(r.admissions,1);assert.equal(r.comparisons,occurrence===1?0:1);
+        if(occurrence===1)assert.deepEqual(r.after,r.before);
+        else {
+          // B actually committed a valid start; uncertain acknowledgment does
+          // not undo it. All other functional/clinical tables remain identical.
+          assert.equal(r.after.contact_change_requests.length,r.before.contact_change_requests.length+1);
+          assert.equal(r.after.contact_change_notices.length,r.before.contact_change_notices.length+1);
+          delete r.after.contact_change_requests;delete r.before.contact_change_requests;
+          delete r.after.contact_change_notices;delete r.before.contact_change_notices;
+          assert.deepEqual(r.after,r.before);
+        }
+      }
     });
   } finally {
     bcrypt.compare=originalCompare;db.query=originalQuery;db.getClient=originalGet;

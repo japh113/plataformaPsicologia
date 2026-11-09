@@ -49,3 +49,44 @@ Entorno local: Docker Desktop Linux Engine no está disponible y no hay Node Lin
 ## Riesgos residuales
 
 Consumo conservador sin comparación, margen de diez segundos entre admisión y comienzo, esperas legítimas por replay y sesiones alternantes, costo de dos transacciones, crecimiento mientras no opere el mantenimiento y límites del reloj DB. Durabilidad depende del PostgreSQL/almacenamiento confiables; no se promete failover sin pérdida. No es límite global de CPU ni protección agregada frente a muchas cuentas. La protección SQL puede no ser reconocida por CodeQL; no se cambian reglas ni se descartan alertas manualmente. No activar capacidades clínicas o afirmar despliegue por aprobar ensayos.
+
+
+## Revisión P2 — BEGIN incierto, 9 de noviembre de 2026
+
+El propietario comunicó el dictamen independiente de Work **SOLICITAR CAMBIOS** sobre `e0ac7ce1b32a16b797f2684f4dc4dca967b8af95`. Ese HEAD y su CI verde son evidencia histórica de la entrega inicial; no acreditaban el manejo de un BEGIN aceptado por PostgreSQL cuya respuesta excede el query_timeout del cliente. Base/main y Draft #62 reconsultados, sin cambios: `3d89863cebb592fb250d7dd6014bf46b8e1b0782`. Se corrige dentro del mismo Draft, sin merge ni despliegue.
+
+Causa: inTransaction se establecía solo después de resolver BEGIN. Un rechazo de la promesa dejaba false y permitía release(undefined), aunque el servidor estuviera idle in transaction. La [implementación de pg 8.20.0](https://github.com/brianc/node-postgres/blob/pg%408.20.0/packages/pg/lib/client.js) distingue el timeout de lectura del estado efectivo de la transacción; un rechazo no prueba que PostgreSQL no haya ejecutado la consulta.
+
+La corrección productiva se limita a begin(): capturar cualquier rechazo de la consulta BEGIN, establecer discard=true y propagar el error. inTransaction solo pasa a true después de confirmar BEGIN. Los SET LOCAL siguen fuera de ese catch: si fallan después de BEGIN confirmado, se intenta ROLLBACK ordinario. No se intenta sanear un BEGIN incierto mediante ROLLBACK antes de descartar.
+
+| Salida | Estado local y devolución al pool |
+| --- | --- |
+| BEGIN A o B rechaza | discard=true; no bcrypt ni ROLLBACK de recuperación; release(error). |
+| BEGIN confirmado, falla SET LOCAL/operación y ROLLBACK confirma | inTransaction=true permite recuperación normal; release(undefined) solo tras ROLLBACK exitoso. |
+| ROLLBACK rechaza | discard=true; release(error). |
+| COMMIT A o B rechaza | descarte existente conservado; no intento de ROLLBACK sobre confirmación incierta; release(error). |
+| A no llega a reservar | Cero admisiones nuevas; no comparación. |
+| A confirmó, B falla | Admisión A persiste; no reembolso. |
+
+La política 10/900, cinco fallos, idempotencia, revalidación, una conexión secuencial, locks usuario → paciente → solicitud y retención de 24 horas permanecen iguales. SQL 001–012, manifiesto/hashes, workflows y reglas CodeQL no se modifican.
+
+### Reproducción real y controles nuevos
+
+[Proxy privado](../backend/test/fixtures/contact-transaction-proxy.js) y [escenario de pool](../backend/test/fixtures/contact-transaction-scenario.js), ejecutados desde la integración existente. Se usa pg real; las consultas no se sustituyen por promesas rechazadas. El proxy escucha únicamente en loopback dentro del contenedor backend del sandbox UUID, conecta a db:5432 en su red privada y no publica puertos en el host. No registra credenciales, mensajes de autenticación, binds ni valores; solo palabras clave de control.
+
+Para BEGIN A y B retiene 250 ms la respuesta después de observar ReadyForQuery con estado T, con query_timeout=80 ms en ese pool de prueba. Una conexión independiente consulta pg_stat_activity antes del release real. Se comprueban timeout de lectura con transporte vivo y servidor idle in transaction, 503 genérico sin SQL, cero bcrypt, snapshot funcional inalterado y consumo cero en A / una reserva conservada en B. Se registra release(error), siguiente préstamo max:1 con PID diferente y estado idle, y desaparición del backend descartado. El timeout del pool/sondas se limita al fixture, sin cambiar tiempos globales de PostgreSQL o configuración productiva.
+
+El mismo harness puede ejecutarse contra el helper rechazado, capturando reutilización del mismo PID todavía idle in transaction antes de limpiar solo como teardown del ensayo. Ese ROLLBACK de teardown no forma parte del saneamiento productivo ni se acredita como corrección del BEGIN incierto.
+
+Control negativo: el proxy termina físicamente el transporte después de BEGIN aceptado; se exige error de desconexión real y ausencia del error Query read timeout. Controles adicionales: error SQL real en SET LOCAL tras BEGIN confirmado en A/B, ROLLBACK normal y reutilización del mismo PID limpio; desconexión durante ROLLBACK y descarte; COMMIT A/B realmente aceptado con respuesta tardía y descarte sin devolver presupuesto ni reintentar contraseña. Si B ya confirmó un inicio válido, su respuesta incierta no deshace el inicio; se verifica coherencia de sus efectos y ausencia de otras mutaciones.
+
+Unitarias nuevas cubren rechazos de BEGIN A/B, los tres SET LOCAL en ambas etapas, ROLLBACK fallido y COMMIT incierto A/B. La integración conserva las 21 regresiones anteriores y agrega seis contratos con el driver/servidor reales. Los timers de respuesta son de 250 ms; las observaciones de cierre usan sondeo acotado y los recursos propios se limpian siempre. Sin ataques de saturación ni bases habituales.
+
+En esta revisión Docker está disponible; el ensayo local utiliza imágenes fijadas Node 24.22.0 y PostgreSQL 17.11 en recursos UUID nuevos. Los resultados de esta revisión quedan pendientes de la ejecución propia del nuevo HEAD en CI. La entrega final registra en el PR siete checks, CodeQL, identidad/base/merge ensayado y artifacts con hashes y limpieza; no reutiliza los resultados de e0ac7ce.
+
+### Observación separada, fuera del P2 corregido
+
+Otros wrappers previos, por ejemplo withIdentity en contact-change.service.js, mantienen su recuperación propia. Su eventual devolución al pool después de un ROLLBACK fallido requeriría análisis y reproducción específicos; este incremento no los corrige ni acredita que tengan exactamente el caso reproducido aquí. No ampliar el parche a esos wrappers por analogía.
+
+
+Ensayo local nuevo del 9 de noviembre: control sobre el helper rechazado en `psicopanel-episodes-13e8af0c-ba3c-4fef-88d6-80eddeeb5429`, con dos reutilizaciones reales del mismo backend idle in transaction (BEGIN A y B). La versión corregida se ejecutó en otro clúster nuevo, `psicopanel-episodes-774bde15-e2b3-466d-943b-597fdd2d5ac8`: **8/8 unitarias del ejecutor y 28/28 casos de integración**, cero fallos/omitidas/canceladas. Incluye las 21 regresiones previas y seis contratos nuevos, con nueve escenarios reales de fallo. Ambos destinos acreditan tmpfs, red interna, cero puertos DB y limpieza propia confirmada, con recursos preexistentes conservados. Resultado local de esa revisión de trabajo: `/tmp/pr62-p2-local-results.json`; no sustituye CI del nuevo commit.
