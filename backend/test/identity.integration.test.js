@@ -1,3 +1,4 @@
+import {installContactAdmissionSchema} from '../scripts/contact-admission-sandbox.js';
 import { spawn } from 'node:child_process';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,8 +20,8 @@ test('004: adult identity, private verification, concurrency and legacy barrier 
   assert.match(process.env.EPISODE_TEST_RUN_ID || '', /^[a-f0-9-]{36}$/);
   const control = await db.getClient();
   const originalQuery = db.query, originalGetClient = db.getClient;
-  const name = 'psicopanel_episode_identity_http';
-  const client = await createSandboxDatabase(control, name);
+  let name = 'psicopanel_episode_identity_http';
+  let client = await createSandboxDatabase(control, name);
   let server, pool;
   try {
     await installBaseline(client);
@@ -80,7 +81,11 @@ test('004: adult identity, private verification, concurrency and legacy barrier 
       } finally { await fs.rm(dir, { recursive: true }); }
       await assert.rejects(migrate(client, { expectedDatabase: name, target: '999' }), /Unsupported/);
     });
-    await migrate(client, { expectedDatabase: name, target: '005' });
+    // Keep historical populated 003/004 evidence in its own database. 008/009
+    // explicitly require an empty destination: never delete/adopt that fixture.
+    await client.end();name='psicopanel_episode_identity_http_012';
+    client=await createSandboxDatabase(control,name);await installBaseline(client);
+    await installContactAdmissionSchema(client,name);await syntheticFixture(client);
     pool = new pg.Pool({ host: 'db', database: name, user: env.dbUser, password: env.dbPassword });
     db.query = (sql, values) => pool.query(sql, values);
     db.getClient = () => pool.connect();
@@ -120,9 +125,12 @@ test('004: adult identity, private verification, concurrency and legacy barrier 
       assert.equal(freshProfessional.status, 202);
       assert.deepEqual(existingPatientEmail.body, freshProfessional.body);
       session = await login(credentials.email); second = await login(credentials.email); userId = session.user.id;
-      for (const table of ['care_relationships','psychologist_patient_access','clinical_episodes','patient_intakes']) {
+      for (const table of ['care_relationships','psychologist_patient_access','patient_intakes','clinical_episode_participants']) {
         assert.equal((await client.query('SELECT 1 FROM ' + table + ' WHERE patient_id=$1', [session.user.patientId])).rowCount, 0, table);
       }
+      // HTTP runs against 012: 008 replaced the legacy patient_id header with
+      // explicit participant slots. Check BOTH header slots as well as CEP.
+      assert.equal((await client.query('SELECT 1 FROM clinical_episodes WHERE participant_one_id=$1 OR participant_two_id=$1',[session.user.patientId])).rowCount,0,'clinical_episodes');
       const identity = await request('/auth/identity', session.token);
       assert.equal(identity.body.data.birthDate, credentials.birthDate);
       assert.equal(identity.body.data.emailVerifiedAt, null); assert.equal(identity.body.data.phoneVerifiedAt, null);

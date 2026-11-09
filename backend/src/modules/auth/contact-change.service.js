@@ -1,6 +1,6 @@
 import { isValidEmail } from './email.validation.js';
 import { randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
-import bcrypt from 'bcryptjs';
+import {contactPasswordOperation} from './contact-password-admission.js';
 import db from '../../config/db.js';
 import { currentIdentity, ensurePatientIdentityOwner, contactDigest, verificationQuota, secretDigest as digestChallenge } from './identity.service.js';
 import { normalizeEmail, normalizePhone } from './identity.validation.js';
@@ -16,16 +16,13 @@ function only(payload,allowed) {
 }
 const event=(client,userId,requestId,action)=>client.query('INSERT INTO contact_change_events(user_id,request_id,action) VALUES ($1,$2,$3)',[userId,requestId,action]);
 async function limit(client,userId,actions,max,seconds,now) {
-  const rows=(await client.query(`SELECT created_at FROM contact_change_events WHERE user_id=$1 AND action=ANY($2)
-    AND created_at>$3::timestamptz-($4*INTERVAL '1 second') ORDER BY created_at`,[userId,actions,now,seconds])).rows;
-  if (rows.length>=max) throw fail('Cambio temporalmente limitado. Tu acceso y atención continúan disponibles.',429,Math.max(1,Math.ceil((rows[0].created_at.getTime()+seconds*1000-now.getTime())/1000)));
-}
-async function passwordCheck(client,identity,password,requestId,now) {
-  await limit(client,identity.userId,['password_failed'],5,900,now);
-  if (typeof password!=='string' || Buffer.byteLength(password)>72 || !await bcrypt.compare(password,identity.passwordHash)) {
-    await event(client,identity.userId,requestId,'password_failed');
-    throw Object.assign(fail('Contraseña incorrecta. Vuelve a intentarlo.'),{commit:true});
-  }
+  const {rows:[row]}=await client.query(`WITH sample AS MATERIALIZED (SELECT clock_timestamp() AS now),
+    recent AS (SELECT created_at FROM contact_change_events,sample WHERE user_id=$1 AND action=ANY($2)
+      AND created_at>sample.now-($4*INTERVAL '1 second') ORDER BY created_at DESC,id DESC LIMIT $3)
+    SELECT CASE WHEN (SELECT count(*) FROM recent)=$3 THEN GREATEST(1,
+      ceil(EXTRACT(EPOCH FROM ((SELECT min(created_at) FROM recent)+($4*INTERVAL '1 second')-sample.now))))
+      ELSE 0 END::int AS retry_after FROM sample`,[userId,actions,max,seconds]);
+  if(row.retry_after>0)throw fail('Cambio temporalmente limitado. Tu acceso y atención continúan disponibles.',429,row.retry_after);
 }
 async function invalidateChallenges(client,id,now) {
   await client.query(`UPDATE contact_verification_challenges SET invalidated_at=$2
@@ -91,20 +88,25 @@ export async function startContactChange(actor,payload) {
   if (!candidate || (payload.channel==='email' && !isValidEmail(candidate))) throw fail('Introduce un correo válido o un teléfono con prefijo internacional.');
   ensurePatientIdentityOwner(actor);
   assertDeliveryConfigured();
-  return withIdentity(actor,async(client,identity,now)=>{
-    const existing=(await client.query('SELECT * FROM contact_change_requests WHERE id=$1 AND user_id=$2',[payload.operationId,actor.id])).rows[0];
-    const fingerprint=contactDigest(payload.channel,candidate);
-    await passwordCheck(client,identity,payload.password,existing?.id||null,now);
-    if (existing) {
-      if (existing.candidate_digest && (existing.channel!==payload.channel || existing.candidate_digest!==fingerprint)) throw fail('La clave de operación ya se utilizó para otro cambio.',409);
-      return dto(existing,actor,now);
-    }
-    if (candidate===contactFor(identity,payload.channel)) throw fail('El nuevo contacto debe ser diferente del vigente.');
-    if (payload.channel==='sms') await requireEmail(client,identity);
-    const old=(await client.query("SELECT * FROM contact_change_requests WHERE user_id=$1 AND status='pending' FOR UPDATE",[actor.id])).rows[0];
-    if ((old && old.id!==payload.replaceRequestId) || (!old && payload.replaceRequestId)) throw fail('Ya existe un cambio pendiente o cambió su estado. Consúltalo antes de sustituirlo.',409);
+  const preflight=async(client,identity,now)=>{
+    const existing=(await client.query('SELECT * FROM contact_change_requests WHERE id=$1 AND user_id=$2 FOR UPDATE',[payload.operationId,actor.id])).rows[0];
+    if(existing)return {existing,requestId:existing.id}; // Still requires reserved bcrypt.
+    if(candidate===contactFor(identity,payload.channel))throw fail('El nuevo contacto debe ser diferente del vigente.');
+    if(payload.channel==='sms')await requireEmail(client,identity);
+    // Expired pending rows are only read here. Resolve them after password success.
+    const old=(await client.query("SELECT * FROM contact_change_requests WHERE user_id=$1 AND status='pending' AND expires_at>$2 FOR UPDATE",[actor.id,now])).rows[0];
+    if((old&&old.id!==payload.replaceRequestId)||(!old&&payload.replaceRequestId))throw fail('Ya existe un cambio pendiente o cambió su estado. Consúltalo antes de sustituirlo.',409);
     await limit(client,actor.id,['started'],5,86400,now);
-    if (old) await limit(client,actor.id,['cancelled','replaced'],10,86400,now);
+    if(old)await limit(client,actor.id,['cancelled','replaced'],10,86400,now);
+    return {old,requestId:null};
+  };
+  return contactPasswordOperation(actor,payload.password,preflight,async(client,identity,now,{existing,old})=>{
+    if(old&&old.expires_at<=now)throw fail('La solicitud ya no está vigente. Consulta su estado o inicia otra.',409);
+    const fingerprint=contactDigest(payload.channel,candidate);
+    if(existing?.candidate_digest&&(existing.channel!==payload.channel||existing.candidate_digest!==fingerprint))throw fail('La clave de operación ya se utilizó para otro cambio.',409);
+    const expired=(await client.query("SELECT id FROM contact_change_requests WHERE user_id=$1 AND status='pending' AND expires_at<=$2 FOR UPDATE",[actor.id,now])).rows;
+    for(const row of expired)await resolveChange(client,row.id,'expired',now);
+    if(existing)return dto((await client.query('SELECT * FROM contact_change_requests WHERE id=$1',[existing.id])).rows[0],actor,now);
     // Validate encryption before any replacement is written.
     const cipher=sealContact(candidate,'candidate:'+actor.id+':'+payload.operationId);
     if (old) {await resolveChange(client,old.id,'replaced',now);await event(client,actor.id,old.id,'replaced');}
@@ -121,6 +123,19 @@ export async function operateContactChange(actor,id,operation,payload={}) {
   const allowed={reauthenticate:['password'],resend:['operationId'],verify:['secret'],confirm:[],cancel:[]};
   if (!allowed[operation]) throw fail('Operación inválida.');
   only(payload,allowed[operation]);
+  if(operation==='reauthenticate') {
+    const preflight=async(client,identity,now)=>{
+      const row=await owned(client,actor,id);
+      pending(row,identity,now);
+      if(row.channel==='sms')await requireEmail(client,identity);
+      return {row,requestId:id};
+    };
+    return contactPasswordOperation(actor,payload.password,preflight,async(client,identity,now,{row})=>{
+      pending(row,identity,now);
+      const updated=(await client.query('UPDATE contact_change_requests SET reauthenticated_at=$2,authorized_session_hash=$3,authorized_version=$4 WHERE id=$1 RETURNING *',[id,now,actor.sessionHash,identity.sessionVersion])).rows[0];
+      await event(client,actor.id,id,'reauthenticated');return dto(updated,actor,now);
+    });
+  }
   let message;
   const result=await withIdentity(actor,async(client,identity,now)=>{
     const row=await owned(client,actor,id);
@@ -131,11 +146,6 @@ export async function operateContactChange(actor,id,operation,payload={}) {
       await limit(client,actor.id,['cancelled','replaced'],10,86400,now);
       await resolveChange(client,id,'cancelled',now);await event(client,actor.id,id,'cancelled');
       return {request:{id,status:'cancelled',channel:row.channel}};
-    }
-    if (operation==='reauthenticate') {
-      await passwordCheck(client,identity,payload.password,id,now);
-      const updated=(await client.query('UPDATE contact_change_requests SET reauthenticated_at=$2,authorized_session_hash=$3,authorized_version=$4 WHERE id=$1 RETURNING *',[id,now,actor.sessionHash,identity.sessionVersion])).rows[0];
-      await event(client,actor.id,id,'reauthenticated');return dto(updated,actor,now);
     }
     if (operation==='resend') {
       if (!uuid(payload.operationId)) throw fail('Clave de envío inválida.');

@@ -15,7 +15,7 @@ export async function loadMigrations(root = sqlRoot) {
     if (sha256(sql) !== entry.sha256) throw new Error('Incompatible file checksum: ' + entry.version);
     migrations.push({ ...entry, sql });
   }
-  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007,008,009,010,011') throw new Error('Incompatible migration versions');
+  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007,008,009,010,011,012') throw new Error('Incompatible migration versions');
   return migrations;
 }
 
@@ -223,9 +223,9 @@ async function verifyProfessionalReviewView(client, migration) {
 }
 
 export async function migrate(client, { expectedDatabase, target = '003', accountReaderRole, privateNoteCreatorRole } = {}) {
-  if (!['003', '004', '005', '006', '007', '008', '009', '010', '011'].includes(target)) throw new Error('Unsupported target version');
-  if (accountReaderRole !== undefined && (!['009','010','011'].includes(target) || typeof accountReaderRole !== 'string' || !accountReaderRole)) throw new Error('Explicit account reader is only supported for 009/010/011');
-  if (privateNoteCreatorRole !== undefined && (!['010','011'].includes(target) || typeof privateNoteCreatorRole !== 'string' || !privateNoteCreatorRole)) throw new Error('Explicit private note creator is only supported for 010/011');
+  if (!['003', '004', '005', '006', '007', '008', '009', '010', '011', '012'].includes(target)) throw new Error('Unsupported target version');
+  if (accountReaderRole !== undefined && (!['009','010','011','012'].includes(target) || typeof accountReaderRole !== 'string' || !accountReaderRole)) throw new Error('Explicit account reader is only supported for 009/010/011/012');
+  if (privateNoteCreatorRole !== undefined && (!['010','011','012'].includes(target) || typeof privateNoteCreatorRole !== 'string' || !privateNoteCreatorRole)) throw new Error('Explicit private note creator is only supported for 010/011/012');
   const migrations = await loadMigrations();
   await client.query('BEGIN');
   try {
@@ -246,7 +246,7 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
         throw new Error('Incompatible recorded migration version/checksum: ' + row.version);
       }
     }
-    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007', '001,002,003,004,005,006,007,008', '001,002,003,004,005,006,007,008,009', '001,002,003,004,005,006,007,008,009,010', '001,002,003,004,005,006,007,008,009,010,011'].includes(ledger.map(r => r.version).join(','))) {
+    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007', '001,002,003,004,005,006,007,008', '001,002,003,004,005,006,007,008,009', '001,002,003,004,005,006,007,008,009,010', '001,002,003,004,005,006,007,008,009,010,011', '001,002,003,004,005,006,007,008,009,010,011,012'].includes(ledger.map(r => r.version).join(','))) {
       throw new Error('Incompatible or incomplete migration ledger');
     }
     if (ledger.length) {
@@ -256,11 +256,11 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
       if (applied.server_major !== major || applied.catalog_sha256 !== await catalogChecksum(client)) {
         throw new Error('Schema drift or incompatible PostgreSQL version; no SQL applied');
       }
-      if (applied.version === '011') {
+      if (applied.version >= '011') {
         const reader = await verifyAccountLockContract(client, migrations[8], accountReaderRole, true);
         await verifyOriginResolverContract(client, migrations[10], reader);
       } else if (applied.version >= '009') await verifyAccountLockContract(client, migrations[8], accountReaderRole);
-      if (applied.version >= '010') await verifyPrivateNoteContract(client, migrations[9], privateNoteCreatorRole, applied.version === '011');
+      if (applied.version >= '010') await verifyPrivateNoteContract(client, migrations[9], privateNoteCreatorRole, applied.version >= '011');
       if (applied.version >= '006') await verifyProfessionalReviewView(client, migrations[5]);
       if (applied.version === target) {
         await client.query('COMMIT');

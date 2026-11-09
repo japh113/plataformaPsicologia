@@ -1,14 +1,14 @@
+import {installContactAdmissionSchema} from './contact-admission-sandbox.js';
 import bcrypt from 'bcryptjs';
 import { sandboxControl, createSandboxDatabase, installBaseline, syntheticFixture } from './episode-sandbox.js';
-import { migrate } from './episode-migration.js';
 let control, client;
 try {
   control = await sandboxControl({ demo: true });
   const name = 'psicopanel_episode_demo';
   client = await createSandboxDatabase(control, name);
   await installBaseline(client);
+  await installContactAdmissionSchema(client,name);
   await syntheticFixture(client);
-  await migrate(client, { expectedDatabase: name, target: '005' });
   const hash = await bcrypt.hash('Episode-Demo-Only-284!', 10);
   // Explicit fictional adult, unverified and without relationship/access/episode.
   await client.query("INSERT INTO patients(id,first_name,last_name,full_name,email,phone,global_birth_date) VALUES ('r','Renata','Demo','Renata Demo','r@episodes.invalid','+525500000003','1990-01-01')");

@@ -1,3 +1,4 @@
+import {installContactAdmissionSchema} from '../scripts/contact-admission-sandbox.js';
 import { spawn,spawnSync } from 'node:child_process';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +18,7 @@ test('005 secure contact changes: real PostgreSQL, HTTP, races and interrupted d
 },async t=>{
  assert.equal(env.dbHost,'db');assert.equal(env.dbName,'psicopanel_integrity_test');assert.equal(env.nodeEnv,'test');
  assert.match(process.env.EPISODE_TEST_RUN_ID||'',/^[a-f0-9-]{36}$/);
- const control=await db.getClient(),name='psicopanel_episode_contact_http',client=await createSandboxDatabase(control,name);
+ const control=await db.getClient();let name='psicopanel_episode_contact_http',client=await createSandboxDatabase(control,name);
  const originalQuery=db.query,originalGetClient=db.getClient;
  let pool,server;
  const password='Disposable-Contact-Only-981!';
@@ -44,6 +45,11 @@ test('005 secure contact changes: real PostgreSQL, HTTP, races and interrupted d
     }finally{await next.end();}
    }
   });
+  // Preserve populated historical 004/005 migration cases in their database;
+  // install the full 012 chain BEFORE synthetic rows in a distinct destination.
+  await client.end();name='psicopanel_episode_contact_http_012';
+  client=await createSandboxDatabase(control,name);await installBaseline(client);
+  await installContactAdmissionSchema(client,name);await syntheticFixture(client);
   pool=new pg.Pool({host:'db',database:name,user:env.dbUser,password:env.dbPassword});db.query=(sql,values)=>pool.query(sql,values);db.getClient=()=>pool.connect();
   server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
   const req=async(path,token,body,method=body===undefined?'GET':'POST')=>{
