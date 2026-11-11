@@ -36,6 +36,14 @@ Aplicar el [flujo del checkpoint](docs/project-checkpoint.md#flujo-de-desarrollo
 
 Antes de cerrar: revisar diff, alcance y permisos. Código funcional: unitarias backend, integración pertinente aislada, frontend lint/build y demo ficticia ADR-019. Agenda exige evaluar backend/frontend, espera y disponibilidad. Markdown solo: contrastar código/GitHub, enlaces/fragmentos/IDs, decisiones y hashes; no ejecutar manualmente bases ni demos. CI ejecuta la matriz completa también en PR documentales, runners nuevos, siete checks y artifacts de **14 días** del HEAD final. Documentar lo no disponible; evidencia histórica nunca cuenta como prueba nueva. Commitear documentación y publicar solo la rama/PR autorizados.
 
+### CI asíncrona: no consumir agentes esperando checks
+
+- **Codex y Work no deben permanecer activos esperando** a que GitHub Actions termine ni realizar polling repetitivo de checks, jobs, logs o artifacts. La espera pasiva y la ejecución de CI pertenecen a GitHub, no al trabajo del agente.
+- **Codex:** completar el alcance autorizado, las validaciones locales posibles y publicar el PR/HEAD. Consultar como máximo una vez que la CI haya iniciado; si sigue en ejecución, terminar la intervención con SHA, enlaces, comprobaciones realizadas y estado **`CI pendiente`**. No afirmar éxito ni inventar artifacts todavía no disponibles.
+- **Work:** auditar código/contratos sin esperar la CI. Si al consultar una vez la evidencia ya está completa, verificar HEAD, checks y artifacts pertinentes; si no, entregar dictamen de contenido y señalar exactamente qué validación sigue pendiente. No repetir consultas solo para observar el progreso.
+- **Propietario:** comprobar después la finalización de CI/CodeQL y los artifacts del HEAD definitivo, y solicitar una intervención adicional únicamente si hay fallos, cambio de HEAD, evidencia faltante o una revisión específica necesaria. El estado comunicado por el propietario no sustituye comprobar la evidencia requerida antes de integrar.
+- **Puerta de merge inalterada:** ningún PR se integra sin los siete checks obligatorios, análisis aplicables, evidencia del HEAD final y auditorías exigidas. El protocolo reduce consultas y consumo; no relaja pruebas, privacidad, seguridad ni aprobación del propietario.
+
 Referencias de implementación: frontend/src/App.jsx, AppointmentsScreen y NotesScreen; servicios auth, patients, appointments y availability, más lectores laterales del inventario de arquitectura.
 
 ## Mantenimiento documental
