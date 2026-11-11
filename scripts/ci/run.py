@@ -3,16 +3,24 @@ import json,os,shutil,signal,subprocess,sys,time,traceback
 from pathlib import Path
 from common import OUT,PRIVATE,command,identity,write,seal,export_tap,inventory,SuiteFailure
 import docs
+from classification import classify
 from sandbox import Sandbox
 
 def main(job):
     started=time.monotonic();report={'job':job,'identity':identity(),'status':'failure','suites':[],
-      'runner':{key:os.environ.get(key) for key in ['RUNNER_OS','RUNNER_ARCH','ImageOS','ImageVersion']},'startedUTC':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'isolation':[]}
+      'runner':{key:os.environ.get(key) for key in ['RUNNER_OS','RUNNER_ARCH','ImageOS','ImageVersion']},'startedUTC':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'isolation':[], 'classification':classify()}
     target=OUT/job;target.mkdir(parents=True,exist_ok=True)
     boxes=[];result=1
     def stop(*_):raise RuntimeError('Execution interrupted')
     signal.signal(signal.SIGTERM,stop);signal.signal(signal.SIGINT,stop)
     try:
+        if job not in ['docs','backend-unit','frontend','postgres','browser']:
+            raise ValueError('Unknown component')
+        if report['classification']['mode']=='docs' and job!='docs':
+            report['status']='not_applicable'
+            report['reason']='verified-documentation-only'
+            result=0
+            return result
         if job=='docs':
             report['suites'].append(docs.run(report['identity']['base']))
             report['suites'].append(command(['python3','-B','-m','unittest','discover','-s','scripts/ci','-p','test_*.py']))
