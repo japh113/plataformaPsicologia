@@ -29,7 +29,7 @@ jobs:
   checks:
     name: ${{ needs.route.outputs.namespace || 'ci' }}/${{ matrix.component }}
     needs: [route]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     strategy:

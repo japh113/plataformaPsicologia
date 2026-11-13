@@ -4,7 +4,7 @@ CI integrada mediante #14, PR documental #15 y bloqueo negativo #16 cerrado sin 
 
 ## Componentes
 
-[Workflow](../.github/workflows/ci.yml): `ci/docs`, `ci/backend-unit`, `ci/frontend`, `ci/postgres`, `ci/browser`, `ci/evidence`, `ci/required`. Los siete jobs se ejecutan también ante cambios documentales, sin filtros de paths; la [ruta documental verificada](#ruta-documental-y-eventos) conserva sus contextos y declara explícitamente las suites no aplicables. La matriz no cancela componentes al fallar otro. Una nueva sincronización cancela la validación ordinaria obsoleta; una ejecución cancelada nunca acredita el nuevo HEAD. La corrección propuesta tras #67 mantiene `edited` para revalidar cambios de base y payloads ambiguos; las ediciones exclusivamente textuales ejecutan reconocimientos ligeros `metadata/*`, sin suites ni constancias de validación. Todos los eventos `edited` tienen grupo de concurrencia propio y no cancelan otra validación. Su conservación efectiva de checks previos requiere la prueba remota descrita abajo; aún no se acredita. `ready_for_review` no dispara este workflow: el mismo contenido ya se valida desde Draft. `push` se limita a main, sin duplicar los PR por push a su rama. Dispatch permite repetición explícita cuando el workflow esté en main.
+[Workflow](../.github/workflows/ci.yml): `ci/docs`, `ci/backend-unit`, `ci/frontend`, `ci/postgres`, `ci/browser`, `ci/evidence`, `ci/required`. Los siete jobs de una validación no cancelada se ejecutan también ante cambios documentales, sin filtros de paths; la [ruta documental verificada](#ruta-documental-y-eventos) conserva sus contextos y declara explícitamente las suites no aplicables. La matriz no cancela componentes al fallar otro. Una nueva sincronización cancela la validación ordinaria obsoleta; una ejecución cancelada nunca acredita el nuevo HEAD. La corrección propuesta tras #67 mantiene `edited` para revalidar cambios de base y payloads ambiguos; las ediciones exclusivamente textuales ejecutan reconocimientos ligeros `metadata/*`, sin suites ni constancias de validación. Todos los eventos `edited` tienen grupo de concurrencia propio por `run_id` y no cancelan otra validación. Su conservación efectiva de checks previos requiere la prueba remota descrita abajo; aún no se acredita. `ready_for_review` no dispara este workflow: el mismo contenido ya se valida desde Draft. `push` se limita a main, sin duplicar los PR por push a su rama. Dispatch permite repetición explícita cuando el workflow esté en main.
 
 Ubuntu 24.04 alojado por GitHub, Node 24.22.0 para aplicación y suites, PostgreSQL 17 y navegador oficial por digest amd64 en [versions.json](../scripts/ci/versions.json). Acciones fijadas a commits upstream verificados por API. Chromium corresponde al navegador fijado por Playwright 1.64.0 y [lockfile](../scripts/ci/browser/package-lock.json); sus versiones reales se registran (Node del contenedor navegador 24.21.0, distinto del Node de aplicación). Las imágenes de aplicación CI usan el digest Node sin cambiar los Dockerfiles habituales. Cada build CI usa su propio tag e imagen, sin reutilizar imágenes de otro run ni caches de dependencias. Las revisiones de versiones se hacen por PR.
 
@@ -62,7 +62,7 @@ Los cinco componentes siempre ejecutan un job real para contenido. `ci/docs` eje
 
 `ci/evidence` y `ci/required` exigen clasificación idéntica a la recomputada, integridad, run/intento/HEAD/base/merge actuales y todos los artifacts. En modo completo solo aceptan suites realmente ejecutadas con las garantías anteriores; en modo documental solo admiten `not_applicable` para esos cuatro componentes y un reporte documental ejecutado/completo. `ci/required` exige además éxito real de la matriz y del agregador en `needs`; una falla, cancelación o job omitido impide aprobar aunque exista un artifact. El índice registra clasificación, estados distintos y retención de 14 días; se conserva el escaneo de datos sensibles. Falta de artifacts, índice obsoleto, clasificación falsa o constancia incompleta falla cerrado.
 
-Una edición textual usa nombres `metadata/*` y grupo de concurrencia propio por run. No puede sustituir un check requerido fallido por uno omitido verde ni cancelar una ejecución útil. Un cambio de base explícito usa los siete nombres normales y el grupo de validación. El avance independiente de main conserva la garantía estricta de rama actualizada: actualizar/rebasar/mergear la rama produce `synchronize` y un nuevo merge probado. No se promete ejecución automática de PR por cada push ajeno a main; no se reutiliza un índice anterior para otro merge. Las ejecuciones manuales son explícitamente completas y no sustituyen por sí mismas la evidencia PR exigida por GitHub.
+Todos los eventos `edited`, textuales, ambiguos o con cambio de base, tienen grupo de concurrencia propio por `run_id`. Una edición exclusivamente textual usa nombres `metadata/*`; no publica éxito ni skipped bajo nombres requeridos y no cancela una ejecución útil. Un cambio de base explícito usa los siete nombres `ci/*`, pero también su grupo propio por `run_id`, no el grupo ordinario de validación. El avance independiente de main conserva la garantía estricta de rama actualizada: actualizar/rebasar/mergear la rama produce `synchronize` y un nuevo merge probado. No se promete ejecución automática de PR por cada push ajeno a main; no se reutiliza un índice anterior para otro merge. Las ejecuciones manuales son explícitamente completas y no sustituyen por sí mismas la evidencia PR exigida por GitHub.
 
 Referencias de plataforma: [eventos y SHA de merge](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows), [checks omitidos y requisitos estrictos](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks). Los tests separan payloads del router, conexiones estáticas y expresiones de nombres/concurrencia; la evaluación final de eventos/check names pertenece a GitHub y debe comprobarse antes de integrar. La CI no protege contra una reescritura arbitraria del propio workflow por alguien con capacidad de proponer cambios técnicos: revisión independiente del diff y siete checks estrictos siguen siendo gates, sin permisos adicionales ni ejecución privilegiada.
 
@@ -121,9 +121,24 @@ El nuevo job `metadata/route` entrega solo el namespace, sin decidir docs/full;
 [classification.py](../scripts/ci/classification.py) sigue recomputando ambas
 diferencias y los padres del merge en cada consumidor.
 
-Los otros jobs usan `always()` en ambos caminos. Primero exigen enrutamiento
-correcto; las suites, checkout completo, limpieza y artifacts solo ejecutan en
-`ci`. El fallback de nombres ante fallo del router es `ci`, con fallo explícito,
+Tras la corrección P2-01, `checks` usa `${{ !cancelled() }}` en ambos caminos:
+una falla del router no añade una condición implícita de éxito y permite ejecutar
+la guarda de rechazo; cancelar el workflow vuelve falsa la condición y permite
+detener la matriz obsoleta. Una edición textual no vuelve falsa esa condición
+antes de expandir la matriz. GitHub documenta la [reevaluación al cancelar](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-cancellation)
+y recomienda [!cancelled() para continuar tras fallo sin impedir cancelación](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#status-check-functions).
+Esto es el contrato de la condición, no una cancelación real ya observada con
+este delta.
+
+`evidence` y `required` conservan `always()` para intentar reunir evidencia y
+registrar rechazo aunque una dependencia falle o se cancele. También conservan
+`always()` los pasos de limpieza y upload del camino `ci`, sin iniciar suites
+nuevas: se intenta limpiar recursos propios y conservar evidencia disponible,
+sin prometer recuperación tras terminación abrupta. Un `checks` cancelado u
+omitido no aprueba `ci/required`: su guarda exige éxito del router y el agregador
+exige éxito de todas las dependencias y artifacts completos. No se usan nombres
+de metadata para sustituir ese rechazo. Todos exigen enrutamiento correcto; las
+suites, checkout completo, limpieza y artifacts solo ejecutan en `ci`. El fallback de nombres ante fallo del router es `ci`, con fallo explícito,
 nunca aprobación. `ci/required` exige también éxito del router, además de matriz,
 índice, identidad y hashes. En metadata solo hay reconocimientos explícitos:
 no se ejecuta `run.py`, no se produce `not_applicable`, no se copia evidencia
@@ -132,9 +147,24 @@ previa ni se escribe éxito bajo nombres `ci/*`.
 La concurrencia aísla **todos** los `edited` mediante run ID antes de interpretar
 el payload; así una edición ambigua tampoco cancela trabajo útil. Open/sync/reopen
 siguen compartiendo grupo por PR y cancelan validaciones ordinarias obsoletas.
-Las validaciones por cambio de base pueden coexistir; la aceptación sigue ligada
-a HEAD/base/merge/intento exactos y a la política estricta. Draft/Ready no genera
-runs y no se usa para elegir una conclusión. No se infiere autorización de merge
+Las validaciones por cambio de base pueden coexistir entre sí y con las del
+grupo ordinario; `synchronize` cancela las ordinarias obsoletas del mismo PR,
+no los runs aislados de `edited`. La política de concurrencia no cambia con este
+delta: no garantiza orden de finalización ni elimina snapshots antiguos.
+
+Cada run valida y sella su propia tupla HEAD/base/merge/run/intento; un éxito de
+la base anterior no acredita la nueva. Esas comprobaciones de integridad no
+consultan en vivo la base final del PR ni resuelven la selección de checks entre
+runs de GitHub. La política estricta exige rama actualizada cuando avanza main,
+pero no se toma como prueba universal de un retarget entre bases ya contenidas.
+Antes de aceptar se deben contrastar la base/ref, HEAD y merge **vigentes** del
+PR con los siete checks, análisis y artifacts del run correspondiente, y repetir
+la consulta de identidad antes de integrar si cambia el PR. Una discrepancia o
+solo un éxito de otro snapshot bloquea la aceptación; un run metadata no cubre
+esa ausencia. La selección efectiva de GitHub al terminar runs concurrentes de
+diferentes bases sigue siendo un ensayo crítico pendiente; no se afirma que
+una comparación interna de artifacts demuestre esa protección por sí sola.
+Draft/Ready no genera runs y no se usa para elegir una conclusión. No se infiere autorización de merge
 de un reconocimiento metadata ni se garantiza orden de ejecución.
 
 ### Pruebas locales y límites
@@ -142,9 +172,12 @@ de un reconocimiento metadata ni se garantiza orden de ejecución.
 [test_workflow_events.py](../scripts/ci/test_workflow_events.py) prueba payloads,
 entrypoint real del router, fallo cerrado y conexiones estáticas del workflow;
 [test-events.cjs](../scripts/ci/test-events.cjs) comprueba únicamente expresiones
-de nombres y grupos. La regresión estática prohíbe el if de job que permitió
-#192 aunque JavaScript calcule el nombre pretendido. Las pruebas de clasificación
-mantienen historiales Git reales y consumidores de evidencia; el negativo del
+de nombres, condiciones y grupos. Las comprobaciones estáticas separan la
+condición cancelable de la matriz de los colectores y evitan omitir metadata antes de la expansión. Las unidades de
+expresiones cubren router fallido y cancelación como entradas explícitas; además
+se ejecutan las guardas reales del YAML para rechazar fallos y outputs ausentes.
+Esto no simula la reevaluación del servidor ni la interrupción de un runner.
+Las pruebas de clasificación mantienen historiales Git reales y consumidores de evidencia; el negativo del
 agregador incluye ahora fallo, omisión y cancelación del router.
 
 `vm.runInNewContext()` no reproduce expansión, publicación, selección de suites
@@ -159,7 +192,7 @@ suplanta ese runtime, ni se relajan sus guardas. La suite documental de extremo 
 extremo, el inventario positivo y las suites funcionales quedan a Actions full.
 No se ejecutan bases, demos ni recursos habituales.
 
-Resultado local: **30 pruebas aprobadas** de clasificación, contratos negativos y
+Resultado local del HEAD anterior `cebef06`: **30 pruebas aprobadas** de clasificación, contratos negativos y
 eventos (9 de eventos), parseo YAML con PyYAML 5.4.1 y validación de los 57 Markdown
 y 1614 enlaces mediante `docs.run(origin/main)`, con decisiones/manifiesto/hashes
 conservados. No se ejecutan las 24 pruebas de `test_inventory_source.py` ni las dos
@@ -167,10 +200,27 @@ pruebas que dependen del inventario positivo y del pipeline documental completo,
 por ausencia del runtime fijado. Esto no es una suite completa aprobada.
 `git diff --check` pasa; `actionlint` no está instalado.
 
+Delta de auditoría P2-01/P3-01: **31 pruebas locales aprobadas**, incluidas 10 de
+eventos; parseo YAML con rechazo de claves duplicadas, 57 Markdown/1618 enlaces y
+`git diff --check` correctos. Se mantienen las limitaciones de runtime indicadas:
+no se ejecuta la suite completa ni ensayos reales de cancelación/concurrencia.
+El cambio de workflow se limita a la condición de `checks`; concurrencia,
+limpieza, colectores, permisos y retención permanecen iguales.
+
 ### Procedimiento remoto en el único Draft y puerta de aceptación
 
-**Estado: corrección propuesta; aceptación bloqueada hasta reunir evidencia
-remota.** Un CI verde del PR técnico no demuestra resuelta la regresión.
+Evidencia reconsultada del HEAD anterior `cebef06ad69f133135ca405d51d8a69f5afdd4d3`:
+[CI #195](https://github.com/japh113/plataformaPsicologia/actions/runs/43483451051)
+y CodeQL success; siete `ci/*` success y seis artifacts no expirados, con fechas
+de retención de 14 días. Se consultaron metadatos de artifacts; no se descargaron
+ni se presenta una verificación nueva de su contenido. [Metadata #196](https://github.com/japh113/plataformaPsicologia/actions/runs/43483529544)
+publicó ocho jobs `metadata/*` success y cero artifacts, mientras #195 seguía en
+curso. Prueba nombres resueltos en ese HEAD, no metadata después de éxito/fallo
+ni cancelación real por synchronize. Ninguno acredita el nuevo commit.
+
+**Estado: P2-01/P3-01 corregidos en la propuesta; aceptación bloqueada hasta
+validar el nuevo HEAD y reunir los ensayos remotos críticos.** Un CI verde del
+PR técnico no demuestra resuelta la regresión.
 Publicar este cambio exige `full`; no se solicita excepción documental. Consultar
 una sola vez tras iniciar CI y terminar con `CI pendiente` si continúa. El
 propietario debe solicitar la siguiente intervención cuando haya evidencia,
@@ -198,7 +248,18 @@ sin mantener agentes activos esperando ni hacer polling.
    nueva identidad y clasificación recomputada. Un payload ambiguo no se puede
    fabricar mediante la edición ordinaria de GitHub; queda cubierto localmente
    por el router y requiere un evento real comparable si se observa.
-6. Reopen y un commit real autorizado deben crear validaciones nuevas. Push a
+6. Comprobar cancelación real por `synchronize` con un run ordinario aún activo:
+   debe interrumpirse su matriz y el run cancelado no debe acreditar el nuevo
+   snapshot. Este delta publicado genera synchronize, pero no prueba cancelación
+   porque #195 ya terminó. No se crean commits vacíos para provocar solapamiento.
+7. Para negativos y carreras que requieran infraestructura experimental, proponer
+   una rama y un PR Draft desechables **solo tras autorización separada**: fixture
+   de fallo exclusivamente CI, edición de texto y Draft/Ready tras el fallo,
+   dos commits CI reales con solapamiento para cancelación y retarget entre bases
+   de ensayo para comprobar el run vigente. No tocar main, Rulesets ni aplicación;
+   conservar IDs, identidades y conclusiones de cada ensayo. No se abre ni ejecuta
+   ese experimento en esta corrección del único #68.
+8. Reopen y un commit real autorizado deben crear validaciones nuevas. Push a
    main y dispatch conservan full por contrato, sin hacer push a main ni integrar
    para ensayarlos. Se verifican cuando el propietario autorice esos eventos;
    no se reutiliza evidencia histórica como prueba nueva.

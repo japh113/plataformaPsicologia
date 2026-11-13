@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -76,13 +77,17 @@ class Events(unittest.TestCase):
     def test_workflow_expression_units(self):
         subprocess.run(['node', 'scripts/ci/test-events.cjs'], check=True)
 
-    def test_metadata_jobs_are_scheduled_not_skipped_before_expansion(self):
+    def test_metadata_does_not_gate_jobs_and_collectors_remain_unconditional(self):
         self.assertEqual(set(JOBS), {'route', 'checks', 'evidence', 'required'})
         self.assertEqual(re.findall(r'^    if:', JOBS['route'], re.M), [])
+        # Matrix work is cancelable; collectors still attempt to record rejection.
+        conditions = {'checks': '${{ !cancelled() }}',
+                      'evidence': 'always()', 'required': 'always()'}
         for job in ['checks', 'evidence', 'required']:
             body = JOBS[job]
             with self.subTest(job=job):
-                self.assertEqual(re.findall(r'^    if: (.*)$', body, re.M), ['always()'])
+                actual = re.findall(r'^    if: (.*)$', body, re.M)
+                self.assertEqual(actual, [conditions[job]])
                 self.assertIn('route', body.split('needs: [')[1].split(']')[0])
                 self.assertIn("needs.route.outputs.namespace || 'ci'", body)
                 self.assertIn("ROUTE_RESULT: ${{ needs.route.result }}", body)
@@ -91,10 +96,31 @@ class Events(unittest.TestCase):
                 self.assertEqual(len([s for s in steps if s.startswith('name: Acknowledge metadata')]), 1)
                 for step in steps[2:]:
                     self.assertIn("needs.route.outputs.namespace != 'metadata'", step)
-        # Regression #192: a false job-level if must fail this static contract,
-        # even when a JS expression evaluator can resolve its intended name.
-        old = "    if: ${{ !(github.event.action == 'edited') }}\n"
-        self.assertNotEqual(re.findall(r'^    if: (.*)$', old, re.M), ['always()'])
+                # Metadata must not make the job condition false before matrix
+                # expansion. Cancellation semantics are unit-checked in JS.
+                self.assertNotIn('github.event', actual[0])
+
+    def test_actual_routing_guards_reject_failed_router_or_missing_output(self):
+        # Execute the trusted guard from each job, not a copy of its predicate.
+        # This tests explicit rejection after scheduling, not GitHub scheduling.
+        for job, body in JOBS.items():
+            if job == 'route':
+                continue
+            command = re.search(r'^        run: (python3 -c .*)$', body, re.M)[1]
+            for result, value, accepted in [('success', 'ci', True),
+                                            ('success', 'metadata', True),
+                                            ('success', '', False),
+                                            ('success', 'unknown', False),
+                                            ('', 'ci', False),
+                                            ('failure', '', False),
+                                            ('failure', 'ci', False),
+                                            ('failure', 'metadata', False),
+                                            ('cancelled', 'ci', False),
+                                            ('skipped', 'metadata', False)]:
+                with self.subTest(job=job, result=result, namespace=value), patch.dict(
+                        os.environ, {'ROUTE_RESULT': result, 'CI_NAMESPACE': value}):
+                    outcome = subprocess.run(shlex.split(command), capture_output=True)
+                    self.assertEqual(outcome.returncode == 0, accepted)
 
     def test_evidence_checkout_retention_and_permissions(self):
         self.assertEqual(SOURCE.count('fetch-depth: 0'), 3)
