@@ -5,6 +5,9 @@ from common import JOBS,OUT,identity,verify,write,seal,accept
 from browser_contract import validate_suites
 from classification import classify
 
+def require_dependencies(needs):
+    assert set(needs)=={'route','checks','evidence'} and all(n['result']=='success' for n in needs.values())
+
 def collect(root):
     reports={};hashes={}
     classification=classify()
@@ -60,7 +63,7 @@ if __name__=='__main__':
         verify(root/'evidence')
         index=json.loads((root/'evidence/index.json').read_text())
         needs=json.loads(__import__('os').environ['CI_NEEDS'])
-        assert set(needs)=={'checks','evidence'} and all(n['result']=='success' for n in needs.values())
+        require_dependencies(needs)
         assert index['classification']==classify() and index['retentionDays']==14
         assert index['identity']==identity() and index['complete'] and index['reports']==reports and index['hashes']==hashes
         accept({j:{'result':'success'} for j in JOBS},reports)
