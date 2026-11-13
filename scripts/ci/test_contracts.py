@@ -6,8 +6,9 @@ from common import JOBS,accept,identity,inventory,parse_tap,scan,seal,verify
 from sandbox import destination,validate,episode_images
 
 class Contracts(unittest.TestCase):
-    def test_aggregator_rejects_every_non_success_and_missing_or_stale_evidence(self):
-        reports={j:{'job':j,'identity':identity(),'status':'success','suites':[{}]} for j in JOBS}
+    @patch('classification.classify', return_value={'mode':'full'})
+    def test_aggregator_rejects_every_non_success_and_missing_or_stale_evidence(self, _classification):
+        reports={j:{'job':j,'identity':identity(),'status':'success','suites':[{}],'classification':_classification.return_value} for j in JOBS}
         needs={j:{'result':'success'} for j in JOBS};self.assertTrue(accept(needs,reports))
         for job in JOBS:
             for status in ['failure','cancelled','skipped','neutral','unknown','']:

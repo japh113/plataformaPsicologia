@@ -3,18 +3,35 @@ import json,sys
 from pathlib import Path
 from common import JOBS,OUT,identity,verify,write,seal,accept
 from browser_contract import validate_suites
+from classification import classify
 
 def collect(root):
     reports={};hashes={}
+    classification=classify()
     for job in JOBS:
         directory=root/job
         hashes[job]=verify(directory)
         report=json.loads((directory/'report.json').read_text())
         assert report['job']==job and report['identity']==identity()
+        assert report['classification']==classification
+        if classification['mode']=='docs' and job!='docs':
+            assert report['status']=='not_applicable'
+            assert report['suites']==[] and report['isolation']==[]
+            assert report['reason']=='verified-documentation-only'
+            assert set(hashes[job])=={'report.json'}
+            reports[job]=report
+            continue
         assert report['status'] in ['success','failure'] and report['suites']
         if report['status']=='success':
             counts={'docs':2,'backend-unit':2,'frontend':4,'postgres':3,'browser':3}
             assert len(report['suites'])==counts[job]
+            if job=='docs':
+                documentation,contracts=report['suites']
+                assert documentation['markdownFiles']>0 and documentation['localLinks']>0
+                assert isinstance(documentation['changedFiles'],list)
+                assert documentation['protectedDecisions']=='unchanged' and documentation['migrations']=='unchanged'
+                assert contracts['command']==['python3','-B','-m','unittest','discover','-s','scripts/ci','-p','test_*.py']
+                assert contracts['exit']==0 and contracts['seconds']>=0
             if job in ['backend-unit','frontend','postgres']:
                 tap=[s for s in report['suites'] if 'tests' in s]
                 assert len(tap)==(2 if job=='postgres' else 1)
@@ -37,14 +54,15 @@ if __name__=='__main__':
     mode=sys.argv[1];root=Path('tmp/ci-download')
     reports,hashes=collect(root)
     if mode=='evidence':
-        write(OUT/'evidence/index.json',{'identity':identity(),'complete':True,'reports':reports,'hashes':hashes,'retentionDays':14})
+        write(OUT/'evidence/index.json',{'identity':identity(),'complete':True,'reports':reports,'hashes':hashes,'retentionDays':14,'classification':classify()})
         seal(OUT/'evidence')
     elif mode=='required':
         verify(root/'evidence')
         index=json.loads((root/'evidence/index.json').read_text())
         needs=json.loads(__import__('os').environ['CI_NEEDS'])
         assert set(needs)=={'checks','evidence'} and all(n['result']=='success' for n in needs.values())
+        assert index['classification']==classify() and index['retentionDays']==14
         assert index['identity']==identity() and index['complete'] and index['reports']==reports and index['hashes']==hashes
         accept({j:{'result':'success'} for j in JOBS},reports)
-        print('All required components succeeded with complete evidence for this run/attempt/commit.')
+        print('All required components executed or verified not applicable for this run/attempt/commit.')
     else:raise ValueError('Unknown mode')

@@ -93,9 +93,17 @@ def accept(needs,reports):
     expected=set(JOBS)
     if set(reports)!=expected:raise ValueError('Missing job evidence')
     if set(needs)!=expected or any(v.get('result')!='success' for v in needs.values()):raise ValueError('Dependency did not succeed')
+    from classification import classify
+    classification = classify()
     current=identity()
     for job,r in reports.items():
-        if r['job']!=job or r['identity']!=current or r['status']!='success' or not r['suites']:raise ValueError('Incomplete or stale evidence: '+job)
+        if r['job']!=job or r['identity']!=current or r.get('classification')!=classification:
+            raise ValueError('Incomplete or stale evidence: '+job)
+        if classification['mode']=='docs' and job!='docs':
+            if r['status']!='not_applicable' or r['suites'] or r.get('isolation') or r.get('reason')!='verified-documentation-only':
+                raise ValueError('Invalid non-applicability evidence: '+job)
+        elif r['status']!='success' or not r['suites']:
+            raise ValueError('Missing executed suite: '+job)
     return True
 
 def export_tap(directory,suites):
