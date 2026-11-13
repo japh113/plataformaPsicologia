@@ -9,13 +9,27 @@ on:
 permissions:
   contents: read
 concurrency:
-  # Text-only events must neither cancel validation nor replace required checks.
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && (github.event.changes.title || github.event.changes.body)) && github.run_id || 'validation' }}
+  # Every edited event is isolated before routing, including ambiguous payloads.
+  # Text cannot cancel a useful validation; real synchronize events still can.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ (github.event_name == 'pull_request' && github.event.action == 'edited') && github.run_id || 'validation' }}
   cancel-in-progress: true
 jobs:
+  route:
+    name: metadata/route
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      namespace: ${{ steps.route.outputs.namespace }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: route
+        run: python3 scripts/ci/events.py
   checks:
-    name: ${{ (github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && (github.event.changes.title || github.event.changes.body)) && format('metadata/{0}', matrix.component) || format('ci/{0}', matrix.component) }}
-    if: ${{ !(github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && (github.event.changes.title || github.event.changes.body)) }}
+    name: ${{ needs.route.outputs.namespace || 'ci' }}/${{ matrix.component }}
+    needs: [route]
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     strategy:
@@ -23,24 +37,35 @@ jobs:
       matrix:
         component: [docs, backend-unit, frontend, postgres, browser]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require successful event routing
+        env:
+          ROUTE_RESULT: ${{ needs.route.result }}
+          CI_NAMESPACE: ${{ needs.route.outputs.namespace }}
+        run: python3 -c "import os; assert os.environ['ROUTE_RESULT'] == 'success' and os.environ['CI_NAMESPACE'] in ('ci', 'metadata')"
+      - name: Acknowledge metadata without publishing validation
+        if: ${{ needs.route.outputs.namespace == 'metadata' }}
+        run: echo 'Metadata only; this job does not validate content or replace ci checks.'
+      - if: ${{ needs.route.outputs.namespace != 'metadata' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - if: ${{ needs.route.outputs.namespace != 'metadata' }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24.22.0
           package-manager-cache: false
-      - name: Execute component with sanitized report
+      - if: ${{ needs.route.outputs.namespace != 'metadata' }}
+        name: Execute component with sanitized report
         run: python3 scripts/ci/run.py "$CI_COMPONENT"
         env:
           CI_COMPONENT: ${{ matrix.component }}
           CI_BASE: ${{ github.event.before || '58c7b095be237b526d489152a0eab387da3d8d5d' }}
-      - name: Final cleanup of this job's registered resources
-        if: always()
+      - if: ${{ always() && needs.route.outputs.namespace != 'metadata' }}
+        name: Final cleanup of this job's registered resources
         run: python3 scripts/ci/cleanup.py
-      - name: Upload allowlisted evidence, including failures
-        if: always()
+      - if: ${{ always() && needs.route.outputs.namespace != 'metadata' }}
+        name: Upload allowlisted evidence, including failures
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-${{ matrix.component }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
@@ -48,21 +73,32 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   evidence:
-    name: ${{ (github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && (github.event.changes.title || github.event.changes.body)) && 'metadata/evidence' || 'ci/evidence' }}
-    needs: [checks]
-    if: ${{ always() && !(github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && (github.event.changes.title || github.event.changes.body)) }}
+    name: ${{ needs.route.outputs.namespace || 'ci' }}/evidence
+    needs: [route, checks]
+    if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require successful event routing
+        env:
+          ROUTE_RESULT: ${{ needs.route.result }}
+          CI_NAMESPACE: ${{ needs.route.outputs.namespace }}
+        run: python3 -c "import os; assert os.environ['ROUTE_RESULT'] == 'success' and os.environ['CI_NAMESPACE'] in ('ci', 'metadata')"
+      - name: Acknowledge metadata without publishing validation
+        if: ${{ needs.route.outputs.namespace == 'metadata' }}
+        run: echo 'Metadata only; this job does not validate content or replace ci checks.'
+      - if: ${{ needs.route.outputs.namespace != 'metadata' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - if: ${{ needs.route.outputs.namespace != 'metadata' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: ci-*-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
           path: tmp/download
-      - name: Require every component artifact
+      - if: ${{ needs.route.outputs.namespace != 'metadata' }}
+        name: Require every component artifact
         run: |
           mkdir -p tmp/ci-download
           for job in docs backend-unit frontend postgres browser; do
@@ -74,29 +110,40 @@ jobs:
           ATTEMPT: ${{ github.run_attempt }}
           SHA: ${{ github.sha }}
           CI_BASE: ${{ github.event.before || '58c7b095be237b526d489152a0eab387da3d8d5d' }}
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: always()
+      - if: ${{ always() && needs.route.outputs.namespace != 'metadata' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci-results-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
           path: tmp/ci-export/evidence/
           if-no-files-found: error
           retention-days: 14
   required:
-    name: ${{ (github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && (github.event.changes.title || github.event.changes.body)) && 'metadata/required' || 'ci/required' }}
-    needs: [checks, evidence]
-    if: ${{ always() && !(github.event_name == 'pull_request' && github.event.action == 'edited' && !github.event.changes.base && (github.event.changes.title || github.event.changes.body)) }}
+    name: ${{ needs.route.outputs.namespace || 'ci' }}/required
+    needs: [route, checks, evidence]
+    if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require successful event routing
+        env:
+          ROUTE_RESULT: ${{ needs.route.result }}
+          CI_NAMESPACE: ${{ needs.route.outputs.namespace }}
+        run: python3 -c "import os; assert os.environ['ROUTE_RESULT'] == 'success' and os.environ['CI_NAMESPACE'] in ('ci', 'metadata')"
+      - name: Acknowledge metadata without publishing validation
+        if: ${{ needs.route.outputs.namespace == 'metadata' }}
+        run: echo 'Metadata only; this job does not validate content or replace ci checks.'
+      - if: ${{ needs.route.outputs.namespace != 'metadata' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - if: ${{ needs.route.outputs.namespace != 'metadata' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: ci-*-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
           path: tmp/download
-      - name: Reject failure, cancellation, omission and incomplete evidence
+      - if: ${{ needs.route.outputs.namespace != 'metadata' }}
+        name: Reject failure, cancellation, omission and incomplete evidence
         run: |
           mkdir -p tmp/ci-download
           for job in docs backend-unit frontend postgres browser; do

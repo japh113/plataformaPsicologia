@@ -203,7 +203,7 @@ class Classification(unittest.TestCase):
                 executed = subprocess.run(['python3', '-B', 'scripts/ci/run.py', job], capture_output=True)
                 self.assertEqual(executed.returncode, 0, executed.stdout.decode() + executed.stderr.decode() + str(list(Path('tmp/ci-private').glob('*.log'))))
             shutil.copytree('tmp/ci-export', 'tmp/ci-download')
-            needs = {'checks': {'result': 'success'}, 'evidence': {'result': 'success'}}
+            needs = {'route': {'result': 'success'}, 'checks': {'result': 'success'}, 'evidence': {'result': 'success'}}
             with patch.dict(os.environ, {'CI_NEEDS': json.dumps(needs)}):
                 subprocess.run(['python3', '-B', 'scripts/ci/evidence.py', 'evidence'], check=True, capture_output=True)
                 shutil.copytree('tmp/ci-export/evidence', 'tmp/ci-download/evidence')
