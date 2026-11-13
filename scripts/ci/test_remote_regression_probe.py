@@ -1,14 +1,20 @@
-"""Disposable experiment A for PR #68; never merge this fixture.
+"""Authorized disposable experiment B fixture for PR #69; never merge.
 
-The real ci/docs component discovers this test. Its ordinary failure must stay
-blocking after metadata edits and Draft/Ready transitions. No reports are forged.
+This replaces experiment A only in the authorized experimental branch.
+The real main checkout waits at most 120 seconds; nested local fixtures do not.
 """
+import os
+import time
 import unittest
+from pathlib import Path
 
 
 class RemoteRegressionProbe(unittest.TestCase):
-    def test_expected_failure_remains_required(self):
-        self.fail('Authorized disposable CI regression experiment A')
+    def test_bounded_window_for_synchronize_cancellation(self):
+        workspace = os.environ.get('GITHUB_WORKSPACE')
+        if (os.environ.get('GITHUB_ACTIONS') == 'true' and workspace
+                and Path.cwd().resolve() == Path(workspace).resolve()):
+            time.sleep(120)
 
 
 if __name__ == '__main__':
