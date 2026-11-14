@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { Buffer } from 'node:buffer';
 import { transformWithOxc } from 'vite';
 import { renderToStaticMarkup } from 'react-dom/server';
 
