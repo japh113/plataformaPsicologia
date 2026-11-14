@@ -4,11 +4,11 @@ cd "$(dirname "$0")/.."
 mode="${1:-test}"
 if [[ "$mode" == cleanup && "$#" == 2 ]]; then
   export EPISODE_TEST_RUN_ID="$2"
-elif [[ ( "$mode" == test || "$mode" == demo || "$mode" == participants-demo || "$mode" == patient-follow-up-demo || "$mode" == patient-projection-demo || "$mode" == identity-demo || "$mode" == contact-demo || "$mode" == contact-review ) && "$#" -le 1 ]]; then
+elif [[ ( "$mode" == test || "$mode" == demo || "$mode" == bilateral-demo || "$mode" == participants-demo || "$mode" == patient-follow-up-demo || "$mode" == patient-projection-demo || "$mode" == identity-demo || "$mode" == contact-demo || "$mode" == contact-review ) && "$#" -le 1 ]]; then
   export EPISODE_TEST_RUN_ID
   EPISODE_TEST_RUN_ID="$(cat /proc/sys/kernel/random/uuid)"
 else
-  echo "Usage: bash scripts/clinical-episodes.sh [test|demo|participants-demo|patient-follow-up-demo|patient-projection-demo|identity-demo|contact-demo|contact-review|cleanup RUN_UUID]" >&2
+  echo "Usage: bash scripts/clinical-episodes.sh [test|demo|bilateral-demo|participants-demo|patient-follow-up-demo|patient-projection-demo|identity-demo|contact-demo|contact-review|cleanup RUN_UUID]" >&2
   exit 1
 fi
 [[ "$EPISODE_TEST_RUN_ID" =~ ^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$ ]]
@@ -62,6 +62,9 @@ elif [[ "$mode" == participants-demo ]]; then
 else
   if [[ "$mode" == identity-demo || "$mode" == contact-demo || "$mode" == contact-review ]]; then
     "${compose[@]}" run --rm -e NODE_ENV=development backend node scripts/create-identity-demo.js
+  elif [[ "$mode" == bilateral-demo ]]; then
+    export BILATERAL_ENABLED=true BILATERAL_SECRET=fictitious-bilateral-independent-demo-key-32bytes
+    "${compose[@]}" run --rm -e NODE_ENV=development backend node scripts/create-bilateral-demo.js
   elif [[ "$mode" == patient-follow-up-demo ]]; then
     "${compose[@]}" run --rm -e NODE_ENV=development backend node scripts/create-patient-follow-up-demo.js
   elif [[ "$mode" == patient-projection-demo ]]; then

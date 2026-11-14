@@ -38,7 +38,7 @@ def main(job):
             box=Sandbox();boxes.append(box);box.start()
             report['suites'].extend(box.postgres())
         elif job=='browser':
-            for kind in ['B','C','D2']:
+            for kind in ['B','C','D2','VIN']:
                 box=Sandbox();boxes.append(box);box.start()
                 review,source=box.review(kind);report['suites'].append(review)
                 shots=target/kind/'screenshots';shots.mkdir(parents=True)

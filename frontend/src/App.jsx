@@ -1,3 +1,4 @@
+import BilateralInvitationsScreen from './screens/BilateralInvitationsScreen';
 import { preservePatientFollowUp } from './utils/patientFollowUp';
 import IdentityPanel from './components/IdentityPanel';
 import ProfessionalProfileScreen from './screens/ProfessionalProfileScreen';
@@ -1918,6 +1919,7 @@ export default function App({onRestrictedSession}) {
   };
 
   const renderMainContent = () => {
+    if(import.meta.env?.VITE_BILATERAL_ENABLED==='true' && vistaActiva==='bilateral' && ['patient','psychologist'].includes(currentUser?.role))return <BilateralInvitationsScreen key={currentUser.id} currentUser={currentUser}/>;
     if(vistaActiva==='professional-profile' && currentUser?.role==='psychologist')return <ProfessionalProfileScreen/>;
     if(vistaActiva==='professional-reviews' && ['admin','superadmin'].includes(currentUser?.role))return <ProfessionalReviewScreen/>;
     if (cargandoDatos) {
