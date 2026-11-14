@@ -74,7 +74,7 @@ class Sandbox:
     def review(self,kind):
         assert kind in ['B','C','D2','VIN']
         if kind=='D2':self.env.update(D2_ENABLED='true',RESTRICTED_JWT_SECRET='D2-private-demo-fixture-Independent-Key-84930276')
-        if kind=='VIN':self.env.update(BILATERAL_ENABLED='true',BILATERAL_SECRET='fictitious-bilateral-independent-demo-key-32bytes')
+        if kind=='VIN':self.env.update(BILATERAL_ENABLED='true',BILATERAL_SECRET='fictitious-bilateral-independent-demo-key-32bytes',D2_ENABLED='true',RESTRICTED_JWT_SECRET='D2-private-demo-fixture-Independent-Key-84930276')
         self.cmd('run','--rm','-T','-e','NODE_ENV=development','backend','node','scripts/create-'+('bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'identity')+'-demo.js')
         self.cmd('--profile','demo','up','-d','api','frontend')
         review=str(uuid.uuid4());stem='bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'contact' if kind=='C' else 'ui'
