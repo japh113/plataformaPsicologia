@@ -247,7 +247,7 @@ test('013: isolated bilateral workflow, actual PostgreSQL privileges, revocators
     await t.test('both lock orders resolve acceptance against decline, withdrawal, blocking, suspension, expiration and restriction deletion',async()=>{
       const outcomes=['decline','withdraw','block','suspend','expire','delete'];
       for(let n=0;n<outcomes.length;n++)for(const first of ['revoker','accept']){
-        const action=outcomes[n],psy='bp'+(16+n),pac='bq'+(15+2*n+(first==='accept'?1:0));
+        const action=outcomes[n],psy=action==='delete'?'bp9':'bp'+(16+n),pac='bq'+(15+2*n+(first==='accept'?1:0));
         await client.query("INSERT INTO bilateral_restrictions(psychologist_id,state,justification) VALUES($1,'enabled','Ensayo ficticio explícito') ON CONFLICT(psychologist_id) DO UPDATE SET state='enabled'",[psy]);
         if(action==='delete')references.delete(psy);
         const id=await issue(psy,pac),i=await incoming(pac,id);
