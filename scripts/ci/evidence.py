@@ -42,13 +42,13 @@ def collect(root):
             if job=='frontend':assert [s['command'] for s in report['suites']]==[['npm','ci','--ignore-scripts'],['npm','test'],['npm','run','lint'],['npm','run','build']]
             if job=='browser':
                 validate_suites(report['suites'],identity()['sha'])
-                assert [s['kind'] for s in report['suites']]==['B','C','D2']
+                assert [s['kind'] for s in report['suites']]==['B','C','D2','VIN']
                 assert all(s['cases'] and all(c['status']=='PASS' for c in s['cases']) and s['runtime']['revision']==identity()['sha'] for s in report['suites'])
                 expected=set(json.loads(Path('scripts/ci/browser-cases.json').read_text())['D2'])
                 actual=[case['id'] for case in report['suites'][2]['cases']]
                 assert set(actual)==expected and len(actual)==len(expected)
         if job in ['postgres','browser'] and report['status']=='success':
-            assert len(report['isolation'])==(3 if job=='browser' else 1)
+            assert len(report['isolation'])==(4 if job=='browser' else 1)
             assert all(x.get('cleanupConfirmed') and x['fresh'] and x['tmpfs'] and x['internal'] and not x['dbPorts'] and not x['persistentVolumes'] for x in report['isolation'])
         reports[job]=report
     return reports,hashes

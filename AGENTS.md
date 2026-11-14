@@ -22,6 +22,10 @@ Corte del 9 de noviembre de 2026: `main` consultado `9ada64b2b529a2849b488139658
 - Entrevista propia suficiente y validación profesional antes de cada activación nueva (ADR-029/RN-59–61), con precondición backend/DB aún pendiente. ADR-031 aprueba dos modalidades y plantillas predefinidas con personalización limitada; editor avanzado fuera del MVP. D21 no aprobada; D12–D20 no amplían automáticamente MVP/2A.
 - No activar D2/D3, nuevas relaciones, clínica, publicación, proveedores, credenciales remotas, recuperación excepcional o emergencia por aparecer en un diseño. Acreditación, identidad y directorio no conceden clínica.
 
+## Colaboración
+
+Mantener objetivo, alcance y criterio de cierre acordados. Antes de iniciar una fase compleja, inventariar todos los bloqueantes reales y proponer una solución integrada. Solicitar aprobación del propietario solo ante decisiones significativas de producto, privacidad, seguridad, costos, alcance o riesgo. Codex resuelve detalles técnicos ordinarios mediante propuestas fundamentadas sujetas a auditoría. No inventar decisiones, identificadores, fases o PRs; no encadenar documentación ni reabrir acuerdos sin contradicción o riesgo nuevo demostrado. Respetar acuerdos y distinguir APROBADO, PROPUESTO, IMPLEMENTADO y VERIFICADO. Los hallazgos no bloqueantes no amplían el encargo. Terminar al cumplir alcance y verificaciones, sin siguiente incremento implícito.
+
 ## Invariantes y UX
 
 Backoffice separado de clínica: support lector operativo; admin/superadmin gestionan funciones autorizadas, sin acceso clínico global ordinario ni break-glass implícito (RN-27).

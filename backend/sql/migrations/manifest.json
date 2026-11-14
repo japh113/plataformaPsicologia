@@ -58,5 +58,10 @@
     "version": "012",
     "file": "012_contact_password_admission.sql",
     "sha256": "6f941a0f3affcd8d9945d754e024f751341428a6d33fce1988e669283393c75e"
+  },
+  {
+    "version": "013",
+    "file": "013_bilateral_invitations.sql",
+    "sha256": "e6f0b899165d92b55409e01d69ac0f3380d79b087cc1ebd8edb348888e7ee68c"
   }
 ]

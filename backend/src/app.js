@@ -1,3 +1,4 @@
+import bilateralRoutes from './modules/bilateral/bilateral.routes.js';
 import express from 'express';
 import cors from 'cors';
 
@@ -16,8 +17,8 @@ import errorMiddleware from './middlewares/errorMiddleware.js';
 const app = express();
 
 app.use(cors({ exposedHeaders: ['Retry-After'] }));
+app.use('/api/bilateral-invitations', bilateralRoutes);
 app.use(express.json());
-
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/professional-status',professionalStatus);
