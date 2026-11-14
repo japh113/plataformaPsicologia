@@ -174,6 +174,21 @@ test('013: isolated bilateral workflow, actual PostgreSQL privileges, revocators
       await assert.rejects(command(actor('bp10'),'professional-reference',operation()),/bilateral_forbidden/);
       await client.query("INSERT INTO bilateral_restrictions VALUES('bp10','enabled',clock_timestamp(),'Ensayo ficticio explícito')");
     });
+    await t.test('deleting restrictions revokes pending invitations and unused references permanently across rehabilitation',async()=>{
+      references.delete('bp9');
+      const id=await issue('bp9','bq38'),unused=await ref('bp9','bq39');
+      await client.query("DELETE FROM bilateral_restrictions WHERE psychologist_id='bp9'");
+      assert.equal((await incoming('bq38',id)).status,'invalidated');
+      assert.equal((await client.query("SELECT count(*)::int n FROM bilateral_references WHERE psychologist_id='bp9' AND (digest IS NOT NULL OR binding_digest IS NOT NULL)")).rows[0].n,0);
+      await assert.rejects(command(actor('bp9'),'professional-reference',operation()),/bilateral_forbidden/);
+      await client.query("INSERT INTO bilateral_restrictions VALUES('bp9','enabled',clock_timestamp(),'Rehabilitación ficticia explícita')");
+      references.delete('bp9');
+      await assert.rejects(accept('bq38',id),/bilateral_conflict/);
+      const response=await command(actor('bp9'),'issue',{...operation(),email:'bq39@bilateral.invalid',recipientReference:unused,conditionsVersion,conditionsHash:proposalHash('bp9'),declarationVersion,declared:true,proposed:true});
+      await processQueue();assert.equal(await incoming('bq39',response.receiptId),undefined);
+      assert.equal((await client.query("SELECT count(*)::int n FROM bilateral_events WHERE invitation_id=$1 AND action='invalidated'",[id])).rows[0].n,1);
+      assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_agreements WHERE invitation_id=$1',[id])).rows[0].n,0);
+    });
     await t.test('sender quotas are durable across independent connections and idempotent retries never duplicate receipts',async()=>{
       const payload={...operation(),email:'absent@bilateral.invalid',recipientReference:'invalid',conditionsVersion,conditionsHash:proposalHash('bp10'),declarationVersion,declared:true,proposed:true};
       const a=await command(actor('bp10'),'issue',payload),b=await command(actor('bp10'),'issue',payload);
@@ -229,18 +244,31 @@ test('013: isolated bilateral workflow, actual PostgreSQL privileges, revocators
       const recovered=await command(actor('bq14'),'accept',payload,id);assert.equal(recovered.status,'completed');
       assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_agreements WHERE invitation_id=$1',[id])).rows[0].n,1);
     });
-    await t.test('both lock orders resolve acceptance against decline, withdrawal, blocking, suspension and expiration',async()=>{
-      const outcomes=['decline','withdraw','block','suspend','expire'];
+    await t.test('both lock orders resolve acceptance against decline, withdrawal, blocking, suspension, expiration and restriction deletion',async()=>{
+      const outcomes=['decline','withdraw','block','suspend','expire','delete'];
       for(let n=0;n<outcomes.length;n++)for(const first of ['revoker','accept']){
         const action=outcomes[n],psy='bp'+(16+n),pac='bq'+(15+2*n+(first==='accept'?1:0));
-        await client.query("UPDATE bilateral_restrictions SET state='enabled' WHERE psychologist_id=$1",[psy]);
+        await client.query("INSERT INTO bilateral_restrictions(psychologist_id,state,justification) VALUES($1,'enabled','Ensayo ficticio explícito') ON CONFLICT(psychologist_id) DO UPDATE SET state='enabled'",[psy]);
+        if(action==='delete')references.delete(psy);
         const id=await issue(psy,pac),i=await incoming(pac,id);
         const one=new pg.Client({connectionString:process.env.BILATERAL_DATABASE_URL}),two=new pg.Client({...connection,database:name});
         await one.connect();await two.connect();
         try{
+          const waitForLock=async connection=>{
+            const pid=(await connection.query('SELECT pg_backend_pid() pid')).rows[0].pid;
+            return async()=>{
+              for(let n=0;n<100;n++){
+                if((await client.query("SELECT wait_event_type='Lock' blocked FROM pg_stat_activity WHERE pid=$1",[pid])).rows[0]?.blocked)return;
+                await new Promise(r=>setTimeout(r,5));
+              }
+              assert.fail('independent-session restriction deletion must reach the lock barrier');
+            };
+          };
+          const observeOne=await waitForLock(one),observeTwo=await waitForLock(two);
           const phone=(await client.query('SELECT phone FROM patients WHERE id=$1',[pac])).rows[0].phone;
           const acceptInput={...express(),id,expectedVersion:1,conditionsVersion:i.conditionsVersion,conditionsHash:i.conditionsHash,agreementId:randomUUID(),fingerprint:randomUUID(),email:pac+'@bilateral.invalid',phone,adult:true,emailDigest:contactDigest('email',pac+'@bilateral.invalid'),phoneDigest:contactDigest('sms',phone)};
           const revoke=async connection=>{
+            if(action==='delete')return connection.query('DELETE FROM bilateral_restrictions WHERE psychologist_id=$1',[psy]);
             if(action==='suspend')return connection.query("UPDATE bilateral_restrictions SET state='suspended' WHERE psychologist_id=$1",[psy]);
             if(action==='expire')return connection.query('SELECT bilateral_cleanup()');
             const owner=action==='withdraw'?psy:pac;
@@ -252,17 +280,26 @@ test('013: isolated bilateral workflow, actual PostgreSQL privileges, revocators
             if(action==='expire')await new Promise(r=>setTimeout(r,250));
             await revoke(two);
             const waiting=one.query('SELECT bilateral_command($1,0,$2,$3::jsonb)',[pac,'accept',JSON.stringify(acceptInput)]).then(()=>null,e=>e);
+            if(action==='delete')await observeOne();
             await two.query('COMMIT');const error=await waiting;assert.equal(error?.message,'bilateral_conflict',action+' revoker first');
             assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_agreements WHERE invitation_id=$1',[id])).rows[0].n,0);
           }else{
             await one.query('BEGIN');await one.query('SELECT bilateral_command($1,0,$2,$3::jsonb)',[pac,'accept',JSON.stringify(acceptInput)]);
             if(action==='expire')await new Promise(r=>setTimeout(r,250));
-            const waiting=revoke(two).then(()=>null,e=>e);await one.query('COMMIT');const error=await waiting;
+            const waiting=revoke(two).then(()=>null,e=>e);
+            if(action==='delete')await observeTwo();
+            await one.query('COMMIT');const error=await waiting;
             if(['decline','withdraw'].includes(action))assert.equal(error?.message,'bilateral_conflict');else assert.equal(error,null);
             assert.equal((await incoming(pac,id)).status,'accepted');
             assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_agreements WHERE invitation_id=$1',[id])).rows[0].n,1);
           }
         }finally{await one.query('ROLLBACK');await two.query('ROLLBACK');await one.end();await two.end();}
+        if(action==='delete'){
+          await client.query("INSERT INTO bilateral_restrictions(psychologist_id,state,justification) VALUES($1,'enabled','Rehabilitación ficticia')",[psy]);
+          references.delete(psy);
+          assert.equal((await incoming(pac,id)).status,first==='revoker'?'invalidated':'accepted');
+          if(first==='revoker')await assert.rejects(accept(pac,id),/bilateral_conflict/);
+        }
       }
     });
     await t.test('exact 20-per-day, 50-pending, 10-per-week, three-resend and seven-day rejection boundaries',async()=>{

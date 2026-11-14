@@ -26,7 +26,7 @@ def collect(root):
             continue
         assert report['status'] in ['success','failure'] and report['suites']
         if report['status']=='success':
-            counts={'docs':2,'backend-unit':2,'frontend':4,'postgres':3,'browser':3}
+            counts={'docs':2,'backend-unit':2,'frontend':4,'postgres':3,'browser':4}
             assert len(report['suites'])==counts[job]
             if job=='docs':
                 documentation,contracts=report['suites']
@@ -53,12 +53,11 @@ def collect(root):
         reports[job]=report
     return reports,hashes
 
-if __name__=='__main__':
-    mode=sys.argv[1];root=Path('tmp/ci-download')
+def main(mode,root=Path('tmp/ci-download'),out=OUT):
     reports,hashes=collect(root)
     if mode=='evidence':
-        write(OUT/'evidence/index.json',{'identity':identity(),'complete':True,'reports':reports,'hashes':hashes,'retentionDays':14,'classification':classify()})
-        seal(OUT/'evidence')
+        write(out/'evidence/index.json',{'identity':identity(),'complete':True,'reports':reports,'hashes':hashes,'retentionDays':14,'classification':classify()})
+        seal(out/'evidence')
     elif mode=='required':
         verify(root/'evidence')
         index=json.loads((root/'evidence/index.json').read_text())
@@ -69,3 +68,5 @@ if __name__=='__main__':
         accept({j:{'result':'success'} for j in JOBS},reports)
         print('All required components executed or verified not applicable for this run/attempt/commit.')
     else:raise ValueError('Unknown mode')
+
+if __name__=='__main__':main(sys.argv[1])

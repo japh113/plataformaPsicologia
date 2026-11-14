@@ -112,7 +112,9 @@ DECLARE target text; psy text;
 BEGIN
   PERFORM pg_advisory_xact_lock(73013,1);
   IF TG_TABLE_NAME='bilateral_restrictions' THEN
-    IF NEW.state='disabled' THEN psy:=NEW.psychologist_id; END IF;
+    -- Absence is disabled too: deletion must revoke before any later enablement.
+    IF TG_OP='DELETE' THEN psy:=OLD.psychologist_id;
+    ELSIF NEW.state='disabled' THEN psy:=NEW.psychologist_id; END IF;
   ELSIF TG_TABLE_NAME='psychologist_profiles' THEN
     IF NEW.approval_status IS DISTINCT FROM OLD.approval_status AND NEW.approval_status<>'active' THEN
       -- Suspension freezes acceptance but does not invalidate; other approval loss is definitive.
@@ -150,7 +152,7 @@ CREATE TRIGGER bilateral_account_change AFTER UPDATE OF email,patient_id,role,is
 CREATE TRIGGER bilateral_identity_change AFTER UPDATE OF phone,global_birth_date,first_name,last_name ON patients FOR EACH ROW EXECUTE FUNCTION bilateral_invalidate();
 CREATE TRIGGER bilateral_verification_change AFTER UPDATE OR DELETE ON contact_verification_state FOR EACH ROW EXECUTE FUNCTION bilateral_invalidate();
 CREATE TRIGGER bilateral_approval_change AFTER UPDATE OF approval_status ON psychologist_profiles FOR EACH ROW EXECUTE FUNCTION bilateral_invalidate();
-CREATE TRIGGER bilateral_restriction_change AFTER INSERT OR UPDATE ON bilateral_restrictions FOR EACH ROW EXECUTE FUNCTION bilateral_invalidate();
+CREATE TRIGGER bilateral_restriction_change AFTER INSERT OR UPDATE OR DELETE ON bilateral_restrictions FOR EACH ROW EXECUTE FUNCTION bilateral_invalidate();
 
 -- Metadata discovery never authorizes a command. Command re-runs this under the same transaction.
 CREATE FUNCTION bilateral_context(actor text,sv integer,op text,p jsonb) RETURNS jsonb
