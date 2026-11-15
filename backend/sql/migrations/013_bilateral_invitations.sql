@@ -328,7 +328,10 @@ BEGIN
     IF prior.processed_at IS NOT NULL THEN RETURN '{}'::jsonb; END IF;
     UPDATE public.bilateral_attempts SET processed_at=stamp,reference_digest=NULL WHERE id=prior.id;
     SELECT * INTO ref FROM public.bilateral_references WHERE digest=prior.reference_digest AND kind='recipient' AND expires_at>stamp FOR UPDATE;
-    IF p->'referenceAuthenticated' IS DISTINCT FROM 'true'::jsonb OR ref.id IS NULL OR NOT coalesce(eligible,false) OR restriction IS DISTINCT FROM 'enabled' OR prior.expires_at<=stamp OR
+    -- Re-read the server clock after row locks. The receipt keeps its own deadline;
+    -- an actual invitation starts its fourteen days only when processing emits it.
+    stamp:=clock_timestamp();
+    IF p->'referenceAuthenticated' IS DISTINCT FROM 'true'::jsonb OR ref.id IS NULL OR NOT coalesce(eligible,false) OR restriction IS DISTINCT FROM 'enabled' OR prior.expires_at<=stamp OR ref.expires_at<=stamp OR
       ref.psychologist_id<>actor OR ref.patient_id IS DISTINCT FROM c->>'patient' OR
       EXISTS(SELECT 1 FROM public.bilateral_blocks WHERE account_id=ref.account_id AND psychologist_id=actor) OR
       EXISTS(SELECT 1 FROM public.bilateral_invitations WHERE psychologist_id=actor AND account_id=ref.account_id AND
@@ -344,7 +347,7 @@ BEGIN
     SELECT btrim(first_name||' '||coalesce(last_name,'')) INTO professional_name FROM public.users WHERE id=actor;
     INSERT INTO public.bilateral_invitations(id,psychologist_id,account_id,patient_id,reference_id,purpose,state,issued_at,expires_at,
       professional_name,conditions_version,conditions_text,conditions_hash,declaration_version,declaration_text)
-      VALUES(prior.id,actor,ref.account_id,ref.patient_id,ref.id,'individual_linkage','pending',prior.created_at,prior.expires_at,
+      VALUES(prior.id,actor,ref.account_id,ref.patient_id,ref.id,'individual_linkage','pending',stamp,stamp+interval '336 hours',
         professional_name,prior.proposal->>'conditionsVersion',prior.proposal->>'conditionsText',prior.proposal->>'conditionsHash',prior.proposal->>'declarationVersion',prior.proposal->>'declarationText');
     INSERT INTO public.bilateral_delivery_budget(account_id,psychologist_id,created_at) VALUES(ref.account_id,actor,stamp);
     INSERT INTO public.bilateral_events(invitation_id,actor_id,action,created_at) VALUES(prior.id,actor,'issued',stamp);

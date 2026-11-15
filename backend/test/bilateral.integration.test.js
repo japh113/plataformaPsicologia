@@ -76,8 +76,104 @@ test('013: isolated bilateral workflow, actual PostgreSQL privileges, revocators
     const accept=async(pac,id,extra={})=>{
       const i=await incoming(pac,id);return command(actor(pac),'accept',{...express(),expectedVersion:i.version,conditionsVersion:i.conditionsVersion,conditionsHash:i.conditionsHash,...extra},id);
     };
+    // Dedicated fictional identities keep clock fixtures separate from quota/race scenarios.
+    const queueClockCase=async suffix=>{
+      const psy='bp_ttl_'+suffix,pac='bq_ttl_'+suffix,phone='+525599990001';
+      await client.query("INSERT INTO patients(id,first_name,full_name,phone,global_birth_date) VALUES($1,$1,$1,$2,'1990-01-01')",[pac,phone]);
+      for(const [id,name,role,patient]of [[psy,'Profesional ficticio '+psy,'psychologist',null],[pac,pac,'patient',pac]])
+        await client.query('INSERT INTO users(id,first_name,email,password_hash,role,patient_id) SELECT $1,$2,$3,password_hash,$4,$5 FROM users WHERE id=\'bp1\'',[id,name,id+'@bilateral.invalid',role,patient]);
+      await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES($1,'active')",[psy]);
+      await client.query("INSERT INTO bilateral_restrictions(psychologist_id,state,justification) VALUES($1,'enabled','Ensayo ficticio de vigencia autorizado')",[psy]);
+      for(const [channel,value]of [['email',pac+'@bilateral.invalid'],['sms',phone]])
+        await client.query('INSERT INTO contact_verification_state VALUES($1,$2,$3,clock_timestamp())',[pac,channel,contactDigest(channel,value)]);
+      const recipientReference=await ref(psy,pac);
+      const payload={...operation(),email:pac+'@bilateral.invalid',recipientReference,conditionsVersion,conditionsHash:proposalHash(psy),declarationVersion,declared:true,proposed:true};
+      const response=await http(psy,'/bilateral-invitations',payload);
+      assert.equal(response.status,202);
+      return {psy,pac,payload,id:response.body.data.receiptId,receipt:response.body.data};
+    };
+    const invitationClock=async id=>(await client.query(`SELECT issued_at::text AS issued,expires_at::text AS expires,
+      expires_at-issued_at=interval '336 hours' AS exact_ttl,
+      issued_at,expires_at FROM bilateral_invitations WHERE id=$1`,[id])).rows[0];
     const legacyBefore=(await client.query('SELECT id,status FROM care_relationships ORDER BY id')).rows;
     const notesBefore=(await client.query('SELECT * FROM patient_clinical_notes ORDER BY id')).rows;
+    await t.test('invitation immediate issuance has exactly fourteen days from the effective server emission',async()=>{
+      const q=await queueClockCase('immediate');
+      const before=(await client.query('SELECT clock_timestamp() stamp')).rows[0].stamp;
+      assert.equal((await processQueue()).deferred,0);
+      const after=(await client.query('SELECT clock_timestamp() stamp')).rows[0].stamp;
+      const clock=await invitationClock(q.id);
+      assert.equal(clock.exact_ttl,true);
+      assert.ok(clock.issued_at>=before&&clock.issued_at<=after);
+      assert.equal(clock.expires_at-clock.issued_at,14*24*60*60*1000);
+    });
+    await t.test('twelve-hour delayed issuance keeps a valid reference and separates invitation dates from uniform receipts',async()=>{
+      const q=await queueClockCase('delayed');
+      const suppressed=await http(q.psy,'/bilateral-invitations',{...q.payload,...operation(),email:'absent@bilateral.invalid'});
+      assert.equal(suppressed.status,202);
+      assert.deepEqual(Object.keys(suppressed.body.data).sort(),Object.keys(q.receipt).sort());
+      assert.equal(suppressed.body.data.status,q.receipt.status);
+      await client.query(`WITH tick AS MATERIALIZED (SELECT clock_timestamp()-interval '12 hours' stamp)
+        UPDATE bilateral_attempts SET created_at=stamp,expires_at=stamp+interval '336 hours' FROM tick WHERE id=ANY($1::uuid[])`,[[q.id,suppressed.body.data.receiptId]]);
+      await client.query(`UPDATE bilateral_references SET created_at=a.created_at,expires_at=a.created_at+interval '24 hours'
+        FROM bilateral_attempts a WHERE a.id=$1 AND bilateral_references.account_id=$2 AND kind='recipient' AND digest IS NOT NULL`,[q.id,q.pac]);
+      const reference=(await client.query(`SELECT expires_at>clock_timestamp() AS valid,expires_at-created_at=interval '24 hours' AS own_ttl
+        FROM bilateral_references WHERE account_id=$1 AND kind='recipient'`,[q.pac])).rows[0];
+      assert.deepEqual(reference,{valid:true,own_ttl:true});
+      const sentBefore=await command(actor(q.psy),'sent');
+      const before=(await client.query('SELECT clock_timestamp() stamp')).rows[0].stamp;
+      assert.equal((await processQueue()).deferred,0);
+      const after=(await client.query('SELECT clock_timestamp() stamp')).rows[0].stamp;
+      const clock=await invitationClock(q.id),sent=await command(actor(q.psy),'sent');
+      assert.equal(clock.exact_ttl,true);
+      assert.ok(clock.issued_at>=before&&clock.issued_at<=after);
+      assert.deepEqual(sent,sentBefore);
+      const [validReceipt,invalidReceipt]=[q.id,suppressed.body.data.receiptId].map(id=>sent.find(row=>row.id===id));
+      const {id:validId,...validDto}=validReceipt,{id:invalidId,...invalidDto}=invalidReceipt;
+      assert.equal(validId,q.id);assert.equal(invalidId,suppressed.body.data.receiptId);
+      assert.deepEqual(validDto,invalidDto);
+      assert.ok(clock.issued_at-new Date(validReceipt.createdAt)>=12*60*60*1000);
+      assert.ok(clock.expires_at>new Date(validReceipt.expiresAt));
+      assert.equal(new Date((await incoming(q.pac,q.id)).expiresAt).getTime(),clock.expires_at.getTime());
+      assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_invitations WHERE id=ANY($1::uuid[])',[[q.id,suppressed.body.data.receiptId]])).rows[0].n,1);
+      assert.doesNotMatch(JSON.stringify(sent),/patient|email|digest|delivered|eligible|issuedAt/i);
+      const retried=await http(q.psy,'/bilateral-invitations',q.payload);
+      assert.deepEqual(retried.body.data,q.receipt);
+      await command(actor(q.pac),'received');
+      await command(actor(q.psy),'resend',express(),q.id);
+      assert.equal((await processQueue()).deferred,0);
+      // Replay the already-consumed job itself, not just an empty queue scan.
+      const duplicated=await restricted.query("SELECT bilateral_command(NULL,NULL,'process',jsonb_build_object('id',$1::text)) data",[q.id]);
+      assert.deepEqual(duplicated.rows[0].data,{});
+      assert.deepEqual(await invitationClock(q.id),clock);
+      assert.deepEqual(await command(actor(q.psy),'sent'),sent);
+      assert.equal((await client.query("SELECT count(*)::int n FROM bilateral_events WHERE invitation_id=$1 AND action='issued'",[q.id])).rows[0].n,1);
+      assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_invitations WHERE id=$1',[q.id])).rows[0].n,1);
+      assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_sender_budget WHERE actor_id=$1',[q.psy])).rows[0].n,3);
+      assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_delivery_budget WHERE account_id=$1',[q.pac])).rows[0].n,2);
+    });
+    await t.test('an expired directed reference cannot emit an invitation from a still-current attempt',async()=>{
+      const q=await queueClockCase('reference_expired');
+      await client.query(`WITH tick AS MATERIALIZED (SELECT clock_timestamp()-interval '25 hours' stamp)
+        UPDATE bilateral_references SET created_at=stamp,expires_at=stamp+interval '24 hours' FROM tick WHERE account_id=$1 AND kind='recipient'`,[q.pac]);
+      assert.equal((await client.query('SELECT expires_at>clock_timestamp() valid FROM bilateral_attempts WHERE id=$1',[q.id])).rows[0].valid,true);
+      const sent=await command(actor(q.psy),'sent');
+      assert.equal((await processQueue()).deferred,0);
+      assert.equal(await invitationClock(q.id),undefined);
+      assert.deepEqual(await command(actor(q.psy),'sent'),sent);
+      assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_delivery_budget WHERE account_id=$1',[q.pac])).rows[0].n,0);
+    });
+    await t.test('an expired attempt cannot emit an invitation even with a still-current directed reference',async()=>{
+      const q=await queueClockCase('attempt_expired');
+      await client.query(`WITH tick AS MATERIALIZED (SELECT clock_timestamp()-interval '15 days' stamp)
+        UPDATE bilateral_attempts SET created_at=stamp,expires_at=stamp+interval '336 hours' FROM tick WHERE id=$1`,[q.id]);
+      assert.equal((await client.query("SELECT expires_at>clock_timestamp() valid FROM bilateral_references WHERE account_id=$1 AND kind='recipient'",[q.pac])).rows[0].valid,true);
+      const sent=await command(actor(q.psy),'sent');
+      assert.equal((await processQueue()).deferred,0);
+      assert.equal(await invitationClock(q.id),undefined);
+      assert.deepEqual(await command(actor(q.psy),'sent'),sent);
+      assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_delivery_budget WHERE account_id=$1',[q.pac])).rows[0].n,0);
+    });
     await t.test('positive HTTP flow fixes exact subjects and texts; acceptance and evidence are atomic without clinical access',async()=>{
       const id=await issue('bp1','bq1');const i=await incoming('bq1',id);
       assert.equal(i.status,'pending');assert.match(i.conditionsText,/Profesional ficticio bp1/);
