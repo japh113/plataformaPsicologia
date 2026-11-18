@@ -120,11 +120,13 @@ test('013: isolated bilateral workflow, actual PostgreSQL privileges, revocators
       const reference=(await client.query(`SELECT expires_at>clock_timestamp() AS valid,expires_at-created_at=interval '24 hours' AS own_ttl
         FROM bilateral_references WHERE account_id=$1 AND kind='recipient'`,[q.pac])).rows[0];
       assert.deepEqual(reference,{valid:true,own_ttl:true});
-      const sentBefore=await command(actor(q.psy),'sent');
+      // These receipts share created_at; compare every field by ID across unspecified tie order.
+      const byReceiptId=rows=>[...rows].sort((a,b)=>a.id.localeCompare(b.id));
+      const sentBefore=byReceiptId(await command(actor(q.psy),'sent'));
       const before=(await client.query('SELECT clock_timestamp() stamp')).rows[0].stamp;
       assert.equal((await processQueue()).deferred,0);
       const after=(await client.query('SELECT clock_timestamp() stamp')).rows[0].stamp;
-      const clock=await invitationClock(q.id),sent=await command(actor(q.psy),'sent');
+      const clock=await invitationClock(q.id),sent=byReceiptId(await command(actor(q.psy),'sent'));
       assert.equal(clock.exact_ttl,true);
       assert.ok(clock.issued_at>=before&&clock.issued_at<=after);
       assert.deepEqual(sent,sentBefore);
@@ -146,7 +148,7 @@ test('013: isolated bilateral workflow, actual PostgreSQL privileges, revocators
       const duplicated=await restricted.query("SELECT bilateral_command(NULL,NULL,'process',jsonb_build_object('id',$1::text)) data",[q.id]);
       assert.deepEqual(duplicated.rows[0].data,{});
       assert.deepEqual(await invitationClock(q.id),clock);
-      assert.deepEqual(await command(actor(q.psy),'sent'),sent);
+      assert.deepEqual(byReceiptId(await command(actor(q.psy),'sent')),sent);
       assert.equal((await client.query("SELECT count(*)::int n FROM bilateral_events WHERE invitation_id=$1 AND action='issued'",[q.id])).rows[0].n,1);
       assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_invitations WHERE id=$1',[q.id])).rows[0].n,1);
       assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_sender_budget WHERE actor_id=$1',[q.psy])).rows[0].n,3);
