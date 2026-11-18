@@ -7,7 +7,7 @@ import app from '../src/app.js';
 import db from '../src/config/db.js';
 import env from '../src/config/env.js';
 import { installBaseline,syntheticFixture } from '../scripts/episode-sandbox.js';
-import { installAdmissionSandbox } from '../scripts/admission-sandbox.js';
+import { installEpisodeRecordSandbox } from '../scripts/episode-record-sandbox.js';
 import { installBilateralSandbox,bilateralFixture } from '../scripts/bilateral-sandbox.js';
 import { migrate,catalogChecksum } from '../scripts/episode-migration.js';
 import { verifyAdmissionContract } from '../scripts/admission-contract.js';
@@ -32,7 +32,7 @@ test('014: isolated adult self-admission, exact versions, private projections an
     assert.equal((await control.query('SELECT 1 FROM pg_database WHERE datname=$1',[name])).rowCount,0);
     await control.query('CREATE DATABASE "'+name+'"');client=new pg.Client({...connection,database:name});await client.connect();
     assert.equal((await client.query("SELECT 1 FROM pg_class WHERE relnamespace='public'::regnamespace")).rowCount,0);
-    await installBaseline(client);const options=await installAdmissionSandbox(client,name);
+    await installBaseline(client);const options=await installEpisodeRecordSandbox(client,name);
     await bilateralFixture(client);await syntheticFixture(client);
     const legacyBefore=(await client.query('SELECT * FROM care_relationships ORDER BY id')).rows;
     const notesBefore=(await client.query('SELECT * FROM patient_clinical_notes ORDER BY id')).rows;
@@ -80,7 +80,33 @@ test('014: isolated adult self-admission, exact versions, private projections an
       return {...await propose(psy,pac),phone};
     };
     let q;
-    await t.test('fresh 014 preserves SQL 001-013 ledger, replay and separate restricted real LOGIN',async()=>{
+    await t.test('015 HTTP: preparation creates only an empty private record atomically without extending any DTO',async()=>{
+      const agreementId=await link('bp22','bq59');
+      const before=(await client.query('SELECT count(*)::int n FROM clinical_episodes')).rows[0].n;
+      await client.query(`CREATE FUNCTION fail_record_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'controlled_record_failure'; END $$;
+        CREATE TRIGGER fail_record_fixture BEFORE INSERT ON episode_private_record_versions FOR EACH ROW EXECUTE FUNCTION fail_record_fixture()`);
+      try{
+        assert.equal((await http('bp22','/admissions/prepare',{...act(),agreementId})).status,503);
+        assert.equal((await client.query('SELECT count(*)::int n FROM clinical_episodes')).rows[0].n,before);
+        assert.equal((await client.query('SELECT count(*)::int n FROM admission_preparations')).rows[0].n,0);
+        assert.equal((await client.query('SELECT count(*)::int n FROM episode_private_records')).rows[0].n,0);
+        assert.equal((await client.query('SELECT count(*)::int n FROM episode_private_record_versions')).rows[0].n,0);
+      }finally{await client.query('DROP TRIGGER fail_record_fixture ON episode_private_record_versions; DROP FUNCTION fail_record_fixture()');}
+      const response=await http('bp22','/admissions/prepare',{...act(),agreementId});assert.equal(response.status,200);
+      assert.deepEqual(Object.keys(response.body.data).sort(),['episodeId','status']);
+      const initial=(await client.query('SELECT * FROM episode_private_record_versions WHERE episode_id=$1',[response.body.data.episodeId])).rows[0];
+      assert.equal(initial.risk_level,'unevaluated');assert.equal(initial.professional_context,'');assert.equal(initial.technical_author_user_id,null);
+      assert.equal(initial.recording_kind,'initial_empty');assert.equal(initial.writer_login,options.admissionClientRole);
+      for(const role of [options.admissionClientRole,options.bilateralClientRole,options.accountReaderRole,options.privateNoteCreatorRole]){
+        for(const table of ['episode_private_records','episode_private_record_versions']){
+          assert.equal((await client.query('SELECT has_table_privilege($1,$2,\'SELECT,INSERT,UPDATE,DELETE\') allowed',[role,table])).rows[0].allowed,false);
+        }
+      }
+      for(const id of ['bp22','bq59','bp2','bq2','bil-admin','bil-support','bil-superadmin']){
+        assert.equal((await http(id,'/episodes/'+response.body.data.episodeId+'/clinical-record')).status,404);
+      }
+    });
+    await t.test('fresh 015 preserves SQL 001-014 ledger replay and the separate restricted admission LOGIN',async()=>{
       const hash=await catalogChecksum(client);assert.equal((await migrate(client,options)).status,'already-applied');assert.equal(await catalogChecksum(client),hash);
       await verifyAdmissionContract(client,options.admissionClientRole);
       await assert.rejects(verifyAdmissionContract(client,options.admissionClientRole,{runtime:true}),/Mismatched admission LOGIN/);
@@ -334,6 +360,45 @@ test('014: isolated adult self-admission, exact versions, private projections an
       await closeAdmission();process.env.ADMISSION_DATABASE_URL=`postgres://${env.dbUser}:${env.dbPassword}@db:5432/${name}`;
       await assert.rejects(command(actor('bp1'),'list'),/Unsafe admission LOGIN/);await closeAdmission();process.env.ADMISSION_DATABASE_URL=`postgres://${options.admissionClientRole}:disposable_admission_roles@db:5432/${name}`;
       const off=process.env.ADMISSION_ENABLED;process.env.ADMISSION_ENABLED='false';assert.equal((await http('bp1','/admissions')).status,404);process.env.ADMISSION_ENABLED=off;
+    });
+    await t.test('015 preparation serializes with all seven admission revokers in both real commit orders',async()=>{
+      const reader=new pg.Client({connectionString:process.env.ADMISSION_DATABASE_URL}),revoker=new pg.Client({...connection,database:name});
+      await reader.connect();await revoker.connect();
+      const blocked=async pid=>{for(let n=0;n<200;n++){
+        if((await client.query('SELECT cardinality(pg_blocking_pids($1))>0 blocked',[pid])).rows[0].blocked)return;
+        await new Promise(r=>setTimeout(r,10));
+      }assert.fail('Expected real preparation lock wait');};
+      try{
+        for(const cause of ['consent','unlink','restriction','account','verification','profile','block'])for(const first of ['operation','revoker']){
+          const r=await freshOwnAdmission();
+          const before=(await client.query('SELECT count(*)::int n FROM episode_private_records')).rows[0].n;
+          const p={...act(),agreementId:r.agreementId,sessionExpiresAt:actor(r.psy).sessionExpiresAt,fingerprint:'e'.repeat(64),
+            emailDigest:contactDigest('email',r.pac+'@bilateral.invalid'),phoneDigest:contactDigest('sms',r.phone)};
+          const prepare=()=>reader.query("SELECT admission_command($1,0,'prepare',$2::jsonb) data",[r.psy,JSON.stringify(p)]);
+          // Consent withdrawal is assignment-scoped: it must NOT revoke the
+          // bilateral agreement or prohibit preparing another independent episode.
+          const revoke=()=>cause==='consent'?revoker.query("SELECT admission_command($1,0,'revoke',$2::jsonb)",[r.pac,JSON.stringify({...p,id:r.id,fingerprint:'f'.repeat(64)})]):
+            cause==='unlink'?revoker.query("SELECT bilateral_command($1,0,'unlink',$2::jsonb)",[r.pac,JSON.stringify({...p,id:r.agreementId,expectedVersion:1})]):
+            cause==='restriction'?revoker.query("UPDATE bilateral_restrictions SET state='suspended' WHERE psychologist_id=$1",[r.psy]):
+            cause==='account'?revoker.query('UPDATE users SET is_active=false WHERE id=$1',[r.pac]):
+            cause==='verification'?revoker.query("DELETE FROM contact_verification_state WHERE user_id=$1 AND channel='email'",[r.pac]):
+            cause==='profile'?revoker.query("UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id=$1",[r.psy]):
+            revoker.query('INSERT INTO bilateral_blocks(id,account_id,psychologist_id) VALUES($1,$2,$3)',[randomUUID(),r.pac,r.psy]);
+          if(first==='revoker'){
+            await revoker.query('BEGIN');await revoke();const pending=prepare().then(r=>r,e=>e);await blocked(reader.processID);await revoker.query('COMMIT');
+            const result=await pending;
+            if(cause==='consent')assert.equal(result.rows[0].data.status,'prepared');
+            else assert.match(result.message,/admission_missing|admission_session/);
+          }else{
+            await reader.query('BEGIN');await prepare();await revoker.query('BEGIN');const pending=revoke();await blocked(revoker.processID);
+            await reader.query('COMMIT');await pending;await revoker.query('COMMIT');
+          }
+          const after=(await client.query('SELECT count(*)::int n FROM episode_private_records')).rows[0].n;
+          assert.equal(after,before+(first==='operation'||cause==='consent'?1:0));
+          assert.equal((await client.query(`SELECT count(*)::int n FROM admission_preparations p LEFT JOIN episode_private_records r USING(episode_id)
+            LEFT JOIN episode_private_record_versions v ON v.episode_id=p.episode_id AND v.revision=1 WHERE r.episode_id IS NULL OR v.episode_id IS NULL`)).rows[0].n,0);
+        }
+      }finally{await reader.query('ROLLBACK');await revoker.query('ROLLBACK');await reader.end();await revoker.end();}
     });
     await t.test('014 provisioning rolls back late DDL failure and refuses populated 013 without adopting data or ledger',async()=>{
       const freshName='psicopanel_episode_admission_'+randomUUID().replaceAll('-','');

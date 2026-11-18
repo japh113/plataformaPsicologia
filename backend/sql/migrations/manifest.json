@@ -68,5 +68,10 @@
     "version": "014",
     "file": "014_self_administered_admission.sql",
     "sha256": "4511663bbdb9515b7d56a0a000e46462de108b109bf34ccd1fdae9d5a4efc5c7"
+  },
+  {
+    "version": "015",
+    "file": "015_individual_clinical_record.sql",
+    "sha256": "52f48091269bffa90cf197f41cf297ab3ed035f07202734cb365a1a43e8b4867"
   }
 ]

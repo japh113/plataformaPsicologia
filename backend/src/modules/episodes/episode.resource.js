@@ -41,9 +41,19 @@ const waitlistQuery = `
        (r.episode_id,r.patient_id,r.created_by_user_id)
   WHERE r.id=$1::bigint AND r.episode_id=$2::bigint
 `;
+const clinicalRecordQuery = `
+  SELECT r.episode_id::text AS resource_id, r.episode_id::text AS episode_id,
+    r.patient_id, r.professional_user_id AS responsible_user_id
+  FROM public.episode_private_records r
+  INNER JOIN public.clinical_episode_participants cep
+    ON (cep.episode_id,cep.patient_id,cep.psychologist_user_id)=
+       (r.episode_id,r.patient_id,r.professional_user_id)
+  WHERE r.episode_id=$1::bigint AND r.episode_id=$2::bigint
+`;
 const queries = Object.freeze({
   appointment: appointmentQuery, note: noteQuery,
   task: checklistQuery, objective: checklistQuery, waitlist: waitlistQuery,
+  clinical_record: clinicalRecordQuery,
 });
 
 // Called only by the private context reader with a verified composition.
@@ -54,11 +64,20 @@ export async function resolveEpisodeResource(client, episode, resource) {
       !Object.hasOwn(queries, resource.type)) return null;
   const type = resource.type, id = episodeKey(resource.id);
   if (!id) return null;
+  if (type === 'clinical_record' && episode.modality !== 'individual') return null;
   const checklist = type === 'task' || type === 'objective';
   const params = checklist ? [id, episode.id, type] : [id, episode.id];
   const { rows } = await client.query(queries[type], params);
   if (!Array.isArray(rows) || rows.length !== 1) return null;
   const row = rows[0];
+  if (type === 'clinical_record') {
+    if (episode.modality !== 'individual' || !row || row.resource_id !== id || row.episode_id !== episode.id ||
+        !textKey(row.patient_id) || !episode.participants.some(p => p.patientId === row.patient_id) ||
+        row.responsible_user_id !== episode.responsibleUserId) return null;
+    return Object.freeze({ type, id, episodeId: row.episode_id, subjectPatientId: row.patient_id,
+      responsibleUserId: row.responsible_user_id, authorUserId: null,
+      state: null, verified: true, matchesEpisode: true, audience: null, audienceVerified: false });
+  }
   if (!row || row.resource_id !== id || row.episode_id !== episode.id ||
       !textKey(row.patient_id) || !episode.participants.some(p => p.patientId === row.patient_id) ||
       !textKey(row.author_user_id) || row.author_user_id !== episode.responsibleUserId) return null;
