@@ -44,8 +44,8 @@ test('014: isolated adult self-admission, exact versions, private projections an
     restricted=new pg.Client({connectionString:process.env.ADMISSION_DATABASE_URL});await restricted.connect();
     server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));
     const url='http://127.0.0.1:'+server.address().port;
-    const http=async(id,path,payload,method=payload?'POST':'GET')=>{
-      const token=jwt.sign({sub:id,sv:0},env.jwtSecret,{expiresIn:'1h'});
+    const http=async(id,path,payload,method=payload?'POST':'GET',sessionVersion=0)=>{
+      const token=jwt.sign({sub:id,sv:sessionVersion},env.jwtSecret,{expiresIn:'1h'});
       const r=await fetch(url+'/api'+path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},...(payload?{body:JSON.stringify(payload)}:{})});
       return {status:r.status,body:await r.json(),headers:r.headers};
     };
@@ -68,6 +68,17 @@ test('014: isolated adult self-admission, exact versions, private projections an
     const save=async(q,value=answers)=>{const d=await detail(q),draft=await command(actor(q.pac),'draft',{},q.id);return command(actor(q.pac),'save',{...act(),expectedVersion:d.version,expectedRevision:draft.revision,answers:value},q.id);};
     const submit=async q=>{const d=await detail(q),draft=await command(actor(q.pac),'draft',{},q.id);return command(actor(q.pac),'submit',{...act(),expectedVersion:d.version,expectedRevision:draft.revision},q.id);};
     const review=async(q,op,extra={})=>{const d=await detail(q);return command(actor(q.psy),op,{...act(),expectedVersion:d.version,submission:d.latestSubmission,episodeId:q.episodeId,...extra},q.id);};
+    let ownFixture=0;
+    const freshOwnAdmission=async()=>{
+      const n=++ownFixture,psy='bp_own_'+n,pac='bq_own_'+n,phone='+525577'+String(n).padStart(6,'0');
+      await client.query("INSERT INTO patients(id,first_name,full_name,phone,global_birth_date) VALUES($1,$1,$1,$2,'1990-01-01')",[pac,phone]);
+      await client.query("INSERT INTO users(id,first_name,email,password_hash,role,patient_id) SELECT $1,$1,$2,password_hash,'patient',$1 FROM users WHERE id='bp1'",[pac,pac+'@bilateral.invalid']);
+      for(const [channel,value]of [['email',pac+'@bilateral.invalid'],['sms',phone]])await client.query('INSERT INTO contact_verification_state VALUES($1,$2,$3,clock_timestamp())',[pac,channel,contactDigest(channel,value)]);
+      await client.query("INSERT INTO users(id,first_name,email,password_hash,role) SELECT $1,$2,$3,password_hash,'psychologist' FROM users WHERE id='bp1'",[psy,'Profesional ficticio '+psy,psy+'@bilateral.invalid']);
+      await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES($1,'active')",[psy]);
+      await client.query("INSERT INTO bilateral_restrictions(psychologist_id,state,justification) VALUES($1,'enabled','Regresión ficticia P2-01')",[psy]);
+      return {...await propose(psy,pac),phone};
+    };
     let q;
     await t.test('fresh 014 preserves SQL 001-013 ledger, replay and separate restricted real LOGIN',async()=>{
       const hash=await catalogChecksum(client);assert.equal((await migrate(client,options)).status,'already-applied');assert.equal(await catalogChecksum(client),hash);
@@ -168,27 +179,27 @@ test('014: isolated adult self-admission, exact versions, private projections an
         [12,"DELETE FROM bilateral_restrictions WHERE psychologist_id=$1"],
         [13,"UPDATE users SET is_active=false WHERE id=$1"],
       ]){
-        const r=await propose('bp'+offset,'bq'+offset);await accept(r);await client.query(sql,[r.psy]);await assert.rejects(detail(r),/admission_missing/);
-        if(offset===11){await client.query("UPDATE bilateral_restrictions SET state='enabled' WHERE psychologist_id=$1",[r.psy]);await assert.rejects(detail(r),/admission_missing/);}
+        const r=await propose('bp'+offset,'bq'+offset);await accept(r);await client.query(sql,[r.psy]);assert.equal((await detail(r)).readOnly,true);await assert.rejects(command(actor(r.psy),'detail',{},r.id),/admission_missing|admission_session/);
+        if(offset===11){await client.query("UPDATE bilateral_restrictions SET state='enabled' WHERE psychologist_id=$1",[r.psy]);assert.equal((await detail(r)).readOnly,true);await assert.rejects(command(actor(r.psy),'detail',{},r.id),/admission_missing|admission_session/);}
       }
       const r=await propose('bp14','bq14');await accept(r);
-      await bilateral(actor(r.pac),'unlink',{...act(),expectedVersion:1},r.agreementId);await assert.rejects(detail(r),/admission_missing/);
+      await bilateral(actor(r.pac),'unlink',{...act(),expectedVersion:1},r.agreementId);assert.equal((await detail(r)).readOnly,true);await assert.rejects(command(actor(r.psy),'detail',{},r.id),/admission_missing|admission_session/);
       const s=await propose('bp15','bq15');await accept(s);
-      await client.query('INSERT INTO bilateral_blocks(id,account_id,psychologist_id) VALUES($1,$2,$3)',[randomUUID(),s.pac,s.psy]);await assert.rejects(detail(s),/admission_missing/);
+      await client.query('INSERT INTO bilateral_blocks(id,account_id,psychologist_id) VALUES($1,$2,$3)',[randomUUID(),s.pac,s.psy]);assert.equal((await detail(s)).readOnly,true);await assert.rejects(command(actor(s.psy),'detail',{},s.id),/admission_missing|admission_session/);
     });
     await t.test('moving restriction or block keys cannot create a dormant grant that revives after restoration',async()=>{
       const r=await propose('bp18','bq18');await accept(r);
       await client.query("DELETE FROM bilateral_restrictions WHERE psychologist_id='bp24'");
       await client.query("UPDATE bilateral_restrictions SET psychologist_id='bp24' WHERE psychologist_id='bp18'");
-      await assert.rejects(detail(r),/admission_missing/);
+      assert.equal((await detail(r)).readOnly,true);await assert.rejects(command(actor(r.psy),'detail',{},r.id),/admission_missing|admission_session/);
       await client.query("UPDATE bilateral_restrictions SET psychologist_id='bp18' WHERE psychologist_id='bp24'");
-      await assert.rejects(detail(r),/admission_missing/);
+      assert.equal((await detail(r)).readOnly,true);await assert.rejects(command(actor(r.psy),'detail',{},r.id),/admission_missing|admission_session/);
       const s=await propose('bp19','bq19'),block=randomUUID();await accept(s);
       await client.query("INSERT INTO bilateral_blocks(id,account_id,psychologist_id) VALUES($1,'bq60','bp19')",[block]);
       await client.query("UPDATE bilateral_blocks SET account_id='bq19' WHERE id=$1",[block]);
-      await assert.rejects(detail(s),/admission_missing/);
+      assert.equal((await detail(s)).readOnly,true);await assert.rejects(command(actor(s.psy),'detail',{},s.id),/admission_missing|admission_session/);
       await client.query('DELETE FROM bilateral_blocks WHERE id=$1',[block]);
-      await assert.rejects(detail(s),/admission_missing/);
+      assert.equal((await detail(s)).readOnly,true);await assert.rejects(command(actor(s.psy),'detail',{},s.id),/admission_missing|admission_session/);
     });
     await t.test('independent connections prove revocation versus read, submit and validation in both commit orders',async()=>{
       const one=new pg.Client({connectionString:process.env.ADMISSION_DATABASE_URL}),two=new pg.Client({...connection,database:name});await one.connect();await two.connect();
@@ -225,6 +236,85 @@ test('014: isolated adult self-admission, exact versions, private projections an
           if(revoker==='restriction')await client.query("UPDATE bilateral_restrictions SET state='enabled' WHERE psychologist_id=$1",[r.psy]);
         }
       }finally{await one.query('ROLLBACK');await two.query('ROLLBACK');await one.end();await two.end();}
+    });
+    await t.test('P2-01 HTTP: owner retains exact draft and submissions after consent unlink restrictions approval and professional inactivity',async()=>{
+      for(const revoker of ['consent','unlink','restriction','profile','professional-account']){
+        const r=await freshOwnAdmission();await accept(r);await save(r);await submit(r);
+        await review(r,'correct',{message:'Mensaje profesional destinado antes de revocación'});
+        await save(r,{reason:'Borrador corregido propio',context:'No enviado al profesional'});
+        const old=await detail(r),draft=await command(actor(r.pac),'draft',{},r.id);
+        const history=async()=>(await client.query('SELECT answers,number,author_id FROM admission_submissions WHERE assignment_id=$1 ORDER BY number',[r.id])).rows;
+        const before=await history();
+        if(revoker==='consent')assert.equal((await http(r.pac,'/admissions/'+r.id+'/revoke',{...act(),expectedVersion:old.version})).status,200);
+        else if(revoker==='unlink')assert.equal((await http(r.pac,'/bilateral-invitations/'+r.agreementId+'/unlink',{...act(),expectedVersion:1})).status,200);
+        else if(revoker==='restriction')await client.query("UPDATE bilateral_restrictions SET state='suspended' WHERE psychologist_id=$1",[r.psy]);
+        else if(revoker==='profile')await client.query("UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id=$1",[r.psy]);
+        else await client.query('UPDATE users SET is_active=false WHERE id=$1',[r.psy]);
+        const stateBefore=(await client.query('SELECT * FROM admission_assignments WHERE id=$1',[r.id])).rows[0];
+        assert.equal(stateBefore.state,'revoked');
+        const kept=await http(r.pac,'/admissions/'+r.id),keptDraft=await http(r.pac,'/admissions/'+r.id+'/draft'),list=await http(r.pac,'/admissions');
+        assert.equal(kept.status,200);assert.equal(kept.headers.get('cache-control'),'no-store');
+        assert.equal(kept.body.data.readOnly,true);assert.equal(kept.body.data.state,'revoked');assert.equal(kept.body.data.episodeId,r.episodeId);
+        assert.deepEqual(kept.body.data.submissions,old.submissions);assert.deepEqual(kept.body.data.corrections,[]);assert.deepEqual(kept.body.data.validations,[]);
+        assert.equal(keptDraft.status,200);assert.deepEqual(keptDraft.body.data,draft);assert.ok(list.body.data.some(i=>i.id===r.id&&i.readOnly));
+        const foreignOwn=await freshOwnAdmission();
+        for(const stranger of ['bq56','bp21','bil-admin','bil-superadmin','bil-support'])for(const suffix of ['', '/draft']){
+          const denied=await http(stranger,'/admissions/'+r.id+suffix),missing=await http(stranger,'/admissions/'+randomUUID()+suffix);
+          assert.equal(denied.status,404);assert.deepEqual(denied.body,missing.body);
+        }
+        assert.equal((await http(r.pac,'/admissions/'+foreignOwn.id)).status,404);
+        for(const suffix of ['', '/draft'])assert.ok([401,403,404].includes((await http(r.psy,'/admissions/'+r.id+suffix)).status));
+        await assert.rejects(command(actor(r.psy),'detail',{},r.id),/admission_missing|admission_session/);
+        for(const [op,input]of [['save',{expectedRevision:draft.revision,answers}],['submit',{expectedRevision:draft.revision}],['accept',{consentVersion:old.consentVersion,consentHash:old.consentHash}]])
+          assert.equal((await http(r.pac,'/admissions/'+r.id+'/'+op,{...act(),expectedVersion:old.version,...input})).status,404);
+        await assert.rejects(review(r,'validate'),/admission_missing|admission_session/);
+        assert.deepEqual((await client.query('SELECT * FROM admission_assignments WHERE id=$1',[r.id])).rows[0],stateBefore);
+        assert.deepEqual(await history(),before);
+        if(revoker==='restriction')await client.query("UPDATE bilateral_restrictions SET state='enabled' WHERE psychologist_id=$1",[r.psy]);
+        if(revoker==='profile')await client.query("UPDATE psychologist_profiles SET approval_status='active' WHERE user_id=$1",[r.psy]);
+        if(revoker==='professional-account')await client.query('UPDATE users SET is_active=true WHERE id=$1',[r.psy]);
+      }
+    });
+    await t.test('P2-01 PostgreSQL and HTTP: own reads survive concurrent withdrawal unlink and restrictions in both orders',async()=>{
+      const reader=new pg.Client({connectionString:process.env.ADMISSION_DATABASE_URL}),revoker=new pg.Client({...connection,database:name});await reader.connect();await revoker.connect();
+      const blocked=async pid=>{for(let n=0;n<150;n++){if((await client.query('SELECT cardinality(pg_blocking_pids($1))>0 AS blocked',[pid])).rows[0].blocked)return;await new Promise(r=>setTimeout(r,10));}assert.fail('Expected real PostgreSQL lock wait');};
+      try{
+        for(const cause of ['consent','unlink','restriction'])for(const op of ['summary','detail','draft'])for(const first of ['reader','revoker']){
+          const r=await freshOwnAdmission();
+          await accept(r);await save(r);await submit(r);
+          const d=await detail(r),p={id:r.id,sessionExpiresAt:actor(r.pac).sessionExpiresAt};
+          const read=()=>reader.query('SELECT admission_command($1,0,$2,$3::jsonb) AS data',[r.pac,op,JSON.stringify(p)]);
+          const revoke=()=>cause==='consent'?revoker.query("SELECT admission_command($1,0,'revoke',$2::jsonb)",[r.pac,JSON.stringify({...p,...act(),expectedVersion:d.version,fingerprint:'c'.repeat(64),emailDigest:contactDigest('email',r.pac+'@bilateral.invalid'),phoneDigest:contactDigest('sms',r.phone)})]):cause==='unlink'?revoker.query("SELECT bilateral_command($1,0,'unlink',$2::jsonb)",[r.pac,JSON.stringify({...act(),id:r.agreementId,expectedVersion:1,fingerprint:'d'.repeat(64)})]):revoker.query("UPDATE bilateral_restrictions SET state='suspended' WHERE psychologist_id=$1",[r.psy]);
+          if(first==='revoker'){
+            await revoker.query('BEGIN');await revoke();const pending=read();await blocked(reader.processID);await revoker.query('COMMIT');const result=(await pending).rows[0].data;
+            if(op!=='draft')assert.equal(result.readOnly,true);else assert.deepEqual(result.answers,answers);
+          }else{
+            await reader.query('BEGIN');await read();await revoker.query('BEGIN');const pending=revoke();await blocked(revoker.processID);await reader.query('COMMIT');await pending;await revoker.query('COMMIT');
+          }
+          const after=await http(r.pac,'/admissions/'+r.id+(op==='draft'?'/draft':''));assert.equal(after.status,200);
+          await assert.rejects(command(actor(r.psy),'detail',{},r.id),/admission_missing/);
+          await assert.rejects(submit(r),/admission_missing/);
+          if(cause==='restriction')await client.query("UPDATE bilateral_restrictions SET state='enabled' WHERE psychologist_id=$1",[r.psy]);
+        }
+      }finally{await reader.query('ROLLBACK');await revoker.query('ROLLBACK');await reader.end();await revoker.end();}
+    });
+    await t.test('P2-01 own archive still requires current account session and exact patient identity after revocation',async()=>{
+      const r=await freshOwnAdmission();await accept(r);await save(r);await submit(r);
+      await command(actor(r.pac),'revoke',{...act(),expectedVersion:(await detail(r)).version},r.id);
+      await client.query('UPDATE users SET session_version=session_version+1 WHERE id=$1',[r.pac]);
+      assert.equal((await http(r.pac,'/admissions/'+r.id)).status,401);
+      assert.equal((await http(r.pac,'/admissions/'+r.id,undefined,'GET',1)).status,200);
+      await client.query("UPDATE users SET role='admin' WHERE id=$1",[r.pac]);
+      const adminVersion=(await client.query('SELECT session_version FROM users WHERE id=$1',[r.pac])).rows[0].session_version;
+      await assert.rejects(command({...actor(r.pac),sessionVersion:adminVersion},'detail',{},r.id),/admission_missing/);
+      await client.query("UPDATE users SET role='patient' WHERE id=$1",[r.pac]);
+      await client.query("INSERT INTO patients(id,first_name,full_name) VALUES('own-identity-replacement','Ficticio','Ficticio')");
+      await client.query("UPDATE users SET patient_id='own-identity-replacement' WHERE id=$1",[r.pac]);
+      const currentVersion=(await client.query('SELECT session_version FROM users WHERE id=$1',[r.pac])).rows[0].session_version;
+      await assert.rejects(command({...actor(r.pac),sessionVersion:currentVersion},'detail',{},r.id),/admission_missing/);
+      await client.query('UPDATE users SET is_active=false WHERE id=$1',[r.pac]);
+      await assert.rejects(command({...actor(r.pac),sessionVersion:1},'draft',{},r.id),/admission_session/);
+      await assert.rejects(command({...actor('bq1'),sessionExpiresAt:Date.now()/1000-1},'detail',{},q.id),/admission_session/);
     });
     await t.test('session revocation and expiry after a real lock wait deny without withdrawing other sessions consent',async()=>{
       const r=await propose('bp17','bq50');await accept(r);await client.query('UPDATE users SET session_version=session_version+1 WHERE id=$1',[r.pac]);

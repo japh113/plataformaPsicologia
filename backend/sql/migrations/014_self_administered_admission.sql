@@ -153,8 +153,24 @@ CREATE TRIGGER admission_block_change AFTER INSERT OR UPDATE ON bilateral_blocks
 -- Internal identity context only. Not an HTTP projection and not an authorization result.
 CREATE FUNCTION admission_context(actor text,sv integer,op text,p jsonb) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
-DECLARE g record; a record; subject record; identity record; grant_id uuid;
+DECLARE g record; a record; subject record; identity record; grant_id uuid; own public.admission_assignments%ROWTYPE;
 BEGIN
+  -- Retained contributions belong to this exact account/patient, independently
+  -- of operational consent, agreement, or the professional's current status.
+  IF op IN ('detail','summary','draft') THEN
+    SELECT * INTO own FROM public.admission_assignments WHERE id=(p->>'id')::uuid AND account_id=actor;
+    IF FOUND THEN
+      PERFORM id FROM public.users WHERE id=actor FOR NO KEY UPDATE;
+      SELECT id,role,is_active,session_version,patient_id INTO a FROM public.users WHERE id=actor;
+      IF NOT FOUND OR NOT a.is_active OR a.session_version IS DISTINCT FROM sv THEN RAISE EXCEPTION 'admission_session'; END IF;
+      IF a.role<>'patient' OR a.patient_id IS DISTINCT FROM own.patient_id THEN RAISE EXCEPTION 'admission_missing'; END IF;
+      PERFORM id FROM public.patients WHERE id=own.patient_id FOR NO KEY UPDATE;
+      IF NOT FOUND THEN RAISE EXCEPTION 'admission_missing'; END IF;
+      PERFORM pg_advisory_xact_lock(73013,1);
+      IF (p->>'sessionExpiresAt') IS NULL OR (p->>'sessionExpiresAt')::double precision<=extract(epoch FROM clock_timestamp()) THEN RAISE EXCEPTION 'admission_session'; END IF;
+      RETURN jsonb_build_object('account',own.account_id,'patient',own.patient_id,'psychologist',own.psychologist_id,'role','patient','ownRead',true);
+    END IF;
+  END IF;
   IF op IN ('prepare','assign') THEN grant_id:=(p->>'agreementId')::uuid;
   ELSE SELECT agreement_id INTO grant_id FROM public.admission_assignments WHERE id=(p->>'id')::uuid; END IF;
   SELECT * INTO g FROM public.bilateral_agreements WHERE id=grant_id;
@@ -188,20 +204,22 @@ END $$;
 CREATE FUNCTION admission_command(actor text,sv integer,op text,p jsonb) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 DECLARE c jsonb; a public.admission_assignments%ROWTYPE; d public.admission_drafts%ROWTYPE; prior public.admission_operations%ROWTYPE; result jsonb; episode bigint; assignment uuid;
-  consent text; name text; submitted integer;
+  consent text; name text; submitted integer; own_read boolean;
 BEGIN
   IF op NOT IN ('prepare','assign','detail','summary','draft','accept','save','submit','correct','validate','revoke') THEN RAISE EXCEPTION 'admission_missing'; END IF;
   c:=public.admission_context(actor,sv,op,p);
-  IF NOT EXISTS(SELECT 1 FROM public.contact_verification_state WHERE user_id=c->>'account' AND channel='email' AND contact_digest=p->>'emailDigest') OR
-     NOT EXISTS(SELECT 1 FROM public.contact_verification_state WHERE user_id=c->>'account' AND channel='sms' AND contact_digest=p->>'phoneDigest') THEN RAISE EXCEPTION 'admission_missing'; END IF;
+  own_read:=coalesce((c->>'ownRead')::boolean,false);
+  IF NOT own_read AND (NOT EXISTS(SELECT 1 FROM public.contact_verification_state WHERE user_id=c->>'account' AND channel='email' AND contact_digest=p->>'emailDigest') OR
+     NOT EXISTS(SELECT 1 FROM public.contact_verification_state WHERE user_id=c->>'account' AND channel='sms' AND contact_digest=p->>'phoneDigest')) THEN RAISE EXCEPTION 'admission_missing'; END IF;
   IF op NOT IN ('prepare','assign') THEN
     SELECT * INTO a FROM public.admission_assignments WHERE id=(p->>'id')::uuid FOR UPDATE;
-    IF NOT FOUND OR a.state='revoked' OR a.account_id IS DISTINCT FROM c->>'account' OR a.patient_id IS DISTINCT FROM c->>'patient' OR a.psychologist_id IS DISTINCT FROM c->>'psychologist' THEN RAISE EXCEPTION 'admission_missing'; END IF;
+    IF NOT FOUND OR (a.state='revoked' AND NOT own_read) OR a.account_id IS DISTINCT FROM c->>'account' OR a.patient_id IS DISTINCT FROM c->>'patient' OR a.psychologist_id IS DISTINCT FROM c->>'psychologist' THEN RAISE EXCEPTION 'admission_missing'; END IF;
     episode:=a.episode_id;
   ELSE episode:=(p->>'episodeId')::bigint; END IF;
-  IF op<>'prepare' AND NOT EXISTS(SELECT 1 FROM public.clinical_episodes e JOIN public.clinical_episode_participants cp ON cp.episode_id=e.id
+  IF NOT own_read AND op<>'prepare' AND NOT EXISTS(SELECT 1 FROM public.clinical_episodes e JOIN public.clinical_episode_participants cp ON cp.episode_id=e.id
     WHERE e.id=episode AND e.status='prepared' AND e.modality='individual' AND e.started_at IS NULL AND e.finalized_at IS NULL
       AND cp.patient_id=c->>'patient' AND cp.psychologist_user_id=c->>'psychologist' AND e.participant_two_id IS NULL) THEN RAISE EXCEPTION 'admission_missing'; END IF;
+  IF (p->>'sessionExpiresAt') IS NULL OR (p->>'sessionExpiresAt')::double precision<=extract(epoch FROM clock_timestamp()) THEN RAISE EXCEPTION 'admission_session'; END IF;
   IF op NOT IN ('detail','summary','draft') THEN
     IF p->'confirmed' IS DISTINCT FROM 'true'::jsonb THEN RAISE EXCEPTION 'admission_conflict'; END IF;
     SELECT * INTO prior FROM public.admission_operations WHERE actor_id=actor AND operation_id=(p->>'operationId')::uuid;
@@ -229,14 +247,18 @@ BEGIN
       VALUES(assignment,(p->>'agreementId')::uuid,episode,c->>'account',c->>'patient',actor,p->>'templateId',name,'fictional-admission-v1',consent,encode(sha256(convert_to(consent,'UTF8')),'hex'));
     result:=jsonb_build_object('id',assignment,'version',1,'state','proposed','episodeId',episode::text);
   ELSIF op='summary' THEN
-    result:=jsonb_build_object('id',a.id,'episodeId',a.episode_id::text,'templateId',a.template_id,'professionalName',a.professional_name,'state',a.state,'version',a.version,'reviewState',a.review_state,'latestSubmission',a.latest_submission);
+    result:=jsonb_build_object('id',a.id,'episodeId',a.episode_id::text,'templateId',a.template_id,'professionalName',a.professional_name,'state',a.state,'version',a.version,'reviewState',a.review_state,'latestSubmission',a.latest_submission,'readOnly',own_read AND a.state='revoked');
   ELSIF op='detail' THEN
     result:=jsonb_build_object('id',a.id,'episodeId',a.episode_id::text,'template',(SELECT definition FROM public.admission_templates WHERE id=a.template_id),
       'professionalName',a.professional_name,'consentVersion',a.consent_version,'consentText',a.consent_text,'consentHash',a.consent_hash,
-      'state',a.state,'version',a.version,'reviewState',a.review_state,'latestSubmission',a.latest_submission,
+      'state',a.state,'version',a.version,'reviewState',a.review_state,'latestSubmission',a.latest_submission,'readOnly',own_read AND a.state='revoked',
       'submissions',coalesce((SELECT jsonb_agg(jsonb_build_object('number',s.number,'answers',s.answers,'submittedAt',s.submitted_at) ORDER BY s.number) FROM public.admission_submissions s WHERE s.assignment_id=a.id),'[]'::jsonb),
-      'corrections',coalesce((SELECT jsonb_agg(jsonb_build_object('submission',r.submission,'message',r.message,'createdAt',r.created_at) ORDER BY r.submission) FROM public.admission_corrections r WHERE r.assignment_id=a.id),'[]'::jsonb),
-      'validations',coalesce((SELECT jsonb_agg(jsonb_build_object('submission',v.submission,'episodeId',v.episode_id::text,'validatedAt',v.validated_at) ORDER BY v.submission) FROM public.admission_validations v WHERE v.assignment_id=a.id),'[]'::jsonb));
+      'corrections',CASE WHEN own_read AND a.state='revoked' THEN '[]'::jsonb ELSE coalesce((SELECT jsonb_agg(jsonb_build_object('submission',r.submission,'message',r.message,'createdAt',r.created_at) ORDER BY r.submission) FROM public.admission_corrections r WHERE r.assignment_id=a.id),'[]'::jsonb) END,
+      'validations',CASE WHEN own_read AND a.state='revoked' THEN '[]'::jsonb ELSE coalesce((SELECT jsonb_agg(jsonb_build_object('submission',v.submission,'episodeId',v.episode_id::text,'validatedAt',v.validated_at) ORDER BY v.submission) FROM public.admission_validations v WHERE v.assignment_id=a.id),'[]'::jsonb) END);
+  ELSIF op='draft' AND own_read THEN
+    IF a.state='proposed' THEN RAISE EXCEPTION 'admission_conflict'; END IF;
+    SELECT * INTO d FROM public.admission_drafts WHERE assignment_id=a.id;
+    result:=jsonb_build_object('revision',coalesce(d.revision,0),'answers',coalesce(d.answers,'{}'::jsonb));
   ELSIF op='revoke' THEN
     UPDATE public.admission_assignments SET state='revoked',revoked_at=clock_timestamp(),version=version+1 WHERE id=a.id;
     result:=jsonb_build_object('id',a.id,'state','revoked');
@@ -289,7 +311,7 @@ CREATE FUNCTION admission_candidates(actor text,sv integer,expires double precis
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 BEGIN
   IF expires IS NULL OR expires<=extract(epoch FROM clock_timestamp()) OR NOT EXISTS(SELECT 1 FROM public.users WHERE id=actor AND is_active AND session_version=sv AND role IN ('patient','psychologist')) THEN RAISE EXCEPTION 'admission_session'; END IF;
-  RETURN coalesce((SELECT jsonb_agg(id ORDER BY id) FROM (SELECT id FROM public.admission_assignments WHERE (account_id=actor OR psychologist_id=actor) AND state<>'revoked' ORDER BY id LIMIT 100) own),'[]'::jsonb);
+  RETURN coalesce((SELECT jsonb_agg(id ORDER BY id) FROM (SELECT id FROM public.admission_assignments WHERE (account_id=actor AND EXISTS(SELECT 1 FROM public.users u WHERE u.id=actor AND u.role='patient' AND u.patient_id=admission_assignments.patient_id)) OR (psychologist_id=actor AND state<>'revoked') ORDER BY id LIMIT 100) own),'[]'::jsonb);
 END $$;
 
 DO $$ DECLARE owner_name text:='admission_owner_'||substr(md5(current_database()),1,16); obj record; BEGIN

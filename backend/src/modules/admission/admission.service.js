@@ -46,8 +46,10 @@ export async function command(actor,op,input={},id){
     fingerprint:fingerprint({op,input,id:id??null},key),newId:randomUUID()};
   return transaction(async client=>{
     const c=(await client.query('SELECT public.admission_context($1,$2,$3,$4::jsonb) AS data',[actor.id,actor.sessionVersion,op,JSON.stringify(p)])).rows[0].data;
-    const phone=normalizePhone(c.phone);
-    p.emailDigest=contactDigest('email',normalizeEmail(c.email));p.phoneDigest=phone?contactDigest('sms',phone):null;
+    if(!c.ownRead){
+      const phone=normalizePhone(c.phone);
+      p.emailDigest=contactDigest('email',normalizeEmail(c.email));p.phoneDigest=phone?contactDigest('sms',phone):null;
+    }
     return (await client.query('SELECT public.admission_command($1,$2,$3,$4::jsonb) AS data',[actor.id,actor.sessionVersion,op,JSON.stringify(p)])).rows[0].data;
   });
 }

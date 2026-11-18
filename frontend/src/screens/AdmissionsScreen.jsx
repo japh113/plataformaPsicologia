@@ -2,7 +2,7 @@ import { useEffect,useRef,useState } from 'react';
 import { apiRequest } from '../api/client';
 const style='rounded-lg border border-slate-300 p-2';
 const button='rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50';
-const labels={proposed:'Pendiente de aceptación',accepted:'Aceptada',awaiting_submission:'Esperando envío',submitted:'Enviada',correction_requested:'Corrección solicitada',validated:'Validación registrada'};
+const labels={revoked:'Revocada: consulta propia',proposed:'Pendiente de aceptación',accepted:'Aceptada',awaiting_submission:'Esperando envío',submitted:'Enviada',correction_requested:'Corrección solicitada',validated:'Validación registrada'};
 const get=async path=>(await apiRequest('/admissions'+path)).data;
 function AdmissionDetail({id,professional,onRefresh,onRevoked}){
   const [data,setData]=useState(null),[draft,setDraft]=useState(null),[answers,setAnswers]=useState({}),[confirmed,setConfirmed]=useState(false),[revokeConfirmed,setRevokeConfirmed]=useState(false),[send,setSend]=useState(false);
@@ -10,7 +10,7 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
   const operations=useRef(new Map()),alive=useRef(false);
   useEffect(()=>{
     alive.current=true;
-    const start=async()=>{try{const detail=await get('/'+id);if(!alive.current)return;setData(detail);if(!professional&&detail.state==='accepted'){const own=await get('/'+id+'/draft');if(alive.current){setDraft(own);setAnswers(own.answers);}}}catch(e){if(alive.current)setError(e.message);}};
+    const start=async()=>{try{const detail=await get('/'+id);if(!alive.current)return;setData(detail);if(!professional&&(detail.state==='accepted'||detail.readOnly)){const own=await get('/'+id+'/draft');if(alive.current){setDraft(own);setAnswers(own.answers);}}}catch(e){if(alive.current)setError(e.message);}};
     void start();return()=>{alive.current=false;};
   },[id,professional]);
   const act=async(op,payload)=>{
@@ -21,18 +21,19 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
       operations.current.delete(key);setConfirmed(false);setSend(false);
       if(op==='revoke'){setData(null);setDraft(null);setAnswers({});await onRefresh();onRevoked();return;}
       const detail=await get('/'+id);if(!alive.current)return;setData(detail);
-      if(!professional&&detail.state==='accepted'){const own=await get('/'+id+'/draft');if(alive.current){setDraft(own);setAnswers(own.answers);}}
+      if(!professional&&(detail.state==='accepted'||detail.readOnly)){const own=await get('/'+id+'/draft');if(alive.current){setDraft(own);setAnswers(own.answers);}}
       await onRefresh();
     }catch(e){if(e.status&&e.status<500)operations.current.delete(key);if(alive.current){setError(e.message);if([401,403,404].includes(e.status)){setData(null);setDraft(null);setAnswers({});}}}
     finally{if(alive.current)setBusy(false);}
   };
-  const editable=data&&['awaiting_submission','correction_requested'].includes(data.reviewState);
+  const editable=data&&!data.readOnly&&['awaiting_submission','correction_requested'].includes(data.reviewState);
   const saved=draft&&JSON.stringify(answers)===JSON.stringify(draft.answers);
   return <article aria-label="Detalle de admisión" className="rounded-xl border bg-white p-5 space-y-4">
     {error&&<p role="alert">{error}</p>}
     {data&&<><h2 className="text-xl font-bold">{data.template.title}</h2><p>{data.template.notice}</p>
       <p>Profesional destinatario: {data.professionalName}. Episodio preparado: {data.episodeId}.</p>
       <p>{labels[data.state]} · {labels[data.reviewState]}</p>
+      {data.readOnly&&<p>Consulta propia de respuestas conservadas. Esta admisión está revocada y no permite nuevas operaciones.</p>}
       {!professional&&data.state==='proposed'&&<><p>{data.consentText}</p><p>Versión de consentimiento: {data.consentVersion}</p>
         <label className="block"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> Acepto específicamente esta asignación, plantilla, destinatario y episodio.</label>
         <button className={button} disabled={busy||!confirmed} onClick={()=>act('accept',{consentVersion:data.consentVersion,consentHash:data.consentHash})}>Aceptar asignación</button></>}
@@ -53,8 +54,8 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
         {data.reviewState==='submitted'&&<><label className="block"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> Registro expresamente la validación profesional del envío {data.latestSubmission} para este participante y episodio, solo en este ensayo ficticio.</label>
           <button className={button} disabled={busy||!confirmed} onClick={()=>act('validate',{submission:data.latestSubmission,episodeId:data.episodeId})}>Registrar validación exacta</button></>}
       </>}
-      <label className="block"><input type="checkbox" checked={revokeConfirmed} onChange={e=>setRevokeConfirmed(e.target.checked)}/> Confirmo cancelar esta admisión{professional?'':' y retirar mi consentimiento'}.</label>
-      <button className={button} disabled={busy||!revokeConfirmed} onClick={()=>act('revoke',{})}>{professional?'Cancelar admisión':'Retirar consentimiento'}</button>
+      {!data.readOnly&&<><label className="block"><input type="checkbox" checked={revokeConfirmed} onChange={e=>setRevokeConfirmed(e.target.checked)}/> Confirmo cancelar esta admisión{professional?'':' y retirar mi consentimiento'}.</label>
+      <button className={button} disabled={busy||!revokeConfirmed} onClick={()=>act('revoke',{})}>{professional?'Cancelar admisión':'Retirar consentimiento'}</button></>}
     </>}
   </article>;
 }
