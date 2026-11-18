@@ -1,3 +1,4 @@
+import { verifyBilateralContract } from './bilateral-contract.js';
 import fs from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import pg from 'pg';
@@ -15,7 +16,7 @@ export async function loadMigrations(root = sqlRoot) {
     if (sha256(sql) !== entry.sha256) throw new Error('Incompatible file checksum: ' + entry.version);
     migrations.push({ ...entry, sql });
   }
-  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007,008,009,010,011,012') throw new Error('Incompatible migration versions');
+  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007,008,009,010,011,012,013') throw new Error('Incompatible migration versions');
   return migrations;
 }
 
@@ -193,6 +194,13 @@ export async function catalogChecksum(client) {
   if ((await client.query("SELECT to_regprocedure('public.recognize_private_note_origin_v1(bigint,bigint,text,text)') AS name")).rows[0].name) {
     results.push(...await originResolverSecurityCatalog(client));
   }
+  if ((await client.query("SELECT to_regclass('public.bilateral_restrictions') AS relation")).rows[0].relation) {
+    results.push((await client.query(`SELECT r.rolname,r.rolsuper,r.rolinherit,r.rolcreaterole,r.rolcreatedb,r.rolcanlogin,r.rolreplication,r.rolbypassrls,
+      (SELECT coalesce(jsonb_agg(to_jsonb(m) ORDER BY roleid,member),'[]'::jsonb) FROM pg_auth_members m WHERE r.oid IN (m.roleid,m.member)) AS memberships
+      FROM pg_roles r WHERE r.oid=(SELECT proowner FROM pg_proc WHERE oid='public.bilateral_command(text,integer,text,jsonb)'::regprocedure)`)).rows);
+    results.push((await client.query(`SELECT c.relname,c.relowner::regrole::text FROM pg_class c WHERE c.relnamespace='public'::regnamespace AND starts_with(c.relname,'bilateral_') ORDER BY c.relname`)).rows);
+    results.push((await client.query(`SELECT p.oid::regprocedure::text,p.proowner::regrole::text FROM pg_proc p WHERE p.pronamespace='public'::regnamespace AND starts_with(p.proname,'bilateral_') ORDER BY p.proname`)).rows);
+  }
   return sha256(JSON.stringify(results));
 }
 
@@ -222,10 +230,11 @@ async function verifyProfessionalReviewView(client, migration) {
   }
 }
 
-export async function migrate(client, { expectedDatabase, target = '003', accountReaderRole, privateNoteCreatorRole } = {}) {
-  if (!['003', '004', '005', '006', '007', '008', '009', '010', '011', '012'].includes(target)) throw new Error('Unsupported target version');
-  if (accountReaderRole !== undefined && (!['009','010','011','012'].includes(target) || typeof accountReaderRole !== 'string' || !accountReaderRole)) throw new Error('Explicit account reader is only supported for 009/010/011/012');
-  if (privateNoteCreatorRole !== undefined && (!['010','011','012'].includes(target) || typeof privateNoteCreatorRole !== 'string' || !privateNoteCreatorRole)) throw new Error('Explicit private note creator is only supported for 010/011/012');
+export async function migrate(client, { expectedDatabase, target = '003', accountReaderRole, privateNoteCreatorRole, bilateralClientRole } = {}) {
+  if (!['003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013'].includes(target)) throw new Error('Unsupported target version');
+  if (accountReaderRole !== undefined && (!['009','010','011','012','013'].includes(target) || typeof accountReaderRole !== 'string' || !accountReaderRole)) throw new Error('Explicit account reader is only supported for 009/010/011/012');
+  if (privateNoteCreatorRole !== undefined && (!['010','011','012','013'].includes(target) || typeof privateNoteCreatorRole !== 'string' || !privateNoteCreatorRole)) throw new Error('Explicit private note creator is only supported for 010/011/012');
+  if(target==='013'&&!bilateralClientRole)throw new Error('013 requires explicit bilateral client');
   const migrations = await loadMigrations();
   await client.query('BEGIN');
   try {
@@ -246,7 +255,7 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
         throw new Error('Incompatible recorded migration version/checksum: ' + row.version);
       }
     }
-    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007', '001,002,003,004,005,006,007,008', '001,002,003,004,005,006,007,008,009', '001,002,003,004,005,006,007,008,009,010', '001,002,003,004,005,006,007,008,009,010,011', '001,002,003,004,005,006,007,008,009,010,011,012'].includes(ledger.map(r => r.version).join(','))) {
+    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007', '001,002,003,004,005,006,007,008', '001,002,003,004,005,006,007,008,009', '001,002,003,004,005,006,007,008,009,010', '001,002,003,004,005,006,007,008,009,010,011', '001,002,003,004,005,006,007,008,009,010,011,012', '001,002,003,004,005,006,007,008,009,010,011,012,013'].includes(ledger.map(r => r.version).join(','))) {
       throw new Error('Incompatible or incomplete migration ledger');
     }
     if (ledger.length) {
@@ -262,6 +271,7 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
       } else if (applied.version >= '009') await verifyAccountLockContract(client, migrations[8], accountReaderRole);
       if (applied.version >= '010') await verifyPrivateNoteContract(client, migrations[9], privateNoteCreatorRole, applied.version >= '011');
       if (applied.version >= '006') await verifyProfessionalReviewView(client, migrations[5]);
+      if (applied.version >= '013') await verifyBilateralContract(client,bilateralClientRole);
       if (applied.version === target) {
         await client.query('COMMIT');
         return { status: 'already-applied', version: target };
@@ -269,6 +279,7 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
       for (const next of migrations.filter(m => m.version>applied.version && m.version<=target)) {
         await client.query("SELECT set_config('psicopanel.migration_target',$1,true)", [next.version]);
         await client.query(next.sql);
+        if (next.version === '013') await verifyBilateralContract(client,bilateralClientRole,{install:true});
         if (next.version === '006') await verifyProfessionalReviewView(client, next);
         if (next.version === '009') await verifyAccountLockContract(client, next, accountReaderRole);
         if (next.version === '010') {
@@ -327,6 +338,7 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
     for (const next of migrations.filter(m => m.version>'003' && m.version<=target)) {
       await client.query("SELECT set_config('psicopanel.migration_target',$1,true)", [next.version]);
       await client.query(next.sql);
+      if (next.version === '013') await verifyBilateralContract(client,bilateralClientRole,{install:true});
       if (next.version === '006') await verifyProfessionalReviewView(client, next);
       if (next.version === '009') await verifyAccountLockContract(client, next, accountReaderRole);
       if (next.version === '010') {

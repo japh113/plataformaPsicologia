@@ -1,7 +1,7 @@
 """Independent required browser inventory; missing, duplicate and stale evidence fails."""
 import json
 from pathlib import Path
-KINDS=['B','C','D2']
+KINDS=['B','C','D2','VIN']
 def validate_cases(kind,cases):
     expected=set(json.loads(Path('scripts/ci/browser-cases.json').read_text())[kind])
     ids=[case['id'] for case in cases]

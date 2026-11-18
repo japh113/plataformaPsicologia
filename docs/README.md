@@ -1,6 +1,8 @@
 # Documentación de PsicoPanel
 
-La continuidad vigente está en el [checkpoint](project-checkpoint.md), corte del **13 de noviembre de 2026**, `main` `6bcc23a01dedbab973fdad9b5fbb687075032bc5`, #68 integrado. **2A parcial**, A/B/C/D1/D2 y SQL 001–012 en Git; D3, nuevas vinculaciones, activación y aislamiento clínico completo pendientes. Procedencia privada reconocida por 011 no habilita audiencia operativa ni lectura clínica. Instalación habitual/despliegue no acreditados.
+La continuidad vigente está en el [checkpoint](project-checkpoint.md), corte del **13 de noviembre de 2026**, `main` `23593644564c4e8214c5c139dc60a61056f731b2`, #70 integrado. **2A parcial**, A/B/C/D1/D2 y SQL 001–012 en Git; D3, nuevas vinculaciones, activación y aislamiento clínico completo pendientes. Procedencia privada reconocida por 011 no habilita audiencia operativa ni lectura clínica. Instalación habitual/despliegue no acreditados.
+
+El [primer incremento bilateral ficticio 013](stage2a-identity-directory-intake.md#implementación-del-primer-incremento-ficticio--013) se implementa en una rama propia pendiente de auditoría/integración; sin habilitación habitual ni clínica.
 
 ## Ruta mínima de lectura
 

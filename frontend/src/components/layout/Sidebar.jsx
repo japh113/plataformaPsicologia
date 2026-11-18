@@ -42,6 +42,7 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
       </div>
 
       <nav className="flex-1 p-4 space-y-2">
+        {import.meta.env?.VITE_BILATERAL_ENABLED==='true' && ['patient','psychologist'].includes(currentUser?.role) && <NavButton active={vistaActiva==='bilateral'} onClick={()=>setVistaActiva('bilateral')}>Vinculación bilateral</NavButton>}
         {import.meta.env.VITE_D2_ENABLED==='true' && isPsychologist && <NavButton active={vistaActiva==='professional-profile'} onClick={()=>setVistaActiva('professional-profile')}>Mi perfil profesional</NavButton>}
         {import.meta.env.VITE_D2_ENABLED==='true' && ['admin','superadmin'].includes(currentUser?.role) && <NavButton active={vistaActiva==='professional-reviews'} onClick={()=>setVistaActiva('professional-reviews')}>Credenciales profesionales</NavButton>}
         <NavButton active={vistaActiva === 'dashboard'} onClick={() => setVistaActiva('dashboard')}>

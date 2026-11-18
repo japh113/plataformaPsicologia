@@ -75,7 +75,7 @@ test('012 contact bcrypt admission: isolated PostgreSQL HTTP and multiple proces
       await client.query('REVOKE SELECT ON contact_change_events FROM '+options.accountReaderRole);
       await client.query("UPDATE psicopanel_schema_migrations SET catalog_sha256=$1 WHERE version='012'",[ledger.at(-1).catalog_sha256]);
       assert.equal((await migrate(client,options)).status,'already-applied');
-      assert.equal((await loadMigrations()).length,12);
+      assert.equal((await loadMigrations()).length,13);
     });
     await t.test('012 upgrade rollback and concurrent replay preserve 011 ledger and all special contracts',async()=>{
       const nextName='psicopanel_episode_bcrypt_upgrade',next=await createSandboxDatabase(control,nextName);

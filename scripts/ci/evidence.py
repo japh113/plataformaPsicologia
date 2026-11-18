@@ -26,7 +26,7 @@ def collect(root):
             continue
         assert report['status'] in ['success','failure'] and report['suites']
         if report['status']=='success':
-            counts={'docs':2,'backend-unit':2,'frontend':4,'postgres':3,'browser':3}
+            counts={'docs':2,'backend-unit':2,'frontend':4,'postgres':3,'browser':4}
             assert len(report['suites'])==counts[job]
             if job=='docs':
                 documentation,contracts=report['suites']
@@ -42,23 +42,22 @@ def collect(root):
             if job=='frontend':assert [s['command'] for s in report['suites']]==[['npm','ci','--ignore-scripts'],['npm','test'],['npm','run','lint'],['npm','run','build']]
             if job=='browser':
                 validate_suites(report['suites'],identity()['sha'])
-                assert [s['kind'] for s in report['suites']]==['B','C','D2']
+                assert [s['kind'] for s in report['suites']]==['B','C','D2','VIN']
                 assert all(s['cases'] and all(c['status']=='PASS' for c in s['cases']) and s['runtime']['revision']==identity()['sha'] for s in report['suites'])
                 expected=set(json.loads(Path('scripts/ci/browser-cases.json').read_text())['D2'])
                 actual=[case['id'] for case in report['suites'][2]['cases']]
                 assert set(actual)==expected and len(actual)==len(expected)
         if job in ['postgres','browser'] and report['status']=='success':
-            assert len(report['isolation'])==(3 if job=='browser' else 1)
+            assert len(report['isolation'])==(4 if job=='browser' else 1)
             assert all(x.get('cleanupConfirmed') and x['fresh'] and x['tmpfs'] and x['internal'] and not x['dbPorts'] and not x['persistentVolumes'] for x in report['isolation'])
         reports[job]=report
     return reports,hashes
 
-if __name__=='__main__':
-    mode=sys.argv[1];root=Path('tmp/ci-download')
+def main(mode,root=Path('tmp/ci-download'),out=OUT):
     reports,hashes=collect(root)
     if mode=='evidence':
-        write(OUT/'evidence/index.json',{'identity':identity(),'complete':True,'reports':reports,'hashes':hashes,'retentionDays':14,'classification':classify()})
-        seal(OUT/'evidence')
+        write(out/'evidence/index.json',{'identity':identity(),'complete':True,'reports':reports,'hashes':hashes,'retentionDays':14,'classification':classify()})
+        seal(out/'evidence')
     elif mode=='required':
         verify(root/'evidence')
         index=json.loads((root/'evidence/index.json').read_text())
@@ -69,3 +68,5 @@ if __name__=='__main__':
         accept({j:{'result':'success'} for j in JOBS},reports)
         print('All required components executed or verified not applicable for this run/attempt/commit.')
     else:raise ValueError('Unknown mode')
+
+if __name__=='__main__':main(sys.argv[1])
