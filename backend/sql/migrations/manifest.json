@@ -73,5 +73,10 @@
     "version": "015",
     "file": "015_individual_clinical_record.sql",
     "sha256": "52f48091269bffa90cf197f41cf297ab3ed035f07202734cb365a1a43e8b4867"
+  },
+  {
+    "version": "016",
+    "file": "016_private_admission_assessments.sql",
+    "sha256": "a6fc4b35779d1b7b0d662e45ed2d96446896cfaac54385cf8c99571c3deaf545"
   }
 ]

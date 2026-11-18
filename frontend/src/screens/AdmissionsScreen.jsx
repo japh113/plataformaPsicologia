@@ -1,4 +1,5 @@
-import { useEffect,useRef,useState } from 'react';
+import AdmissionAssessment from '../components/AdmissionAssessment';
+import { useCallback,useEffect,useRef,useState } from 'react';
 import { apiRequest } from '../api/client';
 const style='rounded-lg border border-slate-300 p-2';
 const button='rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50';
@@ -26,6 +27,8 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
     }catch(e){if(e.status&&e.status<500)operations.current.delete(key);if(alive.current){setError(e.message);if([401,403,404].includes(e.status)){setData(null);setDraft(null);setAnswers({});}}}
     finally{if(alive.current)setBusy(false);}
   };
+  const receiveDetail=useCallback(detail=>{if(alive.current)setData(detail);},[]);
+  const unavailable=useCallback(()=>{setData(null);setDraft(null);setAnswers({});setMessage('');},[]);
   const editable=data&&!data.readOnly&&['awaiting_submission','correction_requested'].includes(data.reviewState);
   const saved=draft&&JSON.stringify(answers)===JSON.stringify(draft.answers);
   return <article aria-label="Detalle de admisión" className="rounded-xl border bg-white p-5 space-y-4">
@@ -54,6 +57,8 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
         {data.reviewState==='submitted'&&<><label className="block"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> Registro expresamente la validación profesional del envío {data.latestSubmission} para este participante y episodio, solo en este ensayo ficticio.</label>
           <button className={button} disabled={busy||!confirmed} onClick={()=>act('validate',{submission:data.latestSubmission,episodeId:data.episodeId})}>Registrar validación exacta</button></>}
       </>}
+      {professional&&data.state==='accepted'&&data.consentVersion==='fictional-admission-v2'&&data.latestSubmission===0&&<p>Valoración profesional: NO EVALUADO. Se requiere un envío para consultar y registrar valoraciones.</p>}
+      {professional&&data.state==='accepted'&&data.consentVersion==='fictional-admission-v2'&&data.latestSubmission>0&&<AdmissionAssessment key={id} id={id} version={data.version} submission={data.latestSubmission} reviewState={data.reviewState} professionalName={data.professionalName} onUnavailable={unavailable} onDetail={receiveDetail}/>}
       {!data.readOnly&&<><label className="block"><input type="checkbox" checked={revokeConfirmed} onChange={e=>setRevokeConfirmed(e.target.checked)}/> Confirmo cancelar esta admisión{professional?'':' y retirar mi consentimiento'}.</label>
       <button className={button} disabled={busy||!revokeConfirmed} onClick={()=>act('revoke',{})}>{professional?'Cancelar admisión':'Retirar consentimiento'}</button></>}
     </>}
