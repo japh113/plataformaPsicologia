@@ -1,6 +1,7 @@
 """Bilateral Chromium only in the fresh owned sandbox registered by Sandbox.review."""
 import json,os,re,subprocess,sys
 from pathlib import Path
+stem=os.environ.get('PSICOPANEL_REVIEW_KIND','bilateral');assert stem in ['bilateral','admission']
 root=Path.cwd().resolve();file=Path(sys.argv[1]).resolve();assert file.is_relative_to(root/'tmp')
 c=json.loads(file.read_text());work=Path(c['work']).resolve();out=Path(c['out']).resolve()
 assert work.is_relative_to(root/'tmp') and out.is_relative_to(root/'tmp')
@@ -12,7 +13,7 @@ assert Path(compose[7]).resolve().is_relative_to(root/'tmp')
 network=json.loads(subprocess.check_output(['docker','network','inspect',c['network']],text=True))[0]
 assert network['Internal'] and network['Labels']['com.docker.compose.project']==c['project']
 image=json.loads(subprocess.check_output(['docker','image','inspect',c['image']],text=True))[0]
-assert image['Config']['Labels']['io.psicopanel.bilateral-review.run']==c['run']
+assert image['Config']['Labels']['io.psicopanel.'+stem+'-review.run']==c['run']
 env=dict(os.environ,EPISODE_TEST_RUN_ID=c['demo'])
 front_id=subprocess.check_output(compose+['ps','-q','frontend'],env=env,text=True).strip()
 front=json.loads(subprocess.check_output(['docker','inspect',front_id],text=True))[0]
@@ -20,10 +21,10 @@ assert front['Config']['Labels']['com.docker.compose.project']==c['project']
 baseline=json.loads(Path(c['baseline']).read_text());assert front['Id'] not in [item['id'] for item in baseline['containers']]
 address=front['NetworkSettings']['Networks'][c['network']]['IPAddress'];assert address
 revision=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
-cmd=['docker','run','--rm','--init','--name','psicopanel-bilateral-browser-'+c['run'],'--label','io.psicopanel.bilateral-review.run='+c['run'],
+cmd=['docker','run','--rm','--init','--name','psicopanel-'+stem+'-browser-'+c['run'],'--label','io.psicopanel.'+stem+'-review.run='+c['run'],
  '--user',str(os.getuid())+':'+str(os.getgid()),'--network',c['network'],'--add-host','frontend.localhost:'+address,'--read-only','--tmpfs','/tmp:size=1g,mode=1777','--shm-size=1g',
  '--cap-drop=ALL','--security-opt','no-new-privileges','-e','HOME=/tmp','-e','REVIEW_FRONTEND_IP='+address,'-e','REVIEW_BASE='+c['base'],'-e','REVIEW_REVISION='+revision,
- '-v',str(work)+':/control','-v',str(out)+':/evidence','-v',str(root/'scripts/bilateral-ui-review.cjs')+':/review/driver.cjs:ro',c['image'],'node','/review/driver.cjs']
+ '-v',str(work)+':/control','-v',str(out)+':/evidence','-v',str(root/('scripts/'+stem+'-ui-review.cjs'))+':/review/driver.cjs:ro',c['image'],'node','/review/driver.cjs']
 result=subprocess.run(cmd,text=True,capture_output=True)
 print(result.stdout,flush=True)
 # Export only IDs/outcomes/events and masked screenshots, never tokens or raw errors.

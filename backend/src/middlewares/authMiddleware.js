@@ -39,6 +39,7 @@ export const authenticate = async (req, res, next) => {
     ensureAccountCanAuthenticate(user, env);
     ensureSessionIsCurrent(user, payload);
     Object.defineProperty(user, 'sessionHash', { value: sessionHash(token), enumerable: false });
+    Object.defineProperty(user, 'sessionExpiresAt', { value: payload.exp, enumerable: false });
     req.user = user;
     return next();
   } catch (error) {

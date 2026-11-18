@@ -166,3 +166,7 @@ Markdown: revisar diff, referencias a archivos/fragmentos, IDs y estados aprobad
 Código funcional: unitarias backend, integración HTTP/PostgreSQL pertinente en destino nuevo, lint/build frontend y demo ficticia ADR-019 del alcance, con evidencia reproducible. Si afecta agenda, revisar citas, disponibilidad y espera en frontend/backend; si afecta identidad, todos los escritores/lectores legacy y regresión JWT/backoffice. No retrasar pruebas hasta otra etapa.
 
 Los reportes [de autenticación](authentication-security.md) y [de 003](clinical-episodes-validation.md) preservan evidencia histórica; no presentarla como ejecutada de nuevo ni reutilizar conteos de dependencias como estado vigente.
+
+## Ensayo de admisión autoadministrada 014
+
+Solo en destino nuevo autorizado: `bash scripts/clinical-episodes.sh admission-demo`. [Contrato, cuentas ficticias y recorrido](stage2a-identity-directory-intake.md#implementación-del-primer-incremento-autoadministrado--014). El wrapper prepara SQL 001–014 antes de fixtures, acuerdo real 013 y una asignación propuesta a episodio `prepared`; no concede clínica legacy ni instala sobre bases habituales. `test` incluye regresión 014/013/legacy, unitarias y lint/build. CI incorpora la demo Chromium ADM al check browser existente, con recursos nuevos y limpieza propia; flags apagados por defecto, sin herramientas instaladas en host.
