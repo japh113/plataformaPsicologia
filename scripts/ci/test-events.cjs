@@ -1,5 +1,4 @@
-// Unit checks of the few remaining expressions, NOT an Actions scheduler.
-// Publication, suite selection and branch protection need the remote procedure.
+// Expression units, NOT an Actions scheduler or branch-protection emulator.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -9,44 +8,52 @@ const jobs = [...source.matchAll(/^  (checks|evidence|required):\n([\s\S]*?)(?=^
 assert.equal(jobs.length, 3);
 const group = source.match(/^  group: (.*)$/m)[1];
 const evaluate = (value, context) => value.replace(/\$\{\{(.*?)\}\}/g, (_, expression) => String(vm.runInNewContext(expression, context, {timeout: 1000})));
-// The status functions here are explicit unit inputs. They neither cancel a
-// runner nor prove how GitHub publishes a canceled matrix's check names.
-for (const [, job, body] of jobs) {
-  const condition = body.match(/^    if: (.*)$/m)[1];
-  for (const routeResult of ['success', 'failure', 'skipped', 'cancelled']) {
-    for (const isCancelled of [false, true]) {
-      for (const namespace of ['ci', 'metadata', '']) {
-        const context = {cancelled: () => isCancelled, always: () => true,
-          needs: {route: {result: routeResult, outputs: {namespace}}}};
-        const expression = condition.startsWith('${{') ? condition : '${{ ' + condition + ' }}';
-        assert.equal(evaluate(expression, context), String(job === 'checks' ? !isCancelled : true));
+const edits = [
+  {title: {from: 'old'}}, {body: {from: ''}}, {body: {from: null}},
+  {title: {from: 'old'}, body: {from: 'old'}},
+  {base: {ref: {from: 'other'}}}, {base: {sha: {from: 'old'}}, title: {from: 'old'}},
+  undefined, null, {}, [], 'title', {title: {}}, {title: null},
+  {title: {from: null}}, {body: {from: []}},
+  {title: {from: 'old', unknown: true}}, {unknown: {}}
+];
+const events = edits.map(changes => ['pull_request', {action: 'edited', changes}]);
+events.push(...['opened', 'reopened', 'synchronize'].map(action => ['pull_request', {action}]),
+  ['push', {ref: 'refs/heads/main'}], ['workflow_dispatch', {}]);
+const groups = new Set();
+let runId = 0;
+for (const [eventName, event] of events) {
+  for (const draft of [false, true]) {
+    for (const previous of ['success', 'failure', 'cancelled', 'in_progress', 'skipped']) {
+      const github = {workflow: 'PsicoPanel CI', event_name: eventName,
+        event: {...event, pull_request: {number: 123, draft}, previous_result: previous},
+        ref: 'refs/heads/main', run_id: ++runId, run_attempt: 1};
+      const names = [];
+      for (const [, job, body] of jobs) {
+        for (const component of job === 'checks' ? ['docs', 'backend-unit', 'frontend', 'postgres', 'browser'] : [job]) {
+          names.push(evaluate(body.match(/^    name: (.*)$/m)[1], {github, matrix: {component}}));
+        }
+        const condition = body.match(/^    if: (.*)$/m)[1];
+        for (const isCancelled of [false, true]) {
+          const expression = condition.startsWith('${{') ? condition : '${{ ' + condition + ' }}';
+          assert.equal(evaluate(expression, {github, cancelled: () => isCancelled, always: () => true}),
+            String(job === 'checks' ? !isCancelled : true));
+        }
       }
+      assert.deepEqual(names, expected);
+      const current = evaluate(group, {github});
+      assert(!groups.has(current));
+      groups.add(current);
+      // Same run, new attempt also cannot replace a pending current attempt.
+      assert.notEqual(current, evaluate(group, {github: {...github, run_attempt: 2}}));
+      assert.notEqual(current, evaluate(group, {github: {...github, workflow: 'Other CI'}}));
     }
   }
 }
-for (const namespace of ['ci', 'metadata', '']) {
-  const names = [];
-  for (const [, job, body] of jobs) {
-    for (const component of job === 'checks' ? ['docs', 'backend-unit', 'frontend', 'postgres', 'browser'] : [job]) {
-      names.push(evaluate(body.match(/^    name: (.*)$/m)[1], {needs: {route: {outputs: {namespace}}}, matrix: {component}}));
-    }
-  }
-  assert.deepEqual(names, expected.map(name => namespace === 'metadata' ? name.replace('ci/', 'metadata/') : name));
-}
-function concurrency(eventName, action, runId, number = 123, changes = {}) {
-  return evaluate(group, {github: {workflow: 'PsicoPanel CI', event_name: eventName, event: {action, changes, pull_request: {number: eventName === 'pull_request' ? number : undefined}}, ref: 'refs/heads/main', run_id: runId}});
-}
-assert.equal(concurrency('pull_request', 'opened', 1), concurrency('pull_request', 'synchronize', 2));
-assert.equal(concurrency('pull_request', 'synchronize', 2), concurrency('pull_request', 'synchronize', 3));
-assert.equal(concurrency('pull_request', 'reopened', 3), concurrency('pull_request', 'synchronize', 2));
-assert.notEqual(concurrency('pull_request', 'edited', 4), concurrency('pull_request', 'synchronize', 2));
-assert.notEqual(concurrency('pull_request', 'edited', 4), concurrency('pull_request', 'edited', 5));
-assert.notEqual(concurrency('pull_request', 'opened', 1, 124), concurrency('pull_request', 'opened', 1));
-assert.notEqual(concurrency('push', undefined, 1, undefined), concurrency('pull_request', 'opened', 1));
-for (const changes of [{title: {from: 'old'}}, {base: {ref: {from: 'other'}}},
-  {base: {}, title: {from: 'old'}}, {unknown: {}}]) {
-  // Every edited snapshot is isolated, including base changes and ambiguity.
-  assert.notEqual(concurrency('pull_request', 'edited', 6, 123, changes), concurrency('pull_request', 'synchronize', 7));
-  assert.notEqual(concurrency('pull_request', 'edited', 6, 123, changes), concurrency('pull_request', 'edited', 8, 123, changes));
-}
-console.log('Expression units PASS; GitHub check publication and mergeability are NOT simulated.');
+// Reversing arrival order cannot change the isolation of stale/current runs.
+const snapshot = (run, head, base) => evaluate(group, {github: {
+  workflow: 'PsicoPanel CI', run_id: run, run_attempt: 1,
+  event: {pull_request: {number: 123, head: {sha: head}, base: {sha: base}}}
+}});
+assert.notEqual(snapshot(200, 'new', 'new'), snapshot(199, 'old', 'old'));
+assert.match(source, /^  cancel-in-progress: false$/m);
+console.log('Event/name/condition/concurrency units PASS; remote check publication and mergeability still require GitHub evidence.');

@@ -6,7 +6,7 @@ from browser_contract import validate_suites
 from classification import classify
 
 def require_dependencies(needs):
-    assert set(needs)=={'route','checks','evidence'} and all(n['result']=='success' for n in needs.values())
+    assert set(needs)=={'checks','evidence'} and all(n['result']=='success' for n in needs.values())
 
 def collect(root):
     reports={};hashes={}

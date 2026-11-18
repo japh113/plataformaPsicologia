@@ -33,7 +33,7 @@ class EvidenceConsumer(unittest.TestCase):
     def test_four_browser_suites_reach_index_and_required_with_negative_controls(self):
         # No mocks of collect, identity, classification, hashes or browser validators.
         with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,{'GITHUB_EVENT_NAME':'local',
-              'CI_NEEDS':json.dumps({job:{'result':'success'} for job in ['route','checks','evidence']})}):
+              'CI_NEEDS':json.dumps({job:{'result':'success'} for job in ['checks','evidence']})}):
             root=Path(tmp)/'download';out=Path(tmp)/'export'
             reports=self.fixtures(root)
             main('evidence',root,out);verify(out/'evidence')
