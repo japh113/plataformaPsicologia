@@ -1,8 +1,8 @@
 # Documentación de PsicoPanel
 
-La continuidad vigente está en el [checkpoint](project-checkpoint.md), corte del **13 de noviembre de 2026**, `main` `23593644564c4e8214c5c139dc60a61056f731b2`, #70 integrado. **2A parcial**, A/B/C/D1/D2 y SQL 001–012 en Git; D3, nuevas vinculaciones, activación y aislamiento clínico completo pendientes. Procedencia privada reconocida por 011 no habilita audiencia operativa ni lectura clínica. Instalación habitual/despliegue no acreditados.
+La continuidad vigente está en el [checkpoint](project-checkpoint.md), corte del **18 de noviembre de 2026**, `main` `78efcc37e45bd2afb182671f7dc05efc995e8ff1`, posterior a #73. **2A parcial**, A/B/C/D1/D2 y SQL 001–013 en Git; bilateral ficticio integrado con flags apagados. D3, activación y aislamiento clínico completo pendientes. Instalación habitual/despliegue no acreditados.
 
-El [primer incremento bilateral ficticio 013](stage2a-identity-directory-intake.md#implementación-del-primer-incremento-ficticio--013) se implementa en una rama propia pendiente de auditoría/integración; sin habilitación habitual ni clínica.
+El [primer incremento autoadministrado ficticio 014](stage2a-identity-directory-intake.md#implementación-del-primer-incremento-autoadministrado--014) pertenece a la rama del encargo actual y requiere auditoría/CI del HEAD final. Consentimiento específico, versiones, revocación y asociación explícita a `prepared`; sin activar tratamientos ni leer expediente legacy.
 
 ## Ruta mínima de lectura
 
@@ -52,4 +52,4 @@ Estos informes conservan fecha, SHA, resultados y límites de **su** entrega. «
 
 Checkpoint se actualiza sin acumular todos los PRs; ADR preservan decisiones, roadmap prioridades/dependencias, contratos comportamientos exigibles, Issues trabajo/estado, e informes evidencia fechada por commit. Al integrar una entrega, verificar main y ajustar las entradas vigentes, dejando enlaces a historia. Inventario se amplía con cada documento nuevo; el tamaño no decide su valor. [Limpieza propuesta](documentation-inventory.md#segundo-pr-de-limpieza-propuesto-no-autorizado) requiere otro alcance: no mover/eliminar/fusionar archivos en este PR.
 
-Mantener `prepared`, `allowed:false`, `audienceVerified:false`, AB-23, originales privados y separación backoffice/clínica. Conservar SQL 001–012/manifiesto/hashes; sin bases habituales, datos reales, migraciones, publicación, proveedores, merge o despliegue por inferencia documental.
+Mantener `prepared`, `allowed:false`, `audienceVerified:false`, AB-23, originales privados y separación backoffice/clínica. Conservar SQL 001–013/manifiesto/hashes; sin bases habituales, datos reales, migraciones, publicación, proveedores, merge o despliegue por inferencia documental.

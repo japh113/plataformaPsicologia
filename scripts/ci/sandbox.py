@@ -72,12 +72,13 @@ class Sandbox:
             reports.append(inventory(self.cmd('run','--rm','-T','backend','npm','run',suite,tap=True,timeout=900),files))
         return reports
     def review(self,kind):
-        assert kind in ['B','C','D2','VIN']
+        assert kind in ['B','C','D2','VIN','ADM']
         if kind=='D2':self.env.update(D2_ENABLED='true',RESTRICTED_JWT_SECRET='D2-private-demo-fixture-Independent-Key-84930276')
+        if kind=='ADM':self.env.update(BILATERAL_ENABLED='true',BILATERAL_SECRET='fictitious-bilateral-independent-demo-key-32bytes',ADMISSION_ENABLED='true',ADMISSION_SECRET='fictitious-admission-independent-demo-key-32bytes')
         if kind=='VIN':self.env.update(BILATERAL_ENABLED='true',BILATERAL_SECRET='fictitious-bilateral-independent-demo-key-32bytes',D2_ENABLED='true',RESTRICTED_JWT_SECRET='D2-private-demo-fixture-Independent-Key-84930276')
-        self.cmd('run','--rm','-T','-e','NODE_ENV=development','backend','node','scripts/create-'+('bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'identity')+'-demo.js')
+        self.cmd('run','--rm','-T','-e','NODE_ENV=development','backend','node','scripts/create-'+('admission' if kind=='ADM' else 'bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'identity')+'-demo.js')
         self.cmd('--profile','demo','up','-d','api','frontend')
-        review=str(uuid.uuid4());stem='bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'contact' if kind=='C' else 'ui'
+        review=str(uuid.uuid4());stem='admission' if kind=='ADM' else 'bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'contact' if kind=='C' else 'ui'
         label='io.psicopanel.'+stem+'-review.run'
         tag='psicopanel-'+stem+'-review-'+episode_images.execution_suffix(review)+'-chromium:isolated'
         assert not subprocess.check_output(['docker','ps','-aq','--filter','label='+label+'='+review],text=True).strip()
@@ -91,11 +92,11 @@ class Sandbox:
         command(['docker','build','--no-cache','-t',tag,'-f',str(dockerfile),'scripts/ci/browser'],timeout=900)
         config={'work':str(work.resolve()),'out':str(out.resolve()),'baseline':str((work/'baseline.json').resolve()),'run':review,'demo':self.run,'project':self.project,'network':self.project+'_app','image':tag,'base':'http://frontend.localhost:5173','composeArgs':self.args}
         file=self.path/'review.json';file.write_text(json.dumps(config))
-        command(['python3','scripts/run-'+('bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'contact' if kind=='C' else 'identity')+'-ui-review.py',str(file)],timeout=600)
+        command(['python3','scripts/run-'+('admission' if kind=='ADM' else 'bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'contact' if kind=='C' else 'identity')+'-ui-review.py',str(file)],timeout=600)
         data=json.loads((work/('review-data.json' if kind=='B' else 'results.json')).read_text())
-        source=Path('scripts/'+('bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'contact' if kind=='C' else 'identity')+'-ui-review.cjs').read_text()
+        source=Path('scripts/'+('admission' if kind=='ADM' else 'bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'contact' if kind=='C' else 'identity')+'-ui-review.cjs').read_text()
         expected=set(re.findall(r"await (?:test|scenario)\('([^']+)'",source))
-        if kind in ['D2','VIN']:assert expected==set(json.loads(Path('scripts/ci/browser-cases.json').read_text())[kind])
+        if kind in ['D2','VIN','ADM']:assert expected==set(json.loads(Path('scripts/ci/browser-cases.json').read_text())[kind])
         cases=data['results'];assert set(r['id'] for r in cases)==expected and len(cases)==len(expected)
         validate_cases(kind,cases)
         assert all(r['status']=='PASS' for r in cases)

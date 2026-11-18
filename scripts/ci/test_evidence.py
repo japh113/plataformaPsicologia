@@ -19,10 +19,10 @@ class EvidenceConsumer(unittest.TestCase):
                         [['npm','ci','--ignore-scripts'],['npm','test'],['npm','run','lint'],['npm','run','build']]],
             'postgres':[{'exit':0},tap,tap],
             'browser':[{'kind':kind,'cases':[{'id':case,'status':'PASS'} for case in catalog[kind]],
-                        'runtime':{'revision':identity()['sha']}} for kind in ['B','C','D2','VIN']]}
+                        'runtime':{'revision':identity()['sha']}} for kind in ['B','C','D2','VIN','ADM']]}
         isolation={'cleanupConfirmed':True,'fresh':True,'tmpfs':True,'internal':True,'dbPorts':False,'persistentVolumes':False}
         reports={job:{'job':job,'identity':identity(),'classification':classify(),'status':'success',
-                      'suites':copy.deepcopy(suites[job]),'isolation':[isolation]*(4 if job=='browser' else 1 if job=='postgres' else 0)} for job in JOBS}
+                      'suites':copy.deepcopy(suites[job]),'isolation':[isolation]*(5 if job=='browser' else 1 if job=='postgres' else 0)} for job in JOBS}
         self.save(root,reports)
         return reports
 
@@ -30,7 +30,7 @@ class EvidenceConsumer(unittest.TestCase):
         for job,report in reports.items():
             write(root/job/'report.json',report);seal(root/job)
 
-    def test_four_browser_suites_reach_index_and_required_with_negative_controls(self):
+    def test_five_browser_suites_reach_index_and_required_with_negative_controls(self):
         # No mocks of collect, identity, classification, hashes or browser validators.
         with tempfile.TemporaryDirectory() as tmp,patch.dict(os.environ,{'GITHUB_EVENT_NAME':'local',
               'CI_NEEDS':json.dumps({job:{'result':'success'} for job in ['checks','evidence']})}):
@@ -39,7 +39,7 @@ class EvidenceConsumer(unittest.TestCase):
             main('evidence',root,out);verify(out/'evidence')
             shutil.copytree(out/'evidence',root/'evidence')
             main('required',root,out)
-            self.assertEqual(len(json.loads((out/'evidence/index.json').read_text())['reports']['browser']['suites']),4)
+            self.assertEqual(len(json.loads((out/'evidence/index.json').read_text())['reports']['browser']['suites']),5)
             for mutate in [lambda r:r['browser']['suites'].pop(),
                            lambda r:r['browser']['suites'].append(copy.deepcopy(r['browser']['suites'][0])),
                            lambda r:r['browser']['suites'][3]['cases'].pop(),
