@@ -1,5 +1,5 @@
 import { sandboxControl,createSandboxDatabase,installBaseline } from './episode-sandbox.js';
-import { installEpisodeRecordSandbox } from './episode-record-sandbox.js';
+import { installAssessmentSandbox } from './admission-assessment-sandbox.js';
 import { bilateralFixture } from './bilateral-sandbox.js';
 import { command as bilateral,processQueue,closeBilateral } from '../src/modules/bilateral/bilateral.service.js';
 import { command,closeAdmission } from '../src/modules/admission/admission.service.js';
@@ -10,7 +10,7 @@ const actor=id=>({id,sessionVersion:0,sessionExpiresAt:Math.floor(Date.now()/100
 const act=()=>({operationId:randomUUID(),confirmed:true});
 try{
   control=await sandboxControl({demo:true});const name='psicopanel_episode_demo';client=await createSandboxDatabase(control,name);await installBaseline(client);
-  await installEpisodeRecordSandbox(client,name,{runtimeRole:'bilateral_runtime_demo',admissionRole:'admission_runtime_demo'});await bilateralFixture(client);
+  await installAssessmentSandbox(client,name,{runtimeRole:'bilateral_runtime_demo',admissionRole:'admission_runtime_demo'});await bilateralFixture(client);
   Object.assign(process.env,{BILATERAL_ENABLED:'true',BILATERAL_SECRET:'fictitious-bilateral-independent-demo-key-32bytes',BILATERAL_DATABASE_URL:'postgres://bilateral_runtime_demo:disposable_bilateral_roles@db:5432/'+name,
     ADMISSION_ENABLED:'true',ADMISSION_SECRET:'fictitious-admission-independent-demo-key-32bytes',ADMISSION_DATABASE_URL:'postgres://admission_runtime_demo:disposable_admission_roles@db:5432/'+name});
   const professionalReference=(await bilateral(actor('bp1'),'professional-reference',{operationId:randomUUID()})).reference;

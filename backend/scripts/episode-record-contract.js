@@ -30,8 +30,16 @@ export async function verifyEpisodeRecordContract(client) {
         EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) WHERE grantee<>p.proowner))
     UNION ALL SELECT 1 FROM pg_class c WHERE c.oid IN ('public.episode_private_records'::regclass,'public.episode_private_record_versions'::regclass)
       AND (c.relowner<>(SELECT proowner FROM pg_proc WHERE oid='public.episode_record_from_preparation()'::regprocedure) OR
-        EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) WHERE grantee<>c.relowner) OR
-        EXISTS(SELECT 1 FROM pg_attribute a CROSS JOIN LATERAL aclexplode(a.attacl) acl WHERE a.attrelid=c.oid AND acl.grantee<>c.relowner))
+        EXISTS(SELECT 1 FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) acl WHERE grantee<>c.relowner AND NOT (
+          EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='public.episode_private_record_versions'::regclass AND attname='assignment_id' AND NOT attisdropped)
+          AND acl.grantee=(SELECT proowner FROM pg_proc WHERE oid='public.admission_command(text,integer,text,jsonb)'::regprocedure)
+          AND acl.privilege_type='SELECT' AND NOT acl.is_grantable)) OR
+        EXISTS(SELECT 1 FROM pg_attribute a CROSS JOIN LATERAL aclexplode(a.attacl) acl WHERE a.attrelid=c.oid AND acl.grantee<>c.relowner AND NOT (
+          EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid='public.episode_private_record_versions'::regclass AND attname='assignment_id' AND NOT attisdropped)
+          AND acl.grantee=(SELECT proowner FROM pg_proc WHERE oid='public.admission_command(text,integer,text,jsonb)'::regprocedure)
+          AND NOT acl.is_grantable AND (c.relname='episode_private_records' AND a.attname='episode_id' AND acl.privilege_type='UPDATE'
+            OR c.relname='episode_private_record_versions' AND acl.privilege_type='INSERT' AND a.attname IN
+              ('episode_id','patient_id','professional_user_id','revision','previous_revision','risk_level','professional_context','recording_kind','assignment_id','submission','authenticated_author_user_id','authenticated_session_version')))))
     ) AS unsafe`);
   if(exposure.unsafe)throw new Error('Expanded episode record access');
 }

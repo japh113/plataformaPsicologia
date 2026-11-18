@@ -19,3 +19,9 @@ test('admission errors contain no database, identity, answers or unexpected diag
   assert.equal(errorFor(new Error('admission_conflict')).status,409);
   assert.equal(errorFor(new Error('SQL secret@example.invalid private answer')).message,'Admisión temporalmente no disponible.');
 });
+test('admission assessments require explicit risk, exact submission, expected versions and reject identity or content injection',()=>{
+  const p={operationId:randomUUID(),confirmed:true,expectedVersion:3,expectedRevision:1,episodeId:'12',submission:1,riskLevel:'unevaluated',context:''};
+  validate('assess',p);validate('record',{});
+  for(const extra of [{riskLevel:'unknown'},{context:'a'.repeat(10001)},{submission:0},{expectedRevision:0},{episodeId:12},{actorId:'forged'},{assignmentId:randomUUID()},{confirmed:false}])assert.throws(()=>validate('assess',{...p,...extra}));
+  assert.equal(errorFor(Object.assign(new Error('admission_conflict'),{code:'P0001'})).status,409);
+});
