@@ -9,9 +9,6 @@ import {
   createPatientTask,
   updatePatientTask,
   deletePatientTask,
-  createPatientObjective,
-  updatePatientObjective,
-  deletePatientObjective,
   upsertPatientInterview,
   createPatientClinicalNote,
   updatePatientClinicalNote,
@@ -19,7 +16,6 @@ import {
 } from './patients.service.js';
 import { validateCreatePatient, validatePatientPayload } from './patients.validators.js';
 import {
-  validateCreateObjectivePayload,
   validateCreateTaskPayload,
   validateUpdateTaskPayload,
 } from './patients.tasks.validators.js';
@@ -181,66 +177,6 @@ export const deletePatientTaskHandler = async (req, res, next) => {
     }
 
     return successResponse(res, null, 'Task retired; record preserved');
-  } catch (error) {
-    return next(error);
-  }
-};
-
-export const createPatientObjectiveHandler = async (req, res, next) => {
-  try {
-    ensurePsychologist(req.user);
-
-    const errors = validateCreateObjectivePayload(req.body);
-
-    if (errors.length > 0) {
-      return errorResponse(res, 'Validation error', 400, errors);
-    }
-
-    const objective = await createPatientObjective(req.params.id, req.body, req.user);
-
-    if (!objective) {
-      return errorResponse(res, 'Patient not found', 404);
-    }
-
-    return successResponse(res, objective, 'Objective created successfully', 201);
-  } catch (error) {
-    return next(error);
-  }
-};
-
-export const updatePatientObjectiveHandler = async (req, res, next) => {
-  try {
-    ensurePsychologist(req.user);
-
-    const errors = validateUpdateTaskPayload(req.body);
-
-    if (errors.length > 0) {
-      return errorResponse(res, 'Validation error', 400, errors);
-    }
-
-    const objective = await updatePatientObjective(req.params.id, req.params.objectiveId, req.body, req.user);
-
-    if (!objective) {
-      return errorResponse(res, 'Objective not found', 404);
-    }
-
-    return successResponse(res, objective, 'Objective updated successfully');
-  } catch (error) {
-    return next(error);
-  }
-};
-
-export const deletePatientObjectiveHandler = async (req, res, next) => {
-  try {
-    ensurePsychologist(req.user);
-
-    const deleted = await deletePatientObjective(req.params.id, req.params.objectiveId, req.user);
-
-    if (!deleted) {
-      return errorResponse(res, 'Objective not found', 404);
-    }
-
-    return successResponse(res, null, 'Objective retired; record preserved');
   } catch (error) {
     return next(error);
   }

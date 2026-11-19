@@ -1,12 +1,12 @@
 # PsicoPanel
 
-Punto de continuidad vigente: [checkpoint](docs/project-checkpoint.md), corte del 19 de noviembre de 2026, `main` verificado `c39aa542c27e5e3245a9144fe4369d999956e25e`, #77 integrado y SQL 001–017. 2A parcial, sin activación ni despliegue acreditado. Encargo actual: [aislamiento negativo de objetivos atribuidos](docs/objective-completion-authorization.md#aislamiento-negativo-de-objetivos-atribuidos-a-episodio--19-de-noviembre-de-2026), único Draft pendiente de CI/auditoría; objetivos NULL y tareas conservados. Reconsultar GitHub antes de cada encargo. [Prioridades](docs/product/roadmap.md#planificación-vigente--9-de-noviembre-de-2026), [inventario documental](docs/documentation-inventory.md) y [seguridad](docs/security-codeql-triage.md).
+Punto de continuidad vigente: [checkpoint](docs/project-checkpoint.md), corte del 19 de noviembre de 2026, `main` verificado `c39aa542c27e5e3245a9144fe4369d999956e25e`, #77 integrado y SQL 001–017. 2A parcial, sin activación ni despliegue acreditado. Encargo actual: [retirada de objetivos globales](docs/objective-completion-authorization.md#retirada-de-objetivos-globales--cambio-de-alcance-de-78), único Draft pendiente de CI/auditoría; tareas e infraestructura compartida conservadas. Reconsultar GitHub antes de cada encargo. [Prioridades](docs/product/roadmap.md#planificación-vigente--9-de-noviembre-de-2026), [inventario documental](docs/documentation-inventory.md) y [seguridad](docs/security-codeql-triage.md).
 
 El [corte #40](docs/operational-status.md) del 29 de octubre conserva evidencia histórica de A/B/C/D1/D2 y #25–#27; no es el estado vigente. D3, nuevas vinculaciones y permisos clínicos completos por episodio siguen pendientes. Código integrado y pruebas aisladas no acreditan instalación o despliegue habitual.
 
 CI implementada en #14, con aceptación documental #15 y ensayo negativo #16 cerrado sin merge. Protect main exige siete checks con política estricta y sin bypass, rereconsultado de solo lectura para este rebaseline. Los resultados históricos conservan su SHA; cada PR documental ejecuta su propia matriz completa en runners nuevos.
 
-Plataforma para psicólogos independientes y pacientes: agenda, disponibilidad, espera manual asistida, tareas, objetivos, notas y seguimiento clínico, con backoffice separado.
+Plataforma para psicólogos independientes y pacientes: agenda, disponibilidad, espera manual asistida, tareas, notas y seguimiento clínico, con backoffice separado. Objetivos por episodio pendientes; la rama #78 retira la capacidad global legacy.
 
 La aplicación activa es web (React/Vite + Express JavaScript + PostgreSQL). React Native/Expo y TypeScript son dirección futura; esa dirección no autoriza iniciar una migración.
 

@@ -180,9 +180,10 @@ test('mapPatientRow excludes private fields even when the query supplies clinica
     assert.equal(patient.interview.birthPlace, 'FICTIONAL_OWN_ANSWER');
     assert.deepEqual(patient.clinicalNotes, []);
     assert.equal(patient.tasks[0].text, 'Fictional task');
-    assert.equal(patient.objectives[0].text, 'Fictional shared objective');
+    assert.equal(Object.hasOwn(patient, 'objectives'), false);
   }
   const professional = patientTestables.mapPatientRow(row, { role: 'psychologist' });
+  assert.equal(Object.hasOwn(professional, 'objectives'), false);
   assert.equal(professional.notes, row.notes);
   assert.equal(professional.riskLevel, row.risk_level);
   assert.equal(professional.tasks[0].clinicalNoteObjective, row.tasks[0].clinicalNoteObjective);

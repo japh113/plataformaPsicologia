@@ -50,7 +50,7 @@ export function deferred() {
   return { promise, resolve, reject };
 }
 export const patient = (id = 'p') => ({ id, fullName: 'Fictional ' + id.toUpperCase(),
-  notes: 'PRIVATE_' + id.toUpperCase(), tasks: [], objectives: [], clinicalNotes: [{ id: 'note-' + id, content: 'PRIVATE_NOTE_' + id.toUpperCase() }] });
+  notes: 'PRIVATE_' + id.toUpperCase(), tasks: [], clinicalNotes: [{ id: 'note-' + id, content: 'PRIVATE_NOTE_' + id.toUpperCase() }] });
 export async function mountedApp() {
   const h = { token: 'fixture-session', actor: { id: 'a', role: 'psychologist' }, boot: [], lists: [], children: {}, errors: [], logoutCalls: 0, writes: 0 };
   h.api = Object.fromEntries(apiNames.map(name => [name, async () => { throw new Error('Unexpected API: ' + name); }]));

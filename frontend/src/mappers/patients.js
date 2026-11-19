@@ -52,12 +52,6 @@ export const mapBackendTaskToUiTask = (task) => ({
   objetivoSesion: task.clinicalNoteObjective || task.sessionObjective || '',
 });
 
-export const mapBackendObjectiveToUiObjective = (objective) => ({
-  id: String(objective.id),
-  texto: objective.text || '',
-  completada: Boolean(objective.completed),
-});
-
 export const mapBackendSessionToUiSession = (session) => ({
   id: String(session.id),
   citaId: session.appointmentId ? String(session.appointmentId) : null,
@@ -127,7 +121,6 @@ export const mapBackendPatientToUiPatient = (patient) => {
     seguimiento: patient.followUp ? mapBackendFollowUpToUiFollowUp(patient.followUp) : null,
     seguimientoEstado: patient.followUp ? 'ready' : patient.followUpUnavailable ? 'error' : 'idle',
     tareas: Array.isArray(patient.tasks) ? patient.tasks.map(mapBackendTaskToUiTask) : [],
-    objetivos: Array.isArray(patient.objectives) ? patient.objectives.map(mapBackendObjectiveToUiObjective) : [],
     sesiones: Array.isArray(patient.clinicalNotes || patient.sessions)
       ? (patient.clinicalNotes || patient.sessions).map(mapBackendSessionToUiSession)
       : [],

@@ -160,8 +160,8 @@ test('clinical integrity: PostgreSQL migration, HTTP API and concurrency', { ski
       assert.ok((await db.query('SELECT retired_at FROM patient_tasks WHERE id=$1',[newTask])).rows[0].retired_at);
       assert.ok((await db.query(`SELECT 1 FROM clinical_record_history WHERE table_name='patient_clinical_notes' AND record_id=$1 AND previous_record->>'content'='original note'`,[String(note)])).rowCount);
       const objective = (await db.query(`INSERT INTO patient_tasks(patient_id,kind,text) VALUES ('1','objective','preserve objective') RETURNING id`)).rows[0].id;
-      assert.equal((await request(`/patients/1/objectives/${objective}`,'DELETE')).status,200);
-      assert.ok((await db.query('SELECT retired_at FROM patient_tasks WHERE id=$1',[objective])).rows[0].retired_at);
+      assert.equal((await request(`/patients/1/objectives/${objective}`,'DELETE')).status,404);
+      assert.equal((await db.query('SELECT retired_at FROM patient_tasks WHERE id=$1',[objective])).rows[0].retired_at, null);
     });
 
     await t.test('rescheduling an unlinked appointment preserves its identity and original schedule', async () => {

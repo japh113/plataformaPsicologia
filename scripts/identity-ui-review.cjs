@@ -183,7 +183,7 @@ await test('E03','Expediente autorizado','Abrir expediente histórico desde la l
  await page.getByRole('button',{name:'Mis Pacientes',exact:true}).click();await settle();
  await page.getByRole('button',{name:'Expediente',exact:true}).click();await settle();await text('Demo P Ficticio');
  await page.getByRole('button',{name:'Entrevista',exact:true}).waitFor();
- await page.getByRole('button',{name:'Objetivos',exact:true}).click();await text('Synthetic legacy objective');await page.getByRole('button',{name:'Resumen',exact:true}).click();
+ assert.equal(await page.getByRole('button',{name:'Objetivos',exact:true}).count(),0);assert.equal(await page.getByText('Synthetic legacy objective',{exact:true}).count(),0);
  return {screenshot:await shot('29-historical-record')};
  });
 await test('E04','Cita histórica y continuidad de agenda','Historial muestra cita completada y nota conservada.',async()=>{

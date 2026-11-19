@@ -20,8 +20,6 @@ const validateCreateChecklistPayload = (payload, { requireClinicalNoteId = false
 
 export const validateCreateTaskPayload = (payload) => validateCreateChecklistPayload(payload, { requireClinicalNoteId: true });
 
-export const validateCreateObjectivePayload = (payload) => validateCreateChecklistPayload(payload);
-
 export const validateUpdateTaskPayload = (payload) => {
   const errors = [];
 

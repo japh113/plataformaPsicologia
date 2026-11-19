@@ -2,7 +2,7 @@
 
 Continuidad vigente: [checkpoint](project-checkpoint.md), corte del **19 de noviembre de 2026**, base `main` `c39aa542c27e5e3245a9144fe4369d999956e25e`, merge #77. **2A parcial**; SQL 001–017 integrado, sin habilitación habitual ni despliegue acreditado.
 
-Único incremento autorizado actual: [aislamiento negativo de objetivos atribuidos](objective-completion-authorization.md#aislamiento-negativo-de-objetivos-atribuidos-a-episodio--19-de-noviembre-de-2026), implementado en rama, pendiente de CI y auditoría independiente. Conserva objetivos NULL, tareas, AB-23 y fallback. 017 dirigida ficticia ya integrado; sin activación ni clínica ordinaria.
+Único incremento autorizado actual: [retirada de objetivos globales](objective-completion-authorization.md#retirada-de-objetivos-globales--cambio-de-alcance-de-78), implementado en rama, pendiente de CI y auditoría independiente. Conserva tareas e infraestructura compartida, AB-23 y barreras del fallback de capacidades activas; RN-72 por episodio sigue pendiente. 017 dirigida ficticia ya integrado; sin activación ni clínica ordinaria.
 
 ## Ruta mínima de lectura
 
@@ -19,7 +19,7 @@ No hace falta leer todo docs/ para iniciar una tarea. [README raíz](../README.m
 | Necesidad | Fuente y frontera |
 | --- | --- |
 | Decidir producto | [Visión](product/vision.md), [ADR/AB](product/decisions.md), [reglas RN](product/business-rules.md). ADR-031/032 aprobados con límites; D21 no aprobada. Producto aprobado no significa implementado. |
-| Saber qué está implementado | [Checkpoint](project-checkpoint.md), [arquitectura](architecture.md) y código del SHA consultado. La arquitectura conserva cortes anteriores; checkpoint y contrato de objetivos distinguen integración 001–017 del aislamiento negativo de esta rama. |
+| Saber qué está implementado | [Checkpoint](project-checkpoint.md), [arquitectura](architecture.md) y código del SHA consultado. La arquitectura conserva cortes anteriores; checkpoint y contrato de objetivos distinguen integración 001–017 de la retirada de esta rama. |
 | Elegir siguiente trabajo | [Roadmap](product/roadmap.md), [candidatos](product/roadmap.md#próximos-tres-incrementos-candidatos). Orden propuesto, no autorización ni cambio de etapas 0–6/2A–2E. |
 | Ver seguridad actual | [Triage de 28 CodeQL y cero Dependabot](security-codeql-triage.md). Corte fechado y residual por superficie; no evaluación de despliegue ni falso positivo automático. |
 | Desarrollar/verificar | [Desarrollo Docker/WSL](development.md), [CI implementada](ci-implementation.md). Destinos nuevos autorizados, siete checks, artifacts 14 días por HEAD/base/merge/intento. |

@@ -1,49 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import vm from 'node:vm';
+import * as mappers from '../src/mappers/patients.js';
 
-// Execute the real App callback without loading JSX or introducing a test runtime.
-const app = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
-const start = app.indexOf('  const toggleObjective = async ');
-const end = app.indexOf('  const removeObjective = async ', start);
-assert.ok(start >= 0 && end > start);
-const source = app.slice(start, end) + '\ntoggleObjective;';
-
-function harness(isPsychologist, completed = false) {
-  const calls = [], states = [];
-  const patient = { id: 'p', objetivos: [{ id: 'o', completada: completed }], tareas: [{ id: 't', completada: false }] };
-  const toggle = vm.runInNewContext(source, {
-    beginClinicalOperation: () => () => true,advancePatientRevision: () => {},
-    isPsychologist, pacienteSeleccionado: patient, procesandoObjetivoId: null,
-    setProcesandoObjetivoId: value => calls.push(['processing', value]),
-    updatePatientObjective: async (patientId, objectiveId, payload) => {
-      calls.push(['api', patientId, objectiveId, payload.completed]);
-      return { id: objectiveId, completed: payload.completed };
-    },
-    mapBackendTaskToUiTask: value => ({ id: value.id, completada: value.completed }),
-    syncPatientState: (value, transform) => states.push(transform ? transform(patient) : value),
-    showErrorFeedback: () => assert.fail('Unexpected feedback'),
-  });
-  return { toggle, calls, states, patient };
-}
-
-test('patient callback invocation cannot send an objective PATCH or mutate local state', async () => {
-  for (const completed of [false, true]) {
-    const h = harness(false, completed);
-    await h.toggle('o');
-    assert.deepEqual(h.calls, []);
-    assert.deepEqual(h.states, []);
-    assert.equal(h.patient.objetivos[0].completada, completed);
+test('patient mapper discards global objectives and derivatives even from an obsolete DTO', () => {
+  const patient = mappers.mapBackendPatientToUiPatient({ id: 'p',
+    objectives: [{ id: 'SECRET_GOAL_ID', text: 'SECRET_GOAL_TEXT', completed: true }],
+    objetivos: [{ id: 'SECRET_ALIAS' }], objectivesProgress: 100, completedObjectives: 1 });
+  for (const field of ['objectives', 'objetivos', 'objectivesProgress', 'completedObjectives']) {
+    assert.equal(Object.hasOwn(patient, field), false);
   }
+  assert.doesNotMatch(JSON.stringify(patient), /SECRET_/);
+  assert.equal(mappers.mapBackendObjectiveToUiObjective, undefined);
 });
 
-test('psychologist callback completes and unmarks objectives while preserving tasks', async () => {
-  for (const completed of [false, true]) {
-    const h = harness(true, completed);
-    await h.toggle('o');
-    assert.deepEqual(h.calls, [['processing', 'o'], ['api', 'p', 'o', !completed], ['processing', null]]);
-    assert.equal(h.states[0].objetivos[0].completada, !completed);
-    assert.equal(h.states[0].tareas, h.patient.tareas);
-  }
+test('retirement preserves task mapping and the clinical note narrative objective', () => {
+  const patient = mappers.mapBackendPatientToUiPatient({ id: 'p',
+    tasks: [{ id: 't', text: 'Fictional task', completed: true, clinicalNoteId: 'n' }],
+    clinicalNotes: [{ id: 'n', clinicalNoteObjective: 'Fictional narrative goal' }] });
+  assert.equal(patient.tareas[0].completada, true);
+  assert.equal(patient.tareas[0].sesionId, 'n');
+  assert.equal(patient.sesiones[0].objetivo, 'Fictional narrative goal');
 });
