@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { setImmediate as nextTurn } from 'node:timers/promises';
 import { harness } from './helpers/followUpAppHarness.js';
 import { mapBackendPatientToUiPatient } from '../src/mappers/patients.js';
 
@@ -136,16 +135,7 @@ test('callback audit: general notes response preserves newer draft, profile, and
   read.resolve(raw);await get;assert.equal(h.state.selected.notas,'confirmed note');synced(h);
 });
 
-test('callback audit: old GET cannot undo an interview confirmation or a newer complete professional snapshot',async()=>{
-  for(const kind of ['detail','main']){
-    const h=harness({previous:mapBackendPatientToUiPatient(raw)}),held=deferred();
-    h.context[kind==='detail'?'getPatient':'getPatients']=()=>held.promise;
-    const old=kind==='detail'?h.selected('p'):h.load();
-    const optional=deferred();h.context.getPatientFollowUp=()=>optional.promise;
-    await h.saveInterview('p',{});held.resolve(kind==='detail'?raw:[raw]);await old;
-    assert.equal(h.state.selected.entrevistaCompleta,true);synced(h);
-    optional.resolve({consultations:[],unassignedTasks:[]});await nextTurn();
-  }
+test('callback audit: stale detail cannot overwrite a newer complete professional snapshot',async()=>{
   const h=professional(),old=deferred();
   h.context.getPatient=()=>old.promise;const first=h.selected('p');
   h.context.getPatient=async()=>fresh;await h.selected('p');const newer=h.state.selected;

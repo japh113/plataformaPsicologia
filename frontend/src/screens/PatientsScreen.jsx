@@ -54,13 +54,11 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
     const highRisk = patients.filter((patient) => patient.riesgo === 'alto').length;
     const pendingTasks = patients.filter((patient) => (patient.tareas || []).some((task) => !task.completada)).length;
     const withoutSessions = patients.filter((patient) => !patient.ultimaSesion || !(patient.sesiones || []).length).length;
-    const pendingInterview = patients.filter((patient) => !patient.entrevistaCompleta).length;
 
     return {
       highRisk,
       pendingTasks,
       withoutSessions,
-      pendingInterview,
     };
   }, [patients]);
   const hasActiveFilters = query.trim() || riskFilter !== 'todos' || statusFilter !== 'todos' || summaryFilter !== 'todos';
@@ -85,9 +83,7 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
             ? patient.riesgo === 'alto'
             : summaryFilter === 'pending_tasks'
               ? (patient.tareas || []).some((task) => !task.completada)
-              : summaryFilter === 'pending_interview'
-                ? !patient.entrevistaCompleta
-                : !patient.ultimaSesion || !(patient.sesiones || []).length;
+              : !patient.ultimaSesion || !(patient.sesiones || []).length;
       return matchesQuery && matchesRisk && matchesStatus && matchesSummary;
     });
   }, [patients, query, riskFilter, statusFilter, summaryFilter]);
@@ -113,7 +109,7 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
       </div>
 
       {isPsychologist && (
-        <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           <button type="button" onClick={() => handleSummaryFilter('high_risk')} className={`rounded-2xl border p-4 text-left transition ${summaryFilter === 'high_risk' ? 'border-rose-400 bg-rose-100 ring-2 ring-rose-200' : 'border-rose-200 bg-rose-50 hover:bg-rose-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-700">Prioridad alta</p>
             <p className="mt-2 text-3xl font-black text-rose-900">{patientSummary.highRisk}</p>
@@ -128,11 +124,6 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Por documentar</p>
             <p className="mt-2 text-3xl font-black text-amber-900">{patientSummary.withoutSessions}</p>
             <p className="mt-1 text-sm text-amber-800">Pacientes sin notas clinicas registradas.</p>
-          </button>
-          <button type="button" onClick={() => handleSummaryFilter('pending_interview')} className={`rounded-2xl border p-4 text-left transition ${summaryFilter === 'pending_interview' ? 'border-violet-400 bg-violet-100 ring-2 ring-violet-200' : 'border-violet-200 bg-violet-50 hover:bg-violet-100/70'}`}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700">Entrevista pendiente</p>
-            <p className="mt-2 text-3xl font-black text-violet-900">{patientSummary.pendingInterview}</p>
-            <p className="mt-1 text-sm text-violet-800">Pacientes sin entrevista inicial completa.</p>
           </button>
         </section>
       )}
@@ -202,11 +193,6 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient })
                     {!patient.ultimaSesion && (
                       <span className="px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border border-amber-200 bg-amber-50 text-amber-700">
                         Sin notas clinicas
-                      </span>
-                    )}
-                    {!patient.entrevistaCompleta && (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border border-violet-200 bg-violet-50 text-violet-700">
-                        Entrevista pendiente
                       </span>
                     )}
                   </div>

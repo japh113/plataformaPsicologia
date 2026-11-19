@@ -1,5 +1,7 @@
 # Privacidad de respuestas clínicas del paciente — Issue #23
 
+**Corte vigente.** El incremento de [admisión individual](project-checkpoint.md#estado-y-uso) retira el PUT, la lectura y los campos de entrevista global descritos en los inventarios históricos. 013–017 aplican sus propios DTO por asignación. La matriz de permisos objetivo y la proyección de las demás capacidades siguen aplicando a sus respectivos alcances.
+
 Este documento conserva la evidencia histórica de #23/#25 y, en la [consolidación 2A](#consolidación-2a--inventario-y-permisos-objetivo), mantiene el inventario actual y el contrato objetivo de [#39](https://github.com/japh113/plataformaPsicologia/issues/39). La consolidación conserva su corte histórico; el cambio aprobado de #78 [retira objetivos globales del runtime](objective-completion-authorization.md#retirada-de-objetivos-globales--cambio-de-alcance-de-78). Las filas de runtime afectadas se precisan debajo, sin ampliar permisos ni modificar los contratos futuros.
 
 ## Alcance y causa

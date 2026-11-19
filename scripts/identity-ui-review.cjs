@@ -54,7 +54,7 @@ async function main(){
  });
  await test('A06','Registro menor','Rechazo visible sin alta.',async()=>{await fill(f,email,'2015-01-01');await click(page,submit(f),'/api/auth/register/patient',400);await text('El registro independiente requiere tener 18 años o más.');return {observed:'Menor rechazado con explicación en español.',screenshot:await shot('06-minor-error')};},[400]);
  await test('A07','Registro adulto','Acuse explica siguiente paso.',async()=>{await fill(f,email);await click(page,submit(f),'/api/auth/register/patient',202);await text('ya puedes iniciar sesión');return {observed:'Acuse visible; permanece en registro y vacía formulario, indicando iniciar sesión.',screenshot:await shot('07-registration-complete')};});
- await test('A08','Login del nuevo adulto','Acceso sin entrevista ni vínculo.',async()=>{user=await login(email);await text('Todavía no tienes psicólogo vinculado.');return {screenshot:await shot('08-patient-no-psychologist')};});
+ await test('A08','Login del nuevo adulto','Acceso sin entrevista ni vínculo.',async()=>{user=await login(email);await text('Tu cuenta está registrada');return {screenshot:await shot('08-patient-no-psychologist')};});
  if(!user)throw Error('Login esencial no completado; recorridos dependientes no ejecutables.');
 
  await test('D08','Paciente nuevo sin obligación clínica','Avisos coherentes con cuenta sin vínculo/episodio.',async()=>{
@@ -63,7 +63,8 @@ async function main(){
  assert.equal(await page.getByRole('heading',{name:'Completar tu entrevista inicial',exact:true}).count(),0);
  const body=await page.locator('body').innerText();
  assert.ok(!body.includes('Necesitas completar tu entrevista')&&!body.includes('Entrevista inicial pendiente'));
- assert.ok(body.includes('no es un requisito de registro'));
+ assert.equal(await page.getByRole('button',{name:'Admisión',exact:true}).count(),0);
+ assert.equal(await page.getByRole('button',{name:'Vinculación bilateral',exact:true}).count(),0);
  return {screenshot:await shot('46-unlinked-coherent-next-step')};
  });
 
@@ -128,23 +129,22 @@ await test('D05','Persistencia tras cerrar sesión','Nombre y dos verificaciones
  });
  await test('F01','Teclado y foco en identidad','Tabulación y foco distinguible.',async()=>{await layout(page,'desktop-patient');await ident().getByRole('textbox',{name:'Nombre',exact:true}).focus();await page.keyboard.press('Tab');const r=await page.evaluate(()=>({name:document.activeElement.getAttribute('aria-label'),outline:getComputedStyle(document.activeElement).outlineStyle,shadow:getComputedStyle(document.activeElement).boxShadow}));assert.equal(r.name,'Apellido');return {observed:'Tab alcanza Apellido; outline '+r.outline+', shadow '+r.shadow+'. Revisión visual del foco en captura.',screenshot:await shot('24-keyboard-focus')};});
  await test('D06','Histórico sin DOB global','Valor desconocido visible sin romper panel.',async()=>{await logout();await login('historical@ui-review.invalid');await text('Desconocida en el registro histórico');return {observed:'Fixture legacy propio, sin relación, muestra DOB desconocida.',screenshot:await shot('25-historical-unknown-dob')};});
-await test('D07','Histórico con entrevista pendiente','Identidad accesible; entrevista explícita y cerrable sin guardar.',async()=>{
+await test('D07','Identidad y expediente históricos','Editar nombre y abrir expediente sin formulario de entrevista global.',async()=>{
  await logout();await login('p@episodes.invalid',demoPw);await text('Desconocida en el registro histórico');
- assert.equal(await page.getByRole('button',{name:'Cerrar entrevista',exact:true}).count(),0);
  await ident().getByRole('textbox',{name:'Nombre',exact:true}).fill('Demo P');
  await ident().getByRole('textbox',{name:'Apellido',exact:true}).fill('Ficticio');
  await click(page,ident().getByRole('button',{name:'Guardar nombre'}),'/api/auth/identity',200);
- await page.getByRole('button',{name:'Completar entrevista',exact:true}).click();
- await page.getByRole('button',{name:'Cerrar entrevista',exact:true}).waitFor();
- await shot('26a-historical-interview-closable');
- await page.getByRole('button',{name:'Cerrar entrevista',exact:true}).click();
- assert.equal(await page.getByRole('button',{name:'Cerrar entrevista',exact:true}).count(),0);
- const response=await api(page,'/patients/p');assert.equal(response.status,200);assert.equal(response.body.data.interviewCompleted,false);
- await ident().getByRole('textbox',{name:'Nombre',exact:true}).focus();
- return {observed:'Identidad editable con entrevista pendiente; abrir/cerrar no crea entrevista ni cambia completitud. Sin modal automático.',screenshot:await shot('26-historical-personal-access')};
+ await page.getByRole('button',{name:'Abrir mi expediente',exact:true}).click();
+ await page.getByRole('button',{name:'Mi seguimiento',exact:true}).waitFor();
+ for(const name of ['Entrevista','Completar entrevista'])assert.equal(await page.getByRole('button',{name,exact:true}).count(),0);
+ const response=await api(page,'/patients/p');assert.equal(response.status,200);
+ assert.equal(Object.hasOwn(response.body.data,'interview'),false);
+ assert.equal(Object.hasOwn(response.body.data,'interviewCompleted'),false);
+ assert.equal((await api(page,'/auth/identity')).body.data.birthDate,null);
+ return {screenshot:await shot('26-historical-personal-access')};
  });
 
- await test('D10','Verificar contactos con entrevista pendiente','Email y SMS disponibles sin entrevista ni DOB inferida.',async()=>{
+ await test('D10','Verificar contactos históricos','Email y SMS disponibles sin entrevista ni DOB inferida.',async()=>{
  await click(page,ident().getByRole('button',{name:'Solicitar enlace',exact:true}),'/api/auth/verification/email/request',200);
  const emailSecret=(await rpc('mailbox',{email:'p@episodes.invalid',channel:'email'})).secret;
  await page.goto(base+'/#verifyEmail='+emailSecret);
@@ -158,8 +158,8 @@ await test('D07','Histórico con entrevista pendiente','Identidad accesible; ent
  await ident().getByText('Verificado',{exact:true}).nth(1).waitFor({state:'visible'});
  assert.equal(await ident().getByText('Verificado',{exact:true}).count(),2);
  await text('Desconocida en el registro histórico');
- const r=await api(page,'/patients/p');assert.equal(r.body.data.interviewCompleted,false);
- return {observed:'Histórico con teléfono explícitamente ficticio del fixture propio verifica ambos contactos; DOB desconocida y entrevista pendiente conservadas.',screenshot:await shot('47-historical-verified-intake-pending')};
+ const r=await api(page,'/auth/identity');assert.equal(r.status,200);assert.equal(r.body.data.birthDate,null);
+ return {observed:'Histórico con teléfono explícitamente ficticio del fixture propio verifica ambos contactos; DOB desconocida conservada.',screenshot:await shot('47-historical-verified-contacts')};
  });
 
  const clinician=await browser.newContext({viewport:{width:1440,height:900},locale:'es-MX',timezoneId:'America/Mexico_City'});page=await clinician.newPage();instrument(page);
@@ -181,9 +181,12 @@ await test('E02','Vínculos históricos y DTO mínimo','Nombre/estado propios, s
  });
 await test('E03','Expediente autorizado','Abrir expediente histórico desde la lista real.',async()=>{
  await page.getByRole('button',{name:'Mis Pacientes',exact:true}).click();await settle();
+ await page.getByRole('button',{name:'Expediente',exact:true}).waitFor();
+ assert.equal(await page.getByText('Entrevista pendiente',{exact:true}).count(),0);
  await page.getByRole('button',{name:'Expediente',exact:true}).click();await settle();await text('Demo P Ficticio');
- await page.getByRole('button',{name:'Entrevista',exact:true}).waitFor();
- assert.equal(await page.getByRole('button',{name:'Objetivos',exact:true}).count(),0);assert.equal(await page.getByText('Synthetic legacy objective',{exact:true}).count(),0);
+ await page.getByRole('button',{name:'Notas clinicas',exact:true}).waitFor();
+ for(const name of ['Entrevista','Objetivos'])assert.equal(await page.getByRole('button',{name,exact:true}).count(),0);
+ assert.equal(await page.getByText('Synthetic legacy objective',{exact:true}).count(),0);
  return {screenshot:await shot('29-historical-record')};
  });
 await test('E04','Cita histórica y continuidad de agenda','Historial muestra cita completada y nota conservada.',async()=>{
@@ -226,7 +229,7 @@ await test('E06','Aislamiento real entre A/B y paciente nuevo','Cada profesional
  const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,deviceScaleFactor:1,locale:'es-MX',timezoneId:'America/Mexico_City'});page=await mobile.newPage();instrument(page);
  const mobEmail='mobile-'+Date.now()+'@ui-review.invalid';
  await test('F02','Registro móvil y menor','Formulario usable a 390×844 y error visible.',async()=>{await page.goto(base);await settle();f=await reg();await fill(f,mobEmail,'2015-01-01','+525500001112');await shot('33-mobile-registration');await click(page,submit(f),'/api/auth/register/patient',400);await text('El registro independiente requiere tener 18 años o más.');const d=await layout(page,'mobile-registration');return {observed:'Formulario interactuado; menor rechazado. Ancho '+d.documentWidth+'/'+d.viewport+' px.',screenshot:await shot('34-mobile-minor-error')};},[400]);
- await test('F03','Alta adulta y login móvil','Registro e identidad accesibles.',async()=>{await fill(f,mobEmail,'1990-05-20','+525500001112');await click(page,submit(f),'/api/auth/register/patient',202);await login(mobEmail);await text('Todavía no tienes psicólogo vinculado.');const d=await layout(page,'mobile-identity');return {observed:'Alta/login reales en móvil; ancho '+d.documentWidth+'/'+d.viewport+' px.',screenshot:await shot('35-mobile-identity')};});
+ await test('F03','Alta adulta y login móvil','Registro e identidad accesibles.',async()=>{await fill(f,mobEmail,'1990-05-20','+525500001112');await click(page,submit(f),'/api/auth/register/patient',202);await login(mobEmail);await text('Tu cuenta está registrada');const d=await layout(page,'mobile-identity');return {observed:'Alta/login reales en móvil; ancho '+d.documentWidth+'/'+d.viewport+' px.',screenshot:await shot('35-mobile-identity')};});
  await test('F04','Dashboard móvil','Estado vacío y navegación inferior utilizables.',async()=>{await page.getByRole('heading',{name:'Vinculación clínica',exact:true}).scrollIntoViewIfNeeded();const d=await layout(page,'mobile-dashboard');return {observed:'Ancho documento '+d.documentWidth+'/'+d.viewport+' px. Navegación inferior capturada.',screenshot:await shot('36-mobile-dashboard')};});
  await test('F05','Verificación email móvil','Abrir enlace real en nueva pestaña y confirmar.',async()=>{await page.reload();await settle();await click(page,ident().getByRole('button',{name:'Solicitar enlace',exact:true}),'/api/auth/verification/email/request',200);const secret=(await rpc('mailbox',{email:mobEmail,channel:'email'})).secret;const p=await mobile.newPage();instrument(p);await p.goto(base+'/#verifyEmail='+secret);await settle(p);assert.equal(await ident(p).getByRole('textbox',{name:'Token del enlace recibido'}).inputValue(),secret);await click(p,ident(p).getByRole('button',{name:'Confirmar correo',exact:true}),'/api/auth/verification/email/confirm',200);page=p;return {screenshot:await shot('37-mobile-email-verified')};});
  await test('F06','Verificación SMS móvil','Ambos contactos verificados.',async()=>{await click(page,ident().getByRole('button',{name:'Solicitar SMS',exact:true}),'/api/auth/verification/sms/request',200);const secret=(await rpc('mailbox',{email:mobEmail,channel:'sms'})).secret;await ident().getByRole('textbox',{name:'Código SMS',exact:true}).fill(secret);await click(page,ident().getByRole('button',{name:'Confirmar teléfono',exact:true}),'/api/auth/verification/sms/confirm',200);await ident().getByText('Verificado',{exact:true}).nth(1).waitFor({state:'visible',timeout:8000});assert.equal(await ident().getByText('Verificado',{exact:true}).count(),2);return {screenshot:await shot('38-mobile-both-verified')};});
@@ -239,13 +242,9 @@ await test('E06','Aislamiento real entre A/B y paciente nuevo','Cada profesional
  const body=await p.locator('body').innerText();assert.ok(!body.includes('Validation error')&&!body.includes('birthDate cannot'));
  return {screenshot:await shot('48-mobile-spanish-errors',p)};
  },[400]);
- await test('F11','Histórico móvil y entrevista cerrable','Identidad funciona; modal explícito puede cerrarse.',async()=>{
+ await test('F11','Identidad histórica en móvil','Nombre editable y contacto verificado con DOB histórica desconocida.',async()=>{
  const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,deviceScaleFactor:1,locale:'es-MX'}),p=await ctx.newPage();instrument(p);await login('p@episodes.invalid',demoPw,p);await text('Desconocida en el registro histórico',p);
  await ident(p).getByText('Verificado',{exact:true}).nth(1).waitFor();
- assert.equal(await p.getByRole('button',{name:'Cerrar entrevista',exact:true}).count(),0);
- await p.getByRole('button',{name:'Completar entrevista',exact:true}).click();
- await shot('49-mobile-interview-closable',p);
- await p.getByRole('button',{name:'Cerrar entrevista',exact:true}).click();
  await ident(p).getByRole('textbox',{name:'Nombre',exact:true}).focus();
  await layout(p,'mobile-historical');
  return {screenshot:await shot('50-mobile-historical-personal-access',p)};

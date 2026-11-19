@@ -9,7 +9,6 @@ import {
   createPatientTask,
   updatePatientTask,
   deletePatientTask,
-  upsertPatientInterview,
   createPatientClinicalNote,
   updatePatientClinicalNote,
   deletePatientClinicalNote,
@@ -19,7 +18,6 @@ import {
   validateCreateTaskPayload,
   validateUpdateTaskPayload,
 } from './patients.tasks.validators.js';
-import { validatePatientInterviewPayload } from './patients.intake.validators.js';
 import { validateCreateClinicalNotePayload, validateUpdateClinicalNotePayload } from './patients.clinical-notes.validators.js';
 import { createForbiddenError, ensurePsychologist, isPatient } from '../auth/auth.permissions.js';
 
@@ -90,26 +88,6 @@ export const deletePatientHandler = async (req, res, next) => {
     }
 
     return successResponse(res, null, 'Patient deleted successfully');
-  } catch (error) {
-    return next(error);
-  }
-};
-
-export const upsertPatientInterviewHandler = async (req, res, next) => {
-  try {
-    const errors = validatePatientInterviewPayload(req.body);
-
-    if (errors.length > 0) {
-      return errorResponse(res, 'Validation error', 400, errors);
-    }
-
-    const patient = await upsertPatientInterview(req.params.id, req.body, req.user);
-
-    if (!patient) {
-      return errorResponse(res, 'Patient not found', 404);
-    }
-
-    return successResponse(res, patient, 'Interview saved successfully');
   } catch (error) {
     return next(error);
   }

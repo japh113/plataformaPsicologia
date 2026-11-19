@@ -6,7 +6,13 @@ const button=(p,name)=>p.getByRole('button',{name,exact:true});
 function watch(p){p.on('pageerror',()=>events.push({scenario:current,type:'pageerror',expected:false}));p.on('response',r=>{if(r.status()>=400)events.push({scenario:current,type:'http',status:r.status(),expected:allowed.has(r.status())});});}
 async function shot(id,p=pac||psy){await p.screenshot({path:out+'/screenshots/'+id+'.png',fullPage:true,animations:'disabled',mask:[p.locator('input'),p.locator('textarea'),p.getByText(/@|Password demo:/)],maskColor:'#475569'});screenshots.push({file:'screenshots/'+id+'.png',scenario:current,secretsMasked:true});save();}
 async function scenario(id,fn,statuses=[]){current=id;allowed=new Set(statuses);try{await fn();await shot(id);results.push({id,status:'PASS'});}catch(e){fs.writeFileSync(control+'/browser-failure.txt',e.stack||e.message);results.push({id,status:'FAIL',failureCategory:e.name==='TimeoutError'?'timeout':'assertion'});try{await shot(id+'-failure');}catch{}save();throw Error('Scenario '+id+' failed');}save();console.log(id+' PASS');}
-async function login(id){const context=await browser.newContext({viewport:{width:375,height:812},locale:'es-MX'}),p=await context.newPage();watch(p);await p.goto(base);await p.locator('input[name=email]').fill(id+'@bilateral.invalid');await p.locator('input[name=password]').fill('Episode-Demo-Only-284!');await button(p,'Entrar').click();const nav=p.getByRole('navigation',{name:'Navegación móvil'});await nav.waitFor();const entry=nav.getByRole('button',{name:'Admisión',exact:true});await entry.click();await p.getByRole('heading',{name:'Admisiones individuales',exact:true}).waitFor();assert.ok(await nav.evaluate(n=>n.scrollWidth<=n.clientWidth));return p;}
+async function signIn(p,id){
+  await p.goto(base);
+  await p.locator('input[name=email]').fill(id+'@bilateral.invalid');
+  await p.locator('input[name=password]').fill('Episode-Demo-Only-284!');
+  await button(p,'Entrar').click();
+}
+async function login(id){const context=await browser.newContext({viewport:{width:375,height:812},locale:'es-MX'}),p=await context.newPage();watch(p);await signIn(p,id);const nav=p.getByRole('navigation',{name:'Navegación móvil'});await nav.waitFor();const entry=nav.getByRole('button',{name:'Admisión',exact:true});await entry.click();await p.getByRole('heading',{name:'Admisiones individuales',exact:true}).waitFor();assert.ok(await nav.evaluate(n=>n.scrollWidth<=n.clientWidth));return p;}
 async function json(p,path='',body){return p.evaluate(async({api,path,body})=>{const r=await fetch(api+'/admissions'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+localStorage.getItem('psicopanel_auth_token'),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,body:await r.json()};},{api,path,body});}
 async function open(p){await Promise.all([p.waitForResponse(r=>r.url().endsWith('/admissions')&&r.status()===200),button(p,'Actualizar admisiones').click()]);await p.getByRole('article',{name:'Detalle de admisión'}).waitFor({state:'hidden'});await p.getByRole('region',{name:'Admisiones individuales',exact:true}).locator('li button').first().click();await p.getByRole('heading',{name:'Admisión individual ficticia',exact:true}).waitFor();}
 async function saveDraft(){await Promise.all([pac.waitForResponse(r=>r.url().endsWith('/save')&&r.status()===200),button(pac,'Guardar borrador privado').click()]);await pac.waitForLoadState('networkidle');}
@@ -15,6 +21,41 @@ async function main(){
  browser=await chromium.launch({headless:true,args:['--no-sandbox',...(process.env.REVIEW_FRONTEND_IP?['--host-resolver-rules=MAP frontend.localhost '+process.env.REVIEW_FRONTEND_IP]:[])]});
  fs.writeFileSync(control+'/runtime.json',JSON.stringify({playwright:require('playwright/package.json').version,chromium:browser.version(),node:process.version,revision:process.env.REVIEW_REVISION,headless:true}));
  await scenario('ADM01',async()=>{psy=await login('bp1');pac=await login('bq1');selected=(await json(pac)).body.data[0].id;await open(psy);await open(pac);assert.ok(await button(pac,'Aceptar asignación').isDisabled());assert.equal(await psy.getByText('Borrador privado',{exact:true}).count(),0);});
+ await scenario('ADM23',async()=>{
+   for(const [id,status,viewport] of [['bp1',503,{width:1280,height:900}],['bq1',403,{width:375,height:812}]]){
+     const context=await browser.newContext({viewport,locale:'es-MX'}),page=await context.newPage();
+     watch(page);
+     let failedReads=0;
+     const patients=url=>url.pathname==='/api/patients';
+     await page.route(patients,async route=>{
+       if(route.request().method()!=='GET')return route.continue();
+       failedReads++;
+       return route.fulfill({status,json:{success:false,message:'Fallo clínico ficticio'},headers:{'access-control-allow-origin':'*'}});
+     });
+     try{
+       await signIn(page,id);
+       const nav=viewport.width<768?page.getByRole('navigation',{name:'Navegación móvil'}):page.locator('aside');
+       await page.getByRole('heading',{name:'No pudimos sincronizar la informacion',exact:true}).waitFor();
+       assert.ok(failedReads>0);
+       if(id==='bq1')await page.getByRole('heading',{name:'Mi identidad y contactos',exact:true}).waitFor();
+       await button(nav,'Vinculación bilateral').click();
+       await page.getByText(/Acuerdo completado/).first().waitFor();
+       await button(nav,'Admisión').click();
+       const list=page.getByRole('region',{name:'Admisiones individuales',exact:true});
+       await list.locator('li button').filter({hasText:'Autoadministrada'}).click();
+       await page.getByRole('heading',{name:'Admisión individual ficticia',exact:true}).waitFor();
+       await page.getByText(/Episodio preparado:/).waitFor();
+       assert.equal(await button(page,'Activar tratamiento').count(),0);
+       await shot('ADM23-'+id,page);
+     }finally{await context.close();}
+   }
+   const unassigned=await login('bq2');
+   try{
+     await unassigned.getByText('No tienes admisiones asignadas.',{exact:true}).waitFor();
+     assert.equal(await button(unassigned,'Aceptar asignación').count(),0);
+     assert.deepEqual((await json(unassigned)).body.data,[]);
+   }finally{await unassigned.context().close();}
+ },[403,503]);
  await scenario('ADM02',async()=>{await pac.getByLabel(/Acepto específicamente esta asignación/).check();await button(pac,'Aceptar asignación').click();await pac.getByRole('heading',{name:'Borrador privado',exact:true}).waitFor();await open(psy);initial=(await json(psy,'/'+selected)).body.data;});
  await scenario('ADM03',async()=>{await pac.getByLabel('Motivo ficticio para este ensayo',{exact:true}).fill('Motivo exclusivo de ensayo');await pac.getByLabel('Contexto ficticio adicional',{exact:true}).fill('Borrador ficticio secreto');await saveDraft();assert.deepEqual((await json(psy,'/'+selected)).body.data,initial);assert.doesNotMatch(JSON.stringify((await json(psy)).body),/Borrador ficticio|answers|revision|draft/i);assert.ok(await button(pac,'Enviar versión inmutable').isDisabled());});
  await scenario('ADM04',async()=>{await send();await open(psy);await psy.locator('details').filter({hasText:'Borrador ficticio secreto'}).waitFor();assert.ok(await button(psy,'Registrar validación exacta').isDisabled());});

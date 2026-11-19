@@ -9,10 +9,9 @@ const app = await readFile(new URL('../../src/App.jsx',import.meta.url),'utf8');
 const follow = { consultations: [{ id: 'c',scheduledDate: '2026-04-08',scheduledTime: '11:00:00',tasks: [] }],unassignedTasks: [] };
 const primary = { id: 'p',fullName: 'Fictional P',tasks: [{ id: 't',text: 'task',completed: false }] };
 
-export function harness({ previous = null, followRequest = async () => follow, put = async () => ({ ...primary,interviewCompleted: true,
-  interview: { birthDate: '1990-01-01',birthPlace: 'Fictional place',completedAt: '2026-10-28T12:00:00Z' } }) } = {}) {
+export function harness({ previous = null, followRequest = async () => follow } = {}) {
   const state = { patients: previous ? [previous] : [],selected: previous,appointments: [],reminders: [],relationships: [],
-    error: '',loading: false,success: [],warnings: [],errors: [],modal: true,form: null,puts: 0,mainReads: 0,followReads: 0,token: 'session-p' };
+    error: '',loading: false,success: [],warnings: [],errors: [],VistaActiva: 'dashboard',mainReads: 0,followReads: 0,token: 'session-p' };
   const assign = key => value => { state[key] = typeof value === 'function' ? value(state[key]) : value; };
   const sessionEpoch = { current: 0 };
   const context = {
@@ -32,12 +31,8 @@ export function harness({ previous = null, followRequest = async () => follow, p
     setReminders: assign('reminders'),setCareRelationships: assign('relationships'),setErrorCarga: assign('error'),
     setCargandoDatos: assign('loading'),setAppointmentWaitlist: () => {},setAvailability: () => {},
     setAvailabilityDraft: () => {},setAvailabilityExceptions: () => {},
-    guardandoEntrevista: false,setGuardandoEntrevista: assign('saving'),
-    upsertPatientInterview: async (...args) => { state.puts++; return put(...args); },
-    mapUiInterviewToBackendInterview: value => value,buildInterviewDraftForm: patient => patient?.entrevista || {},
-    setPatientInterviewForm: assign('form'),todayDate: '2026-10-28',
+    todayDate: '2026-10-28',
     showSuccessFeedback: message => state.success.push(message),showErrorFeedback: message => state.errors.push(message),showWarningFeedback: message => state.warnings.push(message),
-    patientProfile: { id: 'p' },patientInterviewForm: {},setShowPatientInterview: assign('modal'),
   };
   for (const setter of new Set(app.match(/\bset[A-Z]\w+/g))) {
     if (!context[setter]) context[setter] = assign(setter.slice(3));
@@ -82,6 +77,5 @@ export function harness({ previous = null, followRequest = async () => follow, p
   };
   const invoke = (name, ...args) => capture(name)(...args);
   const task = taskId => invoke('toggleTask',taskId);
-  const save = run('  const saveInterview =','  const toggleTask =','({ saveInterview,handleSaveRequiredInterview })');
-  return { state,context,refresh,load,selected,appointments,reminders,task,invoke,capture,reset,...guards,...save,sessionEpoch };
+  return { state,context,refresh,load,selected,appointments,reminders,task,invoke,capture,reset,...guards,sessionEpoch };
 }

@@ -65,40 +65,6 @@ export const mapBackendSessionToUiSession = (session) => ({
   actualizadaEn: session.updatedAt || null,
 });
 
-export const mapBackendInterviewToUiInterview = (interview) => {
-  if (!interview) {
-    return null;
-  }
-
-  return {
-    fechaNacimiento: interview.birthDate || '',
-    lugarNacimiento: interview.birthPlace || '',
-    ocupacion: interview.occupation || '',
-    hobbies: interview.hobbies || '',
-    estadoCivil: interview.maritalStatus || '',
-    familia: interview.familyMembers || '',
-    viveCon: interview.livesWith || '',
-    enfermedadesFisicas: interview.physicalIllnesses || '',
-    fechaEntrevista: interview.completedAt ? String(interview.completedAt).slice(0, 10) : '',
-    indicadores: {
-      insomnio: Boolean(interview.insomnia),
-      pesadillas: Boolean(interview.nightmares),
-      miedosOFobias: Boolean(interview.fearsOrPhobias),
-      accidentes: Boolean(interview.accidents),
-      consumoAlcohol: Boolean(interview.alcoholUse),
-      consumoTabaco: Boolean(interview.tobaccoUse),
-      consumoDrogas: Boolean(interview.drugUse),
-      maltratoPsicologico: Boolean(interview.psychologicalAbuse),
-      maltratoFisico: Boolean(interview.physicalAbuse),
-      deseoDeMorir: Boolean(interview.deathWish),
-      intentosSuicidas: Boolean(interview.suicideAttempts),
-    },
-    completadaEn: interview.completedAt || null,
-    creadaEn: interview.createdAt || null,
-    actualizadaEn: interview.updatedAt || null,
-  };
-};
-
 export const mapBackendFollowUpToUiFollowUp = (followUp) => ({
   consultas: followUp.consultations.map(entry => ({
     id: String(entry.id), fecha: entry.scheduledDate, hora: entry.scheduledTime,
@@ -124,35 +90,11 @@ export const mapBackendPatientToUiPatient = (patient) => {
     sesiones: Array.isArray(patient.clinicalNotes || patient.sessions)
       ? (patient.clinicalNotes || patient.sessions).map(mapBackendSessionToUiSession)
       : [],
-    entrevistaCompleta: Boolean(patient.interviewCompleted),
-    entrevista: mapBackendInterviewToUiInterview(patient.interview),
     email: patient.email || '',
     telefono: patient.phone || '',
     estado: backendToUiStatusMap[patient.status] || 'activo',
   };
 };
-
-export const mapUiInterviewToBackendInterview = (interview) => ({
-  birthDate: interview.fechaNacimiento || '',
-  birthPlace: interview.lugarNacimiento || '',
-  occupation: interview.ocupacion || '',
-  hobbies: interview.hobbies || '',
-  maritalStatus: interview.estadoCivil || '',
-  familyMembers: interview.familia || '',
-  livesWith: interview.viveCon || '',
-  physicalIllnesses: interview.enfermedadesFisicas || '',
-  insomnia: Boolean(interview.indicadores?.insomnio),
-  nightmares: Boolean(interview.indicadores?.pesadillas),
-  fearsOrPhobias: Boolean(interview.indicadores?.miedosOFobias),
-  accidents: Boolean(interview.indicadores?.accidentes),
-  alcoholUse: Boolean(interview.indicadores?.consumoAlcohol),
-  tobaccoUse: Boolean(interview.indicadores?.consumoTabaco),
-  drugUse: Boolean(interview.indicadores?.consumoDrogas),
-  psychologicalAbuse: Boolean(interview.indicadores?.maltratoPsicologico),
-  physicalAbuse: Boolean(interview.indicadores?.maltratoFisico),
-  deathWish: Boolean(interview.indicadores?.deseoDeMorir),
-  suicideAttempts: Boolean(interview.indicadores?.intentosSuicidas),
-});
 
 export const mapUiPatientToBackendPatient = (patient) => {
   const { firstName, lastName } = splitFullName(patient.nombre);

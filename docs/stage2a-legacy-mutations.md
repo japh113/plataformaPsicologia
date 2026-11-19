@@ -1,5 +1,7 @@
 # Mutaciones legacy — inventario revalidado y barrera B
 
+**Corte vigente.** AB-23 conserva las cinco denegaciones y el fallback de capacidades activas. La fila del PUT de entrevista documenta su estado en B. El [incremento vigente](project-checkpoint.md#estado-y-uso) retira ese PUT y sus lectores globales.
+
 Estado operativo al 29 de octubre de 2026: base `main` `a1720245083008399a3543ca4b794ec4d1289d5a`; A/B/C/D1/D2 y #25–#27 integrados, D3 pendiente. [Resumen y backlog](operational-status.md). AB-23 sigue implementado: D2 no reabre las cinco entradas legacy ni activa permisos por episodio. Instalación y despliegue habitual sin acreditar. El inventario y los resultados siguientes conservan su corte histórico B/C (18–19 de octubre; bases 0f2ebba/543442e); esta revisión documental contrasta los bloqueos con el código sin ejecutar nuevos ensayos.
 
 Se recorrieron [auth.routes](../backend/src/modules/auth/auth.routes.js), [auth.controller](../backend/src/modules/auth/auth.controller.js), [auth.service](../backend/src/modules/auth/auth.service.js), [patients.routes](../backend/src/modules/patients/patients.routes.js), [patients.controller](../backend/src/modules/patients/patients.controller.js), [patients.service](../backend/src/modules/patients/patients.service.js), [permisos](../backend/src/modules/auth/auth.permissions.js), SQL, scripts y clientes. Se buscaron todos los escritores de care_relationships, psychologist_patient_access y users.patient_id. Ningún inventario/ensayo consultó la base habitual.

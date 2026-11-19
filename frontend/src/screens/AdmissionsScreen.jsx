@@ -4,7 +4,7 @@ import { useCallback,useEffect,useRef,useState } from 'react';
 import { apiRequest } from '../api/client';
 const style='rounded-lg border border-slate-300 p-2';
 const button='rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50';
-const labels={awaiting_document:'Esperando documentación',documented:'Documentada',revoked:'Revocada: consulta propia',proposed:'Pendiente de aceptación',accepted:'Aceptada',awaiting_submission:'Esperando envío',submitted:'Enviada',correction_requested:'Corrección solicitada',validated:'Validación registrada'};
+const labels={awaiting_document:'Esperando documentación',documented:'Documentada para revisión',revoked:'Revocada: consulta propia',proposed:'Pendiente de aceptación',accepted:'Aceptada',awaiting_submission:'Esperando envío',submitted:'Enviada para revisión',correction_requested:'Corrección solicitada',validated:'Validación registrada'};
 const get=async path=>(await apiRequest('/admissions'+path)).data;
 function AdmissionDetail({id,professional,onRefresh,onRevoked}){
   const [data,setData]=useState(null),[draft,setDraft]=useState(null),[answers,setAnswers]=useState({}),[confirmed,setConfirmed]=useState(false),[revokeConfirmed,setRevokeConfirmed]=useState(false),[send,setSend]=useState(false);
@@ -67,7 +67,7 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
 }
 export default function AdmissionsScreen({currentUser}){
   const professional=currentUser.role==='psychologist';
-  const [items,setItems]=useState([]),[agreements,setAgreements]=useState([]),[agreement,setAgreement]=useState(''),[episode,setEpisode]=useState(''),[selected,setSelected]=useState(''),[selectedMode,setSelectedMode]=useState(''),[mode,setMode]=useState('self');
+  const [items,setItems]=useState(null),[agreements,setAgreements]=useState([]),[agreement,setAgreement]=useState(''),[episode,setEpisode]=useState(''),[selected,setSelected]=useState(''),[selectedMode,setSelectedMode]=useState(''),[mode,setMode]=useState('self');
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[prepareConfirmed,setPrepareConfirmed]=useState(false),[assignConfirmed,setAssignConfirmed]=useState(false);
   const operations=useRef(new Map());
   const refresh=async()=>setItems(await get(''));
@@ -84,7 +84,7 @@ export default function AdmissionsScreen({currentUser}){
     <h1 className="text-2xl font-bold">Admisiones individuales</h1>
     <p>Ensayo ficticio aislado. Plantilla sin validación clínica de mínimos. Aceptar, enviar o validar no activa tratamiento.</p>
     {error&&<p role="alert">{error}</p>}
-    <button className={button} disabled={busy} onClick={()=>{setSelected('');refresh().catch(e=>setError(e.message));}}>Actualizar admisiones</button>
+    <button className={button} disabled={busy} onClick={()=>{setSelected('');setError('');refresh().catch(e=>setError(e.message));}}>Actualizar admisiones</button>
     {professional&&<div className="rounded-xl border bg-white p-5 space-y-3"><h2 className="font-bold">Asignar plantilla predefinida</h2>
       <label className="block" htmlFor="admission-mode">Modalidad de entrevista</label><select id="admission-mode" className={style} value={mode} disabled={busy||Boolean(episode)} onChange={e=>{setMode(e.target.value);setAssignConfirmed(false);}}><option value="self">Autoadministrada</option><option value="directed">Dirigida por el profesional</option></select>
       <label className="block" htmlFor="admission-agreement">Acuerdo bilateral vigente</label><select id="admission-agreement" className={style+' block w-full'} value={agreement} disabled={busy} onChange={e=>{setAgreement(e.target.value);setEpisode('');setPrepareConfirmed(false);setAssignConfirmed(false);}}><option value="">Seleccionar acuerdo</option>{agreements.map(g=><option key={g.id} value={g.id}>Acuerdo {g.id}</option>)}</select>
@@ -93,7 +93,8 @@ export default function AdmissionsScreen({currentUser}){
       {episode&&<><p>Episodio preparado {episode}. Plantilla: Admisión individual ficticia, versión 1.</p><label className="block"><input type="checkbox" checked={assignConfirmed} onChange={e=>setAssignConfirmed(e.target.checked)}/> Asignar esta plantilla a este episodio y al titular del acuerdo.</label>
         <button className={button} disabled={busy||!assignConfirmed} onClick={()=>create('assign')}>Asignar plantilla</button></>}
     </div>}
-    <ul className="space-y-2">{items.map(item=><li key={item.id}><button className={style+' w-full text-left'} onClick={()=>{setSelectedMode(item.mode);setSelected(item.id);}}>Episodio {item.episodeId} · {item.professionalName} · {labels[item.state]} · {labels[item.reviewState]}</button></li>)}</ul>
+    {items?.length===0&&<p role="status">No tienes admisiones asignadas.</p>}
+    {items?.length>0&&<ul className="space-y-2">{items.map(item=><li key={item.id}><button className={style+' w-full text-left'} onClick={()=>{setSelectedMode(item.mode);setSelected(item.id);}}>Episodio {item.episodeId} · {item.professionalName} · {item.mode==='directed'?'Dirigida':'Autoadministrada'} · {labels[item.state]}{labels[item.reviewState]&&' · '+labels[item.reviewState]}</button></li>)}</ul>}
     {selected&&selectedMode==='directed'&&<DirectedAdmission key={selected} id={selected} professional={professional}/>}
     {selected&&selectedMode!=='directed'&&<AdmissionDetail key={selected} id={selected} professional={professional} onRefresh={refresh} onRevoked={()=>setSelected('')}/>}
   </section>;

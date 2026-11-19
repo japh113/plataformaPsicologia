@@ -1,5 +1,7 @@
 # Mi seguimiento: consultas y tareas del paciente — Issue #21
 
+**Corte vigente.** El [incremento de admisión](project-checkpoint.md#estado-y-uso) retira el guardado y el modal de entrevista global de los escenarios históricos de seguimiento. La cronología, las tareas y la recuperación de lecturas conservan su contrato.
+
 Implementación autorizada por el propietario para [Issue #21](https://github.com/japh113/plataformaPsicologia/issues/21), desde main `af72a381f4b3a5a0e81df104baecb60226025a11` (#26 integrado). Rama `feat/patient-followup-timeline`; entrega mediante Draft PR, sin merge, auto-merge, despliegue ni migraciones sobre entornos habituales. El encargo sustituye la advertencia histórica «no iniciar» del issue para este alcance concreto.
 
 Se conservan los contratos de [privacidad #25](patient-response-privacy.md) y [objetivos #26](objective-completion-authorization.md), RN-24/RN-27/RN-72 y la autorización legacy. No se implementan episodios ni publicación clínica.

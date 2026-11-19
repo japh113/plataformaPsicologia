@@ -206,7 +206,6 @@ export default function DashboardScreen({
   careRelationships = [],
   relationshipInvitePreview = null,
   onOpenPatient,
-  onCompleteInterview,
   onViewAppointments,
   onRetryFollowUp,
   onToggleTask,
@@ -241,7 +240,6 @@ export default function DashboardScreen({
   const totalTasks = patientProfile?.tareas?.length || 0;
   const followUp = getPatientFollowUpGroups(patientProfile);
   const totalConsultations = followUp.consultations.length;
-  const interviewCompleted = Boolean(patientProfile?.entrevistaCompleta);
   const hasLegacyRelationship = careRelationships.some(relationship => relationship.status === 'active');
   const patientTaskGroups = !patientProfile?.seguimiento ? (patientProfile?.tareas?.length ? [{
     id: 'available', tasks: patientProfile.tareas, title: 'Tus tareas',
@@ -260,20 +258,6 @@ export default function DashboardScreen({
           </div>
         </div>
 
-        {patientProfile && hasLegacyRelationship && !interviewCompleted && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 shadow-sm">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Entrevista inicial pendiente</p>
-                <p className="mt-2 text-sm text-amber-900">Puedes completar la entrevista de tu atención histórica. Tu identidad y tus funciones personales siguen disponibles.</p>
-              </div>
-              <button onClick={onCompleteInterview} className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-amber-700">
-                Completar entrevista
-              </button>
-            </div>
-          </div>
-        )}
-
         <div className="rounded-3xl border border-slate-200 bg-white p-5 md:p-6 shadow-sm">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
@@ -281,12 +265,7 @@ export default function DashboardScreen({
               {!hasLegacyRelationship ? (
                 <>
                   <h3 className="mt-2 text-xl font-black text-slate-900">Tu cuenta está registrada</h3>
-                  <p className="mt-2 text-sm text-slate-500">Puedes verificar tus contactos y administrar tu identidad. Todavía no tienes psicólogo vinculado. La entrevista inicial será necesaria antes de activar un episodio terapéutico, con validación del psicólogo responsable; no es un requisito de registro.</p>
-                </>
-              ) : !interviewCompleted ? (
-                <>
-                  <h3 className="mt-2 text-xl font-black text-slate-900">Completar tu entrevista inicial</h3>
-                  <p className="mt-2 text-sm text-slate-500">Puedes aportar tu información cuando estés listo. La entrevista pendiente no bloquea tus funciones personales ni activa un episodio nuevo.</p>
+                  <p className="mt-2 text-sm text-slate-500">Puedes verificar tus contactos y administrar tu identidad.</p>
                 </>
               ) : nextAppointment ? (
                 <>
@@ -330,20 +309,11 @@ export default function DashboardScreen({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {!hasLegacyRelationship ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-4">
+          {!hasLegacyRelationship && (
             <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4 md:p-5 shadow-sm">
               <h3 className="text-sm font-medium text-indigo-700">Cuenta personal</h3>
               <p className="mt-2 text-2xl font-bold text-indigo-700">Registrada</p>
-              <p className="mt-2 text-sm text-indigo-700">Sin episodio terapéutico nuevo</p>
-            </div>
-          ) : (
-            <div className={`p-4 md:p-5 rounded-xl shadow-sm border transition hover:shadow-md ${interviewCompleted ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
-              <div className="flex items-center justify-between">
-                <h3 className={`font-medium text-sm md:text-base ${interviewCompleted ? 'text-emerald-700' : 'text-amber-700'}`}>Entrevista</h3>
-                <AlertCircle className={interviewCompleted ? 'text-emerald-500' : 'text-amber-500'} size={24} />
-              </div>
-              <p className={`text-2xl md:text-3xl font-bold mt-2 ${interviewCompleted ? 'text-emerald-700' : 'text-amber-700'}`}>{interviewCompleted ? 'Lista' : 'Pendiente'}</p>
             </div>
           )}
           <div className="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-gray-100 transition hover:shadow-md">

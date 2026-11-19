@@ -1,11 +1,10 @@
 import { clinicalDeletionError } from '../../utils/clinicalIntegrity.js';
 import db from '../../config/db.js';
-import { buildPatientEntity, buildPatientInterviewEntity } from './patients.model.js';
+import { buildPatientEntity } from './patients.model.js';
 import {
   buildPatientAccessScope,
   createForbiddenError,
   ensurePsychologist,
-  isPatient,
   isPsychologist,
 } from '../auth/auth.permissions.js';
 import { logAuditEvent } from '../../utils/audit.js';
@@ -49,40 +48,6 @@ const patientSelectColumns = `
   p.notes,
   p.age,
   p.reason_for_consultation,
-  EXISTS (
-    SELECT 1
-    FROM patient_intakes pi
-    WHERE pi.patient_id = p.id
-  ) AS interview_completed,
-  (
-    SELECT json_build_object(
-      'birthDate', pi.birth_date,
-      'birthPlace', pi.birth_place,
-      'occupation', pi.occupation,
-      'hobbies', pi.hobbies,
-      'maritalStatus', pi.marital_status,
-      'familyMembers', pi.family_members,
-      'livesWith', pi.lives_with,
-      'physicalIllnesses', pi.physical_illnesses,
-      'insomnia', pi.insomnia,
-      'nightmares', pi.nightmares,
-      'fearsOrPhobias', pi.fears_or_phobias,
-      'accidents', pi.accidents,
-      'alcoholUse', pi.alcohol_use,
-      'tobaccoUse', pi.tobacco_use,
-      'drugUse', pi.drug_use,
-      'psychologicalAbuse', pi.psychological_abuse,
-      'physicalAbuse', pi.physical_abuse,
-      'deathWish', pi.death_wish,
-      'suicideAttempts', pi.suicide_attempts,
-      'completedAt', pi.completed_at,
-      'createdAt', pi.created_at,
-      'updatedAt', pi.updated_at
-    )
-    FROM patient_intakes pi
-    WHERE pi.patient_id = p.id
-    LIMIT 1
-  ) AS interview,
   COALESCE(
     (
       SELECT json_agg(
@@ -163,37 +128,6 @@ const mapClinicalNoteRow = (clinicalNote) => ({
   updatedAt: clinicalNote.updatedAt,
 });
 
-const mapInterviewRow = (interview) => {
-  if (!interview) {
-    return null;
-  }
-
-  return {
-    birthDate: normalizeDateValue(interview.birthDate),
-    birthPlace: interview.birthPlace || '',
-    occupation: interview.occupation || '',
-    hobbies: interview.hobbies || '',
-    maritalStatus: interview.maritalStatus || '',
-    familyMembers: interview.familyMembers || '',
-    livesWith: interview.livesWith || '',
-    physicalIllnesses: interview.physicalIllnesses || '',
-    insomnia: Boolean(interview.insomnia),
-    nightmares: Boolean(interview.nightmares),
-    fearsOrPhobias: Boolean(interview.fearsOrPhobias),
-    accidents: Boolean(interview.accidents),
-    alcoholUse: Boolean(interview.alcoholUse),
-    tobaccoUse: Boolean(interview.tobaccoUse),
-    drugUse: Boolean(interview.drugUse),
-    psychologicalAbuse: Boolean(interview.psychologicalAbuse),
-    physicalAbuse: Boolean(interview.physicalAbuse),
-    deathWish: Boolean(interview.deathWish),
-    suicideAttempts: Boolean(interview.suicideAttempts),
-    completedAt: interview.completedAt || null,
-    createdAt: interview.createdAt || null,
-    updatedAt: interview.updatedAt || null,
-  };
-};
-
 const mapPatientRow = (row, actor) => ({
   id: String(row.id),
   firstName: row.first_name,
@@ -205,8 +139,6 @@ const mapPatientRow = (row, actor) => ({
   lastClinicalNoteDate: normalizeDateValue(row.last_clinical_note_date),
   age: row.age,
   reasonForConsultation: row.reason_for_consultation,
-  interviewCompleted: Boolean(row.interview_completed),
-  interview: mapInterviewRow(row.interview),
   tasks: Array.isArray(row.tasks) ? row.tasks.map(task => mapTaskRow(task, actor)) : [],
   clinicalNotes: isPsychologist(actor) && Array.isArray(row.clinical_notes)
     ? row.clinical_notes.map(mapClinicalNoteRow) : [],
@@ -334,43 +266,6 @@ const syncClinicalNoteTasks = async (client, patientId, clinicalNoteId, tasks) =
   }
 };
 
-const getPatientInterviewById = async (patientId) => {
-  const result = await db.query(
-    `
-      SELECT json_build_object(
-        'birthDate', pi.birth_date,
-        'birthPlace', pi.birth_place,
-        'occupation', pi.occupation,
-        'hobbies', pi.hobbies,
-        'maritalStatus', pi.marital_status,
-        'familyMembers', pi.family_members,
-        'livesWith', pi.lives_with,
-        'physicalIllnesses', pi.physical_illnesses,
-        'insomnia', pi.insomnia,
-        'nightmares', pi.nightmares,
-        'fearsOrPhobias', pi.fears_or_phobias,
-        'accidents', pi.accidents,
-        'alcoholUse', pi.alcohol_use,
-        'tobaccoUse', pi.tobacco_use,
-        'drugUse', pi.drug_use,
-        'psychologicalAbuse', pi.psychological_abuse,
-        'physicalAbuse', pi.physical_abuse,
-        'deathWish', pi.death_wish,
-        'suicideAttempts', pi.suicide_attempts,
-        'completedAt', pi.completed_at,
-        'createdAt', pi.created_at,
-        'updatedAt', pi.updated_at
-      ) AS interview
-      FROM patient_intakes pi
-      WHERE pi.patient_id = $1
-      LIMIT 1
-    `,
-    [patientId],
-  );
-
-  return mapInterviewRow(result.rows[0]?.interview || null);
-};
-
 export const getAllPatients = async (actor) => {
   const includeClinicalNotes = isPsychologist(actor);
   const accessScope = buildPatientAccessScope(actor, 'p.id');
@@ -484,17 +379,9 @@ const ensureAppointmentEligibleForClinicalNote = (appointment) => {
   }
 };
 
-const ensurePatientInterviewWriteIsAllowed = ({ actor, currentInterview }) => {
-  if (isPatient(actor) && currentInterview) {
-    throw createForbiddenError('La entrevista ya fue completada y no puede ser editada por el paciente.');
-  }
-};
-
 export const __testables = {
   ensureAppointmentEligibleForClinicalNote,
-  ensurePatientInterviewWriteIsAllowed,
   getTodayDateString,
-  mapInterviewRow,
   mapClinicalNoteRow,
   mapTaskRow,
   mapPatientRow,
@@ -551,118 +438,6 @@ export const deletePatient = async (id, actor) => {
   }
 
   throw clinicalDeletionError('El expediente se conserva. Cambia el estado del paciente a inactivo o dado de alta.');
-};
-
-export const upsertPatientInterview = async (patientId, payload, actor) => {
-  const patient = await getPatientById(patientId, actor);
-
-  if (!patient) {
-    return null;
-  }
-
-  const currentInterview = await getPatientInterviewById(patientId);
-  ensurePatientInterviewWriteIsAllowed({ actor, currentInterview });
-
-  const interview = buildPatientInterviewEntity(payload);
-
-  await db.query(
-    `
-      INSERT INTO patient_intakes (
-        patient_id,
-        birth_date,
-        birth_place,
-        occupation,
-        hobbies,
-        marital_status,
-        family_members,
-        lives_with,
-        physical_illnesses,
-        insomnia,
-        nightmares,
-        fears_or_phobias,
-        accidents,
-        alcohol_use,
-        tobacco_use,
-        drug_use,
-        psychological_abuse,
-        physical_abuse,
-        death_wish,
-        suicide_attempts,
-        completed_at,
-        completed_by_user_id,
-        updated_by_user_id,
-        updated_at
-      )
-      VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9,
-        $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-        COALESCE((SELECT completed_at FROM patient_intakes WHERE patient_id = $1), NOW()),
-        COALESCE((SELECT completed_by_user_id FROM patient_intakes WHERE patient_id = $1), $21),
-        $21,
-        NOW()
-      )
-      ON CONFLICT (patient_id) DO UPDATE
-      SET
-        birth_date = EXCLUDED.birth_date,
-        birth_place = EXCLUDED.birth_place,
-        occupation = EXCLUDED.occupation,
-        hobbies = EXCLUDED.hobbies,
-        marital_status = EXCLUDED.marital_status,
-        family_members = EXCLUDED.family_members,
-        lives_with = EXCLUDED.lives_with,
-        physical_illnesses = EXCLUDED.physical_illnesses,
-        insomnia = EXCLUDED.insomnia,
-        nightmares = EXCLUDED.nightmares,
-        fears_or_phobias = EXCLUDED.fears_or_phobias,
-        accidents = EXCLUDED.accidents,
-        alcohol_use = EXCLUDED.alcohol_use,
-        tobacco_use = EXCLUDED.tobacco_use,
-        drug_use = EXCLUDED.drug_use,
-        psychological_abuse = EXCLUDED.psychological_abuse,
-        physical_abuse = EXCLUDED.physical_abuse,
-        death_wish = EXCLUDED.death_wish,
-        suicide_attempts = EXCLUDED.suicide_attempts,
-        updated_by_user_id = EXCLUDED.updated_by_user_id,
-        updated_at = NOW()
-    `,
-    [
-      patientId,
-      interview.birthDate,
-      interview.birthPlace,
-      interview.occupation,
-      interview.hobbies,
-      interview.maritalStatus,
-      interview.familyMembers,
-      interview.livesWith,
-      interview.physicalIllnesses,
-      interview.insomnia,
-      interview.nightmares,
-      interview.fearsOrPhobias,
-      interview.accidents,
-      interview.alcoholUse,
-      interview.tobaccoUse,
-      interview.drugUse,
-      interview.psychologicalAbuse,
-      interview.physicalAbuse,
-      interview.deathWish,
-      interview.suicideAttempts,
-      actor.id,
-    ],
-  );
-
-  await logAuditEvent(db, {
-    actorUserId: actor.id,
-    actorRole: actor.role,
-    action: 'patient_intake_saved',
-    entityType: 'patient_intake',
-    entityId: patientId,
-    patientId,
-    metadata: {
-      byRole: actor.role,
-    },
-  });
-
-  return getPatientById(patientId, actor);
 };
 
 export const createPatientTask = async (patientId, payload, actor) => {

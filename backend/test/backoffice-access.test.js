@@ -26,7 +26,6 @@ test('clinical services deny administrative roles before any query or transactio
         () => patients.createPatient({}, actor),
         () => patients.updatePatient('1', {}, actor),
         () => patients.deletePatient('1', actor),
-        () => patients.upsertPatientInterview('1', {}, actor),
         ...['Task', 'ClinicalNote'].flatMap(kind => [
           () => patients['createPatient' + kind]('1', {}, actor),
           () => patients['updatePatient' + kind]('1', '1', {}, actor),

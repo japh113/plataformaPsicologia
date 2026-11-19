@@ -183,37 +183,6 @@ test('P2-A/B: GET/PATCH from a previous session have no effects, even same patie
   }
 });
 
-test('P2-C: confirmed interview P cannot close Q modal or touch Q form/feedback/saving, including same patient in new session', async () => {
-  for (const samePatient of [false,true]) {
-    const h=start(),put=deferred();
-    h.context.upsertPatientInterview=()=>{h.state.puts++;return put.promise;};
-    const pending=h.handleSaveRequiredInterview();
-    h.reset();
-    const id=samePatient?'p':'q';
-    h.context.currentUser={id,role:'patient',patientId:id};
-    h.state.token='session-p';
-    const next=mapBackendPatientToUiPatient({ ...raw,id,fullName:'Q current session' });
-    h.state.patients=[next];h.state.selected=next;h.state.form={ value:'Q answer' };
-    h.state.modal=true;h.state.saving=true;h.state.success=[];h.state.errors=[];
-    put.resolve({ ...raw,interviewCompleted:true });await pending;
-    assert.equal(h.state.modal,true);assert.equal(h.state.saving,true);
-    assert.equal(h.state.form.value,'Q answer');assert.equal(h.state.selected,next);
-    assert.equal(h.state.puts,1);assert.equal(h.state.success.length,0);assert.equal(h.state.errors.length,0);
-  }
-});
-
-test('P2-C: current confirmed interview closes only its modal despite optional 500; rejected PUT leaves it open', async () => {
-  const h=start();
-  h.context.getPatientFollowUp=async()=>{throw error(500);};
-  await h.handleSaveRequiredInterview();await tick();
-  assert.equal(h.state.modal,false);assert.equal(h.state.puts,1);
-  assert.equal(h.state.selected.entrevistaCompleta,true);assert.equal(h.state.success.length,1);
-  assert.equal(h.state.selected.seguimientoEstado,'error');
-  const bad=start();bad.context.upsertPatientInterview=async()=>{throw error(500);};
-  await bad.handleSaveRequiredInterview();
-  assert.equal(bad.state.modal,true);assert.equal(bad.state.success.length,0);assert.equal(bad.state.errors.length,1);
-});
-
 test('P2-B: a definitive denial from an older GET still invalidates a newer pending GET', async () => {
   const h=start(),first=deferred(),second=deferred();
   h.context.getPatientFollowUp=()=>first.promise;const old=h.refresh('p');

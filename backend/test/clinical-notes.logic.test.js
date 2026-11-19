@@ -168,7 +168,7 @@ test('mapTaskRow excludes professional context for patients, other roles and mis
 
 test('mapPatientRow excludes private fields even when the query supplies clinical notes', () => {
   const row = { id: 'fictional', notes: 'FICTIONAL_PRIVATE_CONTEXT', risk_level: 'high',
-    interview: { birthPlace: 'FICTIONAL_OWN_ANSWER' },
+    interview: { birthPlace: 'FICTIONAL_RETIRED_ANSWER' }, interview_completed: true,
     tasks: [{ id: 7, text: 'Fictional task', clinicalNoteObjective: 'FICTIONAL_PRIVATE_OBJECTIVE' }],
     objectives: [{ id: 8, text: 'Fictional shared objective' }],
     clinical_notes: [{ id: 10, content: 'FICTIONAL_PRIVATE_CONTENT' }],
@@ -177,13 +177,14 @@ test('mapPatientRow excludes private fields even when the query supplies clinica
     const patient = patientTestables.mapPatientRow(row, actor);
     const serialized = JSON.stringify(patient);
     assert.doesNotMatch(serialized, /FICTIONAL_PRIVATE|"notes"|"riskLevel"|"clinicalNoteObjective"/);
-    assert.equal(patient.interview.birthPlace, 'FICTIONAL_OWN_ANSWER');
+    assert.doesNotMatch(serialized, /FICTIONAL_RETIRED_ANSWER|"interview"|"interviewCompleted"/);
     assert.deepEqual(patient.clinicalNotes, []);
     assert.equal(patient.tasks[0].text, 'Fictional task');
     assert.equal(Object.hasOwn(patient, 'objectives'), false);
   }
   const professional = patientTestables.mapPatientRow(row, { role: 'psychologist' });
   assert.equal(Object.hasOwn(professional, 'objectives'), false);
+  assert.doesNotMatch(JSON.stringify(professional), /FICTIONAL_RETIRED_ANSWER|"interview"|"interviewCompleted"/);
   assert.equal(professional.notes, row.notes);
   assert.equal(professional.riskLevel, row.risk_level);
   assert.equal(professional.tasks[0].clinicalNoteObjective, row.tasks[0].clinicalNoteObjective);
