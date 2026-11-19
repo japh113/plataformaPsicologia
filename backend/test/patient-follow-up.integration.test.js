@@ -198,12 +198,12 @@ test('follow-up: complete HTTP JSON, real dates, task association, privacy and a
       assert.equal(updated.body.data.clinicalNoteObjective,'FICTIONAL_PRIVATE_OBJECTIVE');
       assert.equal((await follow()).body.data.consultations[2].tasks[0].text,'Fictional edited task');
     });
-    await t.test('objective completion and direct note reads stay denied for patients', async () => {
+    await t.test('retired objective operations and direct note reads stay unavailable', async () => {
       const before = await persistence();
-      assert.equal((await request('/patients/p/objectives/' + f.objective,'p','PATCH',{ completed: true })).status,403);
+      assert.equal((await request('/patients/p/objectives/' + f.objective,'p','PATCH',{ completed: true })).status,404);
       assert.equal((await request('/patients/p/clinical-notes/' + f.firstNote)).status,404);
       assert.deepEqual(await persistence(),before);
-      assert.equal((await request('/patients/p/objectives/' + f.objective,'a','PATCH',{ completed: true })).status,200);
+      assert.equal((await request('/patients/p/objectives/' + f.objective,'a','PATCH',{ completed: true })).status,404);
     });
     await t.test('DB rejects cross-patient task-to-note links; no task can appear under a foreign visit', async () => {
       await assert.rejects(db.query(`INSERT INTO patient_tasks(patient_id,text,clinical_note_id)

@@ -29,16 +29,13 @@ import {
 } from './api/availability';
 import {
   createPatient,
-  createPatientObjective,
   createPatientClinicalNote,
-  deletePatientObjective,
   deletePatientTask,
   getPatient,
   getPatientFollowUp,
   getPatients,
   upsertPatientInterview,
   updatePatient,
-  updatePatientObjective,
   updatePatientClinicalNote,
   updatePatientTask,
 } from './api/patients';
@@ -150,8 +147,6 @@ export default function App({onRestrictedSession}) {
   const [sessionActionError, setSessionActionError] = useState('');
   const [guardandoEntrevista, setGuardandoEntrevista] = useState(false);
   const [procesandoTareaId, setProcesandoTareaId] = useState(null);
-  const [creandoObjetivo, setCreandoObjetivo] = useState(false);
-  const [procesandoObjetivoId, setProcesandoObjetivoId] = useState(null);
   const [guardandoCita, setGuardandoCita] = useState(false);
   const [procesandoCitaId, setProcesandoCitaId] = useState(null);
   const [appointmentActionError, setAppointmentActionError] = useState('');
@@ -246,7 +241,7 @@ export default function App({onRestrictedSession}) {
     setSessionActionError('');
     setGuardandoSesion(false);
     setGuardandoEntrevista(false);
-    setCargandoDatos(false); setProcesandoTareaId(null); setCreandoObjetivo(false); setProcesandoObjetivoId(null);
+    setCargandoDatos(false); setProcesandoTareaId(null);
     setGuardandoCita(false); setProcesandoCitaId(null); setGuardandoListaEspera(false); setProcesandoListaEsperaId(null);
     setGuardandoNotas(false); setGuardandoPerfilPaciente(false); setGuardandoPaciente(false);
     setSavingAvailability(false); setSavingAvailabilityException(false);
@@ -308,7 +303,7 @@ export default function App({onRestrictedSession}) {
     setNotasTemp(''); setShowPatientInterview(false); setPatientInterviewForm(buildInterviewDraftForm(null, ''));
     setCargandoDatos(false); setGuardandoEntrevista(false); setGuardandoSesion(false);
     setGuardandoPaciente(false); setGuardandoNotas(false); setGuardandoPerfilPaciente(false);
-    setProcesandoTareaId(null); setCreandoObjetivo(false); setProcesandoObjetivoId(null);
+    setProcesandoTareaId(null);
     setGuardandoCita(false); setProcesandoCitaId(null); setGuardandoListaEspera(false); setProcesandoListaEsperaId(null);
     setSavingAvailability(false); setSavingAvailabilityException(false); setProcessingRelationshipId(null);
     setErrorCarga('Ya no tienes acceso a este expediente. Vuelve a comprobar tu sesión.');
@@ -1294,110 +1289,6 @@ export default function App({onRestrictedSession}) {
     }
   };
 
-  const addObjective = async (objectiveText) => {
-    const isCurrent = beginClinicalOperation();
-    if (!isCurrent()) return false;
-    if (!isPsychologist || !pacienteSeleccionado || creandoObjetivo) {
-      return false;
-    }
-
-    const patientId = pacienteSeleccionado.id;
-    advancePatientRevision(patientId);
-    setCreandoObjetivo(true);
-
-    try {
-      const createdObjective = await createPatientObjective(patientId, { text: objectiveText });
-      if (!isCurrent()) return false;
-      advancePatientRevision(patientId);
-      const uiObjective = mapBackendTaskToUiTask(createdObjective);
-      syncPatientState(patientId, patient => ({
-        ...patient, objetivos: (patient.objetivos || []).some(objective => objective.id === uiObjective.id)
-          ? patient.objetivos : [...(patient.objetivos || []), uiObjective],
-      }));
-      showSuccessFeedback('Objetivo agregado correctamente.');
-      return true;
-    } catch (error) {
-      if (!isCurrent()) return false;
-      advancePatientRevision(patientId);
-      showErrorFeedback(error.message || 'No se pudo crear el objetivo.');
-      return false;
-    } finally {
-      if (isCurrent()) {
-        setCreandoObjetivo(false);
-      }
-    }
-  };
-
-  const toggleObjective = async (objectiveId) => {
-    const isCurrent = beginClinicalOperation();
-    if (!isCurrent()) return false;
-    if (!isPsychologist || !pacienteSeleccionado || procesandoObjetivoId) {
-      return;
-    }
-
-    const objective = (pacienteSeleccionado.objetivos || []).find((currentObjective) => currentObjective.id === objectiveId);
-
-    if (!objective) {
-      return;
-    }
-
-    const patientId = pacienteSeleccionado.id;
-    advancePatientRevision(patientId);
-    setProcesandoObjetivoId(objectiveId);
-
-    try {
-      const updatedObjective = await updatePatientObjective(patientId, objectiveId, {
-        completed: !objective.completada,
-      });
-      if (!isCurrent()) return false;
-      advancePatientRevision(patientId);
-
-      const uiObjective = mapBackendTaskToUiTask(updatedObjective);
-      syncPatientState(patientId, patient => ({
-        ...patient, objetivos: (patient.objetivos || []).map(objective => objective.id === objectiveId ? { ...objective, completada: uiObjective.completada } : objective),
-      }));
-    } catch (error) {
-      if (!isCurrent()) return false;
-      advancePatientRevision(patientId);
-      showErrorFeedback(error.message || 'No se pudo actualizar el objetivo.');
-    } finally {
-      if (isCurrent()) {
-        setProcesandoObjetivoId(null);
-      }
-    }
-  };
-
-  const removeObjective = async (objectiveId) => {
-    const isCurrent = beginClinicalOperation();
-    if (!isCurrent()) return false;
-    if (!isPsychologist || !pacienteSeleccionado || procesandoObjetivoId) {
-      return;
-    }
-
-    const patientId = pacienteSeleccionado.id;
-    advancePatientRevision(patientId);
-    setProcesandoObjetivoId(objectiveId);
-
-    try {
-      await deletePatientObjective(patientId, objectiveId);
-      if (!isCurrent()) return false;
-      advancePatientRevision(patientId);
-
-      syncPatientState(patientId, patient => ({
-        ...patient, objetivos: (patient.objetivos || []).filter(objective => objective.id !== objectiveId),
-      }));
-      showSuccessFeedback('Objetivo retirado; su registro se conserva.');
-    } catch (error) {
-      if (!isCurrent()) return false;
-      advancePatientRevision(patientId);
-      showErrorFeedback(error.message || 'No se pudo retirar el objetivo.');
-    } finally {
-      if (isCurrent()) {
-        setProcesandoObjetivoId(null);
-      }
-    }
-  };
-
   const createSession = async (payload, recordVersion) => {
     const isCurrent = beginClinicalOperation();
     if (!isCurrent()) return false;
@@ -2114,9 +2005,6 @@ export default function App({onRestrictedSession}) {
           onRetryFollowUp={refreshPatientFollowUp}
           onToggleTask={toggleTask}
           onDeleteTask={removeTask}
-          onToggleObjective={toggleObjective}
-          onDeleteObjective={removeObjective}
-          onAddObjective={addObjective}
           clinicalRecordSync={clinicalRecordSync[pacienteSeleccionado.id] || null}
           onRefreshClinicalRecord={refreshClinicalRecord}
           onCreateSession={createSession}
@@ -2130,8 +2018,6 @@ export default function App({onRestrictedSession}) {
           isSavingSession={guardandoSesion}
           isSavingInterview={guardandoEntrevista}
           processingTaskId={procesandoTareaId}
-          isCreatingObjective={creandoObjetivo}
-          processingObjectiveId={procesandoObjetivoId}
         />
       );
     }

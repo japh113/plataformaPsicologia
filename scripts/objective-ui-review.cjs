@@ -1,7 +1,7 @@
 const { chromium } = require('/review/node_modules/playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const results = [], errors = [], objectiveWrites = [];
+const results = [], errors = [], objectiveRequests = [];
 async function main() {
   const browser = await chromium.launch({ headless: true, args: ['--host-resolver-rules=MAP frontend.localhost ' + process.env.FRONTEND_IP] });
   try {
@@ -13,101 +13,91 @@ async function main() {
     const page = await context.newPage();
     page.on('pageerror', () => errors.push('pageerror'));
     page.on('request', request => {
-      if (/\/objectives\//.test(new URL(request.url()).pathname) && request.method() === 'PATCH') objectiveWrites.push(request.url());
+      if (/\/objectives(?:\/|$)/.test(new URL(request.url()).pathname)) objectiveRequests.push(request.method());
     });
     page.on('response', response => {
       const path = new URL(response.url()).pathname;
       if (path.startsWith('/api/') && response.status() >= 400) errors.push(response.status() + ' ' + path);
     });
-    async function login(email) {
+    async function request(path, method = 'GET', data) {
+      return page.request.fetch('http://api:5000/api' + path, {
+        method, ...(data === undefined ? {} : { data }),
+        headers: { Authorization: 'Bearer ' + await page.evaluate(() => localStorage.getItem('psicopanel_auth_token')) },
+      });
+    }
+    async function login(id) {
       await page.goto('http://frontend.localhost:5173');
       await page.getByRole('button', { name: 'Iniciar sesion', exact: true }).click();
       const form = page.locator('form').filter({ has: page.getByRole('button', { name: 'Entrar', exact: true }) });
-      await form.locator('[name=email]').fill(email);
+      await form.locator('[name=email]').fill(id + '@episodes.invalid');
       await form.locator('[name=password]').fill('Episode-Demo-Only-284!');
-      const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/auth/login');
       await form.getByRole('button', { name: 'Entrar', exact: true }).click();
-      assert.equal((await response).status(), 200);
       await page.getByRole('button', { name: 'Cerrar sesion', exact: true }).waitFor();
-      await page.waitForLoadState('networkidle');
     }
-    async function objectives(professional) {
-      if (professional) {
-        await page.locator('aside').getByRole('button', { name: 'Mis Pacientes', exact: true }).click();
-        await page.getByRole('button', { name: 'Expediente', exact: true }).click();
-      } else {
-        await page.getByRole('button', { name: 'Ver detalle', exact: true }).click();
-      }
-      await page.getByRole('button', { name: 'Objetivos', exact: true }).click();
+    async function absentGoals() {
+      await page.waitForLoadState('networkidle');
+      assert.equal(await page.getByRole('button', { name: 'Objetivos', exact: true }).count(), 0);
+      assert.equal(await page.getByRole('button', { name: /Agregar objetivo|Retirar objetivo|Guardar objetivo/ }).count(), 0);
+      assert.equal(await page.getByText(/Avance \d+%|Mis objetivos|Objetivos del proceso|Todavia no hay objetivos/).count(), 0);
+      const response = await request('/patients/p');
+      assert.equal(response.status(), 200);
+      const body = await response.json();
+      assert.equal(Object.hasOwn(body.data, 'objectives'), false);
+      assert.doesNotMatch(JSON.stringify(body), /FICTIONAL_EPISODE_OBJECTIVE_|Synthetic legacy objective/);
+      for (const [path, method, data] of [
+        ['/patients/p/objectives', 'POST', { text: 'Unpermitted' }],
+        ['/patients/p/objectives/1', 'PATCH', { completed: true }],
+        ['/patients/p/objectives/1', 'DELETE'],
+      ]) assert.equal((await request(path, method, data)).status(), 404);
+      return body.data;
     }
     async function shot(name) {
-      await page.screenshot({ path: '/work/' + name + '.png', fullPage: true,
-        mask: [page.locator('input[name=email]'), page.locator('input[name=password]'), page.getByText(/@|Password demo:/)],
-        maskColor: '#475569' });
+      await page.screenshot({ path: '/work/' + name + '.png', fullPage: true, animations: 'disabled',
+        mask: [page.locator('input[name=email]'), page.locator('input[name=password]'), page.getByText(/@|Password demo:/)], maskColor: '#475569' });
     }
-    async function toggle(name, completed) {
-      const wait = page.waitForResponse(r => /\/objectives\//.test(new URL(r.url()).pathname) && r.request().method() === 'PATCH');
-      await page.getByRole('checkbox', { name: 'Cumplimiento de ' + name, exact: true }).click();
-      const response = await wait;
-      assert.equal(response.status(), 200);
-      assert.equal((await response.json()).data.completed, completed);
-      await page.waitForLoadState('networkidle');
-    }
-    await login('a@episodes.invalid');
-    await objectives(true);
-    assert.equal(await page.getByRole('checkbox').count(), 1);
-    await toggle('Synthetic legacy objective', true);
-    await toggle('Synthetic legacy objective', false);
-    await page.getByRole('button', { name: 'Agregar objetivo', exact: true }).click();
-    await page.getByPlaceholder('Ej. Reducir evitacion social o establecer una rutina de sueno mas estable...').fill('Fictional completed objective');
-    const created = page.waitForResponse(r => /\/objectives$/.test(new URL(r.url()).pathname) && r.request().method() === 'POST');
-    await page.getByRole('button', { name: 'Guardar objetivo', exact: true }).click();
-    assert.equal((await created).status(), 201);
-    await toggle('Fictional completed objective', true);
-    await page.getByText('Avance 50%', { exact: true }).waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Retirar objetivo (se conserva el registro)', exact: true }).count(), 2);
+    await login('a');
+    await page.locator('aside').getByRole('button', { name: 'Mis Pacientes', exact: true }).click();
+    await page.getByRole('button', { name: 'Expediente', exact: true }).click();
+    const detail = await absentGoals();
+    assert.equal(detail.clinicalNotes[0].clinicalNoteObjective, 'FICTIONAL_NOTE_OBJECTIVE_p');
     await shot('psychologist-objectives');
-    results.push('professional create, complete/unmark, retirement controls, and 50% progress: PASS');
+    results.push('PSI: no global goals, controls, progress or DTO, retired endpoints 404, E1/E2 hidden: PASS');
+
+    const created = await request('/patients/p/tasks', 'POST', { text: 'Fictional retained task', clinicalNoteId: detail.tasks[0].clinicalNoteId });
+    assert.equal(created.status(), 201);
+    const task = (await created.json()).data;
+    assert.equal(task.clinicalNoteObjective, 'FICTIONAL_NOTE_OBJECTIVE_p');
+    const edited = await request('/patients/p/tasks/' + task.id, 'PATCH', { text: 'Fictional edited task', completed: true });
+    assert.equal(edited.status(), 200);
+    assert.equal((await edited.json()).data.completed, true);
+    assert.equal((await request('/patients/p/tasks/' + task.id, 'DELETE')).status(), 200);
+    results.push('PSI: retained task creation/edit/retirement and clinical note narrative objective: PASS');
     await page.getByRole('button', { name: 'Cerrar sesion', exact: true }).click();
-
-    await login('p@episodes.invalid');
-    await objectives(false);
-    const writesBefore = objectiveWrites.length;
-    await page.getByText('Avance 50%', { exact: true }).waitFor();
-    assert.equal(await page.getByRole('checkbox').count(), 0);
-    assert.equal(await page.getByRole('button', { name: /Agregar objetivo|Retirar objetivo/ }).count(), 0);
-    assert.equal(await page.locator('main textarea').count(), 0);
-    await page.getByText('Synthetic legacy objective', { exact: true }).last().click();
-    await page.getByText('Fictional completed objective', { exact: true }).last().click();
-    await page.locator('div.group').filter({ hasText: 'Fictional completed objective' }).getByText('Completado', { exact: true }).waitFor();
-    await page.locator('div.group').filter({ hasText: 'Synthetic legacy objective' }).getByText('En proceso', { exact: true }).waitFor();
-    await page.getByText('Consulta tus objetivos y su avance. Tu psicologo actualiza su cumplimiento.', { exact: true }).waitFor();
-    await page.waitForLoadState('networkidle');
-    assert.equal(objectiveWrites.length, writesBefore);
+    await login('p');
+    await page.getByRole('button', { name: 'Ver detalle', exact: true }).click();
+    await absentGoals();
     await shot('patient-objectives');
-    results.push('patient pending/completed status, 50% progress, no editable controls or objective PATCH: PASS');
-
     await page.locator('aside').getByRole('button', { name: 'Tablero', exact: true }).click();
-    const task = page.locator('label').filter({ hasText: 'Synthetic legacy task' }).getByRole('checkbox');
+    const checkbox = page.locator('label').filter({ hasText: 'Synthetic legacy task' }).getByRole('checkbox');
     for (const completed of [true, false]) {
       const wait = page.waitForResponse(r => /\/tasks\//.test(new URL(r.url()).pathname) && r.request().method() === 'PATCH');
-      await task.click();
+      await checkbox.click();
       const response = await wait;
       assert.equal(response.status(), 200);
       const body = await response.json();
       assert.equal(body.data.completed, completed);
-      assert.ok(!Object.hasOwn(body.data, 'clinicalNoteObjective'));
+      assert.equal(Object.hasOwn(body.data, 'clinicalNoteObjective'), false);
       await page.waitForLoadState('networkidle');
-      assert.equal(await task.isChecked(), completed);
+      assert.equal(await checkbox.isChecked(), completed);
     }
-    assert.equal(objectiveWrites.length, writesBefore);
     await shot('patient-tasks');
-    results.push('patient completes/unmarks tasks, private note objective absent, no objective PATCH: PASS');
+    assert.deepEqual(objectiveRequests, []);
     assert.deepEqual(errors, []);
-    fs.writeFileSync('/work/browser-result.json', JSON.stringify({ results, errors, runtime: {
-      node: process.version, playwright: require('/review/node_modules/playwright/package.json').version,
-      chromium: browser.version() } }, null, 2));
-    console.log(JSON.stringify({ results, errors }));
+    results.push('PAC: no global goals/progress or objective requests, retained task completion and privacy: PASS');
+    fs.writeFileSync('/work/browser-result.json', JSON.stringify({ results, errors, objectiveRequests, runtime: {
+      node: process.version, playwright: require('/review/node_modules/playwright/package.json').version, chromium: browser.version(),
+    } }, null, 2));
+    console.log(JSON.stringify({ results, errors, objectiveRequests }));
   } finally { await browser.close(); }
 }
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+main().catch(error => { console.error(error.stack); process.exitCode = 1; });

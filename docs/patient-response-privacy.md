@@ -1,6 +1,6 @@
 # Privacidad de respuestas clínicas del paciente — Issue #23
 
-Este documento conserva la evidencia histórica de #23/#25 y, en la [consolidación 2A](#consolidación-2a--inventario-y-permisos-objetivo), mantiene el inventario actual y el contrato objetivo de [#39](https://github.com/japh113/plataformaPsicologia/issues/39). El alcance nuevo es documental: no cambia DTO ni permisos del runtime.
+Este documento conserva la evidencia histórica de #23/#25 y, en la [consolidación 2A](#consolidación-2a--inventario-y-permisos-objetivo), mantiene el inventario actual y el contrato objetivo de [#39](https://github.com/japh113/plataformaPsicologia/issues/39). La consolidación conserva su corte histórico; el cambio aprobado de #78 [retira objetivos globales del runtime](objective-completion-authorization.md#retirada-de-objetivos-globales--cambio-de-alcance-de-78). Las filas de runtime afectadas se precisan debajo, sin ampliar permisos ni modificar los contratos futuros.
 
 ## Alcance y causa
 
@@ -119,14 +119,14 @@ Todas las rutas clínicas están bajo `/api`, autenticadas y restringidas a PAC/
 
 | Ruta actual | Lectura/escritura y salida real | Frontera objetivo y estado |
 | --- | --- | --- |
-| `GET /patients`, `GET /patients/:id` | PAC propio/PSI; ficha por `mapPatientRow`, entrevista, tareas, objetivos; notas solo PSI. | Pendiente: episodio, participante, audiencia y autoría. #25 integrado: omisiones profesionales, también sin actor. |
+| `GET /patients`, `GET /patients/:id` | PAC propio/PSI; ficha por `mapPatientRow`, entrevista y tareas; notas solo PSI. En la rama #78 no hay agregado ni DTO de objetivos globales. | Pendiente: episodio, participante, audiencia y autoría. #25 integrado: omisiones profesionales, también sin actor. |
 | `POST /patients` | Alta unilateral denegada por AB-23 antes de DB. | Conservar bloqueo; no usar para crear nuevos tratamientos. |
 | `PUT /patients/:id` | Solo PSI: `riskLevel,status,notes,reasonForConsultation`; devuelve ficha releída por actor. Identidad rechazada. | Datos clínicos del episodio, sin escritura global que afecte otros. |
 | `DELETE /patients/:id` | Registro accesible se conserva con error 409; ajeno/inexistente sin éxito. | No convertir en purga de demo ni cierre de cuenta D18. |
 | `PUT /patients/:id/interview` | PAC primera escritura, PSI primera/edición; devuelve ficha por actor. No hay envío, borrador ni validación de activación diferenciados. | Nuevo contrato de admisión separado; no reinterpretar guardar legacy como validar. |
 | `POST /patients/:id/tasks`, `PATCH /patients/:id/tasks/:taskId` | PSI crea/edita; PAC solo `completed`. Devuelven `mapTaskRow` por actor. | Tarea y realización por destinatario/episodio; #25 protege objetivo de nota en PATCH. |
-| `POST /patients/:id/objectives`, `PATCH /patients/:id/objectives/:objectiveId` | Solo PSI tanto controlador como servicio; devuelve objeto checklist. PAC lee objetivos/progreso. | #26 integrado; mantener `kind` y estados actuales, sin autoevaluación PAC. |
-| `DELETE /patients/:id/tasks/:taskId`, `DELETE /patients/:id/objectives/:objectiveId` | Solo PSI, retiro lógico; salida sin objeto clínico; filas conservadas. | Retiro por episodio sin borrar historia ni avances ajenos. |
+| `POST /patients/:id/objectives`, `PATCH /patients/:id/objectives/:objectiveId` | Retiradas en #78, sin controlador/servicio; 404 para actores clínicos autorizados y 403 administrativo previo. Sin objeto de respuesta clínico. | RN-72 por episodio aprobado, pendiente de reemplazo; no compatibilidad artificial con CRUD/progreso demo. |
+| `DELETE /patients/:id/tasks/:taskId` | Solo PSI, retiro lógico; salida sin objeto clínico; filas conservadas. DELETE de objetivos retirado en #78. | Retiro por episodio sin borrar historia ni avances ajenos. |
 | `POST /patients/:id/clinical-notes`, `PATCH /patients/:id/clinical-notes/:clinicalNoteId` | Solo PSI; devuelve nota. `tasks` en payload sincroniza checklist; no sale dentro de nota. | Autoría/estado final pendientes #35; sincronización es escritor que también debe aislarse. |
 | `DELETE /patients/:id/clinical-notes/:clinicalNoteId` | Solo PSI; conservación con 409 para registro accesible. | No usar para D13 ni para adendas. |
 | `GET /patients/:id/follow-up` | Consultas completadas y tareas propias, histórico sin asociación aparte; sin nota profesional. | #27 integrado; futuro filtrar episodio/participante antes de agrupar. |
@@ -164,10 +164,10 @@ Salvo excepción explícita, la ficha se lee por los dos GET de patients y se de
 
 | Campos | Origen, autor y recurso | Visibilidad/operaciones actuales | Objetivo y estado |
 | --- | --- | --- | --- |
-| Checklist `id,text,completed` | `patient_tasks`, `kind=task/objective`; PSI redacta, PAC/PSI marca tareas, solo PSI objetivos. No hay autor/destinatario explícito por fila. | GET ficha y POST/PATCH checklist; PAC no edita texto, objetivos solo PSI. | RN-26/67/72: por episodio/audiencia, sin cruces. #26 implementado; tarea conjunta necesita realización independiente D05. |
+| Checklist `id,text,completed` | `patient_tasks`; runtime solo `kind=task`, PSI redacta y PAC/PSI marca tareas. Modelo estructural `objective` conservado sin CRUD legacy. | GET ficha y POST/PATCH de tareas; PAC no edita texto; no contenido ni derivados de objetivos globales en #78. | RN-26/67/72: por episodio/audiencia, sin cruces. #26 es antecedente histórico; RN-72 por episodio pendiente. Tarea conjunta necesita realización independiente D05. |
 | `clinicalNoteId,clinicalNoteDate` | `clinical_note_id` y JOIN fecha de nota; referencia/derivado, no texto PSI. | En tareas PAC/PSI; POST/PATCH según mapper. | Mismo episodio y destinatario, no lectura de nota por poseer ID; D04. |
 | `clinicalNoteObjective` | JOIN `patient_clinical_notes.clinical_note_objective`. | Solo PSI; omitido PAC también en PATCH, #25. | Mantener omisión recursiva; nunca usarlo como título público de tarea. |
-| Forma de objetivos | SQL agregado `id,text,completed`, pero pasa por `mapTaskRow`. | También incluye referencias `null` y objetivo PSI vacío; UI de objetivos retiene solo tres campos. | No afirmar que UI representa todo el JSON; contrato nuevo usa allowlist por recurso/actor. |
+| Forma de objetivos | Agregado, mapper, callbacks y representaciones legacy eliminados en la rama #78. | Sin campo `objectives`, IDs, textos, estados, conteos ni porcentajes; ninguna UI global de objetivos. | Reemplazo por episodio pendiente, con allowlist por recurso/actor; sin compatibilidad artificial con la UI retirada. |
 | Retiro y atribución checklist | `retired_at,created_at,updated_at`; 003 añade `episode_id,episode_scope_id` opcional/generado. | No salen en DTO; retiradas excluidas. Escritores actuales no atribuyen episodio. | No inferir creador desde timestamps; retiro conserva historia. Interacción autor/nota/tareas en #35. |
 | Nota `id,appointmentId,clinicalNoteDate,noteFormat` | `patient_clinical_notes`: ID, cita fija, fecha de cita, formato PSI simple/soap. | GET ficha PSI, POST/PATCH nota PSI. PAC `clinicalNotes:[]`. | RN-12/23: cita completada no futura, sin reasignación; futuro episodio y autor propios. |
 | Nota `clinicalNoteObjective,clinicalObservations,nextSteps,content` | Columnas homónimas snake_case/texto profesional. | Solo PSI; POST/PATCH por alcance paciente; todavía edita original sin exigir autor en predicado. | RN-23/24/67: privado, borrador propio editable, final inmutable y adenda propia. Brecha funcional contra objetivo, no nueva exposición demostrada. |

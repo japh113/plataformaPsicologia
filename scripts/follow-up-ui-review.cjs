@@ -81,8 +81,8 @@ async function main() {
     section = await timeline();
     assert.equal(await section.getByRole('checkbox',{ name: 'Fictional April 1 task A',exact: true }).isChecked(),false);
     results.push('P2: linked/historical complete and unmark, persist after reload: PASS');
-    await page.getByRole('button',{ name: 'Objetivos',exact: true }).click();
-    assert.equal(await page.getByRole('checkbox').count(),0);
+    assert.equal(await page.getByRole('button',{ name: 'Objetivos',exact: true }).count(),0);
+    assert.equal(await page.getByText('Fictional shared objective',{exact:true}).count(),0);
     await page.getByRole('button',{ name: 'Mi seguimiento',exact: true }).click();
     await page.setViewportSize({ width: 390,height: 844 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
@@ -108,7 +108,7 @@ async function main() {
     await page.waitForLoadState('networkidle');
     assert.equal(await dashboardTask.isChecked(),true);
     await shot('patient-dashboard');
-    results.push('P3: mobile no overflow, patient objectives read-only, dashboard shares verified groups and toggles after file selection: PASS');
+    results.push('P3: mobile no overflow, global objectives absent, dashboard shares verified groups and toggles after file selection: PASS');
     await logout();
 
     for (const [id,count,message] of [['q',2,null],['r',0,'Todavía no tienes consultas realizadas'],['s',0,'Tareas sin consulta identificada']]) {

@@ -53,7 +53,7 @@ test('legacy deletes preserve accessible records and hide inaccessible ids', asy
   const queries = [];
   db.query = async (sql) => {
     queries.push(sql);
-    return { rowCount: 1, rows: [{ id: 1, patient_id: 'p', tasks: [], objectives: [] }] };
+    return { rowCount: 1, rows: [{ id: 1, patient_id: 'p', tasks: [] }] };
   };
   const actor = { id: 'psy', role: 'psychologist' };
   try {

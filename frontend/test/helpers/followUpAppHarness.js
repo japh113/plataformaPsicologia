@@ -69,8 +69,8 @@ export function harness({ previous = null, followRequest = async () => follow, p
     const invocation = {
       ...context, pacientes: state.patients, pacienteSeleccionado: state.selected, clinicalRecordSync: state.recordSync || {},
       isPsychologist: context.currentUser.role === 'psychologist',
-      procesandoTareaId: state.processingTask, procesandoObjetivoId: null,
-      creandoObjetivo: false, guardandoPerfilPaciente: false, guardandoNotas: false, guardandoSesion: false,
+      procesandoTareaId: state.processingTask,
+      guardandoPerfilPaciente: false, guardandoNotas: false, guardandoSesion: false,
       notasTemp: state.draft || '',
     };
     const a = app.indexOf('  const ' + name + ' =');
