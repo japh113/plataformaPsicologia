@@ -8,14 +8,17 @@ export default function DirectedAdmission({id,professional}) {
   const [data,setData]=useState(null),[declarations,setDeclarations]=useState({reason:'',context:''});
   const [reason,setReason]=useState(''),[explanation,setExplanation]=useState(''),[target,setTarget]=useState('');
   const [confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[stale,setStale]=useState(true),[error,setError]=useState('');
-  const alive=useRef(false),generation=useRef(0),owner=useRef(null),operation=useRef(null);
-  const unavailable=useCallback(()=>{setData(null);setDeclarations({reason:'',context:''});setReason('');setExplanation('');setConfirmed(false);setStale(true);},[]);
-  const receive=useCallback(detail=>{setData(detail);setConfirmed(false);setStale(false);},[]);
+  const [authorizationEpoch,setAuthorizationEpoch]=useState(0);
+  const alive=useRef(false),generation=useRef(0),owner=useRef(null),operation=useRef(null),authorization=useRef({epoch:0,denied:false});
+  // A denial invalidates pending parent reads and callbacks from the former child.
+  const unavailable=useCallback(()=>{++generation.current;authorization.current={epoch:authorization.current.epoch+1,denied:true};setAuthorizationEpoch(authorization.current.epoch);setData(null);setDeclarations({reason:'',context:''});setReason('');setExplanation('');setConfirmed(false);setStale(true);},[]);
+  const receive=useCallback(detail=>{if(!alive.current||authorization.current.denied||authorization.current.epoch!==authorizationEpoch)return;setData(detail);setConfirmed(false);setStale(false);},[authorizationEpoch]);
+  const childUnavailable=useCallback(()=>{if(alive.current&&authorization.current.epoch===authorizationEpoch)unavailable();},[authorizationEpoch,unavailable]);
   const refresh=useCallback(async()=>{
     const request=++generation.current;setStale(true);setConfirmed(false);
     try{const response=await apiRequest('/admissions/'+id);if(!alive.current||request!==generation.current)return;
       if(response.data.mode!=='directed')throw Object.assign(new Error('Recurso no disponible.'),{status:404});
-      setData(response.data);setStale(false);setError('');operation.current=null;
+      authorization.current.denied=false;setData(response.data);setStale(false);setError('');operation.current=null;
     }catch(e){if(alive.current&&request===generation.current){setError(e.message);if([401,403,404].includes(e.status))unavailable();}}
   },[id,unavailable]);
   useEffect(()=>{const sequence=generation;alive.current=true;void refresh();return()=>{alive.current=false;++sequence.current;};},[refresh]);
@@ -71,7 +74,7 @@ export default function DirectedAdmission({id,professional}) {
         <button className={button} disabled={!enabled||!reason.trim()} onClick={()=>void act('directed/request',{documentRevision:Number(target||data.latestDocument),reason})}>Solicitar corrección de esta versión</button>
       </section>}
       {data.validations.map((v,i)=><p key={i}>Validación profesional del documento {v.documentRevision}, por {v.authorId} · {new Date(v.recordedAt).toLocaleString()}. Constancia histórica; no activa tratamiento.</p>)}
-      {professional&&active&&data.latestDocument>0&&<AdmissionAssessment key={id} id={id} mode="directed" version={data.version} documentRevision={data.latestDocument} reviewState={data.reviewState} professionalName={data.professionalName} onDetail={receive} onUnavailable={unavailable}/>}
+      {professional&&active&&data.latestDocument>0&&<AdmissionAssessment key={id} id={id} mode="directed" version={data.version} documentRevision={data.latestDocument} reviewState={data.reviewState} professionalName={data.professionalName} onDetail={receive} onUnavailable={childUnavailable}/>}
       {professional&&active&&data.latestDocument>0&&!pending&&data.reviewState==='documented'&&<><p>La validación declara expresamente completitud y suficiencia de esta versión para este participante y episodio, solo en el ensayo ficticio. No acredita mínimos clínicos reales.</p><button className={button} disabled={!enabled} onClick={()=>void act('directed/validate',{documentRevision:data.latestDocument,episodeId:data.episodeId})}>Validar expresamente esta versión ficticia</button></>}
       {!data.readOnly&&<><label className="block"><input type="checkbox" checked={confirmed} disabled={busy||stale} onChange={e=>setConfirmed(e.target.checked)}/> Confirmo expresamente la acción y la versión de esta entrevista dirigida.</label>
         <button className={button} disabled={!enabled} onClick={()=>void act('revoke')}>{professional?'Cancelar entrevista dirigida':'Retirar consentimiento dirigido'}</button></>}

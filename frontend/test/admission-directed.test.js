@@ -7,7 +7,7 @@ import { transformWithOxc } from 'vite';
 import { installReactDomHost,elements } from './helpers/reactDomHost.js';
 const document=installReactDomHost();document.oninput=null;
 const createElement=document.createElement.bind(document);
-document.createElement=name=>{const element=createElement(name);Object.defineProperty(element,'disabled',{get:()=>element.getAttribute('disabled')!==null,set:v=>{if(v)element.setAttribute('disabled','');else element.removeAttribute('disabled');}});if(name==='input')Object.defineProperty(element,'type',{get:()=>element.getAttribute('type')||'text',set:v=>{element.setAttribute('type',v);}});return element;};
+document.createElement=name=>{const element=createElement(name);Object.defineProperty(element,'disabled',{get:()=>element.getAttribute('disabled')!==null,set:v=>{if(v)element.setAttribute('disabled','');else element.removeAttribute('disabled');}});if(name==='select')Object.defineProperty(element,'options',{get:()=>elements(element).filter(n=>n.localName==='option')});if(name==='input')Object.defineProperty(element,'type',{get:()=>element.getAttribute('type')||'text',set:v=>{element.setAttribute('type',v);}});return element;};
 const {createRoot}=await import('react-dom/client');
 const url=new URL('../src/components/DirectedAdmission.jsx',import.meta.url).href;
 const assessment=new URL('../src/components/AdmissionAssessment.jsx',import.meta.url).href;
@@ -49,5 +49,28 @@ test('directed own read after revocation presents incorporated provenance and co
   const h=await fixture();try{
     await h.render('a',false);await h.resolve(0,detail('a',{state:'revoked',readOnly:true,latestDocument:1,documents:[{revision:1,declarations:{reason:'OWN_RECORDED',context:'OWN_CONTEXT'},authorId:'psi',subjectId:'pac',recordedAt:'2026-11-18T12:00:00Z'}],requests:[{id:'r',documentRevision:1,reason:'OWN_CORRECTION',authorId:'pac',recordedAt:'2026-11-18T12:00:00Z',resolution:{decision:'reject',explanation:'EXPLANATION',documentRevision:1,authorId:'psi',recordedAt:'2026-11-18T13:00:00Z'}}]}));
     assert.match(h.text(),/OWN_RECORDED|EXPLANATION/);assert.match(h.text(),/No son respuestas escritas, enviadas ni ratificadas/);assert.deepEqual(h.values(),[]);assert.equal(h.calls.length,1);assert.equal(h.button('Solicitar corrección de esta versión'),undefined);
+  }finally{await h.close();}
+});
+
+test('P2-77-A: child denial invalidates a retained parent 200 and requires explicit authorized recovery',async()=>{
+  const h=await fixture();try{
+    const incorporated=detail('a',{latestDocument:1,reviewState:'documented',documents:[{revision:1,declarations:{reason:'DENIED_DOCUMENT_SENTINEL',context:'DECLARED_CONTEXT'},authorId:'psi',subjectId:'pac',recordedAt:'2026-11-18T12:00:00Z'}]});
+    await h.render();await h.resolve(0,incorporated);
+    assert.match(h.text(),/DENIED_DOCUMENT_SENTINEL/);assert.equal(h.calls[1].path,'/admissions/a/directed/record');
+    await h.click('Actualizar entrevista y conservar texto');assert.equal(h.calls[2].path,'/admissions/a');
+    // The actual child still has its initial read pending. Its 404 invokes onUnavailable.
+    await h.reject(1,404);assert.doesNotMatch(h.text(),/DENIED_DOCUMENT_SENTINEL|Validar expresamente|Cancelar entrevista dirigida|Valoración profesional privada/);
+    // This 200 was obtained before revocation and deliberately delivered last.
+    await h.resolve(2,incorporated);
+    assert.doesNotMatch(h.text(),/DENIED_DOCUMENT_SENTINEL|Validar expresamente|Cancelar entrevista dirigida|Valoración profesional privada/);
+    assert.equal(h.calls.length,3,'No automatic recovery after a known denial');
+    assert.equal(h.button('Actualizar entrevista y conservar texto').disabled,false);
+    await h.click('Actualizar entrevista y conservar texto');await h.reject(3,404);
+    assert.doesNotMatch(h.text(),/DENIED_DOCUMENT_SENTINEL|Validar expresamente|Cancelar entrevista dirigida/);
+    await h.click('Actualizar entrevista y conservar texto');await h.resolve(4,incorporated);
+    assert.equal(h.calls[5].path,'/admissions/a/directed/record');
+    await h.resolve(5,{episodeId:'101',version:3,expectedRevision:1,documentRevision:1,canAssess:true,current:null,history:[]});
+    assert.match(h.text(),/DENIED_DOCUMENT_SENTINEL/);assert.equal(h.button('Validar expresamente esta versión ficticia').disabled,true);
+    await h.confirm();assert.equal(h.button('Validar expresamente esta versión ficticia').disabled,false);
   }finally{await h.close();}
 });

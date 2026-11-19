@@ -118,6 +118,36 @@ async function main(){
    await psy.getByLabel(/Registro expresamente esta valoración/).check();await button(psy,'Registrar valoración privada').click();await psy.getByText(/Tu texto local se conserva/).waitFor();assert.equal(await psy.getByLabel('Contexto profesional privado',{exact:true}).inputValue(),'TEXTO_DIRIGIDO_LOCAL');
    await button(psy,'Actualizar referencias y conservar texto').click();await psy.waitForLoadState('networkidle');await psy.getByLabel(/Registro expresamente esta valoración/).check();await button(psy,'Registrar valoración privada').click();await psy.getByText('Contexto vigente: TEXTO_DIRIGIDO_LOCAL',{exact:true}).waitFor();
  },[409]);
+ await scenario('ADM21',async()=>{
+   const d=(await json(psy,'/'+selected)).body.data,recordPattern='**/admissions/'+selected+'/directed/record',parentPattern='**/admissions/'+selected;
+   let releaseChild,releaseParent,childSeen,parentSeen,recordCount=0;
+   const childHeld=new Promise(r=>{releaseChild=r;}),parentHeld=new Promise(r=>{releaseParent=r;}),childStarted=new Promise(r=>{childSeen=r;}),parentStarted=new Promise(r=>{parentSeen=r;});
+   await psy.route(recordPattern,async route=>{if(route.request().method()==='OPTIONS'){await route.continue();return;}if(++recordCount>1){await route.continue();return;}childSeen();await childHeld;await route.fulfill({status:404,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({success:false,message:'Recurso no disponible.'})});});
+   try{
+     await button(psy,'Actualizar referencias y conservar texto').click();await childStarted;
+     await psy.getByText(/VERSION_DIRIGIDA_CORREGIDA/).waitFor();
+     await psy.route(parentPattern,async route=>{if(route.request().method()==='OPTIONS'){await route.continue();return;}parentSeen();await parentHeld;await route.fulfill({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({success:true,data:d})});});
+     await button(psy,'Actualizar entrevista y conservar texto').click();await parentStarted;
+     releaseChild();await psy.getByRole('region',{name:'Valoración profesional privada',exact:true}).waitFor({state:'hidden'});
+     assert.equal(await button(psy,'Cancelar entrevista dirigida').count(),0);
+     releaseParent();await psy.waitForLoadState('networkidle');
+     assert.equal(await psy.getByText(/VERSION_DIRIGIDA_CORREGIDA/).count(),0);assert.equal(await button(psy,'Cancelar entrevista dirigida').count(),0);assert.equal(recordCount,1);
+   }finally{releaseChild();releaseParent();await psy.unroute(parentPattern);await psy.unroute(recordPattern);}
+   await button(psy,'Actualizar entrevista y conservar texto').click();await psy.getByText(/VERSION_DIRIGIDA_CORREGIDA/).waitFor();await psy.getByText('Contexto vigente: TEXTO_DIRIGIDO_LOCAL',{exact:true}).waitFor();
+ },[404]);
+ await scenario('ADM22',async()=>{
+   const pattern='**/admissions/'+selected+'/directed/record';let count=0,failing=true;
+   await psy.route(pattern,async route=>{if(route.request().method()==='OPTIONS'){await route.continue();return;}++count;if(failing){await route.fulfill({status:503,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify({success:false,message:'Indisponibilidad ficticia controlada'})});}else await route.continue();});
+   try{
+     await openDirected(psy);const panel=psy.getByRole('region',{name:'Valoración profesional privada',exact:true});
+     await panel.getByRole('alert').waitFor();assert.equal(await panel.locator('form').count(),0);assert.ok(await button(psy,'Actualizar referencias y conservar texto').isEnabled());
+     const failedReads=count;failing=false;await button(psy,'Actualizar referencias y conservar texto').click();await panel.getByText('Contexto vigente: TEXTO_DIRIGIDO_LOCAL',{exact:true}).waitFor();assert.equal(count,failedReads+1);assert.ok(await psy.getByLabel(/Registro expresamente esta valoración/).isEnabled());
+     assert.equal(await psy.getByLabel('Contexto profesional privado',{exact:true}).inputValue(),'TEXTO_DIRIGIDO_LOCAL');
+     await psy.getByLabel('Contexto profesional privado',{exact:true}).fill('P2_77_B_LOCAL');await psy.getByLabel('Riesgo profesional',{exact:true}).selectOption('low');
+     await button(psy,'Actualizar referencias y conservar texto').click();await psy.waitForLoadState('networkidle');
+     assert.equal(await psy.getByLabel('Contexto profesional privado',{exact:true}).inputValue(),'P2_77_B_LOCAL');assert.equal(await psy.getByLabel('Riesgo profesional',{exact:true}).inputValue(),'low');
+   }finally{await psy.unroute(pattern);}
+ },[503]);
  await scenario('ADM20',async()=>{
    await confirmDirected(pac);await button(pac,'Retirar consentimiento dirigido').click();await pac.getByText(/Consulta propia conservada/).waitFor();assert.equal((await json(psy,'/'+selected+'/directed/record')).status,404);await openDirected(pac);await pac.getByText(/VERSION_DIRIGIDA_CORREGIDA/).waitFor();assert.equal(await button(pac,'Solicitar corrección de esta versión').count(),0);assert.equal((await json(pac,'/'+selected)).body.data.documents.length,2);
  },[404]);

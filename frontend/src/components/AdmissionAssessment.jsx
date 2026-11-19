@@ -31,6 +31,8 @@ export default function AdmissionAssessment({id,version,submission:submitted,doc
     try{const detail=await apiRequest('/admissions/'+id);const response=await apiRequest('/admissions/'+id+prefix+'/record');if(!alive.current||request!==generation.current)return;
       if(detail.data.version!==response.data.version||detail.data[latestField]!==response.data[referenceField]){setConflict(true);throw Object.assign(new Error('La referencia volvió a cambiar. Actualiza nuevamente; tu texto se conserva.'),{status:409});}
       setSnapshot({id,version:detail.data.version,submission:detail.data[latestField],reviewState:detail.data.reviewState,verified:true,record:response.data});
+      // Initialize the first recovered snapshot once; later retries keep local edits.
+      if(!initialized.current){initialized.current=true;setContext(response.data.current?.context||'');setRisk(response.data.current?.riskLevel||'unevaluated');}
       setConflict(false);operation.current=null;setError('');onDetail?.(detail.data);
     }catch(e){if(alive.current&&request===generation.current){setError(e.message);if([401,403,404].includes(e.status)){setSnapshot(null);setContext('');onUnavailable();}}}
     finally{if(alive.current&&busyOwner.current===owner){busyOwner.current=null;setBusy(false);}}
@@ -67,8 +69,8 @@ export default function AdmissionAssessment({id,version,submission:submitted,doc
         <button className={button} disabled={busy||conflict||!confirmed||!canAssess}>Registrar valoración privada</button>
       </form>
       {conflict&&<p>El estado cambió. Tu texto local se conserva. Actualiza las referencias y revisa el envío antes de confirmar otra vez.</p>}
-      <button type="button" className={button} disabled={busy} onClick={()=>void refresh()}>Actualizar referencias y conservar texto</button>
       <details><summary>Historial de valoraciones privadas ({record.history.length})</summary>{record.history.map(v=><article key={v.revision} className="border-t py-2"><p>Revisión {v.revision} · {directed?'Documento':'Envío'} {v[referenceField]} · Autor {professionalName||v.authorId} · {new Date(v.recordedAt).toLocaleString()}</p><p>{risks[v.riskLevel]||'NO EVALUADO'}</p><p className="whitespace-pre-wrap">{v.context}</p></article>)}</details>
     </>}
+      <button type="button" className={button} disabled={busy} onClick={()=>void refresh()}>Actualizar referencias y conservar texto</button>
   </section>;
 }
