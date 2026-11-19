@@ -46,8 +46,8 @@ export async function command(actor,op,input={},id){
   const p={...input,...(id?{id}:{}),sessionExpiresAt:actor.sessionExpiresAt,
     fingerprint:fingerprint({op,input,id:id??null},key),newId:randomUUID()};
   return transaction(async client=>{
-    if(['record','assess'].includes(op))await verifyEpisodeRecordContract(client);
-    const c=(await client.query('SELECT public.admission_context($1,$2,$3,$4::jsonb) AS data',[actor.id,actor.sessionVersion,op,JSON.stringify(p)])).rows[0].data;
+    if(['record','assess','directed-record','directed-assess'].includes(op))await verifyEpisodeRecordContract(client);
+    const c=(await client.query('SELECT public.admission_context($1,$2,$3,$4::jsonb) AS data',[actor.id,actor.sessionVersion,op==='assign-directed'?'assign':op,JSON.stringify(p)])).rows[0].data;
     if(!c.ownRead){
       const phone=normalizePhone(c.phone);
       p.emailDigest=contactDigest('email',normalizeEmail(c.email));p.phoneDigest=phone?contactDigest('sms',phone):null;

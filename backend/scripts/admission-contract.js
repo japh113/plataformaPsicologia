@@ -38,10 +38,11 @@ export async function verifyAdmissionContract(client,role,{install=false,runtime
     AND (EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) WHERE grantee=0 AND privilege_type='EXECUTE')
       OR p.proname NOT IN ('admission_context','admission_command','admission_candidates') AND has_function_privilege($1,p.oid,'EXECUTE'))) unsafe`,[role]);
   if(extra.unsafe)throw new Error('Expanded admission function access');
-  // 016's internal content boundary has no executable grant to any LOGIN or PUBLIC.
-  const internal=(await client.query(`SELECT p.prosecdef,p.proconfig,p.proowner::regrole::text AS owner,
+  // 016/017 internal content boundaries has no executable grant to any LOGIN or PUBLIC.
+  const internals=(await client.query(`SELECT p.prosecdef,p.proconfig,p.proowner::regrole::text AS owner,
     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) WHERE grantee<>p.proowner) exposed
-    FROM pg_proc p WHERE p.oid=to_regprocedure('public.admission_record_command(text,integer,text,jsonb)')`)).rows[0];
+    FROM pg_proc p WHERE p.pronamespace='public'::regnamespace AND p.proname IN ('admission_record_command','admission_directed_command','admission_directed_version_guard')`)).rows;
+  for(const internal of internals)
   if(internal&&(!internal.prosecdef||internal.owner!==owner.rolname||internal.exposed||
     JSON.stringify(internal.proconfig)!==JSON.stringify(['search_path=pg_catalog, public'])))throw new Error('Expanded admission assessment boundary');
 

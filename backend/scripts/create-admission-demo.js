@@ -1,5 +1,5 @@
 import { sandboxControl,createSandboxDatabase,installBaseline } from './episode-sandbox.js';
-import { installAssessmentSandbox } from './admission-assessment-sandbox.js';
+import { installDirectedSandbox as installAssessmentSandbox } from './admission-directed-sandbox.js';
 import { bilateralFixture } from './bilateral-sandbox.js';
 import { command as bilateral,processQueue,closeBilateral } from '../src/modules/bilateral/bilateral.service.js';
 import { command,closeAdmission } from '../src/modules/admission/admission.service.js';
