@@ -1,10 +1,8 @@
 # Documentación de PsicoPanel
 
-La continuidad vigente está en el [checkpoint](project-checkpoint.md), corte del **18 de noviembre de 2026**, `main` `88712f49fd4714fca5927f1a67db1eb889e1e2b3`, posterior a #74. **2A parcial**, A/B/C/D1/D2 y SQL 001–014 en Git; bilateral ficticio integrado con flags apagados. D3, activación y aislamiento clínico completo pendientes. Instalación habitual/despliegue no acreditados.
+Continuidad vigente: [checkpoint](project-checkpoint.md), corte del **18 de noviembre de 2026**, base `main` `65fcc9481d192e9b1dd80854c5267d76900947ad`, merge #76. **2A parcial**; SQL 001–016 integrado, sin habilitación habitual ni despliegue acreditado. [014](stage2a-identity-directory-intake.md#implementación-del-primer-incremento-autoadministrado--014), [015](stage2a-identity-directory-intake.md#ficha-clínica-privada-individual--015) y [016](stage2a-identity-directory-intake.md#valoración-profesional-privada-de-admisión--016) conservan sus garantías y cortes históricos.
 
-El [primer incremento autoadministrado ficticio 014](stage2a-identity-directory-intake.md#implementación-del-primer-incremento-autoadministrado--014) está integrado en #74, con habilitación habitual apagada. Consentimiento específico, versiones, revocación y asociación explícita a `prepared`; sin activar tratamientos ni leer expediente legacy.
-
-La [ficha clínica privada individual 015](stage2a-identity-directory-intake.md#ficha-clínica-privada-individual--015) se implementa en la rama actual, pendiente de integración/CI/auditoría, sin permisos clínicos operativos.
+Único incremento autorizado actual: [entrevista individual dirigida ficticia 017](stage2a-identity-directory-intake.md#entrevista-individual-dirigida-ficticia--017), implementada en la rama de tarea, pendiente de CI y auditoría independiente. Consulta PAC de versiones incorporadas, corrección aceptada/rechazada y valoración privada por versión; sin activación, agenda ni clínica ordinaria.
 
 ## Ruta mínima de lectura
 
@@ -21,7 +19,7 @@ No hace falta leer todo docs/ para iniciar una tarea. [README raíz](../README.m
 | Necesidad | Fuente y frontera |
 | --- | --- |
 | Decidir producto | [Visión](product/vision.md), [ADR/AB](product/decisions.md), [reglas RN](product/business-rules.md). ADR-031/032 aprobados con límites; D21 no aprobada. Producto aprobado no significa implementado. |
-| Saber qué está implementado | [Checkpoint](project-checkpoint.md), [arquitectura](architecture.md) y código del SHA consultado. La arquitectura conserva encabezados de octubre y detalle de dominios; el checkpoint actualiza integración 008–014 y el alcance de 015 en esta rama. |
+| Saber qué está implementado | [Checkpoint](project-checkpoint.md), [arquitectura](architecture.md) y código del SHA consultado. La arquitectura conserva cortes anteriores; checkpoint y contrato 017 distinguen integración 008–016 del incremento dirigido de esta rama. |
 | Elegir siguiente trabajo | [Roadmap](product/roadmap.md), [candidatos](product/roadmap.md#próximos-tres-incrementos-candidatos). Orden propuesto, no autorización ni cambio de etapas 0–6/2A–2E. |
 | Ver seguridad actual | [Triage de 28 CodeQL y cero Dependabot](security-codeql-triage.md). Corte fechado y residual por superficie; no evaluación de despliegue ni falso positivo automático. |
 | Desarrollar/verificar | [Desarrollo Docker/WSL](development.md), [CI implementada](ci-implementation.md). Destinos nuevos autorizados, siete checks, artifacts 14 días por HEAD/base/merge/intento. |
@@ -54,4 +52,4 @@ Estos informes conservan fecha, SHA, resultados y límites de **su** entrega. «
 
 Checkpoint se actualiza sin acumular todos los PRs; ADR preservan decisiones, roadmap prioridades/dependencias, contratos comportamientos exigibles, Issues trabajo/estado, e informes evidencia fechada por commit. Al integrar una entrega, verificar main y ajustar las entradas vigentes, dejando enlaces a historia. Inventario se amplía con cada documento nuevo; el tamaño no decide su valor. [Limpieza propuesta](documentation-inventory.md#segundo-pr-de-limpieza-propuesto-no-autorizado) requiere otro alcance: no mover/eliminar/fusionar archivos en este PR.
 
-Mantener `prepared`, `allowed:false`, `audienceVerified:false`, AB-23, originales privados y separación backoffice/clínica. Conservar SQL 001–014/manifiesto/hashes; sin bases habituales, datos reales, migraciones, publicación, proveedores, merge o despliegue por inferencia documental.
+Mantener `prepared`, `allowed:false`, `audienceVerified:false`, AB-23, originales privados y separación backoffice/clínica. Conservar SQL 001–016/manifiesto/hashes; sin bases habituales, datos reales, migraciones, publicación, proveedores, merge o despliegue por inferencia documental.

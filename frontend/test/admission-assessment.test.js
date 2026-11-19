@@ -102,3 +102,26 @@ test('P2-B: an old-version response cannot revive eligibility after a new submit
     assert.ok(h.calls.every(c=>c.settled));
   }finally{await h.close();}
 });
+test('directed assessment uses document reference and private route without fabricating patient submissions',async()=>{
+  const h=await fixture();try{
+    await h.render('d',{mode:'directed',documentRevision:2,reviewState:'documented'});
+    assert.ok(h.calls[0].path.endsWith('/directed/record'));
+    await h.resolve(0,{...empty('101'),submission:undefined,documentRevision:2});
+    assert.match(h.text(),/Versión documental actual: 2/);await h.edit('DIRECTED_PRIVATE','low');await h.confirm();await h.submit();
+    const p=JSON.parse(h.calls[1].options.body);assert.equal(p.documentRevision,2);assert.equal(p.submission,undefined);assert.ok(h.calls[1].path.endsWith('/directed/assess'));
+    await h.reject(1,409);assert.equal(h.find('textarea').value,'DIRECTED_PRIVATE');assert.equal(h.button(refreshLabel).disabled,false);
+  }finally{await h.close();}
+});
+test('directed correction retains recorded risk but prevents new assessments and stale versions never revive it',async()=>{
+  const h=await fixture();try{
+    await h.render('d',{mode:'directed',documentRevision:1,reviewState:'documented'});
+    await h.resolve(0,{...loaded(),submission:undefined,documentRevision:1});
+    await h.edit('LOCAL_DIRECTED','medium');await h.render('d',{version:4,reviewState:'correction_requested'});
+    await h.resolve(1,{...loaded(4),submission:undefined,documentRevision:1,canAssess:false});
+    assert.match(h.text(),/Contexto vigente: HISTORY_PRIOR/);assert.equal(h.button(saveLabel).disabled,true);
+    await h.render('d',{version:5,documentRevision:2,reviewState:'documented'});
+    assert.doesNotMatch(h.text(),/Contexto vigente:/);
+    await h.resolve(2,{...loaded(4),submission:undefined,documentRevision:1});
+    assert.equal(h.button(saveLabel).disabled,true);assert.equal(h.find('textarea').value,'LOCAL_DIRECTED');
+  }finally{await h.close();}
+});

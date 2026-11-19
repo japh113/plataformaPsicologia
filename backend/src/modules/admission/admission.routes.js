@@ -17,6 +17,9 @@ const handle=op=>async(req,res)=>{
   }catch(error){const safe=errorFor(error);res.status(safe.status).json({success:false,message:safe.message});}
 };
 router.get('/',handle('list'));
+router.post('/assign-directed',handle('assign-directed'));
+router.get('/:id/directed/record',handle('directed-record'));
+for(const op of ['attest','document','request','resolve','validate','assess'])router.post('/:id/directed/'+op,handle('directed-'+op));
 router.post('/prepare',handle('prepare'));router.post('/assign',handle('assign'));
 router.get('/:id',handle('detail'));router.get('/:id/record',handle('record'));router.get('/:id/draft',handle('draft'));
 for(const op of ['accept','save','submit','correct','validate','revoke','assess'])router.post('/:id/'+op,handle(op));

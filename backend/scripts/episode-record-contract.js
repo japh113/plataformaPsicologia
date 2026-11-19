@@ -39,7 +39,7 @@ export async function verifyEpisodeRecordContract(client) {
           AND acl.grantee=(SELECT proowner FROM pg_proc WHERE oid='public.admission_command(text,integer,text,jsonb)'::regprocedure)
           AND NOT acl.is_grantable AND (c.relname='episode_private_records' AND a.attname='episode_id' AND acl.privilege_type='UPDATE'
             OR c.relname='episode_private_record_versions' AND acl.privilege_type='INSERT' AND a.attname IN
-              ('episode_id','patient_id','professional_user_id','revision','previous_revision','risk_level','professional_context','recording_kind','assignment_id','submission','authenticated_author_user_id','authenticated_session_version')))))
+              ('episode_id','patient_id','professional_user_id','revision','previous_revision','risk_level','professional_context','recording_kind','assignment_id','submission','directed_revision','authenticated_author_user_id','authenticated_session_version')))))
     ) AS unsafe`);
   if(exposure.unsafe)throw new Error('Expanded episode record access');
 }

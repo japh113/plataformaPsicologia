@@ -25,3 +25,14 @@ test('admission assessments require explicit risk, exact submission, expected ve
   for(const extra of [{riskLevel:'unknown'},{context:'a'.repeat(10001)},{submission:0},{expectedRevision:0},{episodeId:12},{actorId:'forged'},{assignmentId:randomUUID()},{confirmed:false}])assert.throws(()=>validate('assess',{...p,...extra}));
   assert.equal(errorFor(Object.assign(new Error('admission_conflict'),{code:'P0001'})).status,409);
 });
+test('directed commands bind exact professional versions and correction decisions without dates or patient authorship injection',()=>{
+  const act={operationId:randomUUID(),confirmed:true,expectedVersion:4};
+  const document={...act,expectedDocumentRevision:0,declarations:{reason:'Declaración ficticia',context:'Contexto declarado'}};
+  validate('directed-document',document);validate('directed-attest',act);validate('directed-record',{});
+  for(const extra of [{authorId:'patient'},{performedAt:'2026-11-18'},{expectedDocumentRevision:-1},{declarations:{reason:'missing context'}},{declarations:{reason:'',context:'b'}}])assert.throws(()=>validate('directed-document',{...document,...extra}));
+  const decision={...act,expectedDocumentRevision:1,requestId:randomUUID(),decision:'reject',explanation:'Explicación destinada al paciente'};
+  validate('directed-resolve',decision);validate('directed-resolve',{...decision,decision:'accept',declarations:document.declarations});
+  assert.throws(()=>validate('directed-resolve',{...decision,decision:'accept'}));
+  assert.throws(()=>validate('directed-resolve',{...decision,declarations:document.declarations}));
+  assert.throws(()=>validate('directed-request',{...act,documentRevision:1,reason:' '}));
+});

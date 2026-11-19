@@ -2,6 +2,8 @@
 
 ## Corte y autoridad
 
+Actualización del 18 de noviembre de 2026 para el único incremento dirigido 017: sin altas, traslados ni eliminaciones de Markdown. Decisiones registra las precisiones autorizadas; stage2a contiene el contrato 017; privacidad distingue declaraciones dirigidas y valoración; desarrollo/índice/checkpoint/roadmap/AGENTS reflejan el mismo alcance. La matriz histórica siguiente conserva su corte y no acredita pruebas nuevas.
+
 **Actualización delimitada del 13 de noviembre de 2026**, base `e2dbec786dc71ce9f31000497d52c1740cca7753` (#66): el corpus sigue en 57 Markdown, sin altas/traslados/eliminaciones. D-VIN-01–07 en decisiones es la autoridad aprobada de invitaciones; reglas RN-34/39 y contrato stage2a se sincronizan, con propuestas técnicas y bloqueantes separados. Checkpoint/roadmap/índice actualizan continuidad posterior a #66. La matriz de consumidores y auditoría siguientes preserva el corte del 9 de noviembre, no se presenta como recenso nuevo; no se ejecutan consumidores de bases ni se modifica CI.
 
 Auditoría documental del **9 de noviembre de 2026**, base `main` `9ada64b2b529a2849b4881396585a3756a3781c1` (#62). `git ls-files '*.md'` devuelve **55 Markdown en la base**; este PR incorpora dos y clasifica **57 en total**. No mueve, elimina ni fusiona físicamente documentos. La recomendación de acción es para mantenimiento: solo los seis archivos previstos y la excepción mínima README raíz se actualizan aquí.

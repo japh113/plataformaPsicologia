@@ -78,5 +78,10 @@
     "version": "016",
     "file": "016_private_admission_assessments.sql",
     "sha256": "a6fc4b35779d1b7b0d662e45ed2d96446896cfaac54385cf8c99571c3deaf545"
+  },
+  {
+    "version": "017",
+    "file": "017_directed_admission.sql",
+    "sha256": "bf794f3867f73dd42086fc924b4bbf00551c8c541a0395859bb6f93e3acbf33d"
   }
 ]
