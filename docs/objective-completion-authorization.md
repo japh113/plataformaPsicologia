@@ -74,3 +74,67 @@ El tablero sigue requiriendo expediente seleccionado antes de completar tareas: 
 Verificación final: 58 archivos protegidos contrastados byte a byte con la base (SQL completo, manifiesto, configuración, lockfiles, autenticación y decisiones de producto), todos idénticos; hashes de 001–007 válidos. `git diff --check` y verificador documental offline aprobados: 39 Markdown/543 enlaces, decisiones protegidas y migraciones intactas. No se modifican datos habituales/históricos, D3, vínculos, proveedores ni configuración administrativa. La evidencia local no constituye resultados de Actions ni acredita despliegue.
 
 La CI existente conserva siete checks y artifacts técnicos de 14 días. El Draft PR permite su ejecución automática; su estado se informa por el HEAD publicado. La revisión independiente y autorización del propietario son posteriores.
+
+## Aislamiento negativo de objetivos atribuidos a episodio — 19 de noviembre de 2026
+
+**APROBADO por el propietario:** excluir objetivos `patient_tasks.kind='objective'` con `episode_id IS NOT NULL` de todos los consumidores legacy operativos. Base `main` `c39aa542c27e5e3245a9144fe4369d999956e25e`, #77 integrado y SQL 001–017. **IMPLEMENTADO en rama** `fix/legacy-objective-episode-isolation`, pendiente de CI y auditoría independiente; un único Draft, sin merge/despliegue. La evidencia de octubre anterior sigue siendo histórica.
+
+No hay bloqueante que requiera modificar otros dominios: el lector compartido de expediente y los mutadores compartidos de checklist contienen los cuatro puntos SQL afectados. La selección previa de edición y los UPDATE de modificación/retiro filtran NULL cuando `kind` es objetivo; el predicado se evalúa en la propia escritura aunque la atribución cambie tras la lectura previa. El tipo procede de los wrappers internos existentes, nunca del payload. No se crea una abstracción ni API nueva.
+
+### Inventario de consumidores revalidado
+
+Búsqueda de `patient_tasks`, `objective`, `objectives` y `objetivos` en backend, frontend, scripts y SQL, seguida de lectura de llamadores/rutas y respuestas completas:
+
+| Consumidor | Comportamiento y cobertura |
+| --- | --- |
+| `patientSelectColumns` → `getAllPatients` / `getPatientById` en [patients.service.js](../backend/src/modules/patients/patients.service.js) | Único agregado operativo de objetivos, `json_agg` ordenado y `COALESCE []`; ahora `pt.episode_id IS NULL` antes de agregar. GET listado/detalle PAC/PSI no contienen ID, texto, estado ni señales derivadas de objetivos atribuidos. |
+| `updatePatient` / `upsertPatientInterview` | Devuelven el mismo `getPatientById`: PUT de ficha/entrevista conserva la exclusión. Los prechecks de cita/nota/checklist usan también este lector. No hay otro DTO de objetivos. |
+| `createPatientChecklistItem` / wrappers de objetivos | INSERT existente omite episodio; sigue creando NULL con autorización PSI legacy, sin copiar atribuciones del payload. Respuesta solo de la fila creada. |
+| `updatePatientChecklistItem` / `updatePatientObjective` | SELECT por paciente/ID/tipo y UPDATE tienen ambos `episode_id IS NULL` condicionado a objetivo. Conserva la exigencia PSI de #26 y el 404 sin revelar atribución. |
+| `deletePatientChecklistItem` / `deletePatientObjective` | UPDATE de retiro lógico exige NULL condicionado a objetivo. Sin fila modificada no registra auditoría ni historia; misma respuesta 404 que ID inexistente. |
+| Rutas/controladores `/patients/:id/objectives` y `/:objectiveId` | Únicas entradas de escritura de objetivos: POST/PATCH/DELETE; permisos y validaciones previos conservados. Un ID objetivo en `/tasks` falla por `kind`; cambiar paciente tampoco lo convierte en recurso permitido. |
+| `syncClinicalNoteTasks`, agregado `tasks`, [seguimiento](../backend/src/modules/patients/patients.follow-up.js), [recordatorios](../backend/src/modules/reminders/reminders.service.js) | Todos seleccionan/mutan exclusivamente `kind='task'`; no consumen objetivos ni necesitan filtro nuevo. Conteos/ranking de recordatorios y JSON de seguimiento no varían al introducir E1/E2. |
+| Agenda/disponibilidad, auth/backoffice y auditoría operativa | Sin consultas de objetivos; no hay exportación clínica/histórica HTTP de `patient_tasks`. Backoffice mantiene la denegación clínica de sus tres roles y no publica eventos clínicos como auditoría operativa. |
+| [API frontend](../frontend/src/api/patients.js), [mapper](../frontend/src/mappers/patients.js), [App](../frontend/src/App.jsx) y [NotesScreen](../frontend/src/screens/NotesScreen.jsx) | Solo consumen DTO de listado/detalle/creación/edición. Listas, primer objetivo pendiente, resumen lateral, conteos y avance se derivan de `patient.objetivos`; no existe consulta alternativa. Excluir antes del JSON evita filtrar existencia/estado a esos derivados. Tablero usa tareas, no objetivos. |
+| [Resolutor existente de recursos](../backend/src/modules/episodes/episode.resource.js) y [política](../backend/src/modules/episodes/episode.policy.js) | Lectura estructural interna por episodio/ID/tipo, sin contenido ni rutas clínicas. Reutilizados sin cambios: identificación verificable, audiencia no verificada y todas las operaciones denegadas; no fuente de permisos legacy. |
+| Baseline/seed, runner/migraciones, diagnóstico y fixtures | Herramientas de instalación/estructura explícitas, fuera de rutas operativas. Seed inserta objetivos ficticios y comprueba duplicados solo en instalación nueva; normalización enlaza exclusivamente tareas. Diagnóstico/runner validan integridad/huella, no proyectan objetivos a usuarios. SQL, manifiesto/hashes y herramientas existentes quedan intactos salvo el fixture de demo autorizado. Ninguna ejecución sobre bases existentes. |
+
+### Pruebas y demo de este corte
+
+[Suite HTTP/PostgreSQL ampliada](../backend/test/patient-projection.integration.test.js), en DB nueva con 008 antes de fixtures: dos episodios prepared E1/E2 del mismo paciente, responsables distintos y objetivos pendiente/completado. Compara el JSON HTTP completo antes/después de insertarlos para PAC, PSI con acceso y ajeno y los tres roles administrativos: listado/detalle/seguimiento/recordatorios/agenda/espera, más disponibilidad PSI. Comprueba por separado las respuestas PUT de ficha/entrevista.
+
+Los intentos por ID, cruces de tipo y servicios directos comparan filas completas de tareas/pacientes, auditoría e historia tras cada denegación. Conserva CRUD de objetivos NULL y las regresiones #26 de completado PSI, lectura PAC y tareas interactivas. Una tarea atribuida conserva expresamente lectura, completado PAC, edición y retiro PSI legacy: este dominio no recibe aislamiento en el incremento. Dos intercalaciones deterministas atribuyen un objetivo inicialmente NULL mediante otra conexión SQL, con commit entre el precheck y el UPDATE real: edición y retiro devuelven 404 sin cambiar la fila atribuida, su historia ni auditoría. Es una inyección de prueba, sin vía de atribución productiva.
+
+Reproducción autorizada, únicamente con Docker Linux disponible y recursos nuevos:
+
+```bash
+bash scripts/clinical-episodes.sh test
+bash scripts/clinical-episodes.sh patient-projection-demo
+python3 scripts/run-objective-ui-review.py UUID_NUEVO_IMPRESO_POR_LA_DEMO
+bash scripts/clinical-episodes.sh cleanup UUID_NUEVO_IMPRESO_POR_LA_DEMO
+```
+
+La demo existente instala 008 en vacío y después crea objetivos ficticios E1/E2 del paciente P con profesionales A/B, ambos prepared. Cuentas ficticias: `a@episodes.invalid` (PSI con acceso legacy P), `b@episodes.invalid` (PSI ajeno), `p@episodes.invalid` (PAC propio), `q@episodes.invalid` (PAC ajeno); contraseña de desarrollo `Episode-Demo-Only-284!`. No tiene notas/citas atribuidas ni datos reales. No conectar esta base a otra aplicación ni a recursos habituales.
+
+Recorrido esperado: PSI A abre expediente P → Objetivos: solo «Synthetic legacy objective», puede completar/desmarcar y crear otro objetivo NULL. PAC P consulta estados sin checkbox de objetivos y completa/desmarca su tarea. El driver comprueba el JSON autenticado y ausencia del marcador `FICTIONAL_EPISODE_OBJECTIVE_` en ambas vistas; los conteos y el avance 50% usan exclusivamente objetivos NULL. PSI B y PAC Q no acceden al expediente P, comprobado también por HTTP. Restablecer significa otra demo nueva; limpiar solo el UUID propio verificado.
+
+**VERIFICADO localmente en este corte:**
+
+| Comprobación | Resultado real |
+| --- | --- |
+| Guardas de imágenes/propiedad | 6/6 |
+| Fundamentos SQL / unitarias backend | 116/116 y 181/181 |
+| Integración HTTP/PostgreSQL completa | 360/360, incluidos seis casos nuevos; 17 fuentes declaradas |
+| Frontend | 85/85, lint y build aprobados |
+| Inventarios TAP/AST | Cuatro suites contrastadas con Node 24.22.0 fijado |
+| Contratos CI offline | 53/53 aprobados en la repetición final; primer ensayo 52/53 por montaje local de cwd temporal, corregido fuera del repositorio |
+| Chromium | 3/3 recorridos; tres capturas enmascaradas, cero errores registrados; PSI/PAC inspeccionados visualmente |
+| Repositorio | 57 Markdown/1687 enlaces; 124 archivos protegidos idénticos y 17 hashes válidos; diff sin errores |
+
+Proyecto test `b737e5d3-45a5-4eb8-9cf2-d2371029b578`; demo nueva `4ff235a9-6fa3-4b94-b4b0-d38278a3e71a`; revisión de navegador `c56c7e07-ec8f-49e4-b8d2-9d16b8d4874c`. PostgreSQL 17 tmpfs, red privada, sin puerto DB ni volúmenes persistentes; ambos proyectos y sus imágenes propios limpiados, once contenedores preexistentes conservados. Chromium 156.0.8078.4, Playwright 1.64.0, Node navegador v24.21.0. Sin herramientas instaladas en host ni operación de bases habituales.
+
+Evidencia local: `/tmp/psicopanel-objective-isolation-tests.log`, `/tmp/psicopanel-objective-isolation-demo.log`, `/tmp/psicopanel-objective-isolation-browser.log`, `/tmp/psicopanel-objective-ci-offline-final.log` y `tmp/issue22/browser-result.json`/capturas. El primer log offline `/tmp/psicopanel-objective-ci-offline.log` conserva el fallo del montaje: el adaptador temporal de Node no montaba el cwd del repositorio ficticio anidado. Se corrigió el wrapper externo, sin modificar pruebas/CI ni omitir casos. Esta evidencia local no son artifacts de GitHub ni auditoría independiente.
+
+**CI del HEAD final pendiente.** La matriz conserva `ci/docs`, `ci/backend-unit`, `ci/frontend`, `ci/postgres`, `ci/browser`, `ci/evidence`, `ci/required`, CodeQL aplicable y artifacts 14 días sin modificar workflows ni catálogos obligatorios.
+
+**Límites:** barrera negativa del dominio objetivo en servicios legacy, no política positiva ni aislamiento completo de 2A. Tareas y otros dominios conservan comportamiento previo y requieren su propio encargo; el acceso directo de un operador SQL no es una ruta legacy protegida por este servicio. La aplicación requiere la columna `episode_id` ya definida en 003 y conservada por 008; este PR no instala ni acredita ese esquema en entornos habituales y no añade un fallback ante su ausencia. SQL 001–017, AB-23, fallback, identidad y backoffice permanecen intactos. #30 abierto, sin habilitar tratamientos; activación y clínica general continúan denegadas (`prepared`, `allowed:false`, `audienceVerified:false`).

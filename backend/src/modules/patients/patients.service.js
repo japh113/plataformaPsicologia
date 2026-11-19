@@ -117,6 +117,7 @@ const patientSelectColumns = `
       FROM patient_tasks pt
       WHERE pt.patient_id = p.id
         AND pt.kind = 'objective' AND pt.retired_at IS NULL
+        AND pt.episode_id IS NULL
     ),
     '[]'::json
   ) AS objectives
@@ -735,6 +736,7 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
            , clinical_note_id
       FROM patient_tasks
       WHERE patient_id = $1 AND id = $2 AND kind = $3 AND retired_at IS NULL
+        ${kind === 'objective' ? 'AND episode_id IS NULL' : ''}
       LIMIT 1
     `,
     [patientId, taskId, kind],
@@ -762,6 +764,7 @@ const updatePatientChecklistItem = async (patientId, taskId, payload, actor, kin
         completed = $5,
         updated_at = NOW()
       WHERE patient_id = $1 AND id = $2 AND kind = $3 AND retired_at IS NULL
+        ${kind === 'objective' ? 'AND episode_id IS NULL' : ''}
       RETURNING id, text, completed, clinical_note_id AS "clinicalNoteId"
     `,
     [patientId, taskId, kind, nextText, nextCompleted],
@@ -797,7 +800,10 @@ const deletePatientChecklistItem = async (patientId, taskId, actor, kind) => {
   try {
     await client.query('BEGIN');
     const result = await client.query(
-      'UPDATE patient_tasks SET retired_at = NOW(), updated_at = NOW() WHERE patient_id = $1 AND id = $2 AND kind = $3 AND retired_at IS NULL RETURNING id',
+      `UPDATE patient_tasks SET retired_at = NOW(), updated_at = NOW()
+       WHERE patient_id = $1 AND id = $2 AND kind = $3 AND retired_at IS NULL
+         ${kind === 'objective' ? 'AND episode_id IS NULL' : ''}
+       RETURNING id`,
       [patientId, taskId, kind],
     );
     if (result.rowCount) {

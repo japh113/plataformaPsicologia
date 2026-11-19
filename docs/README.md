@@ -1,8 +1,8 @@
 # Documentación de PsicoPanel
 
-Continuidad vigente: [checkpoint](project-checkpoint.md), corte del **18 de noviembre de 2026**, base `main` `65fcc9481d192e9b1dd80854c5267d76900947ad`, merge #76. **2A parcial**; SQL 001–016 integrado, sin habilitación habitual ni despliegue acreditado. [014](stage2a-identity-directory-intake.md#implementación-del-primer-incremento-autoadministrado--014), [015](stage2a-identity-directory-intake.md#ficha-clínica-privada-individual--015) y [016](stage2a-identity-directory-intake.md#valoración-profesional-privada-de-admisión--016) conservan sus garantías y cortes históricos.
+Continuidad vigente: [checkpoint](project-checkpoint.md), corte del **19 de noviembre de 2026**, base `main` `c39aa542c27e5e3245a9144fe4369d999956e25e`, merge #77. **2A parcial**; SQL 001–017 integrado, sin habilitación habitual ni despliegue acreditado.
 
-Único incremento autorizado actual: [entrevista individual dirigida ficticia 017](stage2a-identity-directory-intake.md#entrevista-individual-dirigida-ficticia--017), implementada en la rama de tarea, pendiente de CI y auditoría independiente. Consulta PAC de versiones incorporadas, corrección aceptada/rechazada y valoración privada por versión; sin activación, agenda ni clínica ordinaria.
+Único incremento autorizado actual: [aislamiento negativo de objetivos atribuidos](objective-completion-authorization.md#aislamiento-negativo-de-objetivos-atribuidos-a-episodio--19-de-noviembre-de-2026), implementado en rama, pendiente de CI y auditoría independiente. Conserva objetivos NULL, tareas, AB-23 y fallback. 017 dirigida ficticia ya integrado; sin activación ni clínica ordinaria.
 
 ## Ruta mínima de lectura
 
@@ -19,7 +19,7 @@ No hace falta leer todo docs/ para iniciar una tarea. [README raíz](../README.m
 | Necesidad | Fuente y frontera |
 | --- | --- |
 | Decidir producto | [Visión](product/vision.md), [ADR/AB](product/decisions.md), [reglas RN](product/business-rules.md). ADR-031/032 aprobados con límites; D21 no aprobada. Producto aprobado no significa implementado. |
-| Saber qué está implementado | [Checkpoint](project-checkpoint.md), [arquitectura](architecture.md) y código del SHA consultado. La arquitectura conserva cortes anteriores; checkpoint y contrato 017 distinguen integración 008–016 del incremento dirigido de esta rama. |
+| Saber qué está implementado | [Checkpoint](project-checkpoint.md), [arquitectura](architecture.md) y código del SHA consultado. La arquitectura conserva cortes anteriores; checkpoint y contrato de objetivos distinguen integración 001–017 del aislamiento negativo de esta rama. |
 | Elegir siguiente trabajo | [Roadmap](product/roadmap.md), [candidatos](product/roadmap.md#próximos-tres-incrementos-candidatos). Orden propuesto, no autorización ni cambio de etapas 0–6/2A–2E. |
 | Ver seguridad actual | [Triage de 28 CodeQL y cero Dependabot](security-codeql-triage.md). Corte fechado y residual por superficie; no evaluación de despliegue ni falso positivo automático. |
 | Desarrollar/verificar | [Desarrollo Docker/WSL](development.md), [CI implementada](ci-implementation.md). Destinos nuevos autorizados, siete checks, artifacts 14 días por HEAD/base/merge/intento. |
@@ -52,4 +52,4 @@ Estos informes conservan fecha, SHA, resultados y límites de **su** entrega. «
 
 Checkpoint se actualiza sin acumular todos los PRs; ADR preservan decisiones, roadmap prioridades/dependencias, contratos comportamientos exigibles, Issues trabajo/estado, e informes evidencia fechada por commit. Al integrar una entrega, verificar main y ajustar las entradas vigentes, dejando enlaces a historia. Inventario se amplía con cada documento nuevo; el tamaño no decide su valor. [Limpieza propuesta](documentation-inventory.md#segundo-pr-de-limpieza-propuesto-no-autorizado) requiere otro alcance: no mover/eliminar/fusionar archivos en este PR.
 
-Mantener `prepared`, `allowed:false`, `audienceVerified:false`, AB-23, originales privados y separación backoffice/clínica. Conservar SQL 001–016/manifiesto/hashes; sin bases habituales, datos reales, migraciones, publicación, proveedores, merge o despliegue por inferencia documental.
+Mantener `prepared`, `allowed:false`, `audienceVerified:false`, AB-23, originales privados y separación backoffice/clínica. Conservar SQL 001–017/manifiesto/hashes; sin bases habituales, datos reales, migraciones, publicación, proveedores, merge o despliegue por inferencia documental.

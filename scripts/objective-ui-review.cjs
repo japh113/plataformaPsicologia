@@ -19,6 +19,14 @@ async function main() {
       const path = new URL(response.url()).pathname;
       if (path.startsWith('/api/') && response.status() >= 400) errors.push(response.status() + ' ' + path);
     });
+    async function hiddenEpisodeObjectives() {
+      const response = await page.request.get('http://api:5000/api/patients/p', {
+        headers: { Authorization: 'Bearer ' + await page.evaluate(() => localStorage.getItem('psicopanel_auth_token')) },
+      });
+      assert.equal(response.status(), 200);
+      assert.equal(JSON.stringify(await response.json()).includes('FICTIONAL_EPISODE_OBJECTIVE_'), false);
+      assert.equal(await page.getByText(/FICTIONAL_EPISODE_OBJECTIVE_/).count(), 0);
+    }
     async function login(email) {
       await page.goto('http://frontend.localhost:5173');
       await page.getByRole('button', { name: 'Iniciar sesion', exact: true }).click();
@@ -55,6 +63,7 @@ async function main() {
     }
     await login('a@episodes.invalid');
     await objectives(true);
+    await hiddenEpisodeObjectives();
     assert.equal(await page.getByRole('checkbox').count(), 1);
     await toggle('Synthetic legacy objective', true);
     await toggle('Synthetic legacy objective', false);
@@ -67,11 +76,12 @@ async function main() {
     await page.getByText('Avance 50%', { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Retirar objetivo (se conserva el registro)', exact: true }).count(), 2);
     await shot('psychologist-objectives');
-    results.push('professional create, complete/unmark, retirement controls, and 50% progress: PASS');
+    results.push('professional create, complete/unmark, retirement controls, hidden E1/E2, and legacy-only 50% progress: PASS');
     await page.getByRole('button', { name: 'Cerrar sesion', exact: true }).click();
 
     await login('p@episodes.invalid');
     await objectives(false);
+    await hiddenEpisodeObjectives();
     const writesBefore = objectiveWrites.length;
     await page.getByText('Avance 50%', { exact: true }).waitFor();
     assert.equal(await page.getByRole('checkbox').count(), 0);
@@ -85,7 +95,7 @@ async function main() {
     await page.waitForLoadState('networkidle');
     assert.equal(objectiveWrites.length, writesBefore);
     await shot('patient-objectives');
-    results.push('patient pending/completed status, 50% progress, no editable controls or objective PATCH: PASS');
+    results.push('patient pending/completed status, hidden E1/E2, legacy-only 50% progress, no editable controls or objective PATCH: PASS');
 
     await page.locator('aside').getByRole('button', { name: 'Tablero', exact: true }).click();
     const task = page.locator('label').filter({ hasText: 'Synthetic legacy task' }).getByRole('checkbox');
