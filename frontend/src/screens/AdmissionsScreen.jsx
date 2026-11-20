@@ -9,27 +9,62 @@ const get=async path=>(await apiRequest('/admissions'+path)).data;
 function AdmissionDetail({id,professional,onRefresh,onRevoked}){
   const [data,setData]=useState(null),[draft,setDraft]=useState(null),[answers,setAnswers]=useState({}),[confirmed,setConfirmed]=useState(false),[revokeConfirmed,setRevokeConfirmed]=useState(false),[send,setSend]=useState(false);
   const [message,setMessage]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
-  const operations=useRef(new Map()),alive=useRef(false);
-  useEffect(()=>{
-    alive.current=true;
-    const start=async()=>{try{const detail=await get('/'+id);if(!alive.current)return;setData(detail);if(!professional&&(detail.state==='accepted'||detail.readOnly)){const own=await get('/'+id+'/draft');if(alive.current){setDraft(own);setAnswers(own.answers);}}}catch(e){if(alive.current)setError(e.message);}};
-    void start();return()=>{alive.current=false;};
+  const operations=useRef(new Map()),alive=useRef(false),generation=useRef(0),denied=useRef(false);
+  const unavailable=useCallback(()=>{
+    if(!alive.current||denied.current)return;
+    denied.current=true;
+    ++generation.current;
+    operations.current.clear();
+    setData(null);setDraft(null);setAnswers({});setMessage('');
+    setConfirmed(false);setRevokeConfirmed(false);setSend(false);setBusy(false);
+  },[]);
+  const loadDetail=useCallback(async isCurrent=>{
+    const detail=await get('/'+id);
+    if(!isCurrent())return;
+    setData(detail);
+    if(!professional&&(detail.state==='accepted'||detail.readOnly)){
+      const own=await get('/'+id+'/draft');
+      if(isCurrent()){setDraft(own);setAnswers(own.answers);}
+    }
   },[id,professional]);
+  useEffect(()=>{
+    const sequence=generation,request=++sequence.current;
+    alive.current=true;denied.current=false;
+    const isCurrent=()=>alive.current&&request===sequence.current;
+    void loadDetail(isCurrent).catch(e=>{
+      if(!isCurrent())return;
+      setError(e.message);
+      if([401,403,404].includes(e.status))unavailable();
+    });
+    return()=>{alive.current=false;++sequence.current;};
+  },[loadDetail,unavailable]);
   const act=async(op,payload)=>{
-    if(busy)return;setBusy(true);setError('');
+    if(busy||denied.current||!data)return;
+    let request=generation.current;
+    const isCurrent=()=>alive.current&&request===generation.current;
+    setBusy(true);setError('');
     const key=JSON.stringify([op,payload]);if(!operations.current.has(key))operations.current.set(key,crypto.randomUUID());
     try{
       await apiRequest('/admissions/'+id+'/'+op,{method:'POST',body:JSON.stringify({...payload,confirmed:true,operationId:operations.current.get(key),expectedVersion:data.version})});
+      if(!isCurrent())return;
       operations.current.delete(key);setConfirmed(false);setSend(false);
-      if(op==='revoke'){setData(null);setDraft(null);setAnswers({});await onRefresh();onRevoked();return;}
-      const detail=await get('/'+id);if(!alive.current)return;setData(detail);
-      if(!professional&&(detail.state==='accepted'||detail.readOnly)){const own=await get('/'+id+'/draft');if(alive.current){setDraft(own);setAnswers(own.answers);}}
-      await onRefresh();
-    }catch(e){if(e.status&&e.status<500)operations.current.delete(key);if(alive.current){setError(e.message);if([401,403,404].includes(e.status)){setData(null);setDraft(null);setAnswers({});}}}
-    finally{if(alive.current)setBusy(false);}
+      if(op==='revoke'){
+        unavailable();
+        request=generation.current;
+        await onRefresh();
+        if(isCurrent())onRevoked();
+        return;
+      }
+      await loadDetail(isCurrent);
+      if(isCurrent())await onRefresh();
+    }catch(e){
+      if(!isCurrent())return;
+      if(e.status&&e.status<500)operations.current.delete(key);
+      setError(e.message);
+      if([401,403,404].includes(e.status))unavailable();
+    }finally{if(isCurrent())setBusy(false);}
   };
-  const receiveDetail=useCallback(detail=>{if(alive.current)setData(detail);},[]);
-  const unavailable=useCallback(()=>{setData(null);setDraft(null);setAnswers({});setMessage('');},[]);
+  const receiveDetail=useCallback(detail=>{if(alive.current&&!denied.current)setData(detail);},[]);
   const editable=data&&!data.readOnly&&['awaiting_submission','correction_requested'].includes(data.reviewState);
   const saved=draft&&JSON.stringify(answers)===JSON.stringify(draft.answers);
   return <article aria-label="Detalle de admisión" className="rounded-xl border bg-white p-5 space-y-4">

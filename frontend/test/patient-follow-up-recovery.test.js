@@ -148,3 +148,57 @@ test('real API client retains 401 token invalidation and session-ended event; 40
     assert.deepEqual(events,status === 401 ? ['psicopanel-session-ended'] : []);
   }
 });
+
+test('real API client fences requests and late bodies when another tab replaces the signed-in session', async () => {
+  const oldSession = 'fixture-session-a';
+  const newSession = 'fixture-session-b';
+  let stored = oldSession;
+  const calls = [], events = [], body = deferred(), reading = deferred();
+  const storage = {
+    getItem: () => stored,
+    setItem: (_key, value) => { stored = value; },
+    removeItem: () => { stored = null; },
+  };
+  const scope = {
+    Event: class { constructor(type) { this.type = type; } },
+    window: { localStorage: storage, dispatchEvent: event => events.push(event.type) },
+    fetch: async (_url, options) => {
+      calls.push(options.headers);
+      return {
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: () => {
+          if (calls.length === 1) {
+            reading.resolve();
+            return body.promise;
+          }
+          return {};
+        },
+      };
+    },
+  };
+  const source = client.replace('import.meta.env.VITE_API_URL', "'http://api.invalid/api'")
+    .replaceAll('export const ', 'const ').replace('export { API_BASE_URL };', '');
+  const { apiRequest, getAuthToken, setAuthToken, storageEndedSession } = vm.runInNewContext(
+    source + '\n({apiRequest,getAuthToken,setAuthToken,storageEndedSession});', scope,
+  );
+  const oldRead = apiRequest('/admissions/old');
+  await reading.promise;
+  assert.ok(calls[0].Authorization === 'Bearer ' + oldSession);
+
+  stored = newSession;
+  assert.equal(getAuthToken(), null);
+  await assert.rejects(apiRequest('/admissions'), { status: 401 });
+  assert.equal(calls.length, 1, 'No request starts with the other tab session before its event arrives');
+  assert.equal(storageEndedSession({ storageArea: storage, key: 'psicopanel_auth_token' }), true);
+  body.resolve({ data: 'PRIVATE_FIXTURE' });
+  await assert.rejects(oldRead, { status: 401 });
+  assert.ok(stored === newSession);
+  assert.deepEqual(events, []);
+
+  await apiRequest('/auth/login');
+  assert.equal(Object.hasOwn(calls[1], 'Authorization'), false);
+  setAuthToken(newSession);
+  await apiRequest('/auth/me');
+  assert.ok(calls[2].Authorization === 'Bearer ' + newSession);
+});

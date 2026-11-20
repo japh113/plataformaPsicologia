@@ -3,15 +3,28 @@ const base=process.env.REVIEW_BASE,api='http://api:5000/api',control='/control',
 const results=[],events=[],screenshots=[];let current='SETUP',allowed=new Set(),browser,psy,pac,selected,initial;
 const save=()=>fs.writeFileSync(control+'/results.json',JSON.stringify({results,events,screenshots},null,2));
 const button=(p,name)=>p.getByRole('button',{name,exact:true});
+function gate(){
+  let release;
+  const wait=new Promise(resolve=>{release=resolve;});
+  return {release,wait};
+}
+async function waitForGate(gate,label){
+  let timer;
+  try{
+    await Promise.race([gate.wait,new Promise((_,reject)=>{
+      timer=setTimeout(()=>reject(new Error('Timed out waiting for '+label)),10000);
+    })]);
+  }finally{clearTimeout(timer);}
+}
 function watch(p){p.on('pageerror',()=>events.push({scenario:current,type:'pageerror',expected:false}));p.on('response',r=>{if(r.status()>=400)events.push({scenario:current,type:'http',status:r.status(),expected:allowed.has(r.status())});});}
 async function shot(id,p=pac||psy){await p.screenshot({path:out+'/screenshots/'+id+'.png',fullPage:true,animations:'disabled',mask:[p.locator('input'),p.locator('textarea'),p.getByText(/@|Password demo:/)],maskColor:'#475569'});screenshots.push({file:'screenshots/'+id+'.png',scenario:current,secretsMasked:true});save();}
 async function scenario(id,fn,statuses=[]){current=id;allowed=new Set(statuses);try{await fn();await shot(id);results.push({id,status:'PASS'});}catch(e){fs.writeFileSync(control+'/browser-failure.txt',e.stack||e.message);results.push({id,status:'FAIL',failureCategory:e.name==='TimeoutError'?'timeout':'assertion'});try{await shot(id+'-failure');}catch{}save();throw Error('Scenario '+id+' failed');}save();console.log(id+' PASS');}
-async function signIn(p,id){
-  await p.goto(base);
+async function submitLogin(p,id){
   await p.locator('input[name=email]').fill(id+'@bilateral.invalid');
   await p.locator('input[name=password]').fill('Episode-Demo-Only-284!');
   await button(p,'Entrar').click();
 }
+async function signIn(p,id){await p.goto(base);await submitLogin(p,id);}
 async function login(id){const context=await browser.newContext({viewport:{width:375,height:812},locale:'es-MX'}),p=await context.newPage();watch(p);await signIn(p,id);const nav=p.getByRole('navigation',{name:'Navegación móvil'});await nav.waitFor();const entry=nav.getByRole('button',{name:'Admisión',exact:true});await entry.click();await p.getByRole('heading',{name:'Admisiones individuales',exact:true}).waitFor();assert.ok(await nav.evaluate(n=>n.scrollWidth<=n.clientWidth));return p;}
 async function json(p,path='',body){return p.evaluate(async({api,path,body})=>{const r=await fetch(api+'/admissions'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+localStorage.getItem('psicopanel_auth_token'),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,body:await r.json()};},{api,path,body});}
 async function open(p){await Promise.all([p.waitForResponse(r=>r.url().endsWith('/admissions')&&r.status()===200),button(p,'Actualizar admisiones').click()]);await p.getByRole('article',{name:'Detalle de admisión'}).waitFor({state:'hidden'});await p.getByRole('region',{name:'Admisiones individuales',exact:true}).locator('li button').first().click();await p.getByRole('heading',{name:'Admisión individual ficticia',exact:true}).waitFor();}
@@ -59,6 +72,123 @@ async function main(){
  await scenario('ADM02',async()=>{await pac.getByLabel(/Acepto específicamente esta asignación/).check();await button(pac,'Aceptar asignación').click();await pac.getByRole('heading',{name:'Borrador privado',exact:true}).waitFor();await open(psy);initial=(await json(psy,'/'+selected)).body.data;});
  await scenario('ADM03',async()=>{await pac.getByLabel('Motivo ficticio para este ensayo',{exact:true}).fill('Motivo exclusivo de ensayo');await pac.getByLabel('Contexto ficticio adicional',{exact:true}).fill('Borrador ficticio secreto');await saveDraft();assert.deepEqual((await json(psy,'/'+selected)).body.data,initial);assert.doesNotMatch(JSON.stringify((await json(psy)).body),/Borrador ficticio|answers|revision|draft/i);assert.ok(await button(pac,'Enviar versión inmutable').isDisabled());});
  await scenario('ADM04',async()=>{await send();await open(psy);await psy.locator('details').filter({hasText:'Borrador ficticio secreto'}).waitFor();assert.ok(await button(psy,'Registrar validación exacta').isDisabled());});
+ await scenario('ADM24',async()=>{
+   for(const status of [403,404]){
+     const page=await login('bp1');
+     const denyRecord=gate(),deliverDetail=gate(),recordStarted=gate(),detailStarted=gate();
+     const detailPath='**/admissions/'+selected,recordPath=detailPath+'/record';
+     let recordReads=0;
+     const headers={'access-control-allow-origin':'*'};
+     try{
+       await page.route(recordPath,async route=>{
+         if(route.request().method()!=='GET')return route.continue();
+         recordReads++;
+         recordStarted.release();
+         await denyRecord.wait;
+         await route.fulfill({status,headers,json:{success:false,message:'Acceso ficticio retirado'}});
+       });
+       const recordRequest=page.waitForRequest(r=>r.method()==='GET'&&r.url().endsWith('/'+selected+'/record'));
+       await open(page);
+       await recordRequest;
+       await waitForGate(recordStarted,'pending assessment read');
+       const detail=page.getByRole('article',{name:'Detalle de admisión'});
+       await detail.getByText(/Borrador ficticio secreto/).waitFor();
+       // Keep the existing fixture for the remaining scenarios. Only the receipt is simulated.
+       await page.route(detailPath+'/validate',route=>route.request().method()==='POST'
+         ?route.fulfill({status:200,headers,json:{success:true,data:{}}}):route.continue());
+       await page.route(detailPath,async route=>{
+         if(route.request().method()!=='GET')return route.continue();
+         const response=await route.fetch();
+         assert.equal(response.status(),200);
+         detailStarted.release();
+         await deliverDetail.wait;
+         await route.fulfill({response});
+       });
+       const detailRequest=page.waitForRequest(r=>r.method()==='GET'&&r.url().endsWith('/admissions/'+selected));
+       await page.getByLabel(/Registro expresamente la validación profesional/).check();
+       await button(page,'Registrar validación exacta').click();
+       await detailRequest;
+       await waitForGate(detailStarted,'retained self-admission detail');
+       const pendingRecordReads=recordReads;
+       denyRecord.release();
+       await page.getByRole('region',{name:'Valoración profesional privada'}).waitFor({state:'hidden'});
+       assert.equal(await detail.getByText(/Borrador ficticio secreto/).count(),0);
+       const delivered=page.waitForResponse(r=>r.url().endsWith('/admissions/'+selected)&&r.status()===200);
+       deliverDetail.release();
+       await (await delivered).finished();
+       await page.waitForLoadState('networkidle');
+       assert.equal(await detail.getByText(/Borrador ficticio secreto/).count(),0);
+       assert.equal(await detail.locator('button, textarea, input').count(),0);
+       assert.equal(recordReads,pendingRecordReads);
+     }finally{
+       denyRecord.release();
+       deliverDetail.release();
+       await page.context().close();
+     }
+   }
+ },[403,404]);
+ await scenario('ADM25',async()=>{
+   const context=await browser.newContext({viewport:{width:1280,height:900},locale:'es-MX'});
+   const first=await context.newPage(),second=await context.newPage();
+   const deliver=gate(),retained=gate(),delivered=gate(),detailPath='**/admissions/'+selected;
+   first.setDefaultTimeout(12000);second.setDefaultTimeout(12000);
+   watch(first);watch(second);
+   try{
+     await second.goto(base);
+     await button(second,'Entrar').waitFor();
+     await signIn(first,'bp1');
+     const firstNav=first.locator('aside'),secondNav=second.locator('aside');
+     await firstNav.getByText('Profesional ficticio bp1',{exact:true}).waitFor();
+     await button(firstNav,'Admisión').click();
+     await open(first);
+     await first.getByText(/Borrador ficticio secreto/).waitFor();
+     await button(first,'Actualizar admisiones').click();
+     await first.getByRole('article',{name:'Detalle de admisión'}).waitFor({state:'hidden'});
+     await first.route(detailPath,async route=>{
+       if(route.request().method()!=='GET')return route.continue();
+       const response=await route.fetch();
+       assert.equal(response.status(),200);
+       retained.release();
+       await deliver.wait;
+       await route.fulfill({response});
+       delivered.release();
+     });
+     const request=first.waitForRequest(r=>r.method()==='GET'&&r.url().endsWith('/admissions/'+selected));
+     await first.getByRole('region',{name:'Admisiones individuales'}).locator('li button').first().click();
+     await request;
+     await waitForGate(retained,'the first tab detail snapshot');
+     await submitLogin(second,'bp2');
+     await secondNav.getByText('Profesional ficticio bp2',{exact:true}).waitFor();
+     await button(first,'Entrar').waitFor();
+     const response=first.waitForResponse(r=>r.url().endsWith('/admissions/'+selected)&&r.status()===200);
+     deliver.release();
+     await Promise.all([response,waitForGate(delivered,'the first tab late response')]);
+     await button(first,'Entrar').waitFor();
+     assert.equal(await firstNav.count(),0);
+     assert.equal(await first.getByText(/Profesional ficticio bp[12]|Borrador ficticio secreto/).count(),0);
+     assert.equal(await first.getByRole('region',{name:'Admisiones individuales'}).count(),0);
+     await button(secondNav,'Admisión').click();
+     await second.getByText('No tienes admisiones asignadas.',{exact:true}).waitFor();
+     const mirror=await context.newPage();
+     await mirror.goto(base);
+     await mirror.locator('aside').getByText('Profesional ficticio bp2',{exact:true}).waitFor();
+     await button(secondNav,'Cerrar sesion').click();
+     await button(second,'Entrar').waitFor();
+     await button(mirror,'Entrar').waitFor();
+     await submitLogin(second,'bp2');
+     await secondNav.getByText('Profesional ficticio bp2',{exact:true}).waitFor();
+     await second.route('**/api/admissions',route=>route.request().method()==='GET'
+       ?route.fulfill({status:401,headers:{'access-control-allow-origin':'*'},json:{success:false,message:'Sesión ficticia revocada'}})
+       :route.continue());
+     await button(secondNav,'Admisión').click();
+     await button(second,'Entrar').waitFor();
+     await second.reload();
+     await button(second,'Entrar').waitFor();
+   }finally{
+     deliver.release();
+     await context.close();
+   }
+ },[401]);
  await scenario('ADM13',async()=>{
    const panel=psy.getByRole('region',{name:'Valoración profesional privada',exact:true});await panel.locator('strong').filter({hasText:'NO EVALUADO'}).waitFor();
    await psy.getByLabel('Riesgo profesional',{exact:true}).selectOption('high');await psy.getByLabel('Contexto profesional privado',{exact:true}).fill('BORRADOR P2 GUARDADO');

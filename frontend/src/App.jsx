@@ -47,7 +47,7 @@ import {
   reorderAppointmentWaitlistEntries,
   updateAppointment,
 } from './api/appointments';
-import { getAuthToken } from './api/client';
+import { getAuthToken, storageEndedSession } from './api/client';
 import {
   acceptCareRelationshipByCode,
   createCareRelationship,
@@ -478,6 +478,8 @@ export default function App({onRestrictedSession}) {
   useEffect(() => {
     const bootstrapSession = async () => {
       const token = getAuthToken();
+      const epoch = sessionEpoch.current;
+      const isCurrent = () => getAuthToken() === token && sessionEpoch.current === epoch;
 
       if (!token) {
         setAuthLoading(false);
@@ -486,10 +488,12 @@ export default function App({onRestrictedSession}) {
 
       try {
         const user = await getCurrentUser();
-        setCurrentUser(user);
+        if (isCurrent()) setCurrentUser(user);
       } catch {
-        logout();
-        resetSessionState();
+        if (isCurrent()) {
+          logout();
+          resetSessionState();
+        }
       } finally {
         setAuthLoading(false);
       }
@@ -519,11 +523,14 @@ export default function App({onRestrictedSession}) {
     setPasswordResetSuccess('');
     setPasswordResetPreview(null);
 
+    const epoch = sessionEpoch.current;
     try {
       const session = await login(credentials);
+      if (sessionEpoch.current !== epoch) return;
       if(session.sessionKind==='restricted') {
         setCurrentUser(null);resetSessionState();onRestrictedSession(session.restrictedToken);return;
       }
+      if (getAuthToken() !== session.token) return;
       setCurrentUser(session.user);
       resetSessionState();
     } catch (error) {
@@ -633,10 +640,11 @@ export default function App({onRestrictedSession}) {
   useEffect(() => {
     const endSession = () => {
       setCurrentUser(null);
+      setAuthLoading(false);
       resetSessionState();
     };
     const storageChanged = event => {
-      if (event.key === 'psicopanel_auth_token' && !event.newValue) endSession();
+      if (storageEndedSession(event)) endSession();
     };
     window.addEventListener('storage', storageChanged);
     window.addEventListener('psicopanel-session-ended', endSession);
@@ -1944,7 +1952,7 @@ export default function App({onRestrictedSession}) {
     );
   }
 
-  if (!currentUser) {
+  if (!currentUser || !getAuthToken()) {
     return (
       <LoginScreen
         onLogin={handleLogin}
