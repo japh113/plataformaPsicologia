@@ -93,52 +93,24 @@ test('P2-01: late follow-up responses cannot restore data after logout, session 
   assert.equal(h.state.patients[0].seguimiento.consultas.length,0);
 });
 
-test('P2-02: confirmed PUT updates file/form, closes real modal, returns true despite network/500 refresh failure, then recovers', async () => {
-  for (const status of [undefined,500]) {
-    const previous = mapBackendPatientToUiPatient({ ...primary,followUp: follow });
-    const pending = deferred();
-    const h = harness({ previous,followRequest: () => pending.promise });
-    await h.handleSaveRequiredInterview();
-    assert.equal(h.state.puts,1);
-    assert.equal(h.state.modal,false);
-    assert.equal(h.state.selected.entrevistaCompleta,true);
-    assert.equal(h.state.form.lugarNacimiento,'Fictional place');
-    assert.equal(h.state.selected.seguimiento,previous.seguimiento);
-    assert.deepEqual(h.state.success,['Entrevista guardada correctamente.']);
-    pending.resolve(Promise.reject(failure(status)));
-    await flush();
-    assert.equal(h.state.errors.length,0);
-    assert.equal(h.state.selected.seguimientoEstado,'error');
-    assert.equal(h.state.selected.seguimiento,previous.seguimiento);
-    h.context.getPatientFollowUp = async () => empty;
-    await h.refresh('p');
-    assert.equal(h.state.selected.seguimientoEstado,'ready');
-    assert.equal(h.state.selected.entrevistaCompleta,true);
-    assert.equal(h.state.puts,1);
-    const direct = harness({ previous,followRequest: async () => { throw failure(status); } });
-    assert.equal(await direct.saveInterview('p',{}),true);
-    await flush();assert.equal(direct.state.puts,1);
+test('clinical recovery keeps whichever preclinical screen was opened while the retry was in flight', async () => {
+  for (const view of ['admissions', 'bilateral', 'notas']) {
+    const h = harness();
+    h.context.getPatients = async () => { throw failure(403); };
+    await h.load();
+    assert.equal(h.context.clinicalAccess.current.denied, true);
+
+    const patients = deferred();
+    h.context.getPatients = () => patients.promise;
+    const retry = h.load({ recheckAccess: true });
+    h.state.VistaActiva = view;
+    patients.resolve([primary]);
+    await retry;
+
+    assert.equal(h.context.clinicalAccess.current.denied, false);
+    assert.equal(h.state.error, '');
+    assert.equal(h.state.VistaActiva, view === 'notas' ? 'dashboard' : view);
   }
-});
-
-test('P2-02: real PUT success + refresh success; real PUT failure keeps modal and returns false without false success', async () => {
-  const good = harness({ previous: mapBackendPatientToUiPatient(primary) });
-  assert.equal(await good.saveInterview('p',{}),true);await flush();
-  assert.equal(good.state.selected.seguimientoEstado,'ready');
-  assert.equal(good.state.selected.entrevistaCompleta,true);
-  const bad = harness({ put: async () => { throw failure(500); } });
-  assert.equal(await bad.saveInterview('p',{}),false);
-  assert.equal(bad.state.success.length,0);assert.equal(bad.state.errors.length,1);
-  assert.equal(bad.state.followReads,0);assert.equal(bad.state.modal,true);
-});
-
-test('P2-02: secondary 401 preserves confirmed persistence outcome, invalidates current session, and cannot restore protected state', async () => {
-  const pending = deferred();
-  const h = harness({ previous: mapBackendPatientToUiPatient({ ...primary,followUp: follow }),followRequest: () => pending.promise });
-  assert.equal(await h.saveInterview('p',{}),true);
-  h.state.token = null;h.sessionEpoch.current++;h.state.patients = [];h.state.selected = null;
-  pending.resolve(Promise.reject(failure(401)));await flush();
-  assert.equal(h.state.puts,1);assert.equal(h.state.selected,null);assert.equal(h.state.patients.length,0);
 });
 
 test('real API composition retains primary data on network/500, while 401/403/404 propagate', async () => {
@@ -175,4 +147,58 @@ test('real API client retains 401 token invalidation and session-ended event; 40
     assert.equal(token,status === 401 ? null : 'jwt');
     assert.deepEqual(events,status === 401 ? ['psicopanel-session-ended'] : []);
   }
+});
+
+test('real API client fences requests and late bodies when another tab replaces the signed-in session', async () => {
+  const oldSession = 'fixture-session-a';
+  const newSession = 'fixture-session-b';
+  let stored = oldSession;
+  const calls = [], events = [], body = deferred(), reading = deferred();
+  const storage = {
+    getItem: () => stored,
+    setItem: (_key, value) => { stored = value; },
+    removeItem: () => { stored = null; },
+  };
+  const scope = {
+    Event: class { constructor(type) { this.type = type; } },
+    window: { localStorage: storage, dispatchEvent: event => events.push(event.type) },
+    fetch: async (_url, options) => {
+      calls.push(options.headers);
+      return {
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: () => {
+          if (calls.length === 1) {
+            reading.resolve();
+            return body.promise;
+          }
+          return {};
+        },
+      };
+    },
+  };
+  const source = client.replace('import.meta.env.VITE_API_URL', "'http://api.invalid/api'")
+    .replaceAll('export const ', 'const ').replace('export { API_BASE_URL };', '');
+  const { apiRequest, getAuthToken, setAuthToken, storageEndedSession } = vm.runInNewContext(
+    source + '\n({apiRequest,getAuthToken,setAuthToken,storageEndedSession});', scope,
+  );
+  const oldRead = apiRequest('/admissions/old');
+  await reading.promise;
+  assert.ok(calls[0].Authorization === 'Bearer ' + oldSession);
+
+  stored = newSession;
+  assert.equal(getAuthToken(), null);
+  await assert.rejects(apiRequest('/admissions'), { status: 401 });
+  assert.equal(calls.length, 1, 'No request starts with the other tab session before its event arrives');
+  assert.equal(storageEndedSession({ storageArea: storage, key: 'psicopanel_auth_token' }), true);
+  body.resolve({ data: 'PRIVATE_FIXTURE' });
+  await assert.rejects(oldRead, { status: 401 });
+  assert.ok(stored === newSession);
+  assert.deepEqual(events, []);
+
+  await apiRequest('/auth/login');
+  assert.equal(Object.hasOwn(calls[1], 'Authorization'), false);
+  setAuthToken(newSession);
+  await apiRequest('/auth/me');
+  assert.ok(calls[2].Authorization === 'Bearer ' + newSession);
 });

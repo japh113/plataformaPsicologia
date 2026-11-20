@@ -151,10 +151,14 @@ test('014: isolated adult self-admission, exact versions, private projections an
       const first=await submit(q);assert.deepEqual(Object.keys(first).sort(),['id','submission','version']);
       const snapshot=await detail(q);assert.equal(snapshot.submissions.length,1);
       const q2=await propose('bp1','bq1',q.agreementId);await accept(q2);
-      assert.deepEqual((await detail(q2)).submissions,[]);
       const parallel=await propose('bp23','bq1');await accept(parallel);
-      assert.deepEqual((await command(actor('bp23'),'detail',{},parallel.id)).submissions,[]);
-      await assert.rejects(command(actor('bp23'),'detail',{},q.id),/admission_missing/);
+      const otherBefore=await Promise.all([detail(q2),detail(parallel)]);
+      for(const other of otherBefore){
+        assert.deepEqual(other.submissions,[]);assert.deepEqual(other.validations,[]);
+        assert.equal(other.reviewState,'awaiting_submission');
+      }
+      assert.equal((await http(parallel.psy,'/admissions/'+q.id)).status,404);
+      assert.equal((await http(q.psy,'/admissions/'+parallel.id)).status,404);
       await assert.rejects(command(actor(q.psy),'validate',{...act(),expectedVersion:first.version,submission:1,episodeId:q2.episodeId},q.id),/admission_conflict/);
       await assert.rejects(command(actor(q.psy),'validate',{...act(),expectedVersion:2,submission:1,episodeId:q2.episodeId},q2.id),/admission_conflict/);
       await review(q,'validate');await review(q,'correct',{message:'Aclarar contexto ficticio para el paciente.'});
@@ -164,6 +168,7 @@ test('014: isolated adult self-admission, exact versions, private projections an
       const latest=await detail(q);assert.deepEqual(latest.submissions[0],snapshot.submissions[0]);assert.equal(latest.validations[0].submission,1);assert.equal(latest.reviewState,'submitted');
       await assert.rejects(command(actor(q.psy),'validate',{...act(),expectedVersion:latest.version,submission:1,episodeId:q.episodeId},q.id),/admission_conflict/);
       await review(q,'validate');const final=await detail(q);assert.equal(final.validations.length,2);assert.equal(final.reviewState,'validated');
+      assert.deepEqual(await Promise.all([detail(q2),detail(parallel)]),otherBefore);
       for(const sql of ["UPDATE admission_submissions SET answers='{}'",'DELETE FROM admission_submissions','TRUNCATE admission_submissions','DELETE FROM admission_validations','UPDATE admission_templates SET definition=definition'])await assert.rejects(client.query(sql),/admission_immutable|cannot truncate/);
     });
     await t.test('idempotency binds nested answers, exact submission, revalidation and obsolete review replays',async()=>{
@@ -359,7 +364,33 @@ test('014: isolated adult self-admission, exact versions, private projections an
       await assert.rejects(transaction(async()=>{throw new Error('controlled rollback');}),/controlled rollback/);assert.ok(Array.isArray(await command(actor('bp1'),'list')));
       await closeAdmission();process.env.ADMISSION_DATABASE_URL=`postgres://${env.dbUser}:${env.dbPassword}@db:5432/${name}`;
       await assert.rejects(command(actor('bp1'),'list'),/Unsafe admission LOGIN/);await closeAdmission();process.env.ADMISSION_DATABASE_URL=`postgres://${options.admissionClientRole}:disposable_admission_roles@db:5432/${name}`;
-      const off=process.env.ADMISSION_ENABLED;process.env.ADMISSION_ENABLED='false';assert.equal((await http('bp1','/admissions')).status,404);process.env.ADMISSION_ENABLED=off;
+    });
+    await t.test('disabled admission preserves registration, login and global DOB without creating an admission',async()=>{
+      const admissions=async()=>(await client.query('SELECT id FROM admission_assignments ORDER BY id')).rows;
+      const before=await admissions();
+      const enabled=process.env.ADMISSION_ENABLED;
+      process.env.ADMISSION_ENABLED='false';
+      try{
+        const credentials={email:'adult-without-admission@bilateral.invalid',password:'Fictitious-Admission-Disabled-742!'};
+        const birthDate='1992-07-15';
+        assert.equal((await http('bq1','/auth/register/patient',{
+          ...credentials,firstName:'Paciente',lastName:'Ficticio',phone:'+525588111999',birthDate,
+        })).status,202);
+        const login=await http('bq1','/auth/login',credentials);
+        assert.equal(login.status,200);
+        const headers={Authorization:'Bearer '+login.body.data.token,'Content-Type':'application/json'};
+        const account=path=>fetch(url+'/api'+path,{headers});
+        assert.equal((await account('/auth/me')).status,200);
+        assert.equal((await account('/admissions')).status,404);
+        const update=await fetch(url+'/api/auth/identity',{method:'PATCH',headers,body:JSON.stringify({firstName:'Identidad'})});
+        assert.equal(update.status,200);
+        const identity=await account('/auth/identity');
+        assert.equal(identity.status,200);
+        const {data}=await identity.json();
+        assert.equal(data.birthDate,birthDate);
+        assert.equal(data.firstName,'Identidad');
+        assert.deepEqual(await admissions(),before);
+      }finally{process.env.ADMISSION_ENABLED=enabled;}
     });
     await t.test('015 preparation serializes with all seven admission revokers in both real commit orders',async()=>{
       const reader=new pg.Client({connectionString:process.env.ADMISSION_DATABASE_URL}),revoker=new pg.Client({...connection,database:name});

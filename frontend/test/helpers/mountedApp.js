@@ -59,7 +59,7 @@ export async function mountedApp() {
   h.api.getCurrentUser = () => { const d = deferred(); h.boot.push(d); return d.promise; };
   h.api.getPatients = () => { const d = deferred(); h.lists.push(d); return d.promise; };
   h.api.logout = () => { h.logoutCalls++; h.token = null; };
-  h.api.login = async () => { h.token = 'next-session'; return { user: { ...h.actor } }; };
+  h.api.login = async () => { h.token = 'next-session'; return { token: h.token, user: { ...h.actor } }; };
   h.api.getPatient = async id => patient(id);
   h.api.updatePatientClinicalNote = async () => { h.writes++; return { id: 'confirmed-note' }; };
   h.renderChild = (url, props, R) => {

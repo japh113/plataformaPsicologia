@@ -10,7 +10,6 @@ import './App.css';
 import Sidebar from './components/layout/Sidebar';
 import MobileNav from './components/layout/MobileNav';
 import NewPatientModal from './modals/NewPatientModal';
-import PatientInterviewModal from './modals/PatientInterviewModal';
 import DashboardScreen from './screens/DashboardScreen';
 import PatientsScreen from './screens/PatientsScreen';
 import NotesScreen from './screens/NotesScreen';
@@ -34,7 +33,6 @@ import {
   getPatient,
   getPatientFollowUp,
   getPatients,
-  upsertPatientInterview,
   updatePatient,
   updatePatientClinicalNote,
   updatePatientTask,
@@ -49,7 +47,7 @@ import {
   reorderAppointmentWaitlistEntries,
   updateAppointment,
 } from './api/appointments';
-import { getAuthToken } from './api/client';
+import { getAuthToken, storageEndedSession } from './api/client';
 import {
   acceptCareRelationshipByCode,
   createCareRelationship,
@@ -75,7 +73,6 @@ import {
   mapBackendPatientToUiPatient,
   mapBackendFollowUpToUiFollowUp,
   mapBackendTaskToUiTask,
-  mapUiInterviewToBackendInterview,
   mapUiPatientToBackendPatient,
 } from './mappers/patients';
 import {
@@ -85,7 +82,6 @@ import {
   mapBackendWaitlistToUiWaitlistEntry,
   mapUiAppointmentToBackendAppointment,
 } from './mappers/appointments';
-import { buildInterviewForm as buildInterviewDraftForm } from './utils/patientInterview';
 
 const sortAppointments = (appointments) =>
   [...appointments].sort((a, b) => {
@@ -145,7 +141,6 @@ export default function App({onRestrictedSession}) {
   const [guardandoPerfilPaciente, setGuardandoPerfilPaciente] = useState(false);
   const [guardandoSesion, setGuardandoSesion] = useState(false);
   const [sessionActionError, setSessionActionError] = useState('');
-  const [guardandoEntrevista, setGuardandoEntrevista] = useState(false);
   const [procesandoTareaId, setProcesandoTareaId] = useState(null);
   const [guardandoCita, setGuardandoCita] = useState(false);
   const [procesandoCitaId, setProcesandoCitaId] = useState(null);
@@ -173,18 +168,12 @@ export default function App({onRestrictedSession}) {
   const [backofficeActionError, setBackofficeActionError] = useState('');
   const [relationshipActionError, setRelationshipActionError] = useState('');
   const [relationshipInvitePreview, setRelationshipInvitePreview] = useState(null);
-  const [showPatientInterview, setShowPatientInterview] = useState(false);
-  const [patientInterviewForm, setPatientInterviewForm] = useState(buildInterviewDraftForm(null, ''));
   const [uiFeedback, setUiFeedback] = useState(null);
 
   const isPsychologist = currentUser?.role === 'psychologist';
   const isBackoffice = ['admin', 'support', 'superadmin'].includes(currentUser?.role || '');
   const todayDate = getTodayDateString();
   const todayAppointments = useMemo(() => filterAppointmentsByDate(appointments, todayDate), [appointments, todayDate]);
-  const patientProfile = useMemo(
-    () => (currentUser?.role === 'patient' ? pacientes.find((patient) => patient.id === currentUser.patientId) || null : null),
-    [currentUser, pacientes],
-  );
 
   useEffect(() => {
     if (!uiFeedback) {
@@ -240,18 +229,16 @@ export default function App({onRestrictedSession}) {
     setAvailabilityExceptionActionError('');
     setSessionActionError('');
     setGuardandoSesion(false);
-    setGuardandoEntrevista(false);
     setCargandoDatos(false); setProcesandoTareaId(null);
     setGuardandoCita(false); setProcesandoCitaId(null); setGuardandoListaEspera(false); setProcesandoListaEsperaId(null);
     setGuardandoNotas(false); setGuardandoPerfilPaciente(false); setGuardandoPaciente(false);
     setSavingAvailability(false); setSavingAvailabilityException(false);
-    setPatientInterviewForm(buildInterviewDraftForm(null, '')); setUiFeedback(null);
+    setUiFeedback(null);
     setReviewingPsychologistId(null);
     setProcessingRelationshipId(null);
     setBackofficeActionError('');
     setRelationshipActionError('');
     setRelationshipInvitePreview(null);
-    setShowPatientInterview(false);
     setMostrarModalNuevoPaciente(false);
     setNuevoPacienteForm({ nombre: '', edad: '', motivo: '', riesgo: 'sin riesgo' });
     setPasswordResetError('');
@@ -300,8 +287,8 @@ export default function App({onRestrictedSession}) {
     clinicalRecordSyncRef.current.clear(); setClinicalRecordSync({});
     setPacientes([]); setPacienteSeleccionado(null); setAppointments([]); setReminders([]); setCareRelationships([]);
     setAppointmentWaitlist([]); setAvailability([]); setAvailabilityDraft([]); setAvailabilityExceptions([]);
-    setNotasTemp(''); setShowPatientInterview(false); setPatientInterviewForm(buildInterviewDraftForm(null, ''));
-    setCargandoDatos(false); setGuardandoEntrevista(false); setGuardandoSesion(false);
+    setNotasTemp('');
+    setCargandoDatos(false); setGuardandoSesion(false);
     setGuardandoPaciente(false); setGuardandoNotas(false); setGuardandoPerfilPaciente(false);
     setProcesandoTareaId(null);
     setGuardandoCita(false); setProcesandoCitaId(null); setGuardandoListaEspera(false); setProcesandoListaEsperaId(null);
@@ -446,7 +433,8 @@ export default function App({onRestrictedSession}) {
           if (!isCurrent()) return;
         }
         clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: false };
-        setVistaActiva('dashboard');
+        // A clinical retry can finish after the user opens a preclinical screen.
+        setVistaActiva(view => ['admissions', 'bilateral'].includes(view) ? view : 'dashboard');
         isCurrent = beginClinicalOperation();
       }
       const patientRows = recheckedFollowUp ? backendPatients.map(patient =>
@@ -490,6 +478,8 @@ export default function App({onRestrictedSession}) {
   useEffect(() => {
     const bootstrapSession = async () => {
       const token = getAuthToken();
+      const epoch = sessionEpoch.current;
+      const isCurrent = () => getAuthToken() === token && sessionEpoch.current === epoch;
 
       if (!token) {
         setAuthLoading(false);
@@ -498,10 +488,12 @@ export default function App({onRestrictedSession}) {
 
       try {
         const user = await getCurrentUser();
-        setCurrentUser(user);
+        if (isCurrent()) setCurrentUser(user);
       } catch {
-        logout();
-        resetSessionState();
+        if (isCurrent()) {
+          logout();
+          resetSessionState();
+        }
       } finally {
         setAuthLoading(false);
       }
@@ -518,14 +510,6 @@ export default function App({onRestrictedSession}) {
     cargarDatos();
   }, [currentUser, cargarDatos]);
 
-  useEffect(() => {
-    if (currentUser?.role !== 'patient' || !patientProfile) {
-      return;
-    }
-
-    setPatientInterviewForm(buildInterviewDraftForm(patientProfile, todayDate));
-  }, [currentUser, patientProfile, todayDate]);
-
   const handleLogin = async (credentials) => {
     if (loggingIn) {
       return;
@@ -539,11 +523,14 @@ export default function App({onRestrictedSession}) {
     setPasswordResetSuccess('');
     setPasswordResetPreview(null);
 
+    const epoch = sessionEpoch.current;
     try {
       const session = await login(credentials);
+      if (sessionEpoch.current !== epoch) return;
       if(session.sessionKind==='restricted') {
         setCurrentUser(null);resetSessionState();onRestrictedSession(session.restrictedToken);return;
       }
+      if (getAuthToken() !== session.token) return;
       setCurrentUser(session.user);
       resetSessionState();
     } catch (error) {
@@ -653,10 +640,11 @@ export default function App({onRestrictedSession}) {
   useEffect(() => {
     const endSession = () => {
       setCurrentUser(null);
+      setAuthLoading(false);
       resetSessionState();
     };
     const storageChanged = event => {
-      if (event.key === 'psicopanel_auth_token' && !event.newValue) endSession();
+      if (storageEndedSession(event)) endSession();
     };
     window.addEventListener('storage', storageChanged);
     window.addEventListener('psicopanel-session-ended', endSession);
@@ -1145,74 +1133,6 @@ export default function App({onRestrictedSession}) {
     setCurrentUser(current => current?.id === currentUser.id ? { ...current, firstName, lastName, fullName: nombre } : current);
     setPacientes(current => current.map(patient => patient.id === currentUser.patientId ? { ...patient, nombre } : patient));
     setPacienteSeleccionado(current => current?.id === currentUser.patientId ? { ...current, nombre } : current);
-  };
-
-  const handleInterviewFieldChange = (field, value) => {
-    setPatientInterviewForm((currentForm) => ({
-      ...currentForm,
-      [field]: value,
-    }));
-  };
-
-  const handleInterviewIndicatorToggle = (indicatorKey) => {
-    setPatientInterviewForm((currentForm) => ({
-      ...currentForm,
-      indicadores: {
-        ...currentForm.indicadores,
-        [indicatorKey]: !currentForm.indicadores?.[indicatorKey],
-      },
-    }));
-  };
-
-  const saveInterview = async (patientId, interviewForm) => {
-    if (!patientId || guardandoEntrevista) {
-      return false;
-    }
-
-    const isCurrent = beginClinicalOperation();
-    if (!isCurrent()) return false;
-    advancePatientRevision(patientId);
-    setGuardandoEntrevista(true);
-
-    try {
-      const updatedApiPatient = await upsertPatientInterview(patientId, mapUiInterviewToBackendInterview(interviewForm));
-      // The PUT is confirmed even if this session ends before its response arrives.
-      if (!isCurrent()) return true;
-      advancePatientRevision(patientId);
-      const updatedPatient = mapBackendPatientToUiPatient(updatedApiPatient);
-      syncPatientState(patientId, current => ({
-        ...current, entrevistaCompleta: updatedPatient.entrevistaCompleta, entrevista: updatedPatient.entrevista,
-      }));
-
-      if (currentUser?.role === 'patient' && currentUser.patientId === patientId) {
-        setPatientInterviewForm(buildInterviewDraftForm(updatedPatient, todayDate));
-      }
-
-      showSuccessFeedback('Entrevista guardada correctamente.');
-      if (currentUser?.role === 'patient') void refreshPatientFollowUp(patientId);
-      return true;
-    } catch (error) {
-      const details = Array.isArray(error?.details) && error.details.length > 0 ? `\n\n${error.details.join('\n')}` : '';
-      if (isCurrent()) {
-        advancePatientRevision(patientId);
-        showErrorFeedback((error.message || 'No se pudo guardar la entrevista.') + details);
-      }
-      return false;
-    } finally {
-      if (isCurrent()) setGuardandoEntrevista(false);
-    }
-  };
-
-  const handleSaveRequiredInterview = async () => {
-    if (!patientProfile) {
-      return;
-    }
-
-    const isCurrent = beginClinicalOperation();
-    if (!isCurrent()) return;
-    const patientId = patientProfile.id;
-    const wasSaved = await saveInterview(patientId, patientInterviewForm);
-    if (wasSaved && isCurrent()) setShowPatientInterview(false);
   };
 
   const toggleTask = async (taskId) => {
@@ -1867,7 +1787,6 @@ export default function App({onRestrictedSession}) {
           careRelationships={careRelationships}
           relationshipInvitePreview={relationshipInvitePreview}
           onOpenPatient={abrirNotas}
-          onCompleteInterview={() => setShowPatientInterview(true)}
           onNewPatient={() => setMostrarModalNuevoPaciente(true)}
           onViewAppointments={() => abrirAgenda(isPsychologist ? todayDate : '')}
           onRetryFollowUp={refreshPatientFollowUp}
@@ -2009,14 +1928,11 @@ export default function App({onRestrictedSession}) {
           onRefreshClinicalRecord={refreshClinicalRecord}
           onCreateSession={createSession}
           onUpdateSession={updateSession}
-          onSaveInterview={saveInterview}
-          onStartPatientInterview={careRelationships.some(r => r.status === 'active') ? () => setShowPatientInterview(true) : null}
           sessionActionError={sessionActionError}
           onDismissSessionActionError={() => setSessionActionError('')}
           isSavingNotes={guardandoNotas}
           isSavingPatientProfile={guardandoPerfilPaciente}
           isSavingSession={guardandoSesion}
-          isSavingInterview={guardandoEntrevista}
           processingTaskId={procesandoTareaId}
         />
       );
@@ -2036,7 +1952,7 @@ export default function App({onRestrictedSession}) {
     );
   }
 
-  if (!currentUser) {
+  if (!currentUser || !getAuthToken()) {
     return (
       <LoginScreen
         onLogin={handleLogin}
@@ -2100,21 +2016,6 @@ export default function App({onRestrictedSession}) {
           {renderMainContent()}
         </div>
       </main>
-
-      {showPatientInterview && currentUser?.role === 'patient' && patientProfile && !patientProfile.entrevistaCompleta && careRelationships.some(r => r.status === 'active') && (
-        <PatientInterviewModal
-          patient={patientProfile}
-          form={patientInterviewForm}
-          onChange={handleInterviewFieldChange}
-          onToggleIndicator={handleInterviewIndicatorToggle}
-          onSubmit={handleSaveRequiredInterview}
-          isSubmitting={guardandoEntrevista}
-          title="Entrevista inicial"
-          description="Puedes completar la entrevista de tu atención histórica y volver a tus funciones personales en cualquier momento. Guardarla no activa un episodio nuevo."
-          allowClose
-          onClose={() => setShowPatientInterview(false)}
-        />
-      )}
     </div>
   );
 }

@@ -4,13 +4,13 @@
 
 1. Leer este archivo: reglas generales y límites.
 2. Leer [checkpoint](docs/project-checkpoint.md): estado vigente, SHA remoto consultado y capacidades reales.
-3. Leer [planificación vigente](docs/product/roadmap.md#planificación-vigente--9-de-noviembre-de-2026): prioridades, dependencias y siguiente candidato.
+3. Leer [planificación vigente](docs/product/roadmap.md#planificación-vigente-por-hitos-funcionales): hitos aprobados, dependencias e incremento vigente.
 4. Leer los ADR, reglas y contratos específicos del alcance en el [índice](docs/README.md). Consultar [arquitectura](docs/architecture.md) y [desarrollo](docs/development.md) cuando la tarea los requiera.
 5. Abrir informes históricos solo para comprobar evidencia necesaria. El [inventario](docs/documentation-inventory.md) distingue contratos, propuestas e historia; no hace falta leer todo docs/ en cada sesión.
 
-Corte del 19 de noviembre de 2026: `main` revalidado `c39aa542c27e5e3245a9144fe4369d999956e25e`, #77 integrado y SQL 001–017 en Git. **2A parcial**, sin habilitación habitual. Encargo vigente APROBADO en el mismo Draft #78 (`fix/legacy-objective-episode-isolation`): retirar objetivos globales del runtime HTTP/UI, sin reemplazo por episodio todavía. Sustituye el aislamiento negativo del HEAD anterior `27702ae292a870a193d579442159a048aa69fac7`. Conservar tareas, objetivo narrativo de notas e infraestructura compartida, sin migraciones ni permisos positivos. RN-72 sigue aprobado para los futuros objetivos por episodio. #30 abierto; `prepared`, `allowed:false`, `audienceVerified:false`. Reconsultar checkout y GitHub antes de trabajar.
+Corte del 19 de noviembre de 2026: `main` revalidado `13b6efa106bde7767afe3f8faed27c0c781705a3`, #78 integrado y SQL 001–017 en Git. **2A parcial**, con admisión limitada al sandbox. Encargo vigente APROBADO en `feat/episode-admission-only`: retirar la entrevista global HTTP/UI y dejar la admisión individual por episodio como recorrido único, con continuidad y roadmap en el mismo PR. Mantener identidad y fecha de nacimiento globales, tareas, notas, citas, AB-23 y fallback de capacidades activas. #30 abierto, `prepared`, `allowed:false`, `audienceVerified:false`. Reconsultar checkout y GitHub antes de trabajar.
 
-**Dirección estratégica C — APROBADA por el propietario:** retirar selectivamente capacidades legacy prescindibles y construir sus reemplazos clínicos por episodio, conservando infraestructura compartida útil y garantías de seguridad. No se exige compatibilidad con datos ni funcionalidades demo. Cada retirada necesita alcance propio aprobado, eliminación completa de sus consumidores y pruebas; conservar AB-23 y las barreras del fallback que protejan otras capacidades activas. La planificación detallada se evaluará y aprobará por separado tras cerrar #78; esta dirección no autoriza otra retirada ni reestructurar ahora el roadmap.
+**Estrategia C y secuencia por hitos — APROBADAS por el propietario:** admisión individual, primera consulta individual ficticia y segura, acreditación/directorio optativo/solicitudes, continuidad clínica y pareja, piloto y producción. Cada retirada exige alcance propio, revisión de todos sus consumidores y pruebas. Conservar infraestructura compartida y seguridad. La secuencia orienta próximos encargos sujetos a aprobación.
 
 ## Alcance y límites operativos
 

@@ -1,14 +1,14 @@
 # Documentación de PsicoPanel
 
-Continuidad vigente: [checkpoint](project-checkpoint.md), corte del **19 de noviembre de 2026**, base `main` `c39aa542c27e5e3245a9144fe4369d999956e25e`, merge #77. **2A parcial**; SQL 001–017 integrado, sin habilitación habitual ni despliegue acreditado.
+Continuidad vigente: [checkpoint](project-checkpoint.md), corte del **19 de noviembre de 2026**, base `main` `13b6efa106bde7767afe3f8faed27c0c781705a3`, merge #78. **2A parcial** con SQL 001–017 integrado.
 
-Único incremento autorizado actual: [retirada de objetivos globales](objective-completion-authorization.md#retirada-de-objetivos-globales--cambio-de-alcance-de-78), implementado en rama, pendiente de CI y auditoría independiente. Conserva tareas e infraestructura compartida, AB-23 y barreras del fallback de capacidades activas; RN-72 por episodio sigue pendiente. 017 dirigida ficticia ya integrado; sin activación ni clínica ordinaria.
+El incremento vigente retira la entrevista global y deja la [admisión individual por episodio](stage2a-identity-directory-intake.md#admisión-clínica-y-entrevistas--contrato-objetivo) como recorrido único de entrevista en el sandbox. [Hitos aprobados](product/roadmap.md#planificación-vigente-por-hitos-funcionales).
 
 ## Ruta mínima de lectura
 
 1. [AGENTS](../AGENTS.md): reglas y alcance/autorización.
 2. [Checkpoint](project-checkpoint.md): qué está integrado, qué sigue cerrado, seguridad/CI y cómo retomar.
-3. [Roadmap vigente](product/roadmap.md#planificación-vigente--9-de-noviembre-de-2026): prioridades por resultado, dependencias y [13 Issues](product/roadmap.md#matriz-de-los-13-issues-abiertos).
+3. [Roadmap vigente](product/roadmap.md#planificación-vigente-por-hitos-funcionales): prioridades por resultado, dependencias y [13 Issues](product/roadmap.md#matriz-de-los-13-issues-abiertos).
 4. Decisiones/reglas y contratos concretos de la tabla siguiente, según tarea.
 5. Informes históricos solo cuando aporten evidencia necesaria. El [inventario de 57 Markdown](documentation-inventory.md) registra propósito, autoridad, consumidores, contenido exclusivo y acciones de mantenimiento.
 
@@ -20,7 +20,7 @@ No hace falta leer todo docs/ para iniciar una tarea. [README raíz](../README.m
 | --- | --- |
 | Decidir producto | [Visión](product/vision.md), [ADR/AB](product/decisions.md), [reglas RN](product/business-rules.md). ADR-031/032 aprobados con límites; D21 no aprobada. Producto aprobado no significa implementado. |
 | Saber qué está implementado | [Checkpoint](project-checkpoint.md), [arquitectura](architecture.md) y código del SHA consultado. La arquitectura conserva cortes anteriores; checkpoint y contrato de objetivos distinguen integración 001–017 de la retirada de esta rama. |
-| Elegir siguiente trabajo | [Roadmap](product/roadmap.md), [candidatos](product/roadmap.md#próximos-tres-incrementos-candidatos). Orden propuesto, no autorización ni cambio de etapas 0–6/2A–2E. |
+| Elegir siguiente trabajo | [Hitos vigentes](product/roadmap.md#planificación-vigente-por-hitos-funcionales). Cada incremento requiere su propio alcance. Las etapas 0–6/2A–2E conservan la trazabilidad de requisitos. |
 | Ver seguridad actual | [Triage de 28 CodeQL y cero Dependabot](security-codeql-triage.md). Corte fechado y residual por superficie; no evaluación de despliegue ni falso positivo automático. |
 | Desarrollar/verificar | [Desarrollo Docker/WSL](development.md), [CI implementada](ci-implementation.md). Destinos nuevos autorizados, siete checks, artifacts 14 días por HEAD/base/merge/intento. |
 | Identidad y contactos | [B](patient-identity-verification.md), [C](contact-changes.md), [diseño bcrypt/012 aprobado](contact-bcrypt-admission-design.md), [auth pública #55](public-auth-hardening.md). Simuladores no autorizan proveedores reales. |

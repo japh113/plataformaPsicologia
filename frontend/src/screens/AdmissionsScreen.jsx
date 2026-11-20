@@ -4,32 +4,67 @@ import { useCallback,useEffect,useRef,useState } from 'react';
 import { apiRequest } from '../api/client';
 const style='rounded-lg border border-slate-300 p-2';
 const button='rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50';
-const labels={awaiting_document:'Esperando documentación',documented:'Documentada',revoked:'Revocada: consulta propia',proposed:'Pendiente de aceptación',accepted:'Aceptada',awaiting_submission:'Esperando envío',submitted:'Enviada',correction_requested:'Corrección solicitada',validated:'Validación registrada'};
+const labels={awaiting_document:'Esperando documentación',documented:'Documentada para revisión',revoked:'Revocada: consulta propia',proposed:'Pendiente de aceptación',accepted:'Aceptada',awaiting_submission:'Esperando envío',submitted:'Enviada para revisión',correction_requested:'Corrección solicitada',validated:'Validación registrada'};
 const get=async path=>(await apiRequest('/admissions'+path)).data;
 function AdmissionDetail({id,professional,onRefresh,onRevoked}){
   const [data,setData]=useState(null),[draft,setDraft]=useState(null),[answers,setAnswers]=useState({}),[confirmed,setConfirmed]=useState(false),[revokeConfirmed,setRevokeConfirmed]=useState(false),[send,setSend]=useState(false);
   const [message,setMessage]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
-  const operations=useRef(new Map()),alive=useRef(false);
-  useEffect(()=>{
-    alive.current=true;
-    const start=async()=>{try{const detail=await get('/'+id);if(!alive.current)return;setData(detail);if(!professional&&(detail.state==='accepted'||detail.readOnly)){const own=await get('/'+id+'/draft');if(alive.current){setDraft(own);setAnswers(own.answers);}}}catch(e){if(alive.current)setError(e.message);}};
-    void start();return()=>{alive.current=false;};
+  const operations=useRef(new Map()),alive=useRef(false),generation=useRef(0),denied=useRef(false);
+  const unavailable=useCallback(()=>{
+    if(!alive.current||denied.current)return;
+    denied.current=true;
+    ++generation.current;
+    operations.current.clear();
+    setData(null);setDraft(null);setAnswers({});setMessage('');
+    setConfirmed(false);setRevokeConfirmed(false);setSend(false);setBusy(false);
+  },[]);
+  const loadDetail=useCallback(async isCurrent=>{
+    const detail=await get('/'+id);
+    if(!isCurrent())return;
+    setData(detail);
+    if(!professional&&(detail.state==='accepted'||detail.readOnly)){
+      const own=await get('/'+id+'/draft');
+      if(isCurrent()){setDraft(own);setAnswers(own.answers);}
+    }
   },[id,professional]);
+  useEffect(()=>{
+    const sequence=generation,request=++sequence.current;
+    alive.current=true;denied.current=false;
+    const isCurrent=()=>alive.current&&request===sequence.current;
+    void loadDetail(isCurrent).catch(e=>{
+      if(!isCurrent())return;
+      setError(e.message);
+      if([401,403,404].includes(e.status))unavailable();
+    });
+    return()=>{alive.current=false;++sequence.current;};
+  },[loadDetail,unavailable]);
   const act=async(op,payload)=>{
-    if(busy)return;setBusy(true);setError('');
+    if(busy||denied.current||!data)return;
+    let request=generation.current;
+    const isCurrent=()=>alive.current&&request===generation.current;
+    setBusy(true);setError('');
     const key=JSON.stringify([op,payload]);if(!operations.current.has(key))operations.current.set(key,crypto.randomUUID());
     try{
       await apiRequest('/admissions/'+id+'/'+op,{method:'POST',body:JSON.stringify({...payload,confirmed:true,operationId:operations.current.get(key),expectedVersion:data.version})});
+      if(!isCurrent())return;
       operations.current.delete(key);setConfirmed(false);setSend(false);
-      if(op==='revoke'){setData(null);setDraft(null);setAnswers({});await onRefresh();onRevoked();return;}
-      const detail=await get('/'+id);if(!alive.current)return;setData(detail);
-      if(!professional&&(detail.state==='accepted'||detail.readOnly)){const own=await get('/'+id+'/draft');if(alive.current){setDraft(own);setAnswers(own.answers);}}
-      await onRefresh();
-    }catch(e){if(e.status&&e.status<500)operations.current.delete(key);if(alive.current){setError(e.message);if([401,403,404].includes(e.status)){setData(null);setDraft(null);setAnswers({});}}}
-    finally{if(alive.current)setBusy(false);}
+      if(op==='revoke'){
+        unavailable();
+        request=generation.current;
+        await onRefresh();
+        if(isCurrent())onRevoked();
+        return;
+      }
+      await loadDetail(isCurrent);
+      if(isCurrent())await onRefresh();
+    }catch(e){
+      if(!isCurrent())return;
+      if(e.status&&e.status<500)operations.current.delete(key);
+      setError(e.message);
+      if([401,403,404].includes(e.status))unavailable();
+    }finally{if(isCurrent())setBusy(false);}
   };
-  const receiveDetail=useCallback(detail=>{if(alive.current)setData(detail);},[]);
-  const unavailable=useCallback(()=>{setData(null);setDraft(null);setAnswers({});setMessage('');},[]);
+  const receiveDetail=useCallback(detail=>{if(alive.current&&!denied.current)setData(detail);},[]);
   const editable=data&&!data.readOnly&&['awaiting_submission','correction_requested'].includes(data.reviewState);
   const saved=draft&&JSON.stringify(answers)===JSON.stringify(draft.answers);
   return <article aria-label="Detalle de admisión" className="rounded-xl border bg-white p-5 space-y-4">
@@ -67,7 +102,7 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
 }
 export default function AdmissionsScreen({currentUser}){
   const professional=currentUser.role==='psychologist';
-  const [items,setItems]=useState([]),[agreements,setAgreements]=useState([]),[agreement,setAgreement]=useState(''),[episode,setEpisode]=useState(''),[selected,setSelected]=useState(''),[selectedMode,setSelectedMode]=useState(''),[mode,setMode]=useState('self');
+  const [items,setItems]=useState(null),[agreements,setAgreements]=useState([]),[agreement,setAgreement]=useState(''),[episode,setEpisode]=useState(''),[selected,setSelected]=useState(''),[selectedMode,setSelectedMode]=useState(''),[mode,setMode]=useState('self');
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[prepareConfirmed,setPrepareConfirmed]=useState(false),[assignConfirmed,setAssignConfirmed]=useState(false);
   const operations=useRef(new Map());
   const refresh=async()=>setItems(await get(''));
@@ -84,7 +119,7 @@ export default function AdmissionsScreen({currentUser}){
     <h1 className="text-2xl font-bold">Admisiones individuales</h1>
     <p>Ensayo ficticio aislado. Plantilla sin validación clínica de mínimos. Aceptar, enviar o validar no activa tratamiento.</p>
     {error&&<p role="alert">{error}</p>}
-    <button className={button} disabled={busy} onClick={()=>{setSelected('');refresh().catch(e=>setError(e.message));}}>Actualizar admisiones</button>
+    <button className={button} disabled={busy} onClick={()=>{setSelected('');setError('');refresh().catch(e=>setError(e.message));}}>Actualizar admisiones</button>
     {professional&&<div className="rounded-xl border bg-white p-5 space-y-3"><h2 className="font-bold">Asignar plantilla predefinida</h2>
       <label className="block" htmlFor="admission-mode">Modalidad de entrevista</label><select id="admission-mode" className={style} value={mode} disabled={busy||Boolean(episode)} onChange={e=>{setMode(e.target.value);setAssignConfirmed(false);}}><option value="self">Autoadministrada</option><option value="directed">Dirigida por el profesional</option></select>
       <label className="block" htmlFor="admission-agreement">Acuerdo bilateral vigente</label><select id="admission-agreement" className={style+' block w-full'} value={agreement} disabled={busy} onChange={e=>{setAgreement(e.target.value);setEpisode('');setPrepareConfirmed(false);setAssignConfirmed(false);}}><option value="">Seleccionar acuerdo</option>{agreements.map(g=><option key={g.id} value={g.id}>Acuerdo {g.id}</option>)}</select>
@@ -93,7 +128,8 @@ export default function AdmissionsScreen({currentUser}){
       {episode&&<><p>Episodio preparado {episode}. Plantilla: Admisión individual ficticia, versión 1.</p><label className="block"><input type="checkbox" checked={assignConfirmed} onChange={e=>setAssignConfirmed(e.target.checked)}/> Asignar esta plantilla a este episodio y al titular del acuerdo.</label>
         <button className={button} disabled={busy||!assignConfirmed} onClick={()=>create('assign')}>Asignar plantilla</button></>}
     </div>}
-    <ul className="space-y-2">{items.map(item=><li key={item.id}><button className={style+' w-full text-left'} onClick={()=>{setSelectedMode(item.mode);setSelected(item.id);}}>Episodio {item.episodeId} · {item.professionalName} · {labels[item.state]} · {labels[item.reviewState]}</button></li>)}</ul>
+    {items?.length===0&&<p role="status">No tienes admisiones asignadas.</p>}
+    {items?.length>0&&<ul className="space-y-2">{items.map(item=><li key={item.id}><button className={style+' w-full text-left'} onClick={()=>{setSelectedMode(item.mode);setSelected(item.id);}}>Episodio {item.episodeId} · {item.professionalName} · {item.mode==='directed'?'Dirigida':'Autoadministrada'} · {labels[item.state]}{labels[item.reviewState]&&' · '+labels[item.reviewState]}</button></li>)}</ul>}
     {selected&&selectedMode==='directed'&&<DirectedAdmission key={selected} id={selected} professional={professional}/>}
     {selected&&selectedMode!=='directed'&&<AdmissionDetail key={selected} id={selected} professional={professional} onRefresh={refresh} onRevoked={()=>setSelected('')}/>}
   </section>;

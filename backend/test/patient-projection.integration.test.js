@@ -90,9 +90,6 @@ const runPatientProjectionCases = async (t, target) => {
     };
     const expectedTask = (completed = false) => ({ id: items.a.task, text: 'FICTIONAL_PATIENT_TASK_a',
       completed, clinicalNoteId: items.a.note, clinicalNoteDate: items.a.date });
-    const interview = { birthDate: '1990-01-01', birthPlace: 'FICTIONAL_PATIENT_ANSWER', occupation: 'Fictional occupation',
-      maritalStatus: 'Fictional status', familyMembers: 'Fictional family', livesWith: 'Fictional household', insomnia: true };
-
     await t.test('authorized psychologist retains private fields in list and detail', async () => {
       const list = await request('/patients', 'psychologist');
       const detail = await request('/patients/a', 'psychologist');
@@ -134,28 +131,12 @@ const runPatientProjectionCases = async (t, target) => {
       }
     });
 
-    await t.test('first interview save returns a projected file and preserves the patients own answers', async () => {
-      const response = await request('/patients/a/interview', 'a', 'PUT', interview);
-      assert.equal(response.status, 200);
-      assertPatientProjection(response.body);
-      assert.equal(response.body.data.interviewCompleted, true);
-      assert.equal(response.body.data.interview.birthPlace, interview.birthPlace);
-      assert.equal(response.body.data.interview.insomnia, true);
-      assert.deepEqual(response.body.data.tasks, [expectedTask()]);
-      assert.equal((await request('/patients/a/interview', 'a', 'PUT', interview)).status, 403);
-      const professional = await request('/patients/a/interview', 'psychologist', 'PUT', interview);
-      assert.equal(professional.status, 200);
-      assert.equal(professional.body.data.notes, 'FICTIONAL_PRIVATE_CONTEXT_a');
-      assert.equal(professional.body.data.riskLevel, 'high');
-    });
-
-    await t.test('identifier changes cannot expose or update another patients file, task or interview', async () => {
+    await t.test('identifier changes cannot expose or update another patients file or task', async () => {
       for (const actor of ['a', 'psychologist']) {
         for (const [path, method, body] of [
           ['/patients/b', 'GET'],
           [`/patients/b/tasks/${items.b.task}`, 'PATCH', { completed: true }],
           [`/patients/a/tasks/${items.b.task}`, 'PATCH', { completed: true }],
-          ['/patients/b/interview', 'PUT', interview],
         ]) {
           const response = await request(path, actor, method, body);
           assert.equal(response.status, 404, `${actor} ${method} ${path}`);
@@ -173,7 +154,6 @@ const runPatientProjectionCases = async (t, target) => {
       for (const actor of ['admin', 'superadmin', 'support']) {
         for (const [path, method, body] of [
           ['/patients', 'GET'], ['/patients/a', 'GET'],
-          ['/patients/a/interview', 'PUT', interview],
           [`/patients/a/tasks/${items.a.task}`, 'PATCH', { completed: true }],
           [`/patients/a/objectives/${items.a.objective}`, 'PATCH', { completed: true }],
         ]) {
@@ -297,14 +277,35 @@ const runPatientProjectionCases = async (t, target) => {
       }
     });
 
-    await t.test('patient and interview write responses contain no global objective projection or derivatives', async () => {
-      for (const response of [
-        await request('/patients/a', 'psychologist', 'PUT', { notes: 'FICTIONAL_PRIVATE_CONTEXT_a' }),
-        await request('/patients/a/interview', 'psychologist', 'PUT', interview),
-      ]) {
-        assert.equal(response.status, 200);
-        assert.equal(Object.hasOwn(response.body.data, 'objectives'), false);
-        assert.doesNotMatch(JSON.stringify(response.body), /FICTIONAL_(EPISODE_OBJECTIVE|SHARED_OBJECTIVE)_/);
+    await t.test('retired interview is absent from scoped reads and writes, and historical rows remain intact', async () => {
+      await pool.query("INSERT INTO patient_intakes(patient_id,birth_date,birth_place) VALUES ('a','1990-01-01','FICTIONAL_RETIRED_INTERVIEW')");
+      const history = () => pool.query("SELECT * FROM patient_intakes WHERE patient_id='a'").then(result => result.rows);
+      const before = await history();
+      for (const actor of ['a', 'psychologist']) {
+        for (const id of ['a', 'b']) {
+          const response = await request(`/patients/${id}/interview`, actor, 'PUT', { birthDate: '1991-02-03' });
+          assert.equal(response.status, 404);
+        }
+        const list = await request('/patients', actor);
+        const detail = await request('/patients/a', actor);
+        assert.equal(list.status, 200);
+        assert.equal(detail.status, 200);
+        for (const patient of [list.body.data[0], detail.body.data]) {
+          assert.equal(patient.id, 'a');
+          assert.equal(patient.tasks[0].id, items.a.task);
+          assertNoRetiredFields(patient);
+        }
+      }
+      const updated = await request('/patients/a', 'psychologist', 'PUT', { notes: 'FICTIONAL_PRIVATE_CONTEXT_a' });
+      assert.equal(updated.status, 200);
+      assertNoRetiredFields(updated.body.data);
+      assert.deepEqual(await history(), before);
+
+      function assertNoRetiredFields(patient) {
+        for (const field of ['interview', 'interviewCompleted', 'objectives']) {
+          assert.equal(Object.hasOwn(patient, field), false, field);
+        }
+        assert.doesNotMatch(JSON.stringify(patient), /FICTIONAL_(RETIRED_INTERVIEW|EPISODE_OBJECTIVE|SHARED_OBJECTIVE)/);
       }
     });
 
