@@ -227,7 +227,9 @@ async function main() {
     await button(psy, 'Pacientes vinculados').click();
     await psy.getByRole('rowheader', { name: 'Lucía García' }).waitFor();
     await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('garcia');
-    await psy.getByRole('cell', { name: /Admisión pendiente/ }).waitFor();
+    const index = psy.getByRole('region', { name: 'Pacientes vinculados' });
+    await index.getByText('Vinculación completada', { exact: true }).waitFor();
+    assert.equal(await index.getByText('Admisión pendiente', { exact: true }).count(), 0);
     await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('Sin coincidencia');
     await psy.getByText('No hay coincidencias para ese nombre.', { exact: true }).waitFor();
     await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('lucia');

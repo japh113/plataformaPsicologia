@@ -408,6 +408,14 @@ async function main(){
      await clinicianPanel.getByText(/Acceso clínico retirado/).waitFor();
      assert.equal(await clinicianPanel.getByText(/Texto profesional ficticio/).count(),0);
      await shot('ADM26-consulta-controles',clinician);
+
+     const nav=clinician.getByRole('navigation',{name:'Navegación móvil'});
+     await button(nav,'Mis pacientes').click();
+     const index=clinician.getByRole('region',{name:'Pacientes vinculados'});
+     const linked=index.getByRole('row').filter({has:clinician.getByRole('rowheader',{name:'bq3',exact:true})});
+     await linked.getByText('Vinculación completada',{exact:true}).waitFor();
+     assert.equal(await index.getByText(/Admisión pendiente/i).count(),0);
+     await shot('ADM26-pacientes-vinculados',clinician);
    } finally {await clinician.context().close();await patient.context().close();}
  });
  assert.equal(events.filter(e=>!e.expected).length,0);save();await browser.close();

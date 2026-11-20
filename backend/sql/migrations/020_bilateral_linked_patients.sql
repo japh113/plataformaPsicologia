@@ -27,6 +27,8 @@ BEGIN
     FROM public.bilateral_agreements g
     JOIN public.bilateral_invitations i ON i.id=g.invitation_id AND i.state='accepted'
       AND (i.psychologist_id,i.account_id,i.patient_id,i.purpose)=(g.psychologist_id,g.account_id,g.patient_id,g.purpose)
+      -- This exact version includes permission to show the patient's name.
+      AND i.conditions_version='fictional-individual-v2'
     JOIN public.users subject ON subject.id=g.account_id AND subject.patient_id=g.patient_id
       AND subject.role='patient' AND subject.is_active
     JOIN public.patients p ON p.id=g.patient_id

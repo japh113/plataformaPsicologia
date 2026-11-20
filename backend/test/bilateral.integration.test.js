@@ -122,6 +122,7 @@ test('013/020: isolated bilateral workflow, actual PostgreSQL privileges, revoca
       assert.deepEqual(await list(psy),[]);
       assert.equal((await http(psy,endpoint+'?patient='+pac)).status,400);
       const invitation=await incoming(pac,id);
+      assert.equal(invitation.conditionsVersion,'fictional-individual-v2');
       const accepted={...express(),expectedVersion:invitation.version,conditionsVersion:invitation.conditionsVersion,conditionsHash:invitation.conditionsHash};
       const post=()=>http(pac,'/bilateral-invitations/'+id+'/accept',accepted);
       const [first,retry]=await Promise.all([post(),post()]);
@@ -530,6 +531,44 @@ test('013/020: isolated bilateral workflow, actual PostgreSQL privileges, revoca
         const response=await fetch(url+'/api/bilateral-invitations',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"recipientReference":"private-reference-never-log"'});
         assert.equal(response.status,400);assert.deepEqual(await response.json(),{success:false,message:'Entrada no válida.'});assert.equal(logs.length,0);
       }finally{console.error=original;}
+    });
+    await t.test('020 keeps accepted v1 agreements and their evidence without projecting their names',async()=>{
+      const {psy,pac,id}=await queueClockCase('historical_name');
+      const historicalText=[
+        'Acepto la propuesta de vinculación preclínica individual de Profesional ficticio '+psy+', con las condiciones y versión mostradas.',
+        'Esto completa un acuerdo bilateral y deja la admisión pendiente.',
+        'No inicia tratamiento, no autoriza al profesional a consultar mi entrevista o expediente y no sustituye los consentimientos clínicos que correspondan.',
+        'Cualquiera de las partes puede terminar este acuerdo de inmediato, sin autorización de la otra.',
+        'Si existe un tratamiento activo o pausado, su continuidad, pausa o cierre se tramitan por su procedimiento propio.',
+      ].join(' ');
+      const historicalTerms={conditionsVersion:'fictional-individual-v1',conditionsText:historicalText,conditionsHash:sha256(historicalText)};
+      // Reproduce a proposal queued by the v1 writer before any invitation or acceptance exists.
+      const seeded=await client.query('UPDATE bilateral_attempts SET proposal=proposal||$2::jsonb WHERE id=$1 AND processed_at IS NULL',[id,historicalTerms]);
+      assert.equal(seeded.rowCount,1);
+      assert.equal((await processQueue()).deferred,0);
+      const invitation=await incoming(pac,id);
+      assert.equal(invitation.status,'pending');
+      for(const [field,value] of Object.entries(historicalTerms)) assert.equal(invitation[field],value);
+      const path='/bilateral-invitations/'+id+'/accept';
+      assert.equal((await http(pac,path,{...express(),expectedVersion:invitation.version,conditionsVersion,conditionsHash:proposalHash(psy)})).status,409);
+      const accepted=await http(pac,path,{...express(),expectedVersion:invitation.version,
+        conditionsVersion:invitation.conditionsVersion,conditionsHash:invitation.conditionsHash});
+      assert.equal(accepted.status,200);
+      assert.equal(accepted.body.data.status,'completed');
+
+      const linked=await http(psy,'/bilateral-invitations/linked-patients');
+      assert.equal(linked.status,200);
+      assert.deepEqual(linked.body.data,[]);
+      const preserved=await incoming(pac,id);
+      assert.equal(preserved.status,'accepted');
+      for(const [field,value] of Object.entries(historicalTerms)) assert.equal(preserved[field],value);
+      const agreements=await http(psy,'/bilateral-invitations/agreements');
+      assert.equal(agreements.status,200);
+      const agreement=agreements.body.data.find(item=>item.id===accepted.body.data.agreementId);
+      assert.equal(agreement.status,'completed');
+      assert.equal(agreement.conditionsVersion,historicalTerms.conditionsVersion);
+      assert.equal(agreement.conditionsText,historicalText);
+      assert.equal((await client.query("SELECT count(*)::int AS n FROM bilateral_events WHERE invitation_id=$1 AND actor_id=$2 AND action='accepted'",[id,pac])).rows[0].n,1);
     });
     await t.test('legacy barrier and originals remain unchanged after every bilateral operation',async()=>{
       for(const [path,body]of [['/auth/care-relationships/request',{}],['/auth/care-relationships/invite',{}]])assert.equal((await http('bp1',path,body)).status,403);

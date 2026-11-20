@@ -357,7 +357,7 @@ function LinkedPatients({ onAgreement, onLegacy }) {
             </th>
             <td className="p-3 sm:px-5">
               <div className="flex flex-wrap items-center justify-between gap-1">
-                <span className="rounded-md bg-amber-100 px-2.5 py-1 text-sm font-semibold text-amber-900">Admisión pendiente</span>
+                <span className="rounded-md bg-emerald-100 px-2.5 py-1 text-sm font-semibold text-emerald-900">Vinculación completada</span>
                 <button type="button" className={link} aria-label={`Ver acuerdo de ${patient.displayName}`}
                   onClick={() => onAgreement(patient.agreementId)}>Ver acuerdo <ChevronRight size={16} aria-hidden="true" /></button>
               </div>
@@ -460,7 +460,7 @@ function Invitations({ professional, selectedAgreement, selectedInvitation, onIn
     {data && (selectedInvitation ? invitation ? <InvitationDetail
       key={JSON.stringify([invitation.id, invitation.version, invitation.conditionsVersion, invitation.conditionsHash, invitation.acceptanceAvailable])}
       item={invitation} action={action} terminal={terminal} onAccepted={result => {
-        setNotice(result.status === 'completed' ? 'Acuerdo bilateral completado. La admisión queda pendiente.' : 'El acuerdo ya no está vigente.');
+        setNotice(result.status === 'completed' ? 'Acuerdo bilateral completado.' : 'El acuerdo ya no está vigente.');
         refresh();
       }} /> : <p className={card}>La invitación ya no está disponible.</p> : <>
       {!selectedAgreement && <>
@@ -498,7 +498,7 @@ function Invitations({ professional, selectedAgreement, selectedInvitation, onIn
           <summary className={`cursor-pointer rounded-md font-semibold text-indigo-700 ${focus}`}>Consultar las condiciones acordadas</summary>
           <div className="mt-3"><Terms value={agreement} /></div>
         </details>
-        <p>{agreement.status === 'completed' ? 'La vinculación deja la admisión pendiente.' : 'La admisión dependiente de este acuerdo ya no puede avanzar.'}</p>
+        {agreement.status === 'unlinked' && <p>La admisión dependiente de este acuerdo ya no puede avanzar.</p>}
         {agreement.status === 'completed' && <button type="button" className={secondary} disabled={action.busy} onClick={() => {
           if (window.confirm('¿Terminar de inmediato este acuerdo? Los tratamientos activos o pausados tienen su propio procedimiento.')) terminal(agreement, 'unlink');
         }}>Terminar acuerdo unilateralmente</button>}
