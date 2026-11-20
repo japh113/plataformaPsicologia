@@ -27,7 +27,8 @@ export function validate(op,p) {
 const canonical=value=>value&&typeof value==='object'?Array.isArray(value)?value.map(canonical):Object.fromEntries(Object.keys(value).sort().map(k=>[k,canonical(value[k])])):value;
 export const fingerprint=(value,key)=>createHmac('sha256',key).update(JSON.stringify(canonical(value))).digest('hex');
 export function errorFor(error) {
-  const codes={admission_missing:[404,'Recurso no disponible.'],admission_session:[401,'Sesión no válida. Inicia sesión nuevamente.'],
+  const codes={consultation_slot_unavailable:[409,'El turno solicitado no está disponible.'],
+    consultation_future:[409,'La cita aún no se puede completar.'],admission_missing:[404,'Recurso no disponible.'],admission_session:[401,'Sesión no válida. Inicia sesión nuevamente.'],
     admission_conflict:[409,'El estado cambió. Recarga antes de reintentar.'],admission_quota:[429,'Límite propio de preparaciones alcanzado. Intenta más tarde.']};
   const known=codes[error.message];
   if(known)return fail(known[1],known[0]);

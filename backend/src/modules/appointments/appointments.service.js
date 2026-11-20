@@ -4,6 +4,7 @@ import db from '../../config/db.js';
 import { buildPatientAccessScope, ensurePsychologist, isPsychologist } from '../auth/auth.permissions.js';
 import { getEffectiveAvailabilityForDate } from '../availability/availability.service.js';
 import { logAuditEvent } from '../../utils/audit.js';
+import { isHourSlotValue } from './appointments.validators.js';
 
 const normalizeDateValue = (value) => {
   if (!value) {
@@ -173,6 +174,10 @@ const fulfillWaitlistEntriesForAppointment = async ({ patientId, scheduledDate, 
   );
 
   await normalizeWaitlistPriorityForSlot(db, { scheduledDate, scheduledTime });
+};
+
+const ensureAppointmentStartAtHour = (scheduledTime) => {
+  if (!isHourSlotValue(scheduledTime)) throw createValidationError('Selecciona una hora exacta para la cita.');
 };
 
 const ensureAppointmentCompletionIsAllowed = ({ scheduledDate, status }) => {
@@ -704,6 +709,7 @@ export const createAppointment = async (payload, actor) => {
 
   const patientId = payload.patientId.trim();
   const scheduledTime = normalizeScheduledTime(payload.scheduledTime);
+  ensureAppointmentStartAtHour(scheduledTime);
   const nextStatus = payload.status || 'pending';
   const hasPatientAccess = await ensurePatientAccess(actor.id, patientId);
 
@@ -834,11 +840,17 @@ export const updateAppointment = async (id, payload, actor) => {
   }
 
   if (payload.recurrenceEditScope === 'future') {
+    if (payload.scheduledTime && normalizeScheduledTime(payload.scheduledTime) !== normalizeScheduledTime(currentAppointment.scheduledTime)) {
+      ensureAppointmentStartAtHour(normalizeScheduledTime(payload.scheduledTime));
+    }
     return updateFutureRecurringAppointments(id, payload, actor);
   }
 
   const nextScheduledDate = payload.scheduledDate || currentAppointment.scheduledDate;
   const nextScheduledTime = normalizeScheduledTime(payload.scheduledTime || currentAppointment.scheduledTime);
+  if (nextScheduledTime !== normalizeScheduledTime(currentAppointment.scheduledTime)) {
+    ensureAppointmentStartAtHour(nextScheduledTime);
+  }
   const nextStatus = payload.status || currentAppointment.status;
   const recurrence = normalizeRecurrencePayload(
     payload.recurrence || null,
@@ -872,6 +884,7 @@ export const updateAppointment = async (id, payload, actor) => {
   }
 
   if (shouldValidateAvailability) {
+    ensureAppointmentStartAtHour(nextScheduledTime);
     await ensureAppointmentAvailability({
       actor,
       patientId: nextPatientId,

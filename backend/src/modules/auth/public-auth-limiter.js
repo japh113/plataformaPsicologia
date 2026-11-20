@@ -30,8 +30,8 @@ export function publicAuthClientKey(req) {
   return `v6:${words.slice(0, 4).map(word => word.toString(16)).join(':')}/64`;
 }
 
-export function createPublicAuthLimiter({ limit, windowMs, maxClients = 4096, now = () => performance.now() }) {
-  if (![limit, windowMs, maxClients].every(value => Number.isSafeInteger(value) && value > 0) || typeof now !== 'function') {
+export function createPublicAuthLimiter({ limit, windowMs, maxClients = 4096, now = () => performance.now(), clientKey = publicAuthClientKey }) {
+  if (![limit, windowMs, maxClients].every(value => Number.isSafeInteger(value) && value > 0) || typeof now !== 'function' || typeof clientKey !== 'function') {
     throw new TypeError('Invalid public authentication limiter configuration');
   }
   // A shared fixed window bounds both cardinality and per-request work. No timers,
@@ -51,7 +51,7 @@ export function createPublicAuthLimiter({ limit, windowMs, maxClients = 4096, no
         resetAt = current + windowMs;
       }
       retryAfter = Math.max(1, Math.ceil((resetAt - current) / 1000));
-      const key = publicAuthClientKey(req);
+      const key = clientKey(req);
       if (key === null) {
         status = 503;
       } else {

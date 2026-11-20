@@ -65,7 +65,10 @@ else
   elif [[ "$mode" == admission-demo ]]; then
     export BILATERAL_ENABLED=true BILATERAL_SECRET=fictitious-bilateral-independent-demo-key-32bytes
     export ADMISSION_ENABLED=true ADMISSION_SECRET=fictitious-admission-independent-demo-key-32bytes
-    "${compose[@]}" run --rm -e NODE_ENV=development backend node scripts/create-admission-demo.js
+    "${compose[@]}" run --rm -e NODE_ENV=development -e FIRST_CONSULTATION_ENABLED backend node scripts/create-admission-demo.js
+    if [[ "${FIRST_CONSULTATION_ENABLED:-false}" == true ]]; then
+      export EPISODE_DEMO_PGUSER=consultation_legacy_demo EPISODE_DEMO_PGPASSWORD=disposable_consultation_legacy
+    fi
   elif [[ "$mode" == bilateral-demo ]]; then
     export BILATERAL_ENABLED=true BILATERAL_SECRET=fictitious-bilateral-independent-demo-key-32bytes
     "${compose[@]}" run --rm -e NODE_ENV=development backend node scripts/create-bilateral-demo.js

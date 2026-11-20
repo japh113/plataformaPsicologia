@@ -50,6 +50,9 @@ services:
       PORT: "5000"
       CONTACT_CHANGE_PROCESSOR: "true"
       PGDATABASE: psicopanel_episode_demo
+      PGUSER: ${EPISODE_DEMO_PGUSER:-integrity_test}
+      PGPASSWORD: ${EPISODE_DEMO_PGPASSWORD:-disposable_test_password}
+      FIRST_CONSULTATION_ENABLED: ${FIRST_CONSULTATION_ENABLED:-false}
       ADMISSION_ENABLED: ${ADMISSION_ENABLED:-false}
       ADMISSION_SECRET: ${ADMISSION_SECRET:-}
       ADMISSION_DATABASE_URL: postgres://admission_runtime_demo:disposable_admission_roles@db:5432/psicopanel_episode_demo
@@ -79,6 +82,7 @@ services:
       - ./frontend/eslint.config.js:/app/eslint.config.js:ro
     environment:
       VITE_IDENTITY_DEMO: ${IDENTITY_DEMO_MODE:-false}
+      VITE_FIRST_CONSULTATION_ENABLED: ${FIRST_CONSULTATION_ENABLED:-false}
       VITE_ADMISSION_ENABLED: ${ADMISSION_ENABLED:-false}
       VITE_BILATERAL_ENABLED: ${BILATERAL_ENABLED:-false}
       VITE_D2_ENABLED: ${D2_ENABLED:-false}
