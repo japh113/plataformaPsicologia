@@ -18,7 +18,7 @@ export async function loadMigrations(root = sqlRoot) {
     if (sha256(sql) !== entry.sha256) throw new Error('Incompatible file checksum: ' + entry.version);
     migrations.push({ ...entry, sql });
   }
-  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017,018') throw new Error('Incompatible migration versions');
+  if (migrations.map(m => m.version).join(',') !== '001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017,018,019') throw new Error('Incompatible migration versions');
   return migrations;
 }
 
@@ -241,12 +241,12 @@ async function verifyProfessionalReviewView(client, migration) {
 }
 
 export async function migrate(client, { expectedDatabase, target = '003', accountReaderRole, privateNoteCreatorRole, bilateralClientRole, admissionClientRole, consultationLegacyRole } = {}) {
-  if (!['003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013', '014', '015', '016','017','018'].includes(target)) throw new Error('Unsupported target version');
-  if (accountReaderRole !== undefined && (!['009','010','011','012','013','014','015', '016','017','018'].includes(target) || typeof accountReaderRole !== 'string' || !accountReaderRole)) throw new Error('Explicit account reader is only supported for 009/010/011/012');
-  if (privateNoteCreatorRole !== undefined && (!['010','011','012','013','014','015', '016','017','018'].includes(target) || typeof privateNoteCreatorRole !== 'string' || !privateNoteCreatorRole)) throw new Error('Explicit private note creator is only supported for 010/011/012');
-  if(['013','014','015', '016','017','018'].includes(target)&&!bilateralClientRole)throw new Error('013 requires explicit bilateral client');
-  if(['014','015', '016','017','018'].includes(target)&&!admissionClientRole)throw new Error('014 requires explicit admission client');
-  if (target==='018' && (typeof consultationLegacyRole!=='string' || !/^[a-z][a-z0-9_]{0,62}$/.test(consultationLegacyRole))) {
+  if (!['003', '004', '005', '006', '007', '008', '009', '010', '011', '012', '013', '014', '015', '016','017','018','019'].includes(target)) throw new Error('Unsupported target version');
+  if (accountReaderRole !== undefined && (!['009','010','011','012','013','014','015', '016','017','018','019'].includes(target) || typeof accountReaderRole !== 'string' || !accountReaderRole)) throw new Error('Explicit account reader is only supported for 009/010/011/012');
+  if (privateNoteCreatorRole !== undefined && (!['010','011','012','013','014','015', '016','017','018','019'].includes(target) || typeof privateNoteCreatorRole !== 'string' || !privateNoteCreatorRole)) throw new Error('Explicit private note creator is only supported for 010/011/012');
+  if(['013','014','015', '016','017','018','019'].includes(target)&&!bilateralClientRole)throw new Error('013 requires explicit bilateral client');
+  if(['014','015', '016','017','018','019'].includes(target)&&!admissionClientRole)throw new Error('014 requires explicit admission client');
+  if (target>='018' && (typeof consultationLegacyRole!=='string' || !/^[a-z][a-z0-9_]{0,62}$/.test(consultationLegacyRole))) {
     throw new Error('018 requires an explicit ordinary API role for the isolated database');
   }
   const migrations = await loadMigrations();
@@ -271,7 +271,7 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
         throw new Error('Incompatible recorded migration version/checksum: ' + row.version);
       }
     }
-    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007', '001,002,003,004,005,006,007,008', '001,002,003,004,005,006,007,008,009', '001,002,003,004,005,006,007,008,009,010', '001,002,003,004,005,006,007,008,009,010,011', '001,002,003,004,005,006,007,008,009,010,011,012', '001,002,003,004,005,006,007,008,009,010,011,012,013', '001,002,003,004,005,006,007,008,009,010,011,012,013,014', '001,002,003,004,005,006,007,008,009,010,011,012,013,014,015','001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016','001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017','001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017,018'].includes(ledger.map(r => r.version).join(','))) {
+    if (ledgerExists && !['001,002,003', '001,002,003,004', '001,002,003,004,005', '001,002,003,004,005,006', '001,002,003,004,005,006,007', '001,002,003,004,005,006,007,008', '001,002,003,004,005,006,007,008,009', '001,002,003,004,005,006,007,008,009,010', '001,002,003,004,005,006,007,008,009,010,011', '001,002,003,004,005,006,007,008,009,010,011,012', '001,002,003,004,005,006,007,008,009,010,011,012,013', '001,002,003,004,005,006,007,008,009,010,011,012,013,014', '001,002,003,004,005,006,007,008,009,010,011,012,013,014,015','001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016','001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017','001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017,018','001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017,018,019'].includes(ledger.map(r => r.version).join(','))) {
       throw new Error('Incompatible or incomplete migration ledger');
     }
     if (ledger.length) {
@@ -297,7 +297,7 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
       for (const next of migrations.filter(m => m.version>applied.version && m.version<=target)) {
         await client.query("SELECT set_config('psicopanel.migration_target',$1,true)", [next.version]);
         await client.query(next.sql);
-        if (['016','017','018'].includes(next.version)) { await verifyEpisodeRecordContract(client); await verifyAdmissionContract(client,admissionClientRole); }
+        if (['016','017','018','019'].includes(next.version)) { await verifyEpisodeRecordContract(client); await verifyAdmissionContract(client,admissionClientRole); }
         if (next.version === '015') await verifyEpisodeRecordContract(client);
         if (next.version === '014') await verifyAdmissionContract(client,admissionClientRole,{install:true});
         if (next.version === '013') await verifyBilateralContract(client,bilateralClientRole,{install:true});
@@ -359,7 +359,7 @@ export async function migrate(client, { expectedDatabase, target = '003', accoun
     for (const next of migrations.filter(m => m.version>'003' && m.version<=target)) {
       await client.query("SELECT set_config('psicopanel.migration_target',$1,true)", [next.version]);
       await client.query(next.sql);
-      if (['016','017','018'].includes(next.version)) { await verifyEpisodeRecordContract(client); await verifyAdmissionContract(client,admissionClientRole); }
+      if (['016','017','018','019'].includes(next.version)) { await verifyEpisodeRecordContract(client); await verifyAdmissionContract(client,admissionClientRole); }
         if (next.version === '015') await verifyEpisodeRecordContract(client);
       if (next.version === '014') await verifyAdmissionContract(client,admissionClientRole,{install:true});
       if (next.version === '013') await verifyBilateralContract(client,bilateralClientRole,{install:true});

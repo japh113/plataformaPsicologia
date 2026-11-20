@@ -26,10 +26,10 @@ export async function verifyAdmissionContract(client,role,{install=false,runtime
     AND NOT has_table_privilege(r.oid,'public.care_relationships','INSERT') AS safe
     FROM pg_roles r WHERE r.oid=(SELECT proowner FROM pg_proc WHERE oid='public.admission_command(text,integer,text,jsonb)'::regprocedure)`)).rows[0];
   if(!owner?.safe)throw new Error('Unsafe admission owner');
-  const hasConsultation=(await client.query(
-    "SELECT to_regprocedure('public.admission_consultation(text,integer,text,jsonb)') IS NOT NULL AS configured"
-  )).rows[0].configured;
-  const functions=hasConsultation?[...baselineFunctions,'admission_consultation(text,integer,text,jsonb)']:baselineFunctions;
+  const optionalFunctions = ['admission_consultation(text,integer,text,jsonb)', 'admission_withdrawal_references(text,integer,double precision)'];
+  const { rows: installed } = await client.query(`SELECT signature
+    FROM unnest($1::text[]) AS f(signature) WHERE to_regprocedure('public.' || signature) IS NOT NULL`, [optionalFunctions]);
+  const functions = [...baselineFunctions, ...installed.map(row => row.signature)];
   for(const fn of functions){
     if(install)await client.query(`GRANT EXECUTE ON FUNCTION public.${fn} TO "${role}"`);
     const {rows:[row]}=await client.query(`SELECT p.prosecdef,p.proconfig,p.proowner::regrole::text AS owner,

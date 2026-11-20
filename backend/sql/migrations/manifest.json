@@ -88,5 +88,10 @@
     "version": "018",
     "file": "018_first_individual_consultation.sql",
     "sha256": "aeb1baad058ee967778ac1bbf96de9dcae22f5dd7c871817ce74fecb10d44363"
+  },
+  {
+    "version": "019",
+    "file": "019_treatment_withdrawal_reference.sql",
+    "sha256": "c88dc1dd4f9d44677d1c74a93b274487627975e1ecd37b4bbb2a0861d70e3f0f"
   }
 ]

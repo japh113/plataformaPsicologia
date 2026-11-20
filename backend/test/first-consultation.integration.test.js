@@ -19,7 +19,7 @@ const action = () => ({ operationId: randomUUID(), confirmed: true });
 const answers = { reason: 'Ensayo ficticio', context: 'Contexto de la prueba' };
 const neutral = { success: false, message: 'El turno solicitado no está disponible.' };
 
-test('018: first consultation over real HTTP and PostgreSQL', {
+test('018–019: first consultation over real HTTP and PostgreSQL', {
   skip: process.env.RUN_EPISODE_INTEGRATION !== 'true',
 }, async t => {
   assert.equal(env.nodeEnv, 'test');
@@ -37,7 +37,7 @@ test('018: first consultation over real HTTP and PostgreSQL', {
     await installBaseline(client);
     const options = await installConsultationSandbox(client, database);
     const ledger = (await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
-    assert.equal(ledger.length, 18);
+    assert.equal(ledger.length, 19);
     assert.equal((await migrate(client, options)).status, 'already-applied');
     assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows, ledger);
     await bilateralFixture(client);
@@ -61,8 +61,8 @@ test('018: first consultation over real HTTP and PostgreSQL', {
     server = app.listen(0, '127.0.0.1');
     await new Promise(resolve => server.once('listening', resolve));
 
-    async function http(userId, path, payload, method = payload ? 'POST' : 'GET') {
-      const token = jwt.sign({ sub: userId, sv: 0 }, env.jwtSecret, { expiresIn: '1h' });
+    async function http(userId, path, payload, method = payload ? 'POST' : 'GET', sessionToken) {
+      const token = sessionToken ?? jwt.sign({ sub: userId, sv: 0 }, env.jwtSecret, { expiresIn: '1h' });
       const response = await fetch('http://127.0.0.1:' + server.address().port + '/api' + path, {
         method,
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -216,7 +216,15 @@ test('018: first consultation over real HTTP and PostgreSQL', {
       const persisted = (await client.query('SELECT author_id,audience,provenance_version FROM consultation_notes WHERE appointment_id=$1', [ownAppointment.id])).rows[0];
       assert.deepEqual(persisted, { author_id: e1.psy, audience: 'professional_private', provenance_version: 'fictional-professional-original-v1' });
     });
-    await t.test('treatment withdrawal, admission revocation, unlink and suspension block new operations without deleting history', async () => {
+    await t.test('ordinary admission and consultation lists remain usable', async () => {
+      for (const route of ['/admissions', '/admissions/consultations']) {
+        const response = await http(e1.pac, route);
+        assert.equal(response.status, 200);
+        assert.ok(response.body.data.some(item => item.id === e1.id));
+      }
+    });
+
+    await t.test('treatment withdrawal, admission revocation and unlink block new operations without deleting history', async () => {
       const patient = await ownStatus(e1.pac, e1);
       await expectOk(e1.pac, e1, 'withdraw', { consentId: patient.consentId });
       const withdrawn = await ownStatus(e1.psy, e1);
@@ -229,11 +237,57 @@ test('018: first consultation over real HTTP and PostgreSQL', {
       assert.equal((await ownStatus(e2.pac, e2)).status, 'withdrawn');
       await client.query("UPDATE bilateral_agreements SET state='unlinked',unlinked_at=clock_timestamp(),version=version+1 WHERE id=$1", [e3.agreementId]);
       assert.equal((await consult(e3.psy, e3)).status, 404);
-      await client.query("UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id='bp4'");
-      assert.ok([401, 403, 404].includes((await consult(e4.psy, e4)).status));
-      assert.equal((await consult(e4.pac, e4)).status, 404);
       assert.equal((await client.query('SELECT count(*)::int AS n FROM consultation_notes')).rows[0].n, 1);
       assert.equal((await client.query('SELECT count(*)::int AS n FROM psychologist_patient_access')).rows[0].n, 2);
+    });
+    await t.test('a freshly authenticated patient can recover and withdraw exactly their consent during professional suspension', async () => {
+      await client.query("UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id='bp4'");
+      assert.ok([401, 403, 404].includes((await consult(e4.psy, e4)).status));
+      const login = await http(e4.pac, '/auth/login', {
+        email: e4.pac + '@bilateral.invalid', password: 'Episode-Demo-Only-284!',
+      });
+      assert.equal(login.status, 200, JSON.stringify(login.body));
+      const token = login.body.data.token;
+      assert.ok(token);
+      const path = '/admissions/consultations';
+      const fresh = (route, payload) => http(e4.pac, route, payload, undefined, token);
+      const clinical = await fresh(path);
+      assert.equal(clinical.status, 200);
+      assert.deepEqual(clinical.body.data, []);
+      assert.equal((await fresh(path + '/' + e4.id)).status, 404);
+
+      const reference = (await client.query(
+        'SELECT consent_id AS "consentId" FROM consultation_activations WHERE episode_id=$1', [e4.episodeId]
+      )).rows[0];
+      const expected = { assignmentId: e4.id, episodeId: e4.episodeId, ...reference };
+      const result = await fresh(path + '/withdrawals');
+      assert.deepEqual(result, { status: 200, body: { success: true, data: [expected] } });
+      assert.equal((await http('bp3', path + '/withdrawals')).status, 404);
+      const other = await http(e2.pac, path + '/withdrawals');
+      assert.equal(other.status, 200);
+      assert.ok(other.body.data.every(item => item.assignmentId !== e4.id));
+      assert.equal((await fresh(path + '/' + e2.id + '/withdraw', { confirmed: true, ...reference })).status, 404);
+      assert.equal((await fresh(path + '/withdrawals?assignmentId=' + e2.id)).status, 400);
+      await assert.rejects(pool.query("SELECT admission_withdrawal_references('bq3',0,9999999999)"), error => error.code === '42501');
+
+      assert.equal((await fresh(path + '/' + expected.assignmentId + '/withdraw', {
+        confirmed: true, consentId: expected.consentId,
+      })).status, 200);
+      assert.equal((await client.query('SELECT 1 FROM consultation_withdrawals WHERE consent_id=$1', [expected.consentId])).rowCount, 1);
+      assert.deepEqual((await fresh(path + '/withdrawals')).body.data, []);
+      assert.equal((await fresh(path + '/' + e4.id)).status, 404);
+    });
+    await t.test('withdrawal references include the current consent before activation during suspension', async () => {
+      const prepared = await prepare('bp5', 'bq5');
+      const accepted = await accept(prepared, await declare(prepared));
+      await client.query("UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id='bp5'");
+      const references = await http(prepared.pac, '/admissions/consultations/withdrawals');
+      assert.deepEqual(references, { status: 200, body: { success: true, data: [
+        { assignmentId: prepared.id, episodeId: prepared.episodeId, consentId: accepted.consentId },
+      ] } });
+      await expectOk(prepared.pac, prepared, 'withdraw', { consentId: accepted.consentId });
+      assert.deepEqual((await http(prepared.pac, '/admissions/consultations/withdrawals')).body.data, []);
+      assert.equal((await client.query('SELECT status FROM clinical_episodes WHERE id=$1', [prepared.episodeId])).rows[0].status, 'prepared');
     });
   } finally {
     Object.assign(db, original);

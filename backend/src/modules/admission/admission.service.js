@@ -104,6 +104,7 @@ export async function consultation(actor, operation, input = {}, id) {
   if (process.env.FIRST_CONSULTATION_ENABLED !== 'true') throw fail('Primera consulta deshabilitada.', 404);
   configuration();
   if (!Number.isFinite(actor?.sessionExpiresAt)) throw fail('Sesión no válida.', 401);
+  if (operation === 'withdrawals' && actor.role !== 'patient') throw fail('Recurso no disponible.', 404);
   const clinicalDatabase = new URL(process.env.ADMISSION_DATABASE_URL);
   const { rows: [legacy] } = await db.query(agendaDestination + `, EXISTS (
     SELECT 1 FROM pg_roles r WHERE r.rolname=current_user
@@ -117,6 +118,17 @@ export async function consultation(actor, operation, input = {}, id) {
           OR has_table_privilege(r.oid,c.oid,'DELETE,TRUNCATE,TRIGGER')))
   ) AS isolated`);
   if (legacy.name !== clinicalDatabase.pathname.slice(1) || !legacy.isolated) throw fail('Destino de agenda incompatible.', 503);
+
+  if (operation === 'withdrawals') {
+    return transaction(async client => {
+      await ensureConsultationDestination(client, legacy);
+      const { rows: [result] } = await client.query(
+        'SELECT public.admission_withdrawal_references($1,$2,$3) AS data',
+        [actor.id, actor.sessionVersion, actor.sessionExpiresAt]
+      );
+      return result.data;
+    });
+  }
 
   if (operation === 'list') {
     const ids = await transaction(async client => {

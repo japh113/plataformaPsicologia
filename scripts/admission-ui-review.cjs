@@ -332,12 +332,44 @@ async function main(){
        await select.selectOption({index:1});
        return page.getByRole('region',{name:'Estado de la primera consulta'});
      }
+     async function replacedConfirmation(page, label, action, update, waitForChange, waitForRestore) {
+       await page.getByLabel(label).check();
+       assert.ok(await button(page,action).isEnabled());
+       const detailPath=/\/api\/admissions\/consultations\/[a-f0-9-]{36}$/;
+       const replacement=async route=>{
+         if(route.request().method()!=='GET') return route.continue();
+         const response=await route.fetch();
+         const body=await response.json();
+         await route.fulfill({response,json:{...body,data:update(body.data)}});
+       };
+       await page.route(detailPath,replacement);
+       try{
+         await button(page,'Actualizar episodio').click();
+         await waitForChange();
+         assert.equal(await page.getByLabel(label).isChecked(),false);
+         assert.ok(await button(page,action).isDisabled());
+       }finally{ await page.unroute(detailPath,replacement); }
+       await Promise.all([
+         page.waitForResponse(r=>r.request().method()==='GET'&&detailPath.test(r.url())&&r.status()===200),
+         button(page,'Actualizar episodio').click()
+       ]);
+       await waitForRestore();
+       assert.equal(await page.getByLabel(label).isChecked(),false);
+       assert.ok(await button(page,action).isDisabled());
+       await page.getByLabel(label).check();
+     }
      const clinicianPanel=await consultation(clinician);
-     await clinicianPanel.getByLabel(/Declaro suficiente para este ensayo/).check();
+     await replacedConfirmation(clinician,/Declaro suficiente para este ensayo/,'Declarar suficiencia',
+       data=>({...data,admissionVersion:data.admissionVersion+1,documentVersion:data.documentVersion+1}),
+       ()=>clinicianPanel.getByLabel(/versión 2, del episodio/).waitFor(),
+       ()=>clinicianPanel.getByLabel(/versión 1, del episodio/).waitFor());
      await button(clinician,'Declarar suficiencia').click();
      await clinicianPanel.getByText('El paciente debe aceptar el consentimiento de tratamiento.').waitFor();
      const patientPanel=await consultation(patient);
-     await patientPanel.getByLabel(/He leído y acepto el consentimiento/).check();
+     await replacedConfirmation(patient,/He leído y acepto el consentimiento/,'Aceptar tratamiento ficticio',
+       data=>({...data,consentHash:'f'.repeat(64),consentTerms:'Términos actualizados para la prueba'}),
+       ()=>patientPanel.getByText('Términos actualizados para la prueba').waitFor(),
+       ()=>patientPanel.getByText(/^Ensayo ficticio individual\. Autorizo iniciar tratamiento/).waitFor());
      await button(patient,'Aceptar tratamiento ficticio').click();
      await patientPanel.getByText('El profesional puede activar el episodio.').waitFor();
      await button(clinician,'Actualizar episodio').click();
@@ -358,8 +390,16 @@ async function main(){
      await button(patient,'Actualizar episodio').click();
      await patientPanel.getByText(/09:00 · 60 minutos · Completada/).waitFor();
      assert.equal(await patientPanel.getByText(/Nota profesional privada|Texto profesional ficticio/).count(),0);
-     await button(patient,'Retirar consentimiento de tratamiento').click();
-     await patientPanel.getByText(/Acceso clínico retirado/).waitFor();
+     const freshPatient=await login('bq3');
+     try{
+       await freshPatient.route('**/api/admissions/consultations',async route=>{
+         if(route.request().method()!=='GET')return route.continue();
+         await route.fulfill({status:200,headers:{'access-control-allow-origin':'*'},json:{success:true,data:[]}});
+       });
+       await button(freshPatient,'Abrir primera consulta ficticia').click();
+       await freshPatient.getByRole('region',{name:'Consentimientos de tratamiento'}).getByRole('button',{name:/Retirar consentimiento del episodio/}).click();
+       await freshPatient.getByRole('region',{name:'Consentimientos de tratamiento'}).waitFor({state:'hidden'});
+     }finally{await freshPatient.context().close();}
      await button(clinician,'Actualizar episodio').click();
      await clinicianPanel.getByText(/Acceso clínico retirado/).waitFor();
      assert.equal(await clinicianPanel.getByText(/Texto profesional ficticio/).count(),0);
