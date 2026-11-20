@@ -322,6 +322,50 @@ async function main(){
  await scenario('ADM20',async()=>{
    await confirmDirected(pac);await button(pac,'Retirar consentimiento dirigido').click();await pac.getByText(/Consulta propia conservada/).waitFor();assert.equal((await json(psy,'/'+selected+'/directed/record')).status,404);await openDirected(pac);await pac.getByText(/VERSION_DIRIGIDA_CORREGIDA/).waitFor();assert.equal(await button(pac,'Solicitar corrección de esta versión').count(),0);assert.equal((await json(pac,'/'+selected)).body.data.documents.length,2);
  },[404]);
+ await scenario('ADM26',async()=>{
+   const clinician=await login('bp3'),patient=await login('bq3');
+   try{
+     async function consultation(page) {
+       await button(page,'Abrir primera consulta ficticia').click();
+       const select=page.getByLabel('Seleccionar episodio');
+       await select.locator('option').nth(1).waitFor({state:'attached'});
+       await select.selectOption({index:1});
+       return page.getByRole('region',{name:'Estado de la primera consulta'});
+     }
+     const clinicianPanel=await consultation(clinician);
+     await clinicianPanel.getByLabel(/Declaro suficiente para este ensayo/).check();
+     await button(clinician,'Declarar suficiencia').click();
+     await clinicianPanel.getByText('El paciente debe aceptar el consentimiento de tratamiento.').waitFor();
+     const patientPanel=await consultation(patient);
+     await patientPanel.getByLabel(/He leído y acepto el consentimiento/).check();
+     await button(patient,'Aceptar tratamiento ficticio').click();
+     await patientPanel.getByText('El profesional puede activar el episodio.').waitFor();
+     await button(clinician,'Actualizar episodio').click();
+     await button(clinician,'Activar episodio ficticio').click();
+     const date=new Date(Date.now()-48*3600*1000).toISOString().slice(0,10);
+     await clinicianPanel.getByLabel('Fecha de la primera cita').fill(date);
+     const hours=clinicianPanel.getByLabel('Hora de inicio');
+     assert.equal(await hours.locator('option[value="09:30"]').count(),0);
+     assert.deepEqual((await hours.locator('option').allTextContents()).slice(1),
+       Array.from({length:24},(_,hour)=>String(hour).padStart(2,'0')+':00'));
+     await hours.selectOption('09:00');
+     await button(clinician,'Reservar cita de 60 minutos').click();
+     await clinicianPanel.getByText(/09:00 · 60 minutos · Pendiente/).waitFor();
+     await button(clinician,'Completar cita').click();
+     await clinicianPanel.getByLabel('Nota profesional privada').fill('Texto profesional ficticio, solo visible para su autor.');
+     await button(clinician,'Registrar nota privada').click();
+     await clinicianPanel.getByText('Texto profesional ficticio, solo visible para su autor.').waitFor();
+     await button(patient,'Actualizar episodio').click();
+     await patientPanel.getByText(/09:00 · 60 minutos · Completada/).waitFor();
+     assert.equal(await patientPanel.getByText(/Nota profesional privada|Texto profesional ficticio/).count(),0);
+     await button(patient,'Retirar consentimiento de tratamiento').click();
+     await patientPanel.getByText(/Acceso clínico retirado/).waitFor();
+     await button(clinician,'Actualizar episodio').click();
+     await clinicianPanel.getByText(/Acceso clínico retirado/).waitFor();
+     assert.equal(await clinicianPanel.getByText(/Texto profesional ficticio/).count(),0);
+     await shot('ADM26-consulta-controles',clinician);
+   } finally {await clinician.context().close();await patient.context().close();}
+ });
  assert.equal(events.filter(e=>!e.expected).length,0);save();await browser.close();
 }
 main().catch(async()=>{save();if(browser)await browser.close();process.exitCode=1;});

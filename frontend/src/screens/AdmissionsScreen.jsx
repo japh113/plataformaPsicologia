@@ -1,3 +1,4 @@
+import FirstConsultation from '../components/FirstConsultation';
 import DirectedAdmission from '../components/DirectedAdmission';
 import AdmissionAssessment from '../components/AdmissionAssessment';
 import { useCallback,useEffect,useRef,useState } from 'react';
@@ -102,6 +103,7 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
 }
 export default function AdmissionsScreen({currentUser}){
   const professional=currentUser.role==='psychologist';
+  const [consultation,setConsultation]=useState(false);
   const [items,setItems]=useState(null),[agreements,setAgreements]=useState([]),[agreement,setAgreement]=useState(''),[episode,setEpisode]=useState(''),[selected,setSelected]=useState(''),[selectedMode,setSelectedMode]=useState(''),[mode,setMode]=useState('self');
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[prepareConfirmed,setPrepareConfirmed]=useState(false),[assignConfirmed,setAssignConfirmed]=useState(false);
   const operations=useRef(new Map());
@@ -117,6 +119,12 @@ export default function AdmissionsScreen({currentUser}){
   };
   return <section className="mx-auto max-w-4xl space-y-5" aria-label="Admisiones individuales">
     <h1 className="text-2xl font-bold">Admisiones individuales</h1>
+    {import.meta.env?.VITE_FIRST_CONSULTATION_ENABLED==='true' && (
+      <button className={style} type="button" onClick={() => setConsultation(value => !value)}>
+        {consultation ? 'Volver a admisiones' : 'Abrir primera consulta ficticia'}
+      </button>
+    )}
+    {consultation ? <FirstConsultation professional={professional}/> : <>
     <p>Ensayo ficticio aislado. Plantilla sin validación clínica de mínimos. Aceptar, enviar o validar no activa tratamiento.</p>
     {error&&<p role="alert">{error}</p>}
     <button className={button} disabled={busy} onClick={()=>{setSelected('');setError('');refresh().catch(e=>setError(e.message));}}>Actualizar admisiones</button>
@@ -132,5 +140,6 @@ export default function AdmissionsScreen({currentUser}){
     {items?.length>0&&<ul className="space-y-2">{items.map(item=><li key={item.id}><button className={style+' w-full text-left'} onClick={()=>{setSelectedMode(item.mode);setSelected(item.id);}}>Episodio {item.episodeId} · {item.professionalName} · {item.mode==='directed'?'Dirigida':'Autoadministrada'} · {labels[item.state]}{labels[item.reviewState]&&' · '+labels[item.reviewState]}</button></li>)}</ul>}
     {selected&&selectedMode==='directed'&&<DirectedAdmission key={selected} id={selected} professional={professional}/>}
     {selected&&selectedMode!=='directed'&&<AdmissionDetail key={selected} id={selected} professional={professional} onRefresh={refresh} onRevoked={()=>setSelected('')}/>}
+    </>}
   </section>;
 }

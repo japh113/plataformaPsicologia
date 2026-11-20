@@ -265,6 +265,13 @@ const includesAny = (message, fragments) => fragments.some((fragment) => message
 export const getAppointmentErrorMeta = (rawMessage = '') => {
   const message = String(rawMessage || '').toLowerCase();
 
+  if (message === 'el turno solicitado no está disponible.') {
+    return {
+      title: 'El turno solicitado no está disponible',
+      hint: 'Prueba otra hora o fecha.',
+    };
+  }
+
   if (includesAny(message, ['ya tiene una cita agendada en este dia', 'paciente ya agendado este dia'])) {
     return {
       title: 'Ese paciente ya tiene una cita activa ese dia',

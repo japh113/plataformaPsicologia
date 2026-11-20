@@ -8,7 +8,7 @@
 4. Leer los ADR, reglas y contratos específicos del alcance en el [índice](docs/README.md). Consultar [arquitectura](docs/architecture.md) y [desarrollo](docs/development.md) cuando la tarea los requiera.
 5. Abrir informes históricos solo para comprobar evidencia necesaria. El [inventario](docs/documentation-inventory.md) distingue contratos, propuestas e historia; no hace falta leer todo docs/ en cada sesión.
 
-Corte del 19 de noviembre de 2026: `main` revalidado `13b6efa106bde7767afe3f8faed27c0c781705a3`, #78 integrado y SQL 001–017 en Git. **2A parcial**, con admisión limitada al sandbox. Encargo vigente APROBADO en `feat/episode-admission-only`: retirar la entrevista global HTTP/UI y dejar la admisión individual por episodio como recorrido único, con continuidad y roadmap en el mismo PR. Mantener identidad y fecha de nacimiento globales, tareas, notas, citas, AB-23 y fallback de capacidades activas. #30 abierto, `prepared`, `allowed:false`, `audienceVerified:false`. Reconsultar checkout y GitHub antes de trabajar.
+Corte del 20 de noviembre de 2026. `main` revalidado en `fe7560d6d432d2697899dadeeaf7efa693d95ba8`, con #78 y #79 integrados. **2A parcial.** Hito 1 integrado: la admisión individual por episodio es el único recorrido de entrevista en el sandbox. Hito 2 autorizado para la primera consulta individual ficticia, con [suficiencia expresa, consentimiento de tratamiento, revocación y agenda](docs/stage2a-identity-directory-intake.md#primera-consulta-individual-ficticia-por-episodio). #80 sigue abierto con riesgo de disponibilidad aceptado temporalmente para desarrollo. Reconsultar checkout y GitHub antes de trabajar.
 
 **Estrategia C y secuencia por hitos — APROBADAS por el propietario:** admisión individual, primera consulta individual ficticia y segura, acreditación/directorio optativo/solicitudes, continuidad clínica y pareja, piloto y producción. Cada retirada exige alcance propio, revisión de todos sus consumidores y pruebas. Conservar infraestructura compartida y seguridad. La secuencia orienta próximos encargos sujetos a aprobación.
 
@@ -21,7 +21,7 @@ Corte del 19 de noviembre de 2026: `main` revalidado `13b6efa106bde7767afe3f8fae
 - RN-28/ADR-018: datos actuales ficticios, sin usuarios reales según declaración de producto; no migrar ni conciliar demo para salvarla, sin autorización para borrar/restablecer recursos existentes. Demos ADR-019 solo conforme al incremento autorizado.
 - Conservar AB-23 y las barreras de [mutaciones legacy](docs/stage2a-legacy-mutations.md), para cuentas nuevas y existentes; no resolver ni borrar pendientes antiguos. No debilitar el fallback de capacidades todavía activas ni conectar LOGINs técnicos/fixtures atribuidos al pool o lectores habituales. Activación exige aislamiento integral y retiro coordinado probado.
 - No inferir DOB, identidad, verificación, episodio, autoría, audiencia ni validación histórica desde edad, entrevista, contacto, vínculo o aprobación. Sin fusiones de identidad ni vías alternativas para menores.
-- Entrevista propia suficiente y validación profesional antes de cada activación nueva (ADR-029/RN-59–61), con precondición backend/DB aún pendiente. ADR-031 aprueba dos modalidades y plantillas predefinidas con personalización limitada; editor avanzado fuera del MVP. D21 no aprobada; D12–D20 no amplían automáticamente MVP/2A.
+- Entrevista propia suficiente y validación profesional antes de cada activación nueva (ADR-029/RN-59–61), con precondición exigible en backend y PostgreSQL para cada flujo habilitado. ADR-031 aprueba dos modalidades y plantillas predefinidas con personalización limitada; editor avanzado fuera del MVP. D21 no aprobada; D12–D20 no amplían automáticamente MVP/2A.
 - No activar D2/D3, nuevas relaciones, clínica, publicación, proveedores, credenciales remotas, recuperación excepcional o emergencia por aparecer en un diseño. Acreditación, identidad y directorio no conceden clínica.
 
 ## Colaboración
@@ -32,15 +32,21 @@ Mantener objetivo, alcance y criterio de cierre acordados. Antes de iniciar una 
 
 Backoffice separado de clínica: support lector operativo; admin/superadmin gestionan funciones autorizadas, sin acceso clínico global ordinario ni break-glass implícito (RN-27).
 
-Citas de 60 minutos por hora exacta, sin solapamientos ni múltiples activas del paciente por día; no completar futuras. Nota solo desde cita completada no futura; cita con nota no vuelve a pendiente/cancelada. Conservar historia; finalización/adendas RN-23 siguen pendientes (#35).
+Citas de 60 minutos exactos a la hora cerrada. El mismo paciente puede tener varias citas en un día si pertenecen a episodios y profesionales distintos y sus horarios son disjuntos. Mantener el cupo diario en la agenda legacy sin atribución y para el mismo paciente/profesional. Las colisiones ajenas devuelven indisponibilidad neutra. No completar citas futuras. Nota solo desde cita completada no futura; cita con nota no vuelve a pendiente/cancelada. Conservar historia; finalización/adendas RN-23 siguen pendientes (#35).
 
 Espera manual: sugerir prioridad 1 y conservar decisión profesional. Disponibilidad con múltiples bloques, excepciones y rangos; no dejar citas futuras sin cobertura. Menos ruido en expediente, modales cuando se sature, agenda mensual calendario, chips compactos semanales/mensuales y colores semánticos distintos.
 
 ## Verificación y entrega
 
-Aplicar el [flujo del checkpoint](docs/project-checkpoint.md#flujo-de-desarrollo-y-actualización): propietario delimita/aprueba; Codex entrega Draft; siete checks; Work audita; Codex corrige bloqueantes; Work verifica HEAD final; propietario decide integración. Verificar main después y actualizar documentación. No iniciar el siguiente candidato automáticamente.
+Aplicar el [flujo del checkpoint](docs/project-checkpoint.md#flujo-de-desarrollo-y-actualización): propietario delimita/aprueba; Codex entrega Draft; siete checks; auditoría según riesgo; Codex corrige bloqueantes; se verifica el HEAD final; propietario decide integración. Verificar main después y actualizar documentación. No iniciar el siguiente candidato automáticamente.
 
 Antes de cerrar: revisar diff, alcance y permisos. Código funcional: unitarias backend, integración pertinente aislada, frontend lint/build y demo ficticia ADR-019. Agenda exige evaluar backend/frontend, espera y disponibilidad. Markdown solo: contrastar código/GitHub, enlaces/fragmentos/IDs, decisiones y hashes; no ejecutar manualmente bases ni demos. CI conserva siete checks y artifacts de **14 días** del HEAD final en runners nuevos: matriz completa para cambios técnicos/mixtos, push a main y ejecución manual; solo la allowlist documental verificada admite suites explícitamente no aplicables según el [contrato CI](docs/ci-implementation.md#ruta-documental-y-eventos). Documentar lo no disponible; evidencia histórica nunca cuenta como prueba nueva. Commitear documentación y publicar solo la rama/PR autorizados.
+
+### Auditoría proporcional al riesgo
+
+- Riesgo alto, incluida cualquier concesión clínica o cambio de seguridad, privacidad o integridad, exige auditoría independiente de Work antes de integrar. Para riesgo medio, realizar revisión independiente cuando una necesidad demostrada la justifique. Work es opcional para riesgo bajo.
+- Al corregir hallazgos, reauditar el delta y sus consecuencias. Reutilizar evidencia válida del mismo HEAD y alcance. Mantener evidencia del HEAD definitivo y los checks aplicables.
+- Elegir modelos y esfuerzo proporcionales a complejidad y riesgo. El ahorro de créditos conserva todas las garantías clínicas, de seguridad y verificación. Cada incremento posterior requiere autorización propia.
 
 ### CI asíncrona: no consumir agentes esperando checks
 

@@ -1,5 +1,5 @@
 // Explicit provisioning and runtime guard for the isolated admission LOGIN.
-const functions=['admission_context(text,integer,text,jsonb)','admission_command(text,integer,text,jsonb)','admission_candidates(text,integer,double precision)'];
+const baselineFunctions=['admission_context(text,integer,text,jsonb)','admission_command(text,integer,text,jsonb)','admission_candidates(text,integer,double precision)'];
 export async function verifyAdmissionContract(client,role,{install=false,runtime=false}={}) {
   if(typeof role!=='string'||!/^[a-z][a-z0-9_]{0,62}$/.test(role))throw new Error('Explicit restricted admission LOGIN required');
   if(runtime&&(await client.query('SELECT current_user=$1 AS matches',[role])).rows[0].matches!==true)throw new Error('Mismatched admission LOGIN');
@@ -26,6 +26,10 @@ export async function verifyAdmissionContract(client,role,{install=false,runtime
     AND NOT has_table_privilege(r.oid,'public.care_relationships','INSERT') AS safe
     FROM pg_roles r WHERE r.oid=(SELECT proowner FROM pg_proc WHERE oid='public.admission_command(text,integer,text,jsonb)'::regprocedure)`)).rows[0];
   if(!owner?.safe)throw new Error('Unsafe admission owner');
+  const hasConsultation=(await client.query(
+    "SELECT to_regprocedure('public.admission_consultation(text,integer,text,jsonb)') IS NOT NULL AS configured"
+  )).rows[0].configured;
+  const functions=hasConsultation?[...baselineFunctions,'admission_consultation(text,integer,text,jsonb)']:baselineFunctions;
   for(const fn of functions){
     if(install)await client.query(`GRANT EXECUTE ON FUNCTION public.${fn} TO "${role}"`);
     const {rows:[row]}=await client.query(`SELECT p.prosecdef,p.proconfig,p.proowner::regrole::text AS owner,
@@ -36,7 +40,7 @@ export async function verifyAdmissionContract(client,role,{install=false,runtime
   }
   const {rows:[extra]}=await client.query(`SELECT EXISTS(SELECT 1 FROM pg_proc p WHERE p.pronamespace='public'::regnamespace AND starts_with(p.proname,'admission_')
     AND (EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) WHERE grantee=0 AND privilege_type='EXECUTE')
-      OR p.proname NOT IN ('admission_context','admission_command','admission_candidates') AND has_function_privilege($1,p.oid,'EXECUTE'))) unsafe`,[role]);
+      OR p.proname<>ALL($2::text[]) AND has_function_privilege($1,p.oid,'EXECUTE'))) unsafe`,[role,functions.map(fn=>fn.split('(')[0])]);
   if(extra.unsafe)throw new Error('Expanded admission function access');
   // 016/017 internal content boundaries has no executable grant to any LOGIN or PUBLIC.
   const internals=(await client.query(`SELECT p.prosecdef,p.proconfig,p.proowner::regrole::text AS owner,

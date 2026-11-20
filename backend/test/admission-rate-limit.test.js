@@ -28,6 +28,18 @@ test('admission real router rejects request 301 on every read and write before J
       assert.doesNotMatch(await response.text(),/private-|own-fixture|unused|deliberately/);
     }
     assert.equal(queries,300,'rejected requests never reach authentication DB');
+    for(let n=0;n<300;n++){
+      const response=await fetch(base+'/consultations/'+id,{headers:{Authorization:'Bearer '+token}});
+      assert.equal(response.status,503);await response.arrayBuffer();
+    }
+    for(const [method,path] of [['GET','/consultations'],['POST','/consultations/'+id+'/note']]){
+      const response=await fetch(base+path,{method,headers:{'Content-Type':'application/json'},
+        ...(method==='POST'?{body:'{private-malformed-body'}:{})});
+      assert.equal(response.status,429,path);
+      assert.ok(Number(response.headers.get('Retry-After'))>=1);
+      assert.doesNotMatch(await response.text(),/private-/);
+    }
+    assert.equal(queries,600,'both limits run before authentication DB');
     assert.equal(logs,0,'no body or SQL diagnostics are logged');
   }finally{
     await new Promise(r=>server.close(r));db.query=original;console.error=originalError;

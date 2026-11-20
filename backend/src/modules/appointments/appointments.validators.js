@@ -3,7 +3,7 @@ const validRecurrenceEditScopes = ['single', 'future'];
 
 const isIsoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 const isTimeValue = (value) => /^\d{2}:\d{2}(:\d{2})?$/.test(value);
-const isHourSlotValue = (value) => /^\d{2}:00(:00)?$/.test(value);
+export const isHourSlotValue = (value) => /^(?:[01][0-9]|2[0-3]):00(?::00)?$/.test(value);
 
 const validateRecurrencePayload = (recurrence, errors) => {
   if (!recurrence || typeof recurrence !== 'object' || Array.isArray(recurrence)) {

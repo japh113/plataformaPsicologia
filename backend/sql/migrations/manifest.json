@@ -83,5 +83,10 @@
     "version": "017",
     "file": "017_directed_admission.sql",
     "sha256": "bf794f3867f73dd42086fc924b4bbf00551c8c541a0395859bb6f93e3acbf33d"
+  },
+  {
+    "version": "018",
+    "file": "018_first_individual_consultation.sql",
+    "sha256": "aeb1baad058ee967778ac1bbf96de9dcae22f5dd7c871817ce74fecb10d44363"
   }
 ]
