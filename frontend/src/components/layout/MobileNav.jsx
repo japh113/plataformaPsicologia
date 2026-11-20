@@ -1,38 +1,42 @@
 import React from 'react';
-import { Calendar, User, LogOut, CalendarRange } from 'lucide-react';
+import { CalendarRange, ClipboardList, House, LogOut, User, UsersRound } from 'lucide-react';
 
 export default function MobileNav({ currentUser, onLogout, vistaActiva, setVistaActiva }) {
-  const isPsychologist = currentUser?.role === 'psychologist';
-  const isBackoffice = ['admin', 'support', 'superadmin'].includes(currentUser?.role || '');
-  const showAdmission = import.meta.env?.VITE_ADMISSION_ENABLED === 'true' && ['patient', 'psychologist'].includes(currentUser?.role);
-  const showBilateral = import.meta.env?.VITE_BILATERAL_ENABLED === 'true' && ['patient', 'psychologist'].includes(currentUser?.role);
-  const showProfessional = import.meta.env.VITE_D2_ENABLED === 'true' && (isPsychologist || ['admin', 'superadmin'].includes(currentUser?.role));
-  const columns = 4 + Number(showAdmission) + Number(showBilateral) + Number(showProfessional);
+  const role = currentUser?.role;
+  const isPsychologist = role === 'psychologist';
+  const isBackoffice = ['admin', 'support', 'superadmin'].includes(role);
+  const showLinked = import.meta.env.VITE_BILATERAL_ENABLED === 'true' && isPsychologist;
+  const showCare = import.meta.env.VITE_BILATERAL_ENABLED === 'true' && role === 'patient';
+  const showAdmission = import.meta.env.VITE_ADMISSION_ENABLED === 'true' && ['patient', 'psychologist'].includes(role) && !showCare;
+  const showProfessional = import.meta.env.VITE_D2_ENABLED === 'true' && (isPsychologist || ['admin', 'superadmin'].includes(role));
+  const entries = [{ view: 'dashboard', label: isBackoffice ? 'Panel' : 'Inicio', Icon: House }];
+
+  if (showCare) {
+    entries.push(
+      { view: 'my-care', label: 'Mi atención', Icon: UsersRound, related: ['appointments', 'admissions', 'legacy-patients'] },
+      { view: 'account', label: 'Cuenta', Icon: User },
+    );
+  } else {
+    const agenda = { view: 'appointments', label: isBackoffice ? 'Revisión' : showLinked ? 'Agenda' : 'Citas', Icon: CalendarRange };
+    if (showLinked) entries.push({ view: 'my-patients', label: 'Mis pacientes', Icon: UsersRound, related: ['legacy-patients'] }, agenda);
+    else entries.push(agenda, { view: 'patients', label: isBackoffice ? 'Usuarios' : isPsychologist ? 'Pacientes' : 'Perfil', Icon: User });
+    if (showAdmission) entries.push({ view: 'admissions', label: 'Admisión', Icon: ClipboardList });
+    if (showProfessional) entries.push({ view: isPsychologist ? 'professional-profile' : 'professional-reviews', label: isPsychologist ? 'Perfil profesional' : 'Credenciales', Icon: User });
+    entries.push({ view: 'logout', label: 'Salir', Icon: LogOut });
+  }
 
   return (
-    <nav aria-label="Navegación móvil" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }} className="md:hidden fixed bottom-0 w-full bg-white border-t border-gray-200 grid items-center h-16 z-40 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-      {showAdmission && <button aria-label="Admisión" aria-current={vistaActiva === 'admissions' ? 'page' : undefined} className="min-w-0 p-1 text-[10px]" onClick={() => setVistaActiva('admissions')}>Admisión</button>}
-      {showBilateral && <button aria-label="Vinculación bilateral" aria-current={vistaActiva === 'bilateral' ? 'page' : undefined} className={`p-1 text-[10px] font-bold ${vistaActiva === 'bilateral' ? 'text-indigo-600' : 'text-gray-400'}`} onClick={() => setVistaActiva('bilateral')}>Vinculación bilateral</button>}
-      {showProfessional && <button className="min-w-0 p-1 text-[10px] leading-tight break-words" onClick={()=>setVistaActiva(isPsychologist?'professional-profile':'professional-reviews')}>{isPsychologist?'Perfil profesional':'Credenciales'}</button>}
-      <button onClick={() => setVistaActiva('dashboard')} className={`flex flex-col items-center p-2 w-full ${vistaActiva === 'dashboard' ? 'text-indigo-600' : 'text-gray-400'}`}>
-        <Calendar size={20} />
-        <span className="text-[10px] mt-1 font-bold">{isBackoffice ? 'Panel' : 'Inicio'}</span>
-      </button>
-
-      <button onClick={() => setVistaActiva('appointments')} className={`flex flex-col items-center p-2 w-full ${vistaActiva === 'appointments' ? 'text-indigo-600' : 'text-gray-400'}`}>
-        <CalendarRange size={20} />
-        <span className="text-[10px] mt-1 font-bold">{isBackoffice ? 'Revision' : 'Citas'}</span>
-      </button>
-
-      <button onClick={() => setVistaActiva('patients')} className={`flex flex-col items-center p-2 w-full ${vistaActiva === 'patients' ? 'text-indigo-600' : 'text-gray-400'}`}>
-        <User size={20} />
-        <span className="text-[10px] mt-1 font-bold">{isBackoffice ? 'Usuarios' : isPsychologist ? 'Pacientes' : 'Perfil'}</span>
-      </button>
-
-      <button onClick={onLogout} className="flex flex-col items-center p-2 w-full text-gray-400">
-        <LogOut size={20} />
-        <span className="text-[10px] mt-1 font-bold">Salir</span>
-      </button>
+    <nav aria-label="Navegación móvil" style={{ gridTemplateColumns: `repeat(${entries.length}, minmax(0, 1fr))` }}
+      className="fixed inset-x-0 bottom-0 z-40 grid min-h-16 items-stretch gap-0.5 border-t border-slate-200 bg-white p-1 shadow-sm md:hidden">
+      {entries.map(({ view, label, Icon, related }) => {
+        const active = vistaActiva === view || related?.includes(vistaActiva);
+        return <button key={view} type="button" aria-current={active ? 'page' : undefined}
+          onClick={view === 'logout' ? onLogout : () => setVistaActiva(view)}
+          className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-0.5 py-1 text-center text-[11px] font-semibold leading-tight focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-700 ${active ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700'}`}>
+          {React.createElement(Icon, { size: 19, 'aria-hidden': true })}
+          <span className="max-w-full break-words">{label}</span>
+        </button>;
+      })}
     </nav>
   );
 }

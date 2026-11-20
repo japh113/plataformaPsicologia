@@ -610,6 +610,22 @@ La navegación móvil ofrece «Vinculación bilateral» únicamente con el flag 
 
 **Pendiente de evidencia CI del HEAD final:** siete checks, análisis aplicables y artifacts de 14 días ligados a run/intento/HEAD/base/merge. La evidencia local no los sustituye. La revisión de las dos alertas bilaterales y sus límites se documenta en el triage enlazado; clasificación remota y auditoría independiente deben comprobarse sobre el HEAD publicado. Sin integración, habilitación habitual, despliegue ni siguiente incremento.
 
+### Mis pacientes y Mi atención — proyección bilateral 020
+
+«Mis pacientes» reúne la búsqueda local por nombre y las invitaciones del profesional. «Mi atención» reúne el intercambio de referencias y la revisión de invitaciones del paciente. La agenda profesional conserva su acceso propio. Las pantallas de expedientes existentes, seguimiento, admisión y cuenta conservan acceso con sus permisos y recorridos. Los códigos viven en memoria mientras se realiza cada paso. Al salir de la vista, puede retomarse el intercambio con el código que ya se compartió.
+
+El lector autenticado `GET /api/bilateral-invitations/linked-patients` devuelve solo `agreementId` y `displayName` al psicólogo exacto. SQL 020 comprueba la sesión, el estado profesional y la restricción vigente en la misma lectura que el acuerdo completado, la invitación aceptada y la cuenta adulta activa asociada al paciente con sus verificaciones vigentes. El nombre usa únicamente los campos de nombre y apellido del paciente. La terminación excluye el acuerdo de la proyección y conserva su evidencia. La vista usa «Admisión pendiente» como estado inicial del vínculo y mantiene los episodios en sus propios recorridos. Las bandejas siguen neutrales y el lector usa el LOGIN bilateral aislado, con instalación únicamente en destinos ficticios nuevos.
+
+Las propuestas nuevas muestran `fictional-individual-v2` con una frase sobre la visibilidad del nombre en el acuerdo vigente. La aceptación de invitaciones anteriores conserva la versión y el hash exactos que se guardaron al emitir. El nombre autorizado procede del acuerdo completado y sus comprobaciones vigentes. El código profesional vence en 24 horas y se reemplaza al generar otro. La referencia dirigida vence en 24 horas, es de un solo uso y se reemplaza al generar otra para el mismo profesional.
+
+Para reproducir el recorrido, ejecutar `bash scripts/clinical-episodes.sh bilateral-demo` en un entorno de desarrollo autorizado. Usar sesiones de navegador separadas y las cuentas ficticias `bp1@bilateral.invalid` y `bq1@bilateral.invalid` con la contraseña demo documentada arriba.
+
+1. En «Mis pacientes → Invitar paciente», generar y copiar la referencia profesional.
+2. En «Mi atención → Generar mi referencia», pegar el código profesional, consultar al destinatario, confirmar y copiar la referencia dirigida.
+3. Volver a «Invitar paciente → Ya recibí el código del paciente». Introducir la referencia y el correo conocido, leer el texto completo, marcar las dos confirmaciones y registrar la solicitud. Comprobar el acuse en «Invitaciones».
+4. En «Mi atención», actualizar la bandeja, abrir la invitación, leer sus condiciones y aceptar expresamente. Volver a «Pacientes vinculados» y buscar `garcia`. La fila de Lucía García indica «Admisión pendiente».
+5. Terminar el acuerdo desde la cuenta del paciente y actualizar «Pacientes vinculados». La fila desaparece y el acuerdo terminado sigue consultable en «Invitaciones». Limpiar únicamente el proyecto UUID indicado por el wrapper.
+
 ### Implementación del primer incremento autoadministrado — 014
 
 **Alcance autorizado por el propietario el 18 de noviembre de 2026:** primer flujo individual autoadministrado, adulto registrado/verificado, acuerdo bilateral SQL 013 vigente, consentimiento específico, versiones inmutables con correcciones, revocación operativa y asociación explícita a `prepared`. Esta autorización posterior habilita únicamente este incremento ficticio; las propuestas anteriores conservan sus límites para dirigida, pareja, mínimos clínicos y custodia. Base revalidada: `main` posterior a #73, `78efcc37e45bd2afb182671f7dc05efc995e8ff1`. Integrado en #74, merge `88712f49fd4714fca5927f1a67db1eb889e1e2b3`. El encargo y sus resultados conservan su corte; integración no significa habilitación habitual ni despliegue. SQL 001–014 y sus hashes son ahora historia protegida.

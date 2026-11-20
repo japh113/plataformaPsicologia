@@ -1,5 +1,5 @@
 import { sandboxControl,createSandboxDatabase,installBaseline } from './episode-sandbox.js';
-import { installDirectedSandbox, installConsultationSandbox } from './admission-directed-sandbox.js';
+import { installConsultationSandbox } from './admission-directed-sandbox.js';
 import { bilateralFixture } from './bilateral-sandbox.js';
 import { command as bilateral,processQueue,closeBilateral } from '../src/modules/bilateral/bilateral.service.js';
 import { command,closeAdmission } from '../src/modules/admission/admission.service.js';
@@ -10,8 +10,8 @@ const actor=id=>({id,sessionVersion:0,sessionExpiresAt:Math.floor(Date.now()/100
 const act=()=>({operationId:randomUUID(),confirmed:true});
 try{
   control=await sandboxControl({demo:true});const name='psicopanel_episode_demo';client=await createSandboxDatabase(control,name);await installBaseline(client);
-  const install=process.env.FIRST_CONSULTATION_ENABLED==='true'?installConsultationSandbox:installDirectedSandbox;
-  await install(client,name,{runtimeRole:'bilateral_runtime_demo',admissionRole:'admission_runtime_demo',legacyRole:'consultation_legacy_demo'});await bilateralFixture(client);
+  await installConsultationSandbox(client,name,{runtimeRole:'bilateral_runtime_demo',admissionRole:'admission_runtime_demo',
+    legacyRole:'consultation_legacy_demo',linkedPatients:true});await bilateralFixture(client);
   if(process.env.FIRST_CONSULTATION_ENABLED==='true') {
     await client.query(`INSERT INTO psychologist_availability_blocks(psychologist_user_id,weekday,start_time,end_time)
       SELECT 'bp3',weekday,'08:00','18:00' FROM generate_series(0,6) AS weekday`);

@@ -434,7 +434,7 @@ export default function App({onRestrictedSession}) {
         }
         clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: false };
         // A clinical retry can finish after the user opens a preclinical screen.
-        setVistaActiva(view => ['admissions', 'bilateral'].includes(view) ? view : 'dashboard');
+        setVistaActiva(view => ['admissions', 'my-patients', 'my-care', 'account'].includes(view) ? view : 'dashboard');
         isCurrent = beginClinicalOperation();
       }
       const patientRows = recheckedFollowUp ? backendPatients.map(patient =>
@@ -1730,9 +1730,23 @@ export default function App({onRestrictedSession}) {
     }
   };
 
+  const bilateralEnabled = import.meta.env?.VITE_BILATERAL_ENABLED === 'true';
+  const patientCare = bilateralEnabled && currentUser?.role === 'patient';
   const renderMainContent = () => {
     if(import.meta.env?.VITE_ADMISSION_ENABLED==='true' && vistaActiva==='admissions' && ['patient','psychologist'].includes(currentUser?.role))return <AdmissionsScreen key={currentUser.id} currentUser={currentUser}/>;
-    if(import.meta.env?.VITE_BILATERAL_ENABLED==='true' && vistaActiva==='bilateral' && ['patient','psychologist'].includes(currentUser?.role))return <BilateralInvitationsScreen key={currentUser.id} currentUser={currentUser}/>;
+    if (bilateralEnabled && (
+      (vistaActiva === 'my-patients' && currentUser?.role === 'psychologist') ||
+      (vistaActiva === 'my-care' && currentUser?.role === 'patient')
+    )) {
+      return <BilateralInvitationsScreen key={currentUser.id} currentUser={currentUser}
+        navigate={setVistaActiva} showAdmission={import.meta.env?.VITE_ADMISSION_ENABLED === 'true'} />;
+    }
+    if (patientCare && vistaActiva === 'account') return <>
+      <IdentityPanel onIdentityUpdated={handleIdentityUpdated} />
+      <button type="button" onClick={handleLogout} className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-700 md:hidden">
+        Cerrar sesión
+      </button>
+    </>;
     if(vistaActiva==='professional-profile' && currentUser?.role==='psychologist')return <ProfessionalProfileScreen/>;
     if(vistaActiva==='professional-reviews' && ['admin','superadmin'].includes(currentUser?.role))return <ProfessionalReviewScreen/>;
     if (cargandoDatos) {
@@ -1869,7 +1883,7 @@ export default function App({onRestrictedSession}) {
       );
     }
 
-    if (vistaActiva === 'patients') {
+    if (vistaActiva === 'patients' || vistaActiva === 'legacy-patients') {
       if (isBackoffice) {
         return (
           <BackofficeScreen
@@ -2010,9 +2024,12 @@ export default function App({onRestrictedSession}) {
       <Sidebar currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} />
       <MobileNav currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} />
 
-      <main className="flex-1 flex flex-col h-screen overflow-auto bg-slate-50/50 w-full">
-        <div className="p-4 md:p-8">
-          {currentUser?.role === 'patient' && <IdentityPanel onIdentityUpdated={handleIdentityUpdated} />}
+      <main className="flex h-screen w-full min-w-0 flex-1 flex-col overflow-auto bg-slate-50">
+        {bilateralEnabled && !isBackoffice && <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-3 font-extrabold text-slate-950 md:hidden">
+          <span aria-hidden="true" className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-indigo-700 text-indigo-700">P</span> PsicoPanel
+        </div>}
+        <div className="p-4 pb-24 md:p-8">
+          {currentUser?.role === 'patient' && !patientCare && <IdentityPanel onIdentityUpdated={handleIdentityUpdated} />}
           {renderMainContent()}
         </div>
       </main>

@@ -93,5 +93,10 @@
     "version": "019",
     "file": "019_treatment_withdrawal_reference.sql",
     "sha256": "c88dc1dd4f9d44677d1c74a93b274487627975e1ecd37b4bbb2a0861d70e3f0f"
+  },
+  {
+    "version": "020",
+    "file": "020_bilateral_linked_patients.sql",
+    "sha256": "04c12927ebefb193decfd8923bc839a577fa3d4f4370750c4a9f276d23615826"
   }
 ]
