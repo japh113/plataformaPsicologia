@@ -1,10 +1,11 @@
 import { createHash, createHmac, randomBytes, randomUUID, createCipheriv, createDecipheriv } from 'node:crypto';
 
 export const purpose = 'individual_linkage';
-export const conditionsVersion = 'fictional-individual-v1';
+const previousConditionsVersion = 'fictional-individual-v1';
+export const conditionsVersion = 'fictional-individual-v2';
 export const declarationVersion = 'independent-channel-v1';
 export const declarationText = 'Confirmo que recibí esta referencia de la persona que pretendo invitar mediante un canal de confianza independiente del correo al que se enviará la invitación.';
-export const conditionsText = name => `Acepto la propuesta de vinculación preclínica individual de ${name}, con las condiciones y versión mostradas. Esto completa un acuerdo bilateral y deja la admisión pendiente. No inicia tratamiento, no autoriza al profesional a consultar mi entrevista o expediente y no sustituye los consentimientos clínicos que correspondan. Cualquiera de las partes puede terminar este acuerdo de inmediato, sin autorización de la otra. Si existe un tratamiento activo o pausado, su continuidad, pausa o cierre se tramitan por su procedimiento propio.`;
+export const conditionsText = name => `Acepto la propuesta de vinculación preclínica individual de ${name}, con las condiciones y versión mostradas. Esto completa un acuerdo bilateral y deja la admisión pendiente. Mientras la vinculación y la autorización sigan vigentes, el profesional podrá ver mi nombre en su lista de pacientes vinculados. No inicia tratamiento, no autoriza al profesional a consultar mi entrevista o expediente y no sustituye los consentimientos clínicos que correspondan. Cualquiera de las partes puede terminar este acuerdo de inmediato, sin autorización de la otra. Si existe un tratamiento activo o pausado, su continuidad, pausa o cierre se tramitan por su procedimiento propio.`;
 export const sha256 = text => createHash('sha256').update(text).digest('hex');
 export const fail = (message, status=400) => Object.assign(new Error(message),{status});
 export const uuid = value => typeof value==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -29,7 +30,7 @@ export function openEmail(envelope,id,key) {
   cipher.setAAD(Buffer.from('bilateral-email-v1:'+id));cipher.setAuthTag(Buffer.from(envelope.tag,'base64'));
   return Buffer.concat([cipher.update(Buffer.from(envelope.data,'base64')),cipher.final()]).toString('utf8');
 }
-const lists=['sent','received','agreements','blocks','notices'];
+const lists=['sent','received','agreements','blocks','notices','linked-patients'];
 export function validate(op,p={}) {
   const fields={
     'professional-reference':['operationId'],preflight:['professionalReference'],
@@ -45,7 +46,9 @@ export function validate(op,p={}) {
   if (op!=='preflight' && !uuid(p.operationId)) throw fail('Operación no válida.');
   if (fields[op].includes('expectedVersion') && (!Number.isSafeInteger(p.expectedVersion)||p.expectedVersion<1)) throw fail('Versión no válida.');
   for(const field of ['confirmed','declared','proposed']) if(fields[op].includes(field) && p[field]!==true) throw fail('Se requiere una acción expresa.');
-  if (fields[op].includes('conditionsVersion') && p.conditionsVersion!==conditionsVersion || op==='issue' && p.declarationVersion!==declarationVersion) throw fail('Las condiciones cambiaron. Recarga.',409);
+  const previousInvitation = op==='accept' && p.conditionsVersion===previousConditionsVersion;
+  if (fields[op].includes('conditionsVersion') && p.conditionsVersion!==conditionsVersion && !previousInvitation ||
+      op==='issue' && p.declarationVersion!==declarationVersion) throw fail('Las condiciones cambiaron. Recarga.',409);
   if (fields[op].includes('conditionsHash') && !/^[a-f0-9]{64}$/.test(p.conditionsHash||'')) throw fail('Condiciones no válidas.');
   for(const field of ['professionalReference','recipientReference']) if(fields[op].includes(field) && (typeof p[field]!=='string'||p[field].length>128)) throw fail('Referencia no válida.');
 }

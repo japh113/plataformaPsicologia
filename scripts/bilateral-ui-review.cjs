@@ -1,30 +1,364 @@
-const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=require('node:fs');
-const base=process.env.REVIEW_BASE,api=process.env.REVIEW_API||'http://api:5000/api';
-const control=process.env.REVIEW_CONTROL||'/control',out=process.env.REVIEW_OUT||'/evidence';
-const results=[],events=[],screenshots=[];let current='SETUP',allowed=new Set(),browser,psy,pac,activePage;
-const save=()=>fs.writeFileSync(control+'/results.json',JSON.stringify({results,events,screenshots},null,2));
-const button=(p,name)=>p.getByRole('button',{name,exact:true});
-function watch(p){activePage=p;p.on('pageerror',()=>events.push({scenario:current,type:'pageerror',expected:false}));p.on('response',r=>{if(r.status()>=400)events.push({scenario:current,type:'http',status:r.status(),expected:allowed.has(r.status())});});}
-async function shot(id,p=activePage||psy){if(p.isClosed())p=psy;await p.screenshot({path:out+'/screenshots/'+id+'.png',fullPage:true,animations:'disabled',mask:[p.locator('input'),p.locator('textarea'),p.getByText(/@|Password demo:/)],maskColor:'#475569'});screenshots.push({file:'screenshots/'+id+'.png',scenario:current,secretsMasked:true});save();}
-async function scenario(id,fn,statuses=[]){current=id;allowed=new Set(statuses);try{await fn();await shot(id);results.push({id,status:'PASS'});}catch(e){fs.writeFileSync(control+'/browser-failure.txt',e.stack||e.message);results.push({id,status:'FAIL',failureCategory:e.name==='TimeoutError'?'timeout':'assertion'});try{await shot(id+'-failure');}catch{}save();throw Error('Scenario '+id+' failed');}save();console.log(id+' PASS');}
-async function login(id){const context=await browser.newContext({viewport:{width:375,height:812},locale:'es-MX'}),p=await context.newPage();watch(p);await p.goto(base);await p.locator('input[name=email]').waitFor();await p.locator('input[name=email]').fill(id+'@bilateral.invalid');await p.locator('input[name=password]').fill('Episode-Demo-Only-284!');await button(p,'Entrar').click();const nav=p.getByRole('navigation',{name:'Navegación móvil'});await nav.waitFor();const entry=nav.getByRole('button',{name:'Vinculación bilateral',exact:true});assert.ok(await entry.isVisible());const bounds=await entry.boundingBox();assert.ok(bounds.x>=0 && bounds.x+bounds.width<=375);assert.equal(await nav.getByRole('button').count(),id.startsWith('bp')?6:5);assert.ok(await nav.evaluate(node=>node.scrollWidth<=node.clientWidth));for(const item of await nav.getByRole('button').all()){const rect=await item.boundingBox();assert.ok(rect.x>=0 && rect.x+rect.width<=375);}await entry.click();await p.getByRole('heading',{name:'Vinculación bilateral',exact:true}).waitFor();assert.equal(await entry.getAttribute('aria-current'),'page');await p.waitForLoadState('networkidle');return p;}
-async function json(p,path,body){return p.evaluate(async({api,path,body})=>{const response=await fetch(api+'/bilateral-invitations'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+localStorage.getItem('psicopanel_auth_token'),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return {status:response.status,data:(await response.json()).data};},{api,path,body});}
-const op=()=>require('node:crypto').randomUUID();
-async function waitInvitation(p){for(let n=0;n<20;n++){await button(p,'Actualizar bandeja').click();const articles=p.locator('article').filter({hasText:'Pendiente'});if(await articles.count())return articles.last();await p.waitForTimeout(300);}throw Error('Invitation not delivered in simulator');}
-async function propose(p,target,reference){await p.getByLabel('Correo conocido de la persona',{exact:true}).fill(target+'@bilateral.invalid');await p.getByLabel('Referencia dirigida recibida por canal independiente',{exact:true}).fill(reference);await p.getByLabel(/Confirmo que recibí/).check();await p.getByLabel(/Propongo expresamente/).check();await button(p,'Emitir propuesta').click();await p.getByRole('status').filter({hasText:'Acuse recibido'}).waitFor();}
-async function prepare(target,professionalReference){const p=await login(target),r=await json(p,'/recipient-reference',{operationId:op(),professionalReference,confirmed:true});assert.equal(r.status,200);await propose(psy,target,r.data.reference);await waitInvitation(p);return p;}
-async function main(){
- browser=await chromium.launch({headless:true,...(process.env.REVIEW_EXECUTABLE?{executablePath:process.env.REVIEW_EXECUTABLE}:{}),args:['--no-sandbox',...(process.env.REVIEW_FRONTEND_IP?['--host-resolver-rules=MAP frontend.localhost '+process.env.REVIEW_FRONTEND_IP]:[])]});
- fs.writeFileSync(control+'/runtime.json',JSON.stringify({playwright:require('playwright/package.json').version,chromium:browser.version(),node:process.version,revision:process.env.REVIEW_REVISION,headless:true}));
- let professionalReference,recipientReference;
- await scenario('VIN01',async()=>{psy=await login('bp1');assert.equal(await psy.locator('input[type=checkbox]:checked').count(),0);assert.ok(await button(psy,'Emitir propuesta').isDisabled());await button(psy,'Generar referencia profesional').click();const field=psy.getByLabel('Referencia profesional (24 horas)',{exact:true});await field.waitFor();professionalReference=await field.inputValue();assert.ok(professionalReference.length>70);assert.ok(!psy.url().includes(professionalReference));});
- await scenario('VIN02',async()=>{pac=await login('bq1');await pac.getByLabel('Referencia profesional',{exact:true}).fill(professionalReference);await button(pac,'Consultar profesional').click();await pac.getByText('Profesional ficticio bp1',{exact:true}).waitFor();assert.ok(await button(pac,'Generar mi referencia dirigida').isDisabled());await pac.getByLabel(/Confirmo el profesional destinatario/).check();await button(pac,'Generar mi referencia dirigida').click();const field=pac.getByLabel('Mi referencia dirigida',{exact:true});await field.waitFor();recipientReference=await field.inputValue();assert.equal((await json(pac,'/agreements')).data.length,0);await shot('VIN02-patient',pac);});
- await scenario('VIN03',async()=>{await propose(psy,'bq1',recipientReference);const item=await waitInvitation(pac);assert.ok(await item.getByRole('button',{name:'Aceptar invitación',exact:true}).isDisabled());assert.ok((await item.innerText()).includes('No inicia tratamiento'));const sent=(await json(psy,'/sent')).data;assert.doesNotMatch(JSON.stringify(sent),/email|patient|contact|digest|delivery|blocked/i);});
- await scenario('VIN04',async()=>{const other=await login('bq2'),i=(await json(pac,'/received')).data[0];assert.equal((await json(other,'/'+i.id+'/accept',{operationId:op(),expectedVersion:i.version,conditionsVersion:i.conditionsVersion,conditionsHash:i.conditionsHash,confirmed:true})).status,404);await other.context().close();const item=pac.locator('article').filter({hasText:'Pendiente'}).first();await item.getByLabel(/Acepto expresamente/).check();await item.getByRole('button',{name:'Aceptar invitación',exact:true}).click();await pac.getByRole('status').filter({hasText:'Acuerdo bilateral completado'}).waitFor();assert.equal((await json(pac,'/agreements')).data[0].admissionAuthorization,'not_granted');await shot('VIN04-agreement',pac);},[404]);
- await scenario('VIN05',async()=>{pac.once('dialog',d=>d.accept());await button(pac,'Terminar acuerdo unilateralmente').click();await pac.getByRole('heading',{name:/Acuerdo terminado/}).waitFor();await button(psy,'Actualizar bandeja').click();await psy.getByRole('heading',{name:/Acuerdo terminado/}).waitFor();});
- await scenario('VIN06',async()=>{const p=await prepare('bq3',professionalReference);await button(p,'Rechazar invitación').click();await p.getByRole('heading',{name:/Rechazada/}).waitFor();await shot('VIN06-declined',p);await p.context().close();});
- await scenario('VIN07',async()=>{const p=await prepare('bq4',professionalReference);await button(p,'Bloquear invitaciones de este profesional').click();await p.getByRole('heading',{name:/No disponible/}).waitFor();await button(p,'Desbloquear').click();await button(p,'Desbloquear').waitFor({state:'hidden'});assert.equal((await json(p,'/received')).data[0].status,'invalidated');await shot('VIN07-block',p);await p.context().close();});
- await scenario('VIN08',async()=>{const p=await prepare('bq5',professionalReference);const i=(await json(p,'/received')).data[0];await button(psy,'Actualizar bandeja').click();const item=psy.locator('article').filter({hasText:i.id.slice(0,8)});await item.getByRole('button',{name:'Solicitar reenvío',exact:true}).click();await psy.getByRole('status').filter({hasText:'Acción registrada'}).waitFor();assert.equal((await json(p,'/received')).data[0].expiresAt,i.expiresAt);await item.getByRole('button',{name:'Retirar propuesta',exact:true}).click();await button(p,'Actualizar bandeja').click();await p.getByRole('heading',{name:/Retirada/}).waitFor();await p.context().close();});
- assert.equal(events.filter(e=>!e.expected).length,0);save();await browser.close();
+const { chromium } = require('playwright');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const { randomUUID } = require('node:crypto');
+
+const base = process.env.REVIEW_BASE;
+const api = process.env.REVIEW_API || 'http://api:5000/api';
+const control = process.env.REVIEW_CONTROL || '/control';
+const out = process.env.REVIEW_OUT || '/evidence';
+const results = [], events = [], screenshots = [];
+let current = 'SETUP', allowed = new Set(), browser, psy, pac, activePage;
+const button = (page, name) => page.getByRole('button', { name, exact: true });
+const heading = (page, name) => page.getByRole('heading', { name, exact: true });
+const save = () => fs.writeFileSync(control + '/results.json', JSON.stringify({ results, events, screenshots }, null, 2));
+const assertNoOverflow = async page => assert.ok(await page.evaluate(() => {
+  const main = document.querySelector('main');
+  return document.documentElement.scrollWidth <= innerWidth && main.scrollWidth <= main.clientWidth &&
+    document.documentElement.scrollHeight <= innerHeight;
+}));
+
+async function assertContrast(locator, property, minimum) {
+  const ratio = await locator.evaluate((node, property) => {
+    const context = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+    const computed = getComputedStyle(node);
+    const paint = color => {
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+    };
+    const luminance = () => {
+      const [r, g, b] = Array.from(context.getImageData(0, 0, 1, 1).data).slice(0, 3).map(channel => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    paint('white');
+    paint(computed.backgroundColor);
+    const background = luminance();
+    paint(computed[property]);
+    const foreground = luminance();
+    return (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
+  }, property);
+  assert.ok(ratio >= minimum, `${property} contrast ${ratio} below ${minimum}`);
 }
-main().catch(async()=>{save();if(browser)await browser.close();process.exitCode=1;});
+
+async function verifyNavigation(page, width, label) {
+  const mobile = width < 768;
+  const brand = page.locator(mobile ? 'main > header' : 'aside');
+  assert.ok(await brand.getByText('PsicoPanel', { exact: true }).isVisible());
+  assert.ok(await brand.locator('svg.lucide-sparkles').isVisible());
+  assert.equal(await brand.getByText('P', { exact: true }).count(), 0);
+
+  const nav = page.getByRole('navigation', { name: mobile ? 'Navegación móvil' : 'Navegación principal' });
+  const home = button(nav, 'Inicio');
+  const entry = button(nav, label);
+  await home.focus();
+  await page.keyboard.press('Tab');
+  assert.ok(await entry.evaluate(node => node === document.activeElement));
+  assert.equal(await entry.getAttribute('aria-current'), 'page');
+  assert.ok(await entry.evaluate(node => {
+    const { outlineStyle, outlineWidth } = getComputedStyle(node);
+    return outlineStyle === 'solid' && parseFloat(outlineWidth) >= 2;
+  }));
+  await assertContrast(entry, 'outlineColor', 3);
+  await assertContrast(entry, 'color', 4.5);
+  await assertContrast(home, 'color', 4.5);
+  await assertNoOverflow(page);
+}
+
+function watch(page) {
+  activePage = page;
+  page.on('pageerror', () => events.push({ scenario: current, type: 'pageerror', expected: false }));
+  page.on('response', response => {
+    if (response.status() >= 400) events.push({ scenario: current, type: 'http', status: response.status(), expected: allowed.has(response.status()) });
+  });
+}
+
+async function shot(id, page = activePage || psy) {
+  if (page.isClosed()) page = psy;
+  const searchesEmpty = await page.locator('input[type=search]').evaluateAll(fields => fields.every(field => !field.value));
+  await page.screenshot({
+    path: out + '/screenshots/' + id + '.png', fullPage: true, animations: 'disabled',
+    mask: [page.locator(searchesEmpty ? 'input:not([type=search])' : 'input'), page.locator('textarea'), page.getByText(/@|Password demo:/)], maskColor: '#475569',
+  });
+  screenshots.push({ file: 'screenshots/' + id + '.png', scenario: current, secretsMasked: true });
+  save();
+}
+
+async function scenario(id, fn, statuses = []) {
+  current = id;
+  allowed = new Set(statuses);
+  try {
+    await fn();
+    await shot(id);
+    results.push({ id, status: 'PASS' });
+  } catch (error) {
+    fs.writeFileSync(control + '/browser-failure.txt', error.stack || error.message);
+    results.push({ id, status: 'FAIL', failureCategory: error.name === 'TimeoutError' ? 'timeout' : 'assertion' });
+    try { await shot(id + '-failure'); } catch { /* Keep the initial failure. */ }
+    save();
+    throw Error('Scenario ' + id + ' failed');
+  }
+  save();
+  console.log(id + ' PASS');
+}
+
+async function login(id, mobile = true) {
+  const context = await browser.newContext({
+    viewport: mobile ? { width: 375, height: 812 } : { width: 1280, height: 900 }, locale: 'es-MX',
+    permissions: ['clipboard-read', 'clipboard-write'],
+  });
+  const page = await context.newPage();
+  watch(page);
+  await page.goto(base);
+  await page.locator('input[name=email]').fill(id + '@bilateral.invalid');
+  await page.locator('input[name=password]').fill('Episode-Demo-Only-284!');
+  await button(page, 'Entrar').click();
+  const nav = page.getByRole('navigation', { name: mobile ? 'Navegación móvil' : 'Navegación principal' });
+  const professional = id.startsWith('bp');
+  const label = professional ? 'Mis pacientes' : 'Mi atención';
+  const entry = button(nav, label);
+  await entry.waitFor();
+  await entry.click();
+  await heading(page, label).waitFor();
+  assert.equal(await entry.getAttribute('aria-current'), 'page');
+  if (mobile) {
+    assert.equal(await nav.getByRole('button').count(), professional ? 5 : 3);
+    for (const item of await nav.getByRole('button').all()) {
+      const rect = await item.boundingBox();
+      assert.ok(rect.x >= 0 && rect.x + rect.width <= 375);
+    }
+  }
+  await page.waitForLoadState('networkidle');
+  await assertNoOverflow(page);
+  return page;
+}
+
+async function json(page, path, body) {
+  return page.evaluate(async ({ api, path, body }) => {
+    const response = await fetch(api + '/bilateral-invitations' + path, {
+      method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + localStorage.getItem('psicopanel_auth_token'), 'Content-Type': 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    return { status: response.status, data: (await response.json()).data };
+  }, { api, path, body });
+}
+
+async function copyCode(page, label) {
+  assert.equal(await page.getByLabel(label, { exact: true }).count(), 0);
+  await button(page, 'Copiar mi referencia').click();
+  const code = await page.evaluate(() => navigator.clipboard.readText());
+  assert.match(code, /^[a-f0-9-]{36}\.[A-Za-z0-9_-]{43}$/);
+  assert.ok(!page.url().includes(code));
+  const persisted = await page.evaluate(value => [localStorage, sessionStorage].some(storage =>
+    Object.values(storage).some(item => item.includes(value))), code);
+  assert.equal(persisted, false);
+  return code;
+}
+
+async function waitInvitation(page) {
+  const item = page.locator('article').filter({ hasText: 'Pendiente' }).first();
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await Promise.all([
+      page.waitForResponse(response => response.url().endsWith('/received') && response.status() === 200),
+      button(page, 'Actualizar bandeja').click(),
+    ]);
+    try {
+      await item.waitFor({ timeout: 500 });
+      return item;
+    } catch (error) {
+      if (error.name !== 'TimeoutError') throw error;
+    }
+  }
+  throw Error('Invitation not delivered in simulator');
+}
+
+async function propose(page, target, reference) {
+  await button(page, 'Invitar paciente').click();
+  const advance = button(page, 'Ya recibí el código del paciente');
+  await advance.focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Tab');
+  assert.equal(await advance.evaluate(node => getComputedStyle(node).outlineStyle), 'solid');
+  await advance.press('Enter');
+  await page.getByLabel('Código del paciente', { exact: true }).fill(reference);
+  await page.getByLabel('Correo conocido de la persona', { exact: true }).fill(target + '@bilateral.invalid');
+  const terms = await json(page, '/terms');
+  await page.getByText(terms.data.conditionsText, { exact: true }).waitFor();
+  const register = button(page, 'Registrar solicitud');
+  const declaration = page.getByLabel(terms.data.declarationText, { exact: true });
+  const proposal = page.getByLabel(/Propongo expresamente/);
+  assert.ok(await register.isDisabled());
+  await declaration.check();
+  assert.ok(await register.isDisabled());
+  await proposal.check();
+  const response = page.waitForResponse(r => r.url().endsWith('/bilateral-invitations') && r.status() === 202);
+  await register.click();
+  await page.getByRole('status').filter({ hasText: 'Solicitud registrada' }).waitFor();
+  assert.match(await page.getByRole('status').filter({ hasText: 'Solicitud registrada' }).innerText(), /cuenta.*requisitos.*entregado/i);
+  const data = (await (await response).json()).data;
+  assert.deepEqual(Object.keys(data).sort(), ['receiptId', 'status']);
+  return data.receiptId;
+}
+
+async function prepare(target, professionalReference) {
+  const page = await login(target);
+  const reference = await json(page, '/recipient-reference', { operationId: randomUUID(), professionalReference, confirmed: true });
+  assert.equal(reference.status, 200);
+  const id = await propose(psy, target, reference.data.reference);
+  const item = await waitInvitation(page);
+  return { page, item, id };
+}
+
+async function main() {
+  browser = await chromium.launch({
+    headless: true, ...(process.env.REVIEW_EXECUTABLE ? { executablePath: process.env.REVIEW_EXECUTABLE } : {}),
+    args: ['--no-sandbox', ...(process.env.REVIEW_FRONTEND_IP ? ['--host-resolver-rules=MAP frontend.localhost ' + process.env.REVIEW_FRONTEND_IP] : [])],
+  });
+  fs.writeFileSync(control + '/runtime.json', JSON.stringify({
+    playwright: require('playwright/package.json').version, chromium: browser.version(), node: process.version,
+    revision: process.env.REVIEW_REVISION, headless: true,
+  }));
+  let professionalReference, recipientReference;
+
+  await scenario('VIN01', async () => {
+    psy = await login('bp1', false);
+    await button(psy.getByRole('navigation', { name: 'Navegación principal' }), 'Agenda').waitFor();
+    await button(psy, 'Invitar paciente').click();
+    await button(psy, 'Generar mi referencia').click();
+    await heading(psy, 'Tu referencia está lista').waitFor();
+    professionalReference = await copyCode(psy, 'Mi referencia profesional');
+    await shot('VIN01-code', psy);
+    await button(psy, 'Volver a Mis pacientes').click();
+    await heading(psy, 'Mis pacientes').waitFor();
+    assert.equal(await button(psy, 'Copiar mi referencia').count(), 0);
+  });
+  await scenario('VIN02', async () => {
+    pac = await login('bq1');
+    await pac.setViewportSize({ width: 1280, height: 900 });
+    await verifyNavigation(pac, 1280, 'Mi atención');
+    await shot('VIN02-patient-desktop', pac);
+    await pac.setViewportSize({ width: 320, height: 750 });
+    await verifyNavigation(pac, 320, 'Mi atención');
+    await shot('VIN02-patient-320', pac);
+    await pac.setViewportSize({ width: 375, height: 812 });
+    await button(pac, 'Generar mi referencia').click();
+    await pac.getByLabel('Referencia profesional recibida', { exact: true }).fill(professionalReference);
+    await button(pac, 'Consultar profesional').click();
+    await heading(pac, 'Profesional ficticio bp1').waitFor();
+    assert.ok(await button(pac, 'Generar mi referencia dirigida').isDisabled());
+    await pac.getByLabel(/Confirmo que quiero generar/).check();
+    await button(pac, 'Generar mi referencia dirigida').click();
+    await heading(pac, 'Tu referencia está lista').waitFor();
+    recipientReference = await copyCode(pac, 'Mi referencia dirigida');
+    assert.equal((await json(pac, '/agreements')).data.length, 0);
+    await assertNoOverflow(pac);
+    await shot('VIN02-patient', pac);
+    await button(pac, 'Volver a Mi atención').click();
+  });
+  await scenario('VIN03', async () => {
+    assert.deepEqual((await json(psy, '/linked-patients')).data, []);
+    await propose(psy, 'bq1', recipientReference);
+    const item = await waitInvitation(pac);
+    await button(item, 'Ver invitación').click();
+    await heading(pac, 'Invitación de vinculación').waitFor();
+    assert.ok(await button(pac, 'Aceptar vinculación').isDisabled());
+    const invitation = (await json(pac, '/received')).data[0];
+    await pac.getByText(invitation.conditionsText, { exact: true }).waitFor();
+    assert.deepEqual((await json(psy, '/linked-patients')).data, []);
+    const sent = (await json(psy, '/sent')).data;
+    assert.doesNotMatch(JSON.stringify(sent), /email|patient|contact|digest|delivery|blocked|Lucía/i);
+    await assertNoOverflow(pac);
+    await shot('VIN03-review', pac);
+  });
+  await scenario('VIN04', async () => {
+    const other = await login('bq2');
+    const item = (await json(pac, '/received')).data[0];
+    const acceptance = { operationId: randomUUID(), expectedVersion: item.version, conditionsVersion: item.conditionsVersion, conditionsHash: item.conditionsHash, confirmed: true };
+    assert.equal((await json(other, '/' + item.id + '/accept', acceptance)).status, 404);
+    await other.context().close();
+    await pac.getByLabel(/Acepto expresamente/).check();
+    await button(pac, 'Aceptar vinculación').click();
+    await pac.getByRole('status').filter({ hasText: 'Acuerdo bilateral completado' }).waitFor();
+    assert.equal((await json(pac, '/agreements')).data[0].admissionAuthorization, 'not_granted');
+    await button(psy, 'Pacientes vinculados').click();
+    await psy.getByRole('rowheader', { name: 'Lucía García' }).waitFor();
+    await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('garcia');
+    const index = psy.getByRole('region', { name: 'Pacientes vinculados' });
+    const status = index.getByText('Vinculación completada', { exact: true });
+    await status.waitFor();
+    await assertContrast(status, 'color', 4.5);
+    assert.equal(await index.getByText('Admisión pendiente', { exact: true }).count(), 0);
+    await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('Sin coincidencia');
+    await psy.getByText('No hay coincidencias para ese nombre.', { exact: true }).waitFor();
+    await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('lucia');
+    await status.waitFor();
+    await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).clear();
+    await psy.setViewportSize({ width: 320, height: 750 });
+    await verifyNavigation(psy, 320, 'Mis pacientes');
+    const search = index.getByRole('searchbox', { name: 'Buscar por nombre' });
+    await search.focus();
+    await psy.keyboard.press('Tab');
+    assert.ok(await button(index, 'Actualizar pacientes').evaluate(node => node === document.activeElement));
+    await psy.keyboard.press('Shift+Tab');
+    assert.ok(await search.evaluate(node => node === document.activeElement && getComputedStyle(node).outlineStyle === 'solid'));
+    await shot('VIN04-mobile-list', psy);
+    await psy.setViewportSize({ width: 1536, height: 900 });
+    await verifyNavigation(psy, 1536, 'Mis pacientes');
+    await assertContrast(button(psy, 'Invitar paciente'), 'color', 4.5);
+    await shot('VIN04-desktop-list', psy);
+  }, [404]);
+  await scenario('VIN05', async () => {
+    await button(pac, 'Volver a Mi atención').click();
+    pac.once('dialog', dialog => dialog.accept());
+    await button(pac, 'Terminar acuerdo unilateralmente').click();
+    await pac.getByRole('heading', { name: /Acuerdo terminado/ }).waitFor();
+    await button(psy, 'Actualizar pacientes').click();
+    await psy.getByText('Todavía no hay pacientes vinculados disponibles.', { exact: true }).waitFor();
+    await button(psy, 'Invitaciones').click();
+    await heading(psy, 'Acuerdo terminado').waitFor();
+  });
+  await scenario('VIN06', async () => {
+    const { page, item } = await prepare('bq3', professionalReference);
+    await button(item, 'Ver invitación').click();
+    page.once('dialog', dialog => dialog.accept());
+    await button(page, 'Rechazar invitación').click();
+    await page.getByText(/Vinculación individual · Rechazada/).waitFor();
+    await shot('VIN06-declined', page);
+    await page.context().close();
+  });
+  await scenario('VIN07', async () => {
+    const { page, item } = await prepare('bq4', professionalReference);
+    await button(item, 'Ver invitación').click();
+    page.once('dialog', dialog => dialog.accept());
+    await button(page, 'Bloquear invitaciones de este profesional').click();
+    await page.getByText(/Vinculación individual · No disponible/).waitFor();
+    await button(page, 'Volver a Mi atención').click();
+    await button(page, 'Desbloquear').click();
+    await button(page, 'Desbloquear').waitFor({ state: 'hidden' });
+    assert.equal((await json(page, '/received')).data[0].status, 'invalidated');
+    await shot('VIN07-block', page);
+    await page.context().close();
+  });
+  await scenario('VIN08', async () => {
+    const { page, id } = await prepare('bq5', professionalReference);
+    const before = (await json(page, '/received')).data[0];
+    assert.equal(before.id, id);
+    const receipt = psy.locator('article').filter({ has: heading(psy, 'Solicitud registrada') }).first();
+    await button(receipt, 'Solicitar reenvío').click();
+    await psy.getByRole('status').filter({ hasText: 'Solicitud de reenvío registrada' }).waitFor();
+    assert.equal((await json(page, '/received')).data[0].expiresAt, before.expiresAt);
+    psy.once('dialog', dialog => dialog.accept());
+    await button(receipt, 'Retirar solicitud').click();
+    await heading(psy, 'Retirada').waitFor();
+    await button(page, 'Actualizar bandeja').click();
+    await page.locator('article').getByText(/Retirada · Vence/).waitFor();
+    await page.context().close();
+  });
+  assert.equal(events.filter(event => !event.expected).length, 0);
+  save();
+  await browser.close();
+}
+
+main().catch(async () => { save(); if (browser) await browser.close(); process.exitCode = 1; });

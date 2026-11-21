@@ -1,6 +1,6 @@
 // Used only by the explicit migration runner and disposable fixture provisioning.
 const commands=['bilateral_context(text,integer,text,jsonb)','bilateral_command(text,integer,text,jsonb)','bilateral_queue()','bilateral_cleanup()'];
-export async function verifyBilateralContract(client,role,{install=false}={}) {
+export async function verifyBilateralContract(client,role,{install=false,linkedPatients=false}={}) {
   if(typeof role!=='string'||!/^[a-z][a-z0-9_]{0,62}$/.test(role))throw new Error('Explicit restricted bilateral LOGIN required');
   const {rows:[guard]}=await client.query(`SELECT r.rolcanlogin AND NOT r.rolsuper AND NOT r.rolinherit AND NOT r.rolcreaterole
     AND NOT r.rolcreatedb AND NOT r.rolreplication AND NOT r.rolbypassrls
@@ -18,7 +18,8 @@ export async function verifyBilateralContract(client,role,{install=false}={}) {
     NOT EXISTS(SELECT 1 FROM pg_auth_members WHERE r.oid IN (roleid,member)) AS safe
     FROM pg_roles r WHERE r.oid=(SELECT proowner FROM pg_proc WHERE oid='public.bilateral_command(text,integer,text,jsonb)'::regprocedure)`)).rows[0];
   if(!owner?.safe)throw new Error('Bilateral NOLOGIN owner boundary invalid');
-  for(const name of commands){
+  const functions=linkedPatients?[...commands,'bilateral_linked_patients(text,integer,double precision)']:commands;
+  for(const name of functions){
     if(install)await client.query(`GRANT EXECUTE ON FUNCTION public.${name} TO "${role}"`);
     const {rows:[fn]}=await client.query(`SELECT p.prosecdef,p.proconfig,p.proowner::regrole::text AS owner,
       has_function_privilege($1,p.oid,'EXECUTE') AS executable,

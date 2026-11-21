@@ -94,7 +94,7 @@ test('P2-01: late follow-up responses cannot restore data after logout, session 
 });
 
 test('clinical recovery keeps whichever preclinical screen was opened while the retry was in flight', async () => {
-  for (const view of ['admissions', 'bilateral', 'notas']) {
+  for (const view of ['admissions', 'my-patients', 'my-care', 'account', 'notas']) {
     const h = harness();
     h.context.getPatients = async () => { throw failure(403); };
     await h.load();

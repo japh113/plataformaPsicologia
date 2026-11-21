@@ -25,7 +25,7 @@ async function submitLogin(p,id){
   await button(p,'Entrar').click();
 }
 async function signIn(p,id){await p.goto(base);await submitLogin(p,id);}
-async function login(id){const context=await browser.newContext({viewport:{width:375,height:812},locale:'es-MX'}),p=await context.newPage();watch(p);await signIn(p,id);const nav=p.getByRole('navigation',{name:'Navegación móvil'});await nav.waitFor();const entry=nav.getByRole('button',{name:'Admisión',exact:true});await entry.click();await p.getByRole('heading',{name:'Admisiones individuales',exact:true}).waitFor();assert.ok(await nav.evaluate(n=>n.scrollWidth<=n.clientWidth));return p;}
+async function login(id){const context=await browser.newContext({viewport:{width:375,height:812},locale:'es-MX'}),p=await context.newPage();watch(p);await signIn(p,id);const nav=p.getByRole('navigation',{name:'Navegación móvil'});await nav.waitFor();if(id.startsWith('bq'))await button(nav,'Mi atención').click();await button(id.startsWith('bq')?p:nav,'Admisión').click();await p.getByRole('heading',{name:'Admisiones individuales',exact:true}).waitFor();assert.ok(await nav.evaluate(n=>n.scrollWidth<=n.clientWidth));return p;}
 async function json(p,path='',body){return p.evaluate(async({api,path,body})=>{const r=await fetch(api+'/admissions'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+localStorage.getItem('psicopanel_auth_token'),'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});return {status:r.status,body:await r.json()};},{api,path,body});}
 async function open(p){await Promise.all([p.waitForResponse(r=>r.url().endsWith('/admissions')&&r.status()===200),button(p,'Actualizar admisiones').click()]);await p.getByRole('article',{name:'Detalle de admisión'}).waitFor({state:'hidden'});await p.getByRole('region',{name:'Admisiones individuales',exact:true}).locator('li button').first().click();await p.getByRole('heading',{name:'Admisión individual ficticia',exact:true}).waitFor();}
 async function saveDraft(){await Promise.all([pac.waitForResponse(r=>r.url().endsWith('/save')&&r.status()===200),button(pac,'Guardar borrador privado').click()]);await pac.waitForLoadState('networkidle');}
@@ -50,10 +50,14 @@ async function main(){
        const nav=viewport.width<768?page.getByRole('navigation',{name:'Navegación móvil'}):page.locator('aside');
        await page.getByRole('heading',{name:'No pudimos sincronizar la informacion',exact:true}).waitFor();
        assert.ok(failedReads>0);
-       if(id==='bq1')await page.getByRole('heading',{name:'Mi identidad y contactos',exact:true}).waitFor();
-       await button(nav,'Vinculación bilateral').click();
+       if(id==='bq1'){
+         await button(nav,viewport.width<768?'Cuenta':'Mi cuenta').click();
+         await page.getByRole('heading',{name:'Mi identidad y contactos',exact:true}).waitFor();
+       }
+       await button(nav,id==='bq1'?'Mi atención':'Mis pacientes').click();
+       if(id!=='bq1')await button(page,'Invitaciones').click();
        await page.getByText(/Acuerdo completado/).first().waitFor();
-       await button(nav,'Admisión').click();
+       await button(id==='bq1'?page:nav,'Admisión').click();
        const list=page.getByRole('region',{name:'Admisiones individuales',exact:true});
        await list.locator('li button').filter({hasText:'Autoadministrada'}).click();
        await page.getByRole('heading',{name:'Admisión individual ficticia',exact:true}).waitFor();
@@ -404,6 +408,14 @@ async function main(){
      await clinicianPanel.getByText(/Acceso clínico retirado/).waitFor();
      assert.equal(await clinicianPanel.getByText(/Texto profesional ficticio/).count(),0);
      await shot('ADM26-consulta-controles',clinician);
+
+     const nav=clinician.getByRole('navigation',{name:'Navegación móvil'});
+     await button(nav,'Mis pacientes').click();
+     const index=clinician.getByRole('region',{name:'Pacientes vinculados'});
+     const linked=index.getByRole('row').filter({has:clinician.getByRole('rowheader',{name:'bq3',exact:true})});
+     await linked.getByText('Vinculación completada',{exact:true}).waitFor();
+     assert.equal(await index.getByText(/Admisión pendiente/i).count(),0);
+     await shot('ADM26-pacientes-vinculados',clinician);
    } finally {await clinician.context().close();await patient.context().close();}
  });
  assert.equal(events.filter(e=>!e.expected).length,0);save();await browser.close();

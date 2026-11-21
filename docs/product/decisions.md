@@ -137,6 +137,14 @@ Ejecución exclusivamente explícita: URL y nombre de base confirmados, transacc
 
 **Consecuencia:** cada etapa incluye sus pruebas; 3 no es el inicio de toda validación. La UI mínima de aceptación, autorización digital/presencial y revocación se entrega en 2B/2C, sin esperar a 4. Los entregables y criterios por etapa están en [roadmap.md](roadmap.md). La planificación puede usar ChatGPT, implementación autorizada Codex local y auditoría Work cuando aporte valor; no se impone usar las tres herramientas.
 
+### Diseño aprobado de navegación e identidad visual
+
+El propietario aprobó «Mis pacientes» como entrada principal del psicólogo, con «Invitaciones» dentro de ese recorrido y «Agenda» independiente. «Mi atención» es la entrada del paciente. La navegación es simplificada y contextual. Se conserva el logotipo original de PsicoPanel, con el símbolo de destellos y el nombre en dos tonos, y se mantiene un lenguaje visual común entre pantallas, roles y dispositivos. El símbolo circular de los mockups servía de referencia ilustrativa.
+
+Todo ajuste visual se justifica y documenta en su PR. Los cambios significativos se notifican antes de implementarse y cualquier desviación de la dirección aprobada requiere autorización del propietario. Los ajustes menores que respetan el diseño vigente se resuelven dentro del encargo autorizado.
+
+El [Draft #84](https://github.com/japh113/plataformaPsicologia/pull/84) implementa el primer alcance ficticio de [navegación y vinculación](../stage2a-identity-directory-intake.md#mis-pacientes-y-mi-atención--proyección-bilateral-020). La ficha clínica unificada por paciente queda pendiente de un incremento propio.
+
 ## ADR-011 — Derechos del paciente y marco jurídico inicial
 
 **Estado: APROBADA como separación de producto; LEGAL A VALIDAR en alcance normativo y responsabilidades.**
