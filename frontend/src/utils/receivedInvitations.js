@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export function isActionableInvitation(invitation, now) {
   return invitation.status === 'pending' && invitation.acceptanceAvailable === true && Date.parse(invitation.expiresAt) > now;
@@ -13,8 +13,9 @@ export function useReceivedInvitations(scope, apiRequest) {
     const owner = { scope, controller: null };
     ownerRef.current = owner;
 
-    async function load() {
-      if (ownerRef.current !== owner || owner.controller) return;
+    async function load(force = false) {
+      if (ownerRef.current !== owner || (!force && owner.controller)) return;
+      owner.controller?.abort();
       const controller = new AbortController();
       owner.controller = controller;
       try {
@@ -32,11 +33,12 @@ export function useReceivedInvitations(scope, apiRequest) {
       }
     }
 
+    const onFocus = () => { void load(); };
     owner.load = load;
-    window.addEventListener('focus', load);
+    window.addEventListener('focus', onFocus);
     void load();
     return () => {
-      window.removeEventListener('focus', load);
+      window.removeEventListener('focus', onFocus);
       owner.controller?.abort();
       if (ownerRef.current === owner) ownerRef.current = null;
     };
@@ -49,26 +51,26 @@ export function useReceivedInvitations(scope, apiRequest) {
     setSnapshot(null);
   }
 
-  function refresh() {
+  const refresh = useCallback(() => {
     const owner = ownerRef.current;
-    if (owner?.scope === scope) void owner.load();
-  }
+    if (owner?.scope === scope) void owner.load(true);
+  }, [scope]);
 
   function afterAction(id, status) {
     const owner = ownerRef.current;
     if (!owner || owner.scope !== scope) return;
-    // A GET begun before an acknowledged write cannot restore its previous state.
-    owner.controller?.abort();
-    owner.controller = null;
+    // Hide availability after a decision or conflict until an authoritative read completes.
     setSnapshot(previous => {
       if (previous?.scope !== scope || !previous.items) return previous;
       if (!id) return null;
       return {
         ...previous,
-        items: previous.items.map(item => item.id === id ? { ...item, status, acceptanceAvailable: false } : item),
+        items: previous.items.map(item => item.id === id
+          ? { ...item, status: status ?? item.status, acceptanceAvailable: false }
+          : item),
       };
     });
-    void owner.load();
+    void owner.load(true);
   }
 
   const current = scope && snapshot?.scope === scope ? snapshot : null;

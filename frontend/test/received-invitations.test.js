@@ -40,7 +40,7 @@ test('shared inbox deduplicates reads, applies decisions immediately and fences 
   try {
     await render('patient-a:session-1');
     assert.equal(calls[0].path, '/bilateral-invitations/received');
-    await act(async () => { current.refresh(); window.dispatchEvent(new Event('focus')); });
+    await act(async () => window.dispatchEvent(new Event('focus')));
     assert.equal(calls.length, 1);
     await resolve(0, [a, b]);
     assert.equal(current.actionable.length, 2);
@@ -75,5 +75,45 @@ test('shared inbox deduplicates reads, applies decisions immediately and fences 
   } finally {
     await act(async () => root.unmount());
     document.body.removeChild(container);
+  }
+});
+
+test('manual refresh and a conflict supersede older reads within the same session', async () => {
+  const calls = [];
+  const request = (path, { signal }) => new Promise(resolve => calls.push({ signal, resolve }));
+  const root = createRoot(document.createElement('div'));
+  let current;
+  function Fixture() {
+    current = useReceivedInvitations('patient-a:session-1', request);
+    return null;
+  }
+  const pending = { id: 'invitation', status: 'pending', acceptanceAvailable: true, expiresAt: new Date(Date.now() + 60_000).toISOString() };
+  const withdrawn = { ...pending, status: 'withdrawn', acceptanceAvailable: false };
+  const resolve = (index, item) => act(async () => calls[index].resolve({ data: [item] }));
+  try {
+    await act(async () => root.render(React.createElement(Fixture)));
+    await act(async () => current.refresh());
+    assert.equal(calls.length, 2);
+    assert.ok(calls[0].signal.aborted);
+    await resolve(1, withdrawn);
+    await resolve(0, pending);
+    assert.deepEqual(current.items, [withdrawn]);
+    assert.equal(current.actionable.length, 0);
+
+    await act(async () => current.refresh());
+    await resolve(2, pending);
+    assert.deepEqual(current.actionable, [pending]);
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    await act(async () => current.afterAction(pending.id));
+    assert.equal(calls.length, 5);
+    assert.ok(calls[3].signal.aborted);
+    assert.equal(current.items[0].status, 'pending');
+    assert.equal(current.actionable.length, 0);
+    await resolve(4, withdrawn);
+    await resolve(3, pending);
+    assert.deepEqual(current.items, [withdrawn]);
+    assert.equal(current.actionable.length, 0);
+  } finally {
+    await act(async () => root.unmount());
   }
 });

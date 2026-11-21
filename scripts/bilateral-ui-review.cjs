@@ -149,6 +149,46 @@ async function json(page, path, body) {
   }, { api, path, body });
 }
 
+async function controlInboxReads(page) {
+  await page.addInitScript(() => {
+    const fetch = window.fetch.bind(window);
+    const held = window.heldInboxReads = {};
+    const released = window.releasedInboxReads = {};
+    window.fetch = async (...args) => {
+      const path = new URL(String(args[0]), window.location.href).pathname.split('/').at(-1);
+      const delay = held[path] === true;
+      if (delay) held[path] = false;
+      const response = await fetch(...args);
+      if (delay) {
+        const read = response.json.bind(response);
+        response.json = async () => {
+          const body = await read();
+          await new Promise(resolve => { held[path] = resolve; });
+          released[path] = true;
+          return body;
+        };
+      }
+      return response;
+    };
+  });
+}
+
+async function holdInboxReads(page, ...paths) {
+  await page.evaluate(names => names.forEach(name => {
+    window.heldInboxReads[name] = true;
+    window.releasedInboxReads[name] = false;
+  }), paths);
+}
+
+async function waitForHeldInboxReads(page, ...paths) {
+  await page.waitForFunction(names => names.every(name => typeof window.heldInboxReads[name] === 'function'), paths);
+}
+
+async function releaseInboxReads(page, ...paths) {
+  await page.evaluate(names => names.forEach(name => window.heldInboxReads[name]()), paths);
+  await page.waitForFunction(names => names.every(name => window.releasedInboxReads[name]), paths);
+}
+
 async function copyCode(page, label) {
   assert.equal(await page.getByLabel(label, { exact: true }).count(), 0);
   await button(page, 'Copiar mi referencia').click();
@@ -340,9 +380,26 @@ async function main() {
   }, [404]);
   await scenario('VIN05', async () => {
     await button(pac, 'Volver a Mi atención').click();
-    pac.once('dialog', dialog => dialog.accept());
-    await button(pac, 'Terminar acuerdo unilateralmente').click();
+    const mobile = pac.getByRole('navigation', { name: 'Navegación móvil' });
+    const before = (await json(pac, '/notices')).data;
+    await button(mobile, 'Inicio').click();
+    await button(psy, 'Ver acuerdo de Lucía García').click();
+    psy.once('dialog', dialog => dialog.accept());
+    await button(psy, 'Terminar acuerdo unilateralmente').click();
+    await heading(psy, 'Acuerdo terminado').waitFor();
+    const [notices] = await Promise.all([
+      pac.waitForResponse(response => response.url().endsWith('/notices') && response.request().method() === 'GET'),
+      button(mobile, 'Mi atención').click(),
+    ]);
+    assert.equal(notices.status(), 200);
+    const newNotices = (await notices.json()).data.filter(item => !before.some(previous => previous.id === item.id));
+    assert.equal(newNotices.length, 1);
+    assert.equal(newNotices[0].message, 'Hay una acción disponible en tu cuenta');
+    await pac.getByRole('status').filter({ hasText: /^Hay novedades en tu bandeja\.$/ }).waitFor();
     await pac.getByRole('heading', { name: /Acuerdo terminado/ }).waitFor();
+    assert.equal(await pac.locator('#mobile-invitation-count').count(), 0);
+    await shot('VIN05-aviso-neutral', pac);
+    await button(psy, 'Volver a Mis pacientes').click();
     await button(psy, 'Actualizar pacientes').click();
     await psy.getByText('Todavía no hay pacientes vinculados disponibles.', { exact: true }).waitFor();
     await button(psy, 'Invitaciones').click();
@@ -404,26 +461,14 @@ async function main() {
       fixture('Fixture pendiente A', 'pending', true),
       fixture('Fixture pendiente B', 'pending', true),
     ];
+    let notices = [];
     await page.route('**/bilateral-invitations/received', route => route.request().method() === 'GET'
       ? route.fulfill({ json: { success: true, data: rows }, headers: { 'access-control-allow-origin': '*' } })
       : route.continue());
-    await page.addInitScript(() => {
-      const original = window.fetch.bind(window);
-      window.fetch = async (...args) => {
-        const delay = window.delayReceived && String(args[0]).endsWith('/bilateral-invitations/received');
-        const response = await original(...args);
-        if (delay) {
-          const read = response.json.bind(response);
-          response.json = async () => {
-            const body = await read();
-            await new Promise(resolve => { window.releaseReceived = resolve; });
-            window.receivedReleased = true;
-            return body;
-          };
-        }
-        return response;
-      };
-    });
+    await page.route('**/bilateral-invitations/notices', route => route.request().method() === 'GET'
+      ? route.fulfill({ json: { success: true, data: notices }, headers: { 'access-control-allow-origin': '*' } })
+      : route.continue());
+    await controlInboxReads(page);
     try {
       await page.goto(base);
       await submitLogin(page, 'bq6');
@@ -434,10 +479,12 @@ async function main() {
       await heading(inbox, 'Fixture pendiente B').waitFor();
       const names = await inbox.getByRole('heading', { level: 3 }).allTextContents();
       assert.deepEqual(names.slice(0, 2), ['Fixture pendiente A', 'Fixture pendiente B']);
-      await page.evaluate(() => { window.delayReceived = true; window.dispatchEvent(new Event('focus')); });
-      await page.waitForFunction(() => Boolean(window.releaseReceived));
+      notices = [{ id: randomUUID(), message: 'Hay una acción disponible en tu cuenta' }];
+      await holdInboxReads(page, 'received', 'notices');
+      await button(page, 'Actualizar bandeja').click();
+      await waitForHeldInboxReads(page, 'received', 'notices');
       rows = [];
-      await page.evaluate(() => { window.delayReceived = false; });
+      notices = [];
       await button(page, 'Cuenta').click();
       await button(page, 'Cerrar sesión').click();
       await button(page, 'Entrar').waitFor();
@@ -445,18 +492,94 @@ async function main() {
       await submitLogin(page, 'bq7');
       await button(page, 'Mi atención').click();
       await page.getByText('No tienes invitaciones disponibles.', { exact: true }).waitFor();
-      await page.evaluate(() => window.releaseReceived());
-      await page.waitForFunction(() => window.receivedReleased);
+      await releaseInboxReads(page, 'received', 'notices');
       assert.equal(await page.locator('#mobile-invitation-count').count(), 0);
       assert.equal(await page.getByText(/Fixture pendiente/).count(), 0);
+      assert.equal(await page.getByText('Hay novedades en tu bandeja.', { exact: true }).count(), 0);
       await button(page.getByRole('navigation', { name: 'Navegación móvil' }), 'Inicio').click();
       assert.equal(await page.getByRole('heading', { name: /invitaci[oó]n(es)? pendiente/i }).count(), 0);
       await shot('VIN09-inicio-sin-pendientes', page);
     } finally {
-      await page.evaluate(() => window.releaseReceived?.());
       await context.close();
     }
   });
+  await scenario('VIN10', async () => {
+    const context = await browser.newContext({ viewport: { width: 375, height: 812 }, locale: 'es-MX' });
+    const page = await context.newPage();
+    watch(page);
+    const pending = () => ({
+      id: randomUUID(), professionalName: 'Profesional ficticio', status: 'pending', acceptanceAvailable: true,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(), version: 1, conditionsVersion: 'fictional-individual-v2',
+      conditionsHash: 'fixture', conditionsText: 'Condiciones ficticias para la regresión.',
+    });
+    const withdrawn = item => ({ ...item, status: 'withdrawn', version: 2, acceptanceAvailable: false });
+    let rows = [];
+    await page.route('**/bilateral-invitations/received', route => route.request().method() === 'GET'
+      ? route.fulfill({ json: { success: true, data: rows }, headers: { 'access-control-allow-origin': '*' } })
+      : route.continue());
+    await page.route('**/bilateral-invitations/notices', route => route.request().method() === 'GET'
+      ? route.fulfill({ status: 503, json: { message: 'Avisos no disponibles.' }, headers: { 'access-control-allow-origin': '*' } })
+      : route.continue());
+    await page.route(/\/bilateral-invitations\/[^/]+\/(accept|decline)$/, route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      rows = [withdrawn(rows[0])];
+      return route.fulfill({ status: 409, json: { message: 'La invitación cambió.' }, headers: { 'access-control-allow-origin': '*' } });
+    });
+    await controlInboxReads(page);
+    try {
+      const mobile = page.getByRole('navigation', { name: 'Navegación móvil' });
+      const count = page.locator('#mobile-invitation-count');
+      const homeCard = page.getByRole('heading', { name: /Tienes .* invitaci[oó]n/ });
+      const firstRead = page.waitForResponse(response => response.url().endsWith('/received') && response.request().method() === 'GET');
+      await page.goto(base);
+      await submitLogin(page, 'bq7');
+      assert.deepEqual((await (await firstRead).json()).data, []);
+      const first = pending();
+      rows = [first];
+      await button(mobile, 'Mi atención').click();
+      await page.getByText('Pendiente de respuesta', { exact: false }).waitFor();
+      await page.getByText('No hay acuerdos para mostrar.', { exact: true }).waitFor();
+      assert.equal(await count.textContent(), '1 invitación pendiente');
+
+      await holdInboxReads(page, 'received');
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await waitForHeldInboxReads(page, 'received');
+      rows = [withdrawn(first)];
+      await button(page, 'Actualizar bandeja').click();
+      await page.getByText(/Retirada · Vence/).waitFor();
+      await releaseInboxReads(page, 'received');
+      assert.equal(await page.getByText('Pendiente de respuesta', { exact: false }).count(), 0);
+      assert.equal(await count.count(), 0);
+      await button(mobile, 'Inicio').click();
+      assert.equal(await homeCard.count(), 0);
+
+      for (const action of ['Aceptar vinculación', 'Rechazar invitación']) {
+        rows = [pending()];
+        await button(mobile, 'Mi atención').click();
+        await page.getByText('Pendiente de respuesta', { exact: false }).waitFor();
+        assert.equal(await count.textContent(), '1 invitación pendiente');
+        await button(page, 'Ver invitación').click();
+        if (action === 'Aceptar vinculación') await page.getByLabel(/Acepto expresamente/).check();
+        else page.once('dialog', dialog => dialog.accept());
+        await holdInboxReads(page, 'received');
+        await button(page, action).click();
+        await waitForHeldInboxReads(page, 'received');
+        await page.getByRole('alert').filter({ hasText: 'La invitación cambió.' }).waitFor();
+        await count.waitFor({ state: 'detached' });
+        await releaseInboxReads(page, 'received');
+        await page.getByText('Vinculación individual · Retirada', { exact: true }).waitFor();
+        assert.equal(await count.count(), 0);
+        await button(mobile, 'Inicio').click();
+        assert.equal(await homeCard.count(), 0);
+      }
+      await button(mobile, 'Mi atención').click();
+      await page.getByText(/Retirada · Vence/).waitFor();
+      assert.equal(await count.count(), 0);
+      await shot('VIN10-bandeja-revalidada', page);
+    } finally {
+      await context.close();
+    }
+  }, [409, 503]);
   assert.equal(events.filter(event => !event.expected).length, 0);
   save();
   await browser.close();

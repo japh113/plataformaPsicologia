@@ -373,7 +373,7 @@ function LinkedPatients({ onAgreement, onLegacy }) {
   </section>;
 }
 
-function InvitationDetail({ item, acceptanceAvailable, action, terminal, onAccepted }) {
+function InvitationDetail({ item, acceptanceAvailable, action, terminal, onAccepted, onConflict }) {
   const [checked, setChecked] = useState(false);
   return <div className="max-w-2xl space-y-4">
     <section className={card}>
@@ -397,7 +397,12 @@ function InvitationDetail({ item, acceptanceAvailable, action, terminal, onAccep
           <button type="button" className={primary} disabled={action.busy || !checked || !acceptanceAvailable}
             onClick={() => void action.send('/' + item.id + '/accept', {
               expectedVersion: item.version, conditionsVersion: item.conditionsVersion, conditionsHash: item.conditionsHash, confirmed: checked,
-            }, onAccepted, failure => { if (failure.status === 409) setChecked(false); })}>Aceptar vinculación</button>
+            }, onAccepted, failure => {
+              if (failure.status === 409) {
+                setChecked(false);
+                onConflict(item.id);
+              }
+            })}>Aceptar vinculación</button>
           <button type="button" className={secondary} disabled={action.busy} onClick={() => {
             if (window.confirm('¿Rechazar esta invitación? El rechazo cierra esta propuesta de forma definitiva.')) terminal(item, 'decline');
           }}>Rechazar invitación</button>
@@ -412,16 +417,27 @@ function InvitationDetail({ item, acceptanceAvailable, action, terminal, onAccep
 
 function Invitations({ professional, receivedInvitations, selectedAgreement, selectedInvitation, onInvitation, registered }) {
   const [data, setData] = useState(null);
+  const [hasNotices, setHasNotices] = useState(false);
   const [readError, setReadError] = useState('');
   const [notice, setNotice] = useState('');
   const [attempt, setAttempt] = useState(0);
   const action = useBilateralAction();
 
-  function refresh() {
+  function refreshLists() {
     setData(null);
+    setHasNotices(false);
     setReadError('');
     setAttempt(value => value + 1);
+  }
+
+  function refresh() {
+    refreshLists();
     receivedInvitations?.refresh();
+  }
+
+  function revalidateDecision(id) {
+    receivedInvitations.afterAction(id);
+    refreshLists();
   }
 
   useEffect(() => {
@@ -436,6 +452,13 @@ function Invitations({ professional, receivedInvitations, selectedAgreement, sel
     ).catch(failure => {
       if (!controller.signal.aborted) setReadError(failure.message);
     });
+    if (!professional) {
+      apiRequest(base + '/notices', { signal: controller.signal }).then(({ data }) => {
+        if (!controller.signal.aborted) setHasNotices(Array.isArray(data) && data.length > 0);
+      }).catch(() => {
+        if (!controller.signal.aborted) setHasNotices(false);
+      });
+    }
     return () => controller.abort();
   }, [professional, attempt]);
 
@@ -451,9 +474,15 @@ function Invitations({ professional, receivedInvitations, selectedAgreement, sel
         setNotice('Acción registrada.');
       } else {
         setNotice(verb === 'resend' ? 'Solicitud de reenvío registrada. El acuse no confirma que se haya emitido o entregado una invitación.' : 'Acción registrada.');
+        refresh();
+        return;
       }
-      refresh();
-    }, failure => { if (failure.status === 409) refresh(); });
+      refreshLists();
+    }, failure => {
+      if (failure.status !== 409) return;
+      if (verb === 'decline') revalidateDecision(item.id);
+      else refresh();
+    });
   }
 
   const items = professional ? data?.items : receivedInvitations.items;
@@ -473,13 +502,14 @@ function Invitations({ professional, receivedInvitations, selectedAgreement, sel
     <button type="button" className={secondary} disabled={action.busy} onClick={refresh}>
       <RefreshCw size={17} aria-hidden="true" /> Actualizar bandeja
     </button>
+    {!selectedInvitation && !selectedAgreement && hasNotices && <p role="status" className="text-sm text-slate-600">Hay novedades en tu bandeja.</p>}
     {!items && !loadError && <p role="status">Consultando la bandeja…</p>}
     {selectedInvitation ? items && (invitation ? <InvitationDetail
       key={JSON.stringify([invitation.id, invitation.version, invitation.conditionsVersion, invitation.conditionsHash, pendingIds.has(invitation.id)])}
-      item={invitation} acceptanceAvailable={pendingIds.has(invitation.id)} action={action} terminal={terminal} onAccepted={result => {
+      item={invitation} acceptanceAvailable={pendingIds.has(invitation.id)} action={action} terminal={terminal} onConflict={revalidateDecision} onAccepted={result => {
         receivedInvitations.afterAction(invitation.id, 'accepted');
         setNotice(result.status === 'completed' ? 'Acuerdo bilateral completado.' : 'El acuerdo ya no está vigente.');
-        refresh();
+        refreshLists();
       }} /> : <p className={card}>La invitación ya no está disponible.</p>) : <>
       {!selectedAgreement && orderedItems && <section aria-labelledby="bilateral-invitations-title" className={content}>
         <h2 id="bilateral-invitations-title" className={heading}>{professional ? 'Solicitudes de vinculación' : 'Invitaciones'}</h2>
@@ -542,6 +572,7 @@ export default function BilateralInvitationsScreen({ currentUser, navigate, show
   const [registered, setRegistered] = useState(false);
   const headingRef = useRef(null);
   const focusHeading = useRef(!professional);
+  const refreshReceived = receivedInvitations?.refresh;
 
   function open(target, id = null) {
     setSelection(id);
@@ -553,6 +584,10 @@ export default function BilateralInvitationsScreen({ currentUser, navigate, show
     if (focusHeading.current) headingRef.current?.focus();
     focusHeading.current = false;
   }, [page]);
+
+  useEffect(() => {
+    if (page === 'invitations') refreshReceived?.();
+  }, [page, refreshReceived]);
 
   const subpage = ['invite', 'reference', 'detail', 'agreement'].includes(page);
   const home = professional ? 'Mis pacientes' : 'Mi atención';

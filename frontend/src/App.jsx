@@ -1746,9 +1746,9 @@ export default function App({onRestrictedSession}) {
     if(import.meta.env?.VITE_ADMISSION_ENABLED==='true' && vistaActiva==='admissions' && ['patient','psychologist'].includes(currentUser?.role))return <AdmissionsScreen key={currentUser.id} currentUser={currentUser}/>;
     if (bilateralEnabled && (
       (vistaActiva === 'my-patients' && currentUser?.role === 'psychologist') ||
-      (vistaActiva === 'my-care' && currentUser?.role === 'patient')
+      (vistaActiva === 'my-care' && invitationScope)
     )) {
-      return <BilateralInvitationsScreen key={currentUser.id} currentUser={currentUser}
+      return <BilateralInvitationsScreen key={invitationScope ?? currentUser.id} currentUser={currentUser}
         receivedInvitations={patientCare ? receivedInvitations : null}
         navigate={setVistaActiva} showAdmission={import.meta.env?.VITE_ADMISSION_ENABLED === 'true'} />;
     }
