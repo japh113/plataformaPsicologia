@@ -16,13 +16,13 @@ const statusLabels = {
 };
 const neutralReceipt = 'Este acuse no confirma que exista una cuenta, que la persona cumpla los requisitos ni que se haya entregado una invitación.';
 const focus = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700';
-const primary = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-700 px-4 py-2.5 font-semibold text-white hover:bg-indigo-800 disabled:bg-slate-200 disabled:text-slate-600 ${focus}`;
+const primary = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-600 ${focus}`;
 const secondary = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-800 hover:bg-indigo-50 disabled:text-slate-500 ${focus}`;
 const link = `inline-flex min-h-11 items-center gap-2 rounded-md px-2 py-2 font-semibold text-indigo-700 hover:bg-indigo-50 disabled:text-slate-500 ${focus}`;
 const input = `mt-1.5 w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-slate-900 ${focus}`;
 const card = 'min-w-0 space-y-4 rounded-xl border border-slate-200 bg-white p-4 sm:p-6';
 const content = 'space-y-5';
-const title = 'break-words text-3xl font-extrabold tracking-tight text-slate-950 sm:text-4xl';
+const title = 'break-words text-2xl font-black tracking-tight text-gray-900 md:text-3xl';
 const heading = 'break-words text-xl font-bold text-slate-950';
 
 function Avatar({ name }) {
@@ -327,45 +327,48 @@ function LinkedPatients({ onAgreement, onLegacy }) {
 
   const visible = patients?.filter(patient => normalizeName(patient.displayName).includes(normalizeName(query.trim()))) ?? [];
   return <section aria-label="Pacientes vinculados" className={content}>
-    <div className="flex flex-wrap items-end gap-3">
-      <label className="min-w-52 flex-1 font-semibold">
+    <div className="flex items-end gap-2 sm:gap-3">
+      <label className="min-w-0 flex-1 text-sm font-semibold">
         Buscar por nombre
         <span className="relative block">
           <Search size={19} aria-hidden="true" className="pointer-events-none absolute bottom-3.5 left-3 text-slate-500" />
-          <input className={`${input} pl-10`} type="search" autoComplete="off" value={query} onChange={e => setQuery(e.target.value)} />
+          <input className={`${input} h-11 pl-10`} type="search" autoComplete="off" value={query} onChange={e => setQuery(e.target.value)} />
         </span>
       </label>
-      <button type="button" className={secondary} onClick={refresh}>
-        <RefreshCw size={17} aria-hidden="true" /> Actualizar pacientes
+      <button type="button" className={`${secondary} h-11 shrink-0 px-3 text-sm`} aria-label="Actualizar pacientes"
+        title="Actualizar pacientes" onClick={refresh}>
+        <RefreshCw size={17} aria-hidden="true" /> <span className="hidden sm:inline">Actualizar pacientes</span>
       </button>
     </div>
     <ErrorMessage error={error} />
     {!error && !patients && <p role="status">Consultando pacientes vinculados…</p>}
-    {patients && (visible.length ? <div className="rounded-xl border border-slate-200 bg-white">
-      <table className="w-full table-fixed text-left">
+    {patients && (visible.length ? <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <table className="w-full table-fixed text-left text-sm">
         <caption className="sr-only">Pacientes vinculados</caption>
         <thead className="border-b border-slate-200 bg-slate-50 text-sm text-slate-700">
-          <tr><th scope="col" className="w-1/2 p-3 sm:w-2/5 sm:px-5">Paciente</th><th scope="col" className="p-3 sm:px-5">Estado de la vinculación</th></tr>
+          <tr><th scope="col" className="w-[44%] rounded-tl-2xl p-3 sm:w-2/5 sm:px-5">Paciente</th><th scope="col" className="rounded-tr-2xl p-3 sm:px-5">Estado de la vinculación</th></tr>
         </thead>
         <tbody className="divide-y divide-slate-200">
           {visible.map(patient => <tr key={patient.agreementId}>
-            <th scope="row" className="p-3 font-semibold sm:px-5">
+            <th scope="row" className="p-3 font-semibold text-gray-900 sm:px-5">
               <span className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <Avatar name={patient.displayName} />
                 <span className="min-w-0 break-words">{patient.displayName}</span>
               </span>
             </th>
             <td className="p-3 sm:px-5">
-              <div className="flex flex-wrap items-center justify-between gap-1">
-                <span className="rounded-md bg-emerald-100 px-2.5 py-1 text-sm font-semibold text-emerald-900">Vinculación completada</span>
-                <button type="button" className={link} aria-label={`Ver acuerdo de ${patient.displayName}`}
-                  onClick={() => onAgreement(patient.agreementId)}>Ver acuerdo <ChevronRight size={16} aria-hidden="true" /></button>
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <span className="rounded-lg bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-900">Vinculación completada</span>
+                <button type="button" className={`${link} whitespace-nowrap`} aria-label={`Ver acuerdo de ${patient.displayName}`}
+                  onClick={() => onAgreement(patient.agreementId)}>Ver acuerdo <ChevronRight className="shrink-0" size={16} aria-hidden="true" /></button>
               </div>
             </td>
           </tr>)}
         </tbody>
       </table>
-    </div> : <p className={card} role="status">{patients.length ? 'No hay coincidencias para ese nombre.' : 'Todavía no hay pacientes vinculados disponibles.'}</p>)}
+    </div> : <p className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-700" role="status">
+      {patients.length ? 'No hay coincidencias para ese nombre.' : 'Todavía no hay pacientes vinculados disponibles.'}
+    </p>)}
     <button type="button" className={link} onClick={onLegacy}>Expedientes existentes <ChevronRight size={16} aria-hidden="true" /></button>
   </section>;
 }
@@ -541,7 +544,7 @@ export default function BilateralInvitationsScreen({ currentUser, navigate, show
     detail: 'Invitación de vinculación', agreement: 'Acuerdo de vinculación',
   }[page] || home;
 
-  return <section aria-labelledby="bilateral-title" className="mx-auto max-w-6xl space-y-6 text-slate-700">
+  return <section aria-labelledby="bilateral-title" className={`space-y-5 text-slate-700 sm:space-y-6 ${subpage ? 'mx-auto max-w-6xl' : ''}`}>
     {subpage && <button type="button" className={link} onClick={() => open(professional ? 'linked' : 'invitations')}>
       <ArrowLeft size={18} aria-hidden="true" /> Volver a {home}
     </button>}

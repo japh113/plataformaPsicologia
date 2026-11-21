@@ -14,8 +14,58 @@ const heading = (page, name) => page.getByRole('heading', { name, exact: true })
 const save = () => fs.writeFileSync(control + '/results.json', JSON.stringify({ results, events, screenshots }, null, 2));
 const assertNoOverflow = async page => assert.ok(await page.evaluate(() => {
   const main = document.querySelector('main');
-  return document.documentElement.scrollWidth <= innerWidth && main.scrollWidth <= main.clientWidth;
+  return document.documentElement.scrollWidth <= innerWidth && main.scrollWidth <= main.clientWidth &&
+    document.documentElement.scrollHeight <= innerHeight;
 }));
+
+async function assertContrast(locator, property, minimum) {
+  const ratio = await locator.evaluate((node, property) => {
+    const context = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+    const computed = getComputedStyle(node);
+    const paint = color => {
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+    };
+    const luminance = () => {
+      const [r, g, b] = Array.from(context.getImageData(0, 0, 1, 1).data).slice(0, 3).map(channel => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    paint('white');
+    paint(computed.backgroundColor);
+    const background = luminance();
+    paint(computed[property]);
+    const foreground = luminance();
+    return (Math.max(background, foreground) + 0.05) / (Math.min(background, foreground) + 0.05);
+  }, property);
+  assert.ok(ratio >= minimum, `${property} contrast ${ratio} below ${minimum}`);
+}
+
+async function verifyNavigation(page, width, label) {
+  const mobile = width < 768;
+  const brand = page.locator(mobile ? 'main > header' : 'aside');
+  assert.ok(await brand.getByText('PsicoPanel', { exact: true }).isVisible());
+  assert.ok(await brand.locator('svg.lucide-sparkles').isVisible());
+  assert.equal(await brand.getByText('P', { exact: true }).count(), 0);
+
+  const nav = page.getByRole('navigation', { name: mobile ? 'Navegación móvil' : 'Navegación principal' });
+  const home = button(nav, 'Inicio');
+  const entry = button(nav, label);
+  await home.focus();
+  await page.keyboard.press('Tab');
+  assert.ok(await entry.evaluate(node => node === document.activeElement));
+  assert.equal(await entry.getAttribute('aria-current'), 'page');
+  assert.ok(await entry.evaluate(node => {
+    const { outlineStyle, outlineWidth } = getComputedStyle(node);
+    return outlineStyle === 'solid' && parseFloat(outlineWidth) >= 2;
+  }));
+  await assertContrast(entry, 'outlineColor', 3);
+  await assertContrast(entry, 'color', 4.5);
+  await assertContrast(home, 'color', 4.5);
+  await assertNoOverflow(page);
+}
 
 function watch(page) {
   activePage = page;
@@ -27,9 +77,10 @@ function watch(page) {
 
 async function shot(id, page = activePage || psy) {
   if (page.isClosed()) page = psy;
+  const searchesEmpty = await page.locator('input[type=search]').evaluateAll(fields => fields.every(field => !field.value));
   await page.screenshot({
     path: out + '/screenshots/' + id + '.png', fullPage: true, animations: 'disabled',
-    mask: [page.locator('input'), page.locator('textarea'), page.getByText(/@|Password demo:/)], maskColor: '#475569',
+    mask: [page.locator(searchesEmpty ? 'input:not([type=search])' : 'input'), page.locator('textarea'), page.getByText(/@|Password demo:/)], maskColor: '#475569',
   });
   screenshots.push({ file: 'screenshots/' + id + '.png', scenario: current, secretsMasked: true });
   save();
@@ -185,6 +236,13 @@ async function main() {
   });
   await scenario('VIN02', async () => {
     pac = await login('bq1');
+    await pac.setViewportSize({ width: 1280, height: 900 });
+    await verifyNavigation(pac, 1280, 'Mi atención');
+    await shot('VIN02-patient-desktop', pac);
+    await pac.setViewportSize({ width: 320, height: 750 });
+    await verifyNavigation(pac, 320, 'Mi atención');
+    await shot('VIN02-patient-320', pac);
+    await pac.setViewportSize({ width: 375, height: 812 });
     await button(pac, 'Generar mi referencia').click();
     await pac.getByLabel('Referencia profesional recibida', { exact: true }).fill(professionalReference);
     await button(pac, 'Consultar profesional').click();
@@ -228,15 +286,27 @@ async function main() {
     await psy.getByRole('rowheader', { name: 'Lucía García' }).waitFor();
     await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('garcia');
     const index = psy.getByRole('region', { name: 'Pacientes vinculados' });
-    await index.getByText('Vinculación completada', { exact: true }).waitFor();
+    const status = index.getByText('Vinculación completada', { exact: true });
+    await status.waitFor();
+    await assertContrast(status, 'color', 4.5);
     assert.equal(await index.getByText('Admisión pendiente', { exact: true }).count(), 0);
     await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('Sin coincidencia');
     await psy.getByText('No hay coincidencias para ese nombre.', { exact: true }).waitFor();
     await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('lucia');
+    await status.waitFor();
+    await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).clear();
     await psy.setViewportSize({ width: 320, height: 750 });
-    await assertNoOverflow(psy);
+    await verifyNavigation(psy, 320, 'Mis pacientes');
+    const search = index.getByRole('searchbox', { name: 'Buscar por nombre' });
+    await search.focus();
+    await psy.keyboard.press('Tab');
+    assert.ok(await button(index, 'Actualizar pacientes').evaluate(node => node === document.activeElement));
+    await psy.keyboard.press('Shift+Tab');
+    assert.ok(await search.evaluate(node => node === document.activeElement && getComputedStyle(node).outlineStyle === 'solid'));
     await shot('VIN04-mobile-list', psy);
-    await psy.setViewportSize({ width: 1280, height: 900 });
+    await psy.setViewportSize({ width: 1536, height: 900 });
+    await verifyNavigation(psy, 1536, 'Mis pacientes');
+    await assertContrast(button(psy, 'Invitar paciente'), 'color', 4.5);
     await shot('VIN04-desktop-list', psy);
   }, [404]);
   await scenario('VIN05', async () => {

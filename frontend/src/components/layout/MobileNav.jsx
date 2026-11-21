@@ -27,13 +27,13 @@ export default function MobileNav({ currentUser, onLogout, vistaActiva, setVista
 
   return (
     <nav aria-label="Navegación móvil" style={{ gridTemplateColumns: `repeat(${entries.length}, minmax(0, 1fr))` }}
-      className="fixed inset-x-0 bottom-0 z-40 grid min-h-16 items-stretch gap-0.5 border-t border-slate-200 bg-white p-1 shadow-sm md:hidden">
+      className="fixed inset-x-0 bottom-0 z-40 grid min-h-16 items-stretch gap-0.5 border-t border-gray-200 bg-white p-1 shadow-sm md:hidden">
       {entries.map(({ view, label, Icon, related }) => {
         const active = vistaActiva === view || related?.includes(vistaActiva);
         return <button key={view} type="button" aria-current={active ? 'page' : undefined}
           onClick={view === 'logout' ? onLogout : () => setVistaActiva(view)}
-          className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-0.5 py-1 text-center text-[11px] font-semibold leading-tight focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-700 ${active ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700'}`}>
-          {React.createElement(Icon, { size: 19, 'aria-hidden': true })}
+          className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1 text-center text-[11px] leading-tight transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-indigo-700 ${active ? 'bg-indigo-50 font-bold text-indigo-700' : 'font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900'}`}>
+          {React.createElement(Icon, { size: 20, 'aria-hidden': true })}
           <span className="max-w-full break-words">{label}</span>
         </button>;
       })}

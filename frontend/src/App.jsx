@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css';
 import Sidebar from './components/layout/Sidebar';
 import MobileNav from './components/layout/MobileNav';
+import PsicoPanelBrand from './components/layout/PsicoPanelBrand';
 import NewPatientModal from './modals/NewPatientModal';
 import DashboardScreen from './screens/DashboardScreen';
 import PatientsScreen from './screens/PatientsScreen';
@@ -1988,7 +1989,7 @@ export default function App({onRestrictedSession}) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex font-sans text-gray-900 relative pb-20 md:pb-0">
+    <div className="min-h-screen bg-gray-50 flex font-sans text-gray-900 relative">
       {uiFeedback && (
         <div className="pointer-events-none fixed inset-x-4 top-4 z-[70] flex justify-center md:justify-end">
           <div className={`pointer-events-auto w-full max-w-md rounded-2xl border px-4 py-3 shadow-xl ${
@@ -2025,9 +2026,9 @@ export default function App({onRestrictedSession}) {
       <MobileNav currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} />
 
       <main className="flex h-screen w-full min-w-0 flex-1 flex-col overflow-auto bg-slate-50">
-        {bilateralEnabled && !isBackoffice && <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-4 py-3 font-extrabold text-slate-950 md:hidden">
-          <span aria-hidden="true" className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-indigo-700 text-indigo-700">P</span> PsicoPanel
-        </div>}
+        <header className="shrink-0 border-b border-gray-200 bg-white px-4 py-3 md:hidden">
+          <PsicoPanelBrand />
+        </header>
         <div className="p-4 pb-24 md:p-8">
           {currentUser?.role === 'patient' && !patientCare && <IdentityPanel onIdentityUpdated={handleIdentityUpdated} />}
           {renderMainContent()}

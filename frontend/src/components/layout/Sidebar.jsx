@@ -1,5 +1,6 @@
 import React from 'react';
-import { Calendar, Sparkles, User, DollarSign, Bot, LogOut, CalendarRange, House, UsersRound, ClipboardList } from 'lucide-react';
+import { Calendar, User, DollarSign, Bot, LogOut, CalendarRange, House, UsersRound, ClipboardList } from 'lucide-react';
+import PsicoPanelBrand from './PsicoPanelBrand';
 
 function NavButton({ active, onClick, children, disabled = false }) {
   const base = 'flex items-center w-full px-4 py-3 rounded-xl text-left transition-all';
@@ -10,7 +11,7 @@ function NavButton({ active, onClick, children, disabled = false }) {
 
   return (
     <button type="button" onClick={onClick} aria-current={active ? 'page' : undefined}
-      className={`${base} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700 ${active ? 'bg-indigo-50 text-indigo-700 font-bold' : 'text-slate-700 hover:bg-gray-50 hover:text-gray-900'}`}>
+      className={`${base} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700 ${active ? 'bg-indigo-50 font-bold text-indigo-700' : 'font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900'}`}>
       {children}
     </button>
   );
@@ -36,15 +37,9 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
           : 'Paciente';
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col z-10 shadow-sm sticky top-0 h-screen">
+    <aside className="w-64 shrink-0 bg-white border-r border-gray-200 hidden md:flex flex-col z-10 shadow-sm sticky top-0 h-screen">
       <div className="p-6 border-b border-gray-100">
-        {careNav ? <p className="flex items-center gap-2 text-2xl font-extrabold tracking-tight text-slate-950">
-          <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-indigo-700 text-xl text-indigo-700">P</span>
-          PsicoPanel
-        </p> : <h1 className="text-2xl font-black tracking-tight flex items-center">
-          <Sparkles className="text-indigo-600 mr-2" size={24} />
-          Psico<span className="text-indigo-600">Panel</span>
-        </h1>}
+        <PsicoPanelBrand />
       </div>
 
       <nav aria-label="Navegación principal" className="flex-1 space-y-2 overflow-y-auto p-4">
@@ -67,8 +62,12 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
           <NavButton active={vistaActiva === 'admissions'} onClick={() => setVistaActiva('admissions')}>
             <ClipboardList className="mr-3 shrink-0" size={20} aria-hidden="true" /> Admisión
           </NavButton>}
-        {import.meta.env.VITE_D2_ENABLED==='true' && isPsychologist && <NavButton active={vistaActiva==='professional-profile'} onClick={()=>setVistaActiva('professional-profile')}>Mi perfil profesional</NavButton>}
-        {import.meta.env.VITE_D2_ENABLED==='true' && ['admin','superadmin'].includes(currentUser?.role) && <NavButton active={vistaActiva==='professional-reviews'} onClick={()=>setVistaActiva('professional-reviews')}>Credenciales profesionales</NavButton>}
+        {import.meta.env.VITE_D2_ENABLED==='true' && isPsychologist && <NavButton active={vistaActiva==='professional-profile'} onClick={()=>setVistaActiva('professional-profile')}>
+          <User className="mr-3 shrink-0" size={20} aria-hidden="true" /> Mi perfil profesional
+        </NavButton>}
+        {import.meta.env.VITE_D2_ENABLED==='true' && ['admin','superadmin'].includes(currentUser?.role) && <NavButton active={vistaActiva==='professional-reviews'} onClick={()=>setVistaActiva('professional-reviews')}>
+          <User className="mr-3 shrink-0" size={20} aria-hidden="true" /> Credenciales profesionales
+        </NavButton>}
 
         {!careNav && <div className="pt-4 mt-4 border-t border-gray-100 space-y-2">
           <NavButton disabled>
@@ -102,7 +101,7 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
           </div>
         </div>
 
-        <button onClick={onLogout} className="w-full inline-flex items-center justify-center rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50">
+        <button type="button" onClick={onLogout} className="w-full inline-flex items-center justify-center rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700">
           <LogOut size={16} className="mr-2" /> Cerrar sesion
         </button>
       </div>
