@@ -5,6 +5,7 @@ import IdentityPanel from './components/IdentityPanel';
 import ProfessionalProfileScreen from './screens/ProfessionalProfileScreen';
 import ProfessionalReviewScreen from './screens/ProfessionalReviewScreen';
 import { patientRegistrationError } from './utils/identityFeedback';
+import { useReceivedInvitations } from './utils/receivedInvitations';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import Sidebar from './components/layout/Sidebar';
@@ -48,7 +49,7 @@ import {
   reorderAppointmentWaitlistEntries,
   updateAppointment,
 } from './api/appointments';
-import { getAuthToken, storageEndedSession } from './api/client';
+import { apiRequest, getAuthToken, storageEndedSession } from './api/client';
 import {
   acceptCareRelationshipByCode,
   createCareRelationship,
@@ -154,6 +155,7 @@ export default function App({onRestrictedSession}) {
   const [savingAvailabilityException, setSavingAvailabilityException] = useState(false);
   const [availabilityExceptionActionError, setAvailabilityExceptionActionError] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
+  const [invitationSession, setInvitationSession] = useState(0);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
@@ -173,6 +175,13 @@ export default function App({onRestrictedSession}) {
 
   const isPsychologist = currentUser?.role === 'psychologist';
   const isBackoffice = ['admin', 'support', 'superadmin'].includes(currentUser?.role || '');
+  const bilateralEnabled = import.meta.env?.VITE_BILATERAL_ENABLED === 'true';
+  const patientCare = bilateralEnabled && currentUser?.role === 'patient';
+  const invitationScope = patientCare && !authLoading && getAuthToken()
+    ? JSON.stringify([currentUser.id, invitationSession])
+    : null;
+  const receivedInvitations = useReceivedInvitations(invitationScope, apiRequest);
+  const pendingCount = receivedInvitations.actionable.length;
   const todayDate = getTodayDateString();
   const todayAppointments = useMemo(() => filterAppointmentsByDate(appointments, todayDate), [appointments, todayDate]);
 
@@ -202,6 +211,8 @@ export default function App({onRestrictedSession}) {
 
   const resetSessionState = () => {
     sessionEpoch.current += 1;
+    receivedInvitations.clear();
+    setInvitationSession(value => value + 1);
     clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: false };
     patientRevisions.current.clear();
     clinicalRecordSyncRef.current.clear();
@@ -1731,8 +1742,6 @@ export default function App({onRestrictedSession}) {
     }
   };
 
-  const bilateralEnabled = import.meta.env?.VITE_BILATERAL_ENABLED === 'true';
-  const patientCare = bilateralEnabled && currentUser?.role === 'patient';
   const renderMainContent = () => {
     if(import.meta.env?.VITE_ADMISSION_ENABLED==='true' && vistaActiva==='admissions' && ['patient','psychologist'].includes(currentUser?.role))return <AdmissionsScreen key={currentUser.id} currentUser={currentUser}/>;
     if (bilateralEnabled && (
@@ -1740,6 +1749,7 @@ export default function App({onRestrictedSession}) {
       (vistaActiva === 'my-care' && currentUser?.role === 'patient')
     )) {
       return <BilateralInvitationsScreen key={currentUser.id} currentUser={currentUser}
+        receivedInvitations={patientCare ? receivedInvitations : null}
         navigate={setVistaActiva} showAdmission={import.meta.env?.VITE_ADMISSION_ENABLED === 'true'} />;
     }
     if (patientCare && vistaActiva === 'account') return <>
@@ -1796,6 +1806,7 @@ export default function App({onRestrictedSession}) {
       return (
         <DashboardScreen
           currentUser={currentUser}
+          bilateralInvitationsEnabled={patientCare}
           patients={pacientes}
           appointments={isPsychologist ? todayAppointments : appointments}
           reminders={reminders}
@@ -2022,8 +2033,8 @@ export default function App({onRestrictedSession}) {
         isSubmitting={guardandoPaciente}
       />
 
-      <Sidebar currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} />
-      <MobileNav currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} />
+      <Sidebar currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} pendingCount={pendingCount} />
+      <MobileNav currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} pendingCount={pendingCount} />
 
       <main className="flex h-screen w-full min-w-0 flex-1 flex-col overflow-auto bg-slate-50">
         <header className="shrink-0 border-b border-gray-200 bg-white px-4 py-3 md:hidden">
@@ -2031,6 +2042,20 @@ export default function App({onRestrictedSession}) {
         </header>
         <div className="p-4 pb-24 md:p-8">
           {currentUser?.role === 'patient' && !patientCare && <IdentityPanel onIdentityUpdated={handleIdentityUpdated} />}
+          {patientCare && vistaActiva === 'dashboard' && pendingCount > 0 && (
+            <section aria-labelledby="pending-invitations-title" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 sm:p-5">
+              <div className="space-y-1">
+                <h2 id="pending-invitations-title" className="font-bold text-slate-900">
+                  Tienes {pendingCount} {pendingCount === 1 ? 'invitación pendiente' : 'invitaciones pendientes'}
+                </h2>
+                <p className="text-sm text-slate-700">Revisa las condiciones de vinculación antes de decidir.</p>
+              </div>
+              <button type="button" onClick={() => setVistaActiva('my-care')}
+                className="min-h-11 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700">
+                {pendingCount === 1 ? 'Revisar invitación' : 'Revisar invitaciones'}
+              </button>
+            </section>
+          )}
           {renderMainContent()}
         </div>
       </main>

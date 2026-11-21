@@ -16,7 +16,9 @@ async function componentUrl(name, flags, imports = {}) {
 }
 
 async function navigation(flags, role, selected = 'dashboard') {
-  const { default: MobileNav } = await import(await componentUrl('MobileNav', flags));
+  const { default: MobileNav } = await import(await componentUrl('MobileNav', flags, {
+    './PendingInvitationCount': await componentUrl('PendingInvitationCount', {}),
+  }));
   const actions = [];
   const element = MobileNav({ currentUser: { role }, vistaActiva: selected, setVistaActiva: v => actions.push(v), onLogout: () => {} });
   return { element, actions, html: renderToStaticMarkup(element) };
@@ -41,6 +43,7 @@ test('desktop keeps the original wordmark and role-specific routes with either f
   for (const enabled of ['true', 'false']) {
     const { default: Sidebar } = await import(await componentUrl('Sidebar', { VITE_BILATERAL_ENABLED: enabled }, {
       './PsicoPanelBrand': brandUrl,
+      './PendingInvitationCount': await componentUrl('PendingInvitationCount', {}),
     }));
     for (const role of ['psychologist', 'patient', 'support', 'admin', 'superadmin']) {
       const html = renderToStaticMarkup(Sidebar({ currentUser: { role }, vistaActiva: 'dashboard' }));

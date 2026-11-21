@@ -1,8 +1,9 @@
 import React from 'react';
 import { Calendar, User, DollarSign, Bot, LogOut, CalendarRange, House, UsersRound, ClipboardList } from 'lucide-react';
 import PsicoPanelBrand from './PsicoPanelBrand';
+import PendingInvitationCount from './PendingInvitationCount';
 
-function NavButton({ active, onClick, children, disabled = false }) {
+function NavButton({ active, onClick, children, disabled = false, label, describedBy }) {
   const base = 'flex items-center w-full px-4 py-3 rounded-xl text-left transition-all';
 
   if (disabled) {
@@ -10,14 +11,14 @@ function NavButton({ active, onClick, children, disabled = false }) {
   }
 
   return (
-    <button type="button" onClick={onClick} aria-current={active ? 'page' : undefined}
+    <button type="button" onClick={onClick} aria-current={active ? 'page' : undefined} aria-label={label} aria-describedby={describedBy}
       className={`${base} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700 ${active ? 'bg-indigo-50 font-bold text-indigo-700' : 'font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900'}`}>
       {children}
     </button>
   );
 }
 
-export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaActiva }) {
+export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaActiva, pendingCount = 0 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
   const isBackoffice = ['admin', 'support', 'superadmin'].includes(currentUser?.role || '');
   const showCare = import.meta.env.VITE_BILATERAL_ENABLED === 'true' && currentUser?.role === 'patient';
@@ -49,8 +50,10 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
         {showLinked && <NavButton active={['my-patients', 'legacy-patients'].includes(vistaActiva)} onClick={() => setVistaActiva('my-patients')}>
           <UsersRound className="mr-3 shrink-0" size={20} aria-hidden="true" /> Mis pacientes
         </NavButton>}
-        {showCare && <NavButton active={['my-care', 'legacy-patients', 'admissions', 'appointments'].includes(vistaActiva)} onClick={() => setVistaActiva('my-care')}>
+        {showCare && <NavButton active={['my-care', 'legacy-patients', 'admissions', 'appointments'].includes(vistaActiva)} onClick={() => setVistaActiva('my-care')}
+          label="Mi atención" describedBy={pendingCount ? 'desktop-invitation-count' : undefined}>
           <UsersRound className="mr-3 shrink-0" size={20} aria-hidden="true" /> Mi atención
+          <PendingInvitationCount count={pendingCount} id="desktop-invitation-count" className="ml-auto" />
         </NavButton>}
         {!showCare && <NavButton active={vistaActiva === 'appointments'} onClick={() => setVistaActiva('appointments')}>
           <CalendarRange className="mr-3" size={20} aria-hidden="true" /> {showLinked ? 'Agenda' : appointmentsLabel}

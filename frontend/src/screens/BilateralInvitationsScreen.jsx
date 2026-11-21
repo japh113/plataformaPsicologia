@@ -14,7 +14,7 @@ const statusLabels = {
   declined: 'Rechazada', withdrawn: 'Retirada', expired: 'Vencida', invalidated: 'No disponible',
   completed: 'Acuerdo completado', unlinked: 'Acuerdo terminado',
 };
-const neutralReceipt = 'Este acuse no confirma que exista una cuenta, que la persona cumpla los requisitos ni que se haya entregado una invitación.';
+const neutralReceipt = 'Este acuse confirma la recepción de tu solicitud. Por sí solo no confirma que exista una cuenta, que la persona cumpla los requisitos ni que se haya emitido o entregado una invitación.';
 const focus = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700';
 const primary = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-600 ${focus}`;
 const secondary = `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 font-semibold text-slate-800 hover:bg-indigo-50 disabled:text-slate-500 ${focus}`;
@@ -373,7 +373,7 @@ function LinkedPatients({ onAgreement, onLegacy }) {
   </section>;
 }
 
-function InvitationDetail({ item, action, terminal, onAccepted }) {
+function InvitationDetail({ item, acceptanceAvailable, action, terminal, onAccepted }) {
   const [checked, setChecked] = useState(false);
   return <div className="max-w-2xl space-y-4">
     <section className={card}>
@@ -389,17 +389,17 @@ function InvitationDetail({ item, action, terminal, onAccepted }) {
     <section className={card}>
       <Terms value={item} />
       {item.status === 'pending' && <>
-        <CheckField checked={checked} onChange={setChecked} disabled={action.busy || !item.acceptanceAvailable}>
+        <CheckField checked={checked} onChange={setChecked} disabled={action.busy || !acceptanceAvailable}>
           Acepto expresamente las condiciones y la versión mostradas.
         </CheckField>
-        {!item.acceptanceAvailable && <p>La aceptación no está disponible en este momento. El vencimiento se conserva.</p>}
+        {!acceptanceAvailable && <p>La aceptación no está disponible en este momento. El vencimiento se conserva.</p>}
         <div className="flex flex-wrap gap-3">
-          <button type="button" className={primary} disabled={action.busy || !checked || !item.acceptanceAvailable}
+          <button type="button" className={primary} disabled={action.busy || !checked || !acceptanceAvailable}
             onClick={() => void action.send('/' + item.id + '/accept', {
               expectedVersion: item.version, conditionsVersion: item.conditionsVersion, conditionsHash: item.conditionsHash, confirmed: checked,
             }, onAccepted, failure => { if (failure.status === 409) setChecked(false); })}>Aceptar vinculación</button>
           <button type="button" className={secondary} disabled={action.busy} onClick={() => {
-            if (window.confirm('¿Rechazar esta invitación?')) terminal(item, 'decline');
+            if (window.confirm('¿Rechazar esta invitación? El rechazo cierra esta propuesta de forma definitiva.')) terminal(item, 'decline');
           }}>Rechazar invitación</button>
         </div>
       </>}
@@ -410,7 +410,7 @@ function InvitationDetail({ item, action, terminal, onAccepted }) {
   </div>;
 }
 
-function Invitations({ professional, selectedAgreement, selectedInvitation, onInvitation, registered }) {
+function Invitations({ professional, receivedInvitations, selectedAgreement, selectedInvitation, onInvitation, registered }) {
   const [data, setData] = useState(null);
   const [readError, setReadError] = useState('');
   const [notice, setNotice] = useState('');
@@ -421,16 +421,17 @@ function Invitations({ professional, selectedAgreement, selectedInvitation, onIn
     setData(null);
     setReadError('');
     setAttempt(value => value + 1);
+    receivedInvitations?.refresh();
   }
 
   useEffect(() => {
     const controller = new AbortController();
-    const names = professional ? ['sent', 'agreements'] : ['received', 'agreements', 'blocks', 'notices'];
+    const names = professional ? ['sent', 'agreements'] : ['agreements', 'blocks'];
     Promise.all(names.map(name => apiRequest(base + '/' + name, { signal: controller.signal }))).then(
-      ([items, agreements, blocks, notices]) => {
-        if (!controller.signal.aborted) setData({
-          items: items.data, agreements: agreements.data, blocks: blocks?.data || [], hasNotices: Boolean(notices?.data.length),
-        });
+      ([first, second]) => {
+        if (!controller.signal.aborted) setData(professional
+          ? { items: first.data, agreements: second.data }
+          : { agreements: first.data, blocks: second.data });
       },
     ).catch(failure => {
       if (!controller.signal.aborted) setReadError(failure.message);
@@ -442,35 +443,49 @@ function Invitations({ professional, selectedAgreement, selectedInvitation, onIn
     const version = ['withdraw', 'decline', 'unlink'].includes(verb) ? { expectedVersion: item.version } : {};
     setNotice('');
     void action.send('/' + item.id + '/' + verb, { ...version, confirmed: true }, () => {
-      setNotice(verb === 'resend' ? 'Solicitud de reenvío registrada. El acuse conserva su vigencia.' : 'Acción registrada.');
+      if (verb === 'decline') {
+        receivedInvitations.afterAction(item.id, 'declined');
+        setNotice('Invitación rechazada. Esta propuesta quedó cerrada.');
+      } else if (verb === 'block') {
+        receivedInvitations.afterAction();
+        setNotice('Acción registrada.');
+      } else {
+        setNotice(verb === 'resend' ? 'Solicitud de reenvío registrada. El acuse no confirma que se haya emitido o entregado una invitación.' : 'Acción registrada.');
+      }
       refresh();
     }, failure => { if (failure.status === 409) refresh(); });
   }
 
-  const invitation = data?.items.find(item => item.id === selectedInvitation);
-  const agreements = selectedAgreement ? data?.agreements.filter(item => item.id === selectedAgreement) : data?.agreements;
+  const items = professional ? data?.items : receivedInvitations.items;
+  const actionable = receivedInvitations?.actionable ?? [];
+  const pendingIds = new Set(actionable.map(item => item.id));
+  const orderedItems = items && (professional ? items : [...actionable, ...items.filter(item => !pendingIds.has(item.id))]);
+  const invitation = items?.find(item => item.id === selectedInvitation);
+  const agreements = data?.agreements.filter(item => !selectedAgreement || item.id === selectedAgreement);
+  const loadError = readError || receivedInvitations?.error;
   return <div className={content}>
     {registered && <div role="status" className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950">
       <Check className="mt-0.5 shrink-0" aria-hidden="true" />
       <div><p className="font-bold">Solicitud registrada</p><p>{neutralReceipt}</p></div>
     </div>}
     {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-emerald-950">{notice}</p>}
-    <ErrorMessage error={action.error || readError} />
+    <ErrorMessage error={action.error || loadError} />
     <button type="button" className={secondary} disabled={action.busy} onClick={refresh}>
       <RefreshCw size={17} aria-hidden="true" /> Actualizar bandeja
     </button>
-    {!data && !readError && <p role="status">Consultando la bandeja…</p>}
-    {data && (selectedInvitation ? invitation ? <InvitationDetail
-      key={JSON.stringify([invitation.id, invitation.version, invitation.conditionsVersion, invitation.conditionsHash, invitation.acceptanceAvailable])}
-      item={invitation} action={action} terminal={terminal} onAccepted={result => {
+    {!items && !loadError && <p role="status">Consultando la bandeja…</p>}
+    {selectedInvitation ? items && (invitation ? <InvitationDetail
+      key={JSON.stringify([invitation.id, invitation.version, invitation.conditionsVersion, invitation.conditionsHash, pendingIds.has(invitation.id)])}
+      item={invitation} acceptanceAvailable={pendingIds.has(invitation.id)} action={action} terminal={terminal} onAccepted={result => {
+        receivedInvitations.afterAction(invitation.id, 'accepted');
         setNotice(result.status === 'completed' ? 'Acuerdo bilateral completado.' : 'El acuerdo ya no está vigente.');
         refresh();
-      }} /> : <p className={card}>La invitación ya no está disponible.</p> : <>
-      {!selectedAgreement && <>
-        <h2 className={heading}>{professional ? 'Solicitudes de vinculación' : 'Invitaciones'}</h2>
-        {data.hasNotices && <p className="text-sm text-slate-600">Hay novedades en tu bandeja.</p>}
-        {!data.items.length && <p className={card}>{professional ? 'Todavía no has registrado solicitudes.' : 'No tienes invitaciones disponibles.'}</p>}
-        {data.items.map(item => <article key={item.id} className={card}>
+      }} /> : <p className={card}>La invitación ya no está disponible.</p>) : <>
+      {!selectedAgreement && orderedItems && <section aria-labelledby="bilateral-invitations-title" className={content}>
+        <h2 id="bilateral-invitations-title" className={heading}>{professional ? 'Solicitudes de vinculación' : 'Invitaciones'}</h2>
+        {professional && <p className="text-sm text-slate-600">El reenvío solo aplica a una invitación existente y disponible. No crea una invitación ni revierte un rechazo. Para presentar una propuesta nueva deben cumplirse las condiciones y los plazos aplicables.</p>}
+        {!orderedItems.length && <p className={card}>{professional ? 'Todavía no has registrado solicitudes.' : 'No tienes invitaciones disponibles.'}</p>}
+        {orderedItems.map(item => <article key={item.id} className={card}>
           <h3 className="break-words font-bold">{professional ? statusLabels[item.status] : item.professionalName}</h3>
           {professional ? <>
             <p className="text-slate-600">{neutralReceipt}</p>
@@ -487,11 +502,12 @@ function Invitations({ professional, selectedAgreement, selectedInvitation, onIn
               }}><Trash2 size={17} aria-hidden="true" /> Retirar solicitud</button>
             </div>}
           </> : <div className="flex flex-wrap items-center justify-between gap-2">
-            <p>{statusLabels[item.status]} · Vence el {formatDate(item.expiresAt)}</p>
+            <p>{pendingIds.has(item.id) ? 'Pendiente de respuesta' : item.status === 'pending' ? 'No disponible para responder' : statusLabels[item.status]} · Vence el {formatDate(item.expiresAt)}</p>
             <button type="button" className={link} onClick={() => onInvitation(item.id)}>Ver invitación <ChevronRight size={16} aria-hidden="true" /></button>
           </div>}
         </article>)}
-      </>}
+      </section>}
+      {agreements && <>
       <h2 className={heading}>{selectedAgreement ? 'Acuerdo de vinculación' : 'Acuerdos de vinculación'}</h2>
       {!agreements.length && <p className={card}>No hay acuerdos para mostrar.</p>}
       {agreements.map(agreement => <article key={agreement.id} className={card}>
@@ -506,7 +522,8 @@ function Invitations({ professional, selectedAgreement, selectedInvitation, onIn
           if (window.confirm('¿Terminar de inmediato este acuerdo? Los tratamientos activos o pausados tienen su propio procedimiento.')) terminal(agreement, 'unlink');
         }}>Terminar acuerdo unilateralmente</button>}
       </article>)}
-      {!professional && data.blocks.length > 0 && <section className={card}>
+      </>}
+      {!professional && data?.blocks.length > 0 && <section className={card}>
         <h2 className={heading}>Profesionales bloqueados</h2>
         <p>Desbloquear permite nuevas invitaciones. Las anteriores conservan su estado.</p>
         {data.blocks.map(block => <div key={block.id} className="flex flex-wrap items-center justify-between gap-2">
@@ -514,17 +531,17 @@ function Invitations({ professional, selectedAgreement, selectedInvitation, onIn
           <button type="button" className={secondary} disabled={action.busy} onClick={() => terminal(block, 'unblock')}>Desbloquear</button>
         </div>)}
       </section>}
-    </>)}
+    </>}
   </div>;
 }
 
-export default function BilateralInvitationsScreen({ currentUser, navigate, showAdmission }) {
+export default function BilateralInvitationsScreen({ currentUser, navigate, showAdmission, receivedInvitations }) {
   const professional = currentUser.role === 'psychologist';
   const [page, setPage] = useState(professional ? 'linked' : 'invitations');
   const [selection, setSelection] = useState(null);
   const [registered, setRegistered] = useState(false);
   const headingRef = useRef(null);
-  const focusHeading = useRef(false);
+  const focusHeading = useRef(!professional);
 
   function open(target, id = null) {
     setSelection(id);
@@ -570,7 +587,7 @@ export default function BilateralInvitationsScreen({ currentUser, navigate, show
     {page === 'linked' && <LinkedPatients onAgreement={id => open('agreement', id)} onLegacy={() => navigate('legacy-patients')} />}
     {page === 'invite' && <ProfessionalInvite onRegistered={() => { setRegistered(true); open('invitations'); }} />}
     {page === 'reference' && <PatientReference />}
-    {['invitations', 'detail', 'agreement'].includes(page) && <Invitations professional={professional} registered={registered && page === 'invitations'}
+    {['invitations', 'detail', 'agreement'].includes(page) && <Invitations professional={professional} receivedInvitations={receivedInvitations} registered={registered && page === 'invitations'}
       selectedAgreement={page === 'agreement' ? selection : null} selectedInvitation={page === 'detail' ? selection : null}
       onInvitation={id => open('detail', id)} />}
     <p className="text-sm text-slate-600">Entorno de ensayo con cuentas ficticias y entrega simulada.</p>

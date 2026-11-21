@@ -104,6 +104,12 @@ async function scenario(id, fn, statuses = []) {
   console.log(id + ' PASS');
 }
 
+async function submitLogin(page, id) {
+  await page.locator('input[name=email]').fill(id + '@bilateral.invalid');
+  await page.locator('input[name=password]').fill('Episode-Demo-Only-284!');
+  await button(page, 'Entrar').click();
+}
+
 async function login(id, mobile = true) {
   const context = await browser.newContext({
     viewport: mobile ? { width: 375, height: 812 } : { width: 1280, height: 900 }, locale: 'es-MX',
@@ -112,9 +118,7 @@ async function login(id, mobile = true) {
   const page = await context.newPage();
   watch(page);
   await page.goto(base);
-  await page.locator('input[name=email]').fill(id + '@bilateral.invalid');
-  await page.locator('input[name=password]').fill('Episode-Demo-Only-284!');
-  await button(page, 'Entrar').click();
+  await submitLogin(page, id);
   const nav = page.getByRole('navigation', { name: mobile ? 'Navegación móvil' : 'Navegación principal' });
   const professional = id.startsWith('bp');
   const label = professional ? 'Mis pacientes' : 'Mi atención';
@@ -241,7 +245,14 @@ async function main() {
     await shot('VIN02-patient-desktop', pac);
     await pac.setViewportSize({ width: 320, height: 750 });
     await verifyNavigation(pac, 320, 'Mi atención');
+    assert.equal(await pac.locator('#mobile-invitation-count').count(), 0);
     await shot('VIN02-patient-320', pac);
+    const mobile = pac.getByRole('navigation', { name: 'Navegación móvil' });
+    await button(mobile, 'Inicio').click();
+    assert.equal(await heading(pac, 'Tienes 1 invitación pendiente').count(), 0);
+    await pac.getByText(/Consulta las invitaciones bilaterales en/).waitFor();
+    await shot('VIN02-inicio-sin-pendientes', pac);
+    await button(mobile, 'Mi atención').click();
     await pac.setViewportSize({ width: 375, height: 812 });
     await button(pac, 'Generar mi referencia').click();
     await pac.getByLabel('Referencia profesional recibida', { exact: true }).fill(professionalReference);
@@ -261,6 +272,23 @@ async function main() {
     assert.deepEqual((await json(psy, '/linked-patients')).data, []);
     await propose(psy, 'bq1', recipientReference);
     const item = await waitInvitation(pac);
+    const mobile = pac.getByRole('navigation', { name: 'Navegación móvil' });
+    assert.equal(await button(mobile, 'Mi atención').getAttribute('aria-describedby'), 'mobile-invitation-count');
+    await pac.setViewportSize({ width: 320, height: 750 });
+    await assertNoOverflow(pac);
+    await shot('VIN03-mi-atencion-pendiente-320', pac);
+    await button(mobile, 'Inicio').click();
+    await heading(pac, 'Tienes 1 invitación pendiente').waitFor();
+    await assertNoOverflow(pac);
+    await shot('VIN03-inicio-pendiente-320', pac);
+    await pac.setViewportSize({ width: 1280, height: 900 });
+    const desktop = pac.getByRole('navigation', { name: 'Navegación principal' });
+    assert.equal(await button(desktop, 'Mi atención').getAttribute('aria-describedby'), 'desktop-invitation-count');
+    await shot('VIN03-inicio-pendiente-desktop', pac);
+    await button(pac, 'Revisar invitación').click();
+    await heading(pac, 'Mi atención').waitFor();
+    await shot('VIN03-mi-atencion-pendiente-desktop', pac);
+    await pac.setViewportSize({ width: 375, height: 812 });
     await button(item, 'Ver invitación').click();
     await heading(pac, 'Invitación de vinculación').waitFor();
     assert.ok(await button(pac, 'Aceptar vinculación').isDisabled());
@@ -281,6 +309,7 @@ async function main() {
     await pac.getByLabel(/Acepto expresamente/).check();
     await button(pac, 'Aceptar vinculación').click();
     await pac.getByRole('status').filter({ hasText: 'Acuerdo bilateral completado' }).waitFor();
+    assert.equal(await pac.locator('#mobile-invitation-count').count(), 0);
     assert.equal((await json(pac, '/agreements')).data[0].admissionAuthorization, 'not_granted');
     await button(psy, 'Pacientes vinculados').click();
     await psy.getByRole('rowheader', { name: 'Lucía García' }).waitFor();
@@ -325,6 +354,8 @@ async function main() {
     page.once('dialog', dialog => dialog.accept());
     await button(page, 'Rechazar invitación').click();
     await page.getByText(/Vinculación individual · Rechazada/).waitFor();
+    assert.equal(await page.locator('#mobile-invitation-count').count(), 0);
+    await page.getByRole('status').filter({ hasText: 'Esta propuesta quedó cerrada.' }).waitFor();
     await shot('VIN06-declined', page);
     await page.context().close();
   });
@@ -348,6 +379,7 @@ async function main() {
     const receipt = psy.locator('article').filter({ has: heading(psy, 'Solicitud registrada') }).first();
     await button(receipt, 'Solicitar reenvío').click();
     await psy.getByRole('status').filter({ hasText: 'Solicitud de reenvío registrada' }).waitFor();
+    await psy.getByText(/El acuse no confirma que se haya emitido o entregado/).waitFor();
     assert.equal((await json(page, '/received')).data[0].expiresAt, before.expiresAt);
     psy.once('dialog', dialog => dialog.accept());
     await button(receipt, 'Retirar solicitud').click();
@@ -355,6 +387,75 @@ async function main() {
     await button(page, 'Actualizar bandeja').click();
     await page.locator('article').getByText(/Retirada · Vence/).waitFor();
     await page.context().close();
+  });
+  await scenario('VIN09', async () => {
+    const context = await browser.newContext({ viewport: { width: 320, height: 750 }, locale: 'es-MX' });
+    const page = await context.newPage();
+    watch(page);
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    const fixture = (professionalName, status, acceptanceAvailable, expiry = expiresAt) =>
+      ({ id: randomUUID(), professionalName, status, acceptanceAvailable, expiresAt: expiry });
+    let rows = [
+      fixture('Fixture histórico', 'accepted', false),
+      fixture('Fixture vencido', 'pending', true, '2000-01-01T00:00:00Z'),
+      fixture('Fixture suspendido', 'pending', false),
+      fixture('Fixture rechazado', 'declined', false),
+      fixture('Fixture retirado', 'withdrawn', false),
+      fixture('Fixture pendiente A', 'pending', true),
+      fixture('Fixture pendiente B', 'pending', true),
+    ];
+    await page.route('**/bilateral-invitations/received', route => route.request().method() === 'GET'
+      ? route.fulfill({ json: { success: true, data: rows }, headers: { 'access-control-allow-origin': '*' } })
+      : route.continue());
+    await page.addInitScript(() => {
+      const original = window.fetch.bind(window);
+      window.fetch = async (...args) => {
+        const delay = window.delayReceived && String(args[0]).endsWith('/bilateral-invitations/received');
+        const response = await original(...args);
+        if (delay) {
+          const read = response.json.bind(response);
+          response.json = async () => {
+            const body = await read();
+            await new Promise(resolve => { window.releaseReceived = resolve; });
+            window.receivedReleased = true;
+            return body;
+          };
+        }
+        return response;
+      };
+    });
+    try {
+      await page.goto(base);
+      await submitLogin(page, 'bq6');
+      await heading(page, 'Tienes 2 invitaciones pendientes').waitFor();
+      assert.equal(await page.locator('#mobile-invitation-count').textContent(), '2 invitaciones pendientes');
+      await button(page, 'Revisar invitaciones').click();
+      const inbox = page.getByRole('region', { name: 'Invitaciones', exact: true });
+      await heading(inbox, 'Fixture pendiente B').waitFor();
+      const names = await inbox.getByRole('heading', { level: 3 }).allTextContents();
+      assert.deepEqual(names.slice(0, 2), ['Fixture pendiente A', 'Fixture pendiente B']);
+      await page.evaluate(() => { window.delayReceived = true; window.dispatchEvent(new Event('focus')); });
+      await page.waitForFunction(() => Boolean(window.releaseReceived));
+      rows = [];
+      await page.evaluate(() => { window.delayReceived = false; });
+      await button(page, 'Cuenta').click();
+      await button(page, 'Cerrar sesión').click();
+      await button(page, 'Entrar').waitFor();
+      assert.equal(await page.locator('#mobile-invitation-count').count(), 0);
+      await submitLogin(page, 'bq7');
+      await button(page, 'Mi atención').click();
+      await page.getByText('No tienes invitaciones disponibles.', { exact: true }).waitFor();
+      await page.evaluate(() => window.releaseReceived());
+      await page.waitForFunction(() => window.receivedReleased);
+      assert.equal(await page.locator('#mobile-invitation-count').count(), 0);
+      assert.equal(await page.getByText(/Fixture pendiente/).count(), 0);
+      await button(page.getByRole('navigation', { name: 'Navegación móvil' }), 'Inicio').click();
+      assert.equal(await page.getByRole('heading', { name: /invitaci[oó]n(es)? pendiente/i }).count(), 0);
+      await shot('VIN09-inicio-sin-pendientes', page);
+    } finally {
+      await page.evaluate(() => window.releaseReceived?.());
+      await context.close();
+    }
   });
   assert.equal(events.filter(event => !event.expected).length, 0);
   save();
