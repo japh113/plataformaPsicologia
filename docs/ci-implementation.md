@@ -12,6 +12,9 @@ Ubuntu 24.04 alojado por GitHub, Node 24.22.0 para aplicación y suites, Postgre
 
 Bilateral 013 forma parte de la regresión SQL/HTTP y de la suite Chromium VIN integrada. Este incremento autoadministrado añade [integración 014](../backend/test/admission.integration.test.js) a `test:integration` y la quinta suite Chromium ADM (ADM01–ADM07), sobre otra demo nueva. El consumidor exige B/C/D2/VIN/ADM completos, runtime del HEAD probado, capturas enmascaradas y cinco reportes de aislamiento/limpieza propios. Inventarios y negativos se actualizan juntos. Se conservan los siete checks, seis artifacts de 14 días y CodeQL JavaScript/Python/Actions. [Alcance y reproducción](stage2a-identity-directory-intake.md#implementación-del-primer-incremento-autoadministrado--014).
 
+Para el recorrido unificado 021, `ci/browser` conserva las cinco suites previas y agrega [CARE01–CARE04](../scripts/care-ui-review.cjs) en un sandbox propio. Los consumidores de evidencia exigen los seis grupos, sus casos, el runtime del mismo HEAD y sus seis comprobaciones de aislamiento y limpieza. Se conservan los siete checks y la retención de 14 días. [Recorrido y demo](stage2a-identity-directory-intake.md#implementación-y-demostración-aislada).
+
+
 ## Aislamiento y límites
 
 [sandbox.py](../scripts/ci/sandbox.py) reutiliza las guardas de imágenes existentes y Compose de pruebas; nunca levanta Compose habitual. Nombres CI con run/intento/UUID nuevo por destino, inventario real previo y preflight de ausencia de recursos, PostgreSQL tmpfs, red DB internal, cero puertos DB, sin volumen persistente. Rechaza host/base externa, flags desactivados y recursos sin propiedad. B/C usan también red de aplicación internal. Solo fixtures ficticios `.invalid`, entrega simulated y secretos desechables de prueba.
