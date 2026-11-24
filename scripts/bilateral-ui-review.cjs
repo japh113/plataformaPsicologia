@@ -443,7 +443,8 @@ async function main() {
     await button(receipt, 'Retirar solicitud').click();
     await heading(psy, 'Retirada').waitFor();
     await button(page, 'Actualizar bandeja').click();
-    await page.locator('article').getByText(/Retirada · Vence/).waitFor();
+    await page.locator('summary').filter({ hasText: /^Historial$/ }).click();
+    await page.getByText(/Retirada · Vence/).waitFor();
     await page.context().close();
   });
   await scenario('VIN09', async () => {
