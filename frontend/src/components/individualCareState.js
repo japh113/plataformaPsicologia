@@ -48,3 +48,27 @@ export function patientHasNextTask(assignment, consultation) {
   return assignment.state === 'proposed' || (assignment.state === 'accepted' && assignment.mode !== 'directed'
     && assignment.episodeStatus === 'prepared' && ['awaiting_submission', 'correction_requested'].includes(assignment.reviewState));
 }
+
+export function careChecklist(item, consultation, professional, consultationRead) {
+  const current = careProgress(item, consultation, professional, consultationRead);
+  const steps = [
+    { label: 'Vinculación', complete: true, owner: null },
+    { label: 'Entrevista inicial', complete: ['documented', 'submitted', 'correction_requested', 'validated'].includes(item.reviewState)
+      || consultation?.documentVersion > 0 || ['active', 'withdrawn'].includes(consultation?.status), owner: 'patient' },
+    { label: 'Revisión profesional', complete: ['validated'].includes(item.reviewState)
+      || Boolean(consultation?.sufficiencyId || consultation?.sufficiencyConfirmed || consultation?.consentAccepted || consultation?.status === 'active'), owner: 'professional' },
+    { label: 'Consentimiento de tratamiento', complete: Boolean(consultation?.consentAccepted || consultation?.status === 'active'), owner: 'patient' },
+    { label: 'Inicio del tratamiento', complete: consultation?.status === 'active' || Boolean(consultation?.appointment), owner: 'professional' },
+    { label: 'Primera cita', complete: Boolean(consultation?.appointment), owner: 'professional' },
+  ];
+  const index = steps.findIndex(step => !step.complete);
+  if (index >= 0) steps[index].current = true;
+  if (item.state === 'revoked' || consultation?.status === 'withdrawn' || consultation?.consentWithdrawn) {
+    return { ...current, steps: steps.map(step => ({ ...step, current: false, owner: null })), completed: 0, closed: true };
+  }
+  const activeOwner = index < 0 ? null : steps[index].owner;
+  steps.forEach((step, stepIndex) => {
+    if (stepIndex === index) step.owner = activeOwner;
+  });
+  return { ...current, steps, completed: steps.filter(step => step.complete).length, closed: false };
+}

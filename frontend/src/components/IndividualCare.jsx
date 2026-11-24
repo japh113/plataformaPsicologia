@@ -4,7 +4,7 @@ import { useCareAction } from './useCareAction';
 import { useCareRead } from './useCareRead';
 import { useVisibleCareRefresh } from './useVisibleCareRefresh';
 import { ConsultationDetail, TreatmentWithdrawals } from './FirstConsultation';
-import { careProgress, episodeTitle, firstConsultationEnabled } from './individualCareState';
+import { careChecklist, careProgress, episodeTitle, firstConsultationEnabled } from './individualCareState';
 
 const section = 'space-y-3 rounded-xl border border-slate-200 bg-white p-4 sm:p-5';
 const defaultTemplate = 'fictional-initial-interview-v1';
@@ -12,6 +12,34 @@ const defaultTemplate = 'fictional-initial-interview-v1';
 function ReadMessage({ read, loadingText }) {
   if (read.error) return <p role="alert">{read.error}</p>;
   return read.loading && !read.data ? <p role="status">{loadingText}</p> : null;
+}
+
+function CareProgress({ item, consultation, professional, consultationRead }) {
+  const progress = careChecklist(item, consultation, professional, consultationRead);
+  const labels = { professional: 'Psicólogo', patient: 'Paciente' };
+  const unavailable = consultationRead === 'error' || consultationRead === 'loading';
+  return <section aria-label="Progreso de atención" className="rounded-2xl bg-slate-50 p-4 sm:p-5">
+    <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <h3 className="text-lg font-bold text-slate-950">Progreso de atención</h3>
+      <span className="text-sm text-slate-600">{unavailable ? 'Estado por actualizar' : `${progress.completed} de ${progress.steps.length} completados`}</span>
+    </div>
+    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200" aria-hidden="true">
+      <div className="h-full rounded-full bg-teal-700 transition-[width]" style={{ width: unavailable ? '0%' : `${progress.completed / progress.steps.length * 100}%` }} />
+    </div>
+    <ol className="mt-3 divide-y divide-slate-200">
+      {progress.steps.map(step => <li key={step.label} className="flex items-center gap-3 py-2.5">
+        <span aria-hidden="true" className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${step.complete
+          ? 'bg-emerald-100 text-emerald-800' : step.current ? 'bg-amber-100 text-amber-900' : 'bg-slate-200 text-slate-600'}`}>
+          {unavailable ? '·' : step.complete ? '✓' : step.current ? '•' : ''}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold text-slate-900">{step.label}</span>
+          <span className="block text-sm text-slate-600">{unavailable ? 'Consultando estado' : step.complete ? 'Completado' : step.current
+            ? progress.closed ? 'Cerrado' : `En proceso${step.owner ? ` · Actúa ${labels[step.owner]}` : ''}` : 'Pendiente'}</span>
+        </span>
+      </li>)}
+    </ol>
+  </section>;
 }
 
 function StartInterview({ preparation, agreementId, catalog, onChange, blocked }) {
@@ -74,11 +102,14 @@ function Episode({ item, professional, onChange }) {
     await onChange();
   }, [onChange]);
 
-  return <div className="space-y-3">
-    <header className={section} aria-label="Siguiente paso">
-      <h3 className="text-lg font-bold">{progress.stage}</h3>
-      <p role="status">{progress.next}</p>
+  return <div className="space-y-4">
+    <header className="rounded-2xl bg-teal-50 p-4 sm:p-5" aria-label="Siguiente paso">
+      <p className="text-xs font-bold uppercase tracking-wide text-teal-900">Siguiente paso</p>
+      <h3 className="mt-1 text-xl font-bold text-slate-950">{progress.stage}</h3>
+      <p role="status" className="mt-1 text-slate-700">{progress.next}</p>
     </header>
+    <CareProgress item={item} consultation={consultationState} professional={professional}
+      consultationRead={consultationFailed ? 'error' : consultation ? 'loaded' : 'loading'} />
     {(!professional || !completed) && <CareInterview item={item} professional={professional} completed={completed}
       consultation={consultationState} onChange={restoreState} />}
     {consultation && <ConsultationDetail assignmentId={item.id} professional={professional} onRefresh={onChange}

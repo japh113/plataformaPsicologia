@@ -347,31 +347,19 @@ function LinkedPatients({ onAgreement, onLegacy }) {
     </div>
     <ErrorMessage error={error} />
     {!error && !patients && <p role="status">Consultando pacientes vinculados…</p>}
-    {patients && (visible.length ? <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-      <table className="w-full table-fixed text-left text-sm">
-        <caption className="sr-only">Pacientes vinculados</caption>
-        <thead className="border-b border-slate-200 bg-slate-50 text-sm text-slate-700">
-          <tr><th scope="col" className="w-[44%] rounded-tl-2xl p-3 sm:w-2/5 sm:px-5">Paciente</th><th scope="col" className="rounded-tr-2xl p-3 sm:px-5">Estado de la vinculación</th></tr>
-        </thead>
-        <tbody className="divide-y divide-slate-200">
-          {visible.map(patient => <tr key={patient.agreementId}>
-            <th scope="row" className="p-3 font-semibold text-gray-900 sm:px-5">
-              <span className="flex flex-wrap items-center gap-2 sm:gap-3">
-                <Avatar name={patient.displayName} />
-                <span className="min-w-0 break-words">{patient.displayName}</span>
-              </span>
-            </th>
-            <td className="p-3 sm:px-5">
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <span className="rounded-lg bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-900">Vinculación completada</span>
-                <button type="button" className={`${link} whitespace-nowrap`} aria-label={`Ver acuerdo de ${patient.displayName}`}
-                  onClick={() => onAgreement(patient)}>Ver acuerdo <ChevronRight className="shrink-0" size={16} aria-hidden="true" /></button>
-              </div>
-            </td>
-          </tr>)}
-        </tbody>
-      </table>
-    </div> : <p className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-700" role="status">
+    {patients && (visible.length ? <ul className="grid gap-3 sm:grid-cols-2">
+      {visible.map(patient => <li key={patient.agreementId} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-5">
+        <div className="flex items-center gap-3">
+          <Avatar name={patient.displayName} />
+          <div className="min-w-0 flex-1">
+            <h2 className="break-words text-lg font-bold text-slate-950">{patient.displayName}</h2>
+            <p className="text-sm text-emerald-800">Vinculación completada</p>
+          </div>
+        </div>
+        <button type="button" className={`${primary} mt-4 w-full`} aria-label={`Abrir atención de ${patient.displayName}`}
+          onClick={() => onAgreement(patient)}>Abrir ficha <ChevronRight className="shrink-0" size={16} aria-hidden="true" /></button>
+      </li>)}
+    </ul> : <p className="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-700" role="status">
       {patients.length ? 'No hay coincidencias para ese nombre.' : 'Todavía no hay pacientes vinculados disponibles.'}
     </p>)}
     <button type="button" className={link} onClick={onLegacy}>Expedientes existentes <ChevronRight size={16} aria-hidden="true" /></button>
@@ -587,21 +575,39 @@ function Invitations({
           <summary className={`cursor-pointer rounded-md font-semibold text-indigo-700 ${focus}`}>Consultar las condiciones acordadas</summary>
           <div className="mt-3"><Terms value={agreement} /></div>
         </details>
-        {agreement.status === 'completed' && <button type="button" className={secondary} disabled={action.busy} onClick={() => {
-          if (window.confirm('¿Terminar de inmediato este acuerdo? Los tratamientos activos o pausados tienen su propio procedimiento.')) terminal(agreement, 'unlink');
-        }}>Terminar acuerdo unilateralmente</button>}
+        {agreement.status === 'completed' && <details className="mt-3 border-t border-slate-200 pt-3">
+          <summary className={`cursor-pointer text-sm font-semibold text-slate-600 ${focus}`}>Gestionar vinculación</summary>
+          <div className="mt-3 space-y-2 rounded-xl bg-amber-50 p-4 text-sm text-amber-950">
+            <p>Terminar la vinculación detiene esta relación. Un tratamiento activo o pausado conserva su procedimiento propio.</p>
+            <button type="button" className={secondary} disabled={action.busy} onClick={() => {
+              if (window.confirm('¿Terminar de inmediato este acuerdo? Los tratamientos activos o pausados tienen su propio procedimiento.')) terminal(agreement, 'unlink');
+            }}>Terminar acuerdo</button>
+          </div>
+        </details>}
       </article>)}
       {showOverview && agreements && <section className={content} aria-label="Vinculaciones actuales">
-        <h2 className={heading}>Vinculaciones actuales</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className={heading}>Tu atención</h2>
+          {!admissions.error && !consultations.error && !admissions.loading && !consultations.loading && <span className={`rounded-full px-3 py-1 text-sm font-semibold ${currentAgreements.filter(hasNextTask).length
+            ? 'bg-amber-100 text-amber-950' : 'bg-slate-100 text-slate-700'}`}>
+            {currentAgreements.filter(hasNextTask).length
+              ? `${currentAgreements.filter(hasNextTask).length} ${currentAgreements.filter(hasNextTask).length === 1 ? 'tarea pendiente' : 'tareas pendientes'}`
+              : 'Sin tareas pendientes'}
+          </span>}
+        </div>
         {admissions.error && <ErrorMessage error={admissions.error} />}
         {consultations.error && <ErrorMessage error={consultations.error} />}
         {(admissions.loading || consultations.loading) && <p role="status">Consultando tus próximas acciones…</p>}
         {!agreements.some(agreement => agreement.status === 'completed') && <p className={card}>No tienes vinculaciones vigentes.</p>}
         {currentAgreements.map(agreement => {
           const episodes = admissions.data?.filter(item => item.agreementId === agreement.id && item.state !== 'revoked');
+          const tasks = episodes?.filter(item => patientHasNextTask(item, consultations.data?.find(value => value.id === item.id))).length ?? 0;
           return <article key={agreement.id} className={card}>
             <h3 className="break-words font-bold">{agreement.professionalName}</h3>
-            <p>{unifiedCareEnabled ? 'Vinculación completada' : 'Acuerdo completado'} · {formatDate(agreement.completedAt)}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-slate-600">{unifiedCareEnabled ? 'Vinculación completada' : 'Acuerdo completado'}</span>
+              {tasks > 0 && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-950">Te toca actuar</span>}
+            </div>
             {episodes?.length === 0 && <p>{admissions.data.some(item => item.agreementId === agreement.id && item.state === 'revoked')
               ? 'Admisión revocada. Puedes consultar tus documentos conservados.'
               : 'Tu profesional está preparando la admisión.'}</p>}
