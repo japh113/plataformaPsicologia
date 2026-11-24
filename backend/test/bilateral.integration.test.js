@@ -7,7 +7,8 @@ import app from '../src/app.js';
 import db from '../src/config/db.js';
 import env from '../src/config/env.js';
 import { installBaseline,syntheticFixture } from '../scripts/episode-sandbox.js';
-import { installBilateralSandbox,bilateralFixture } from '../scripts/bilateral-sandbox.js';
+import { bilateralFixture } from '../scripts/bilateral-sandbox.js';
+import { installConsultationSandbox } from '../scripts/admission-directed-sandbox.js';
 import { migrate,catalogChecksum } from '../scripts/episode-migration.js';
 import { command,processQueue,closeBilateral,transaction } from '../src/modules/bilateral/bilateral.service.js';
 import { conditionsVersion,conditionsText,sha256,declarationVersion,errorFor } from '../src/modules/bilateral/bilateral.policy.js';
@@ -18,7 +19,7 @@ const proposalHash=psy=>sha256(conditionsText('Profesional ficticio '+psy));
 const operation=()=>({operationId:randomUUID()});
 const express=()=>({...operation(),confirmed:true});
 
-test('013: isolated bilateral workflow, actual PostgreSQL privileges, revocators and concurrent commands',{
+test('013/020: isolated bilateral workflow, actual PostgreSQL privileges, revocators and concurrent commands',{
   skip:process.env.RUN_EPISODE_INTEGRATION!=='true'&&process.env.RUN_BILATERAL_INTEGRATION!=='true',
 },async t=>{
   assert.equal(env.nodeEnv,'test');assert.equal(env.localDevelopment,true);assert.equal(env.databaseUrl,'');
@@ -41,7 +42,7 @@ test('013: isolated bilateral workflow, actual PostgreSQL privileges, revocators
     client=new pg.Client({...connection,database:name});await client.connect();
     assert.equal((await client.query("SELECT 1 FROM pg_class WHERE relnamespace='public'::regnamespace")).rowCount,0);
     await installBaseline(client);
-    const options=await installBilateralSandbox(client,name);
+    const options=await installConsultationSandbox(client,name,{linkedPatients:true});
     await bilateralFixture(client);await syntheticFixture(client);
     const catalog=await catalogChecksum(client);
     assert.equal((await migrate(client,options)).status,'already-applied');
@@ -97,6 +98,63 @@ test('013: isolated bilateral workflow, actual PostgreSQL privileges, revocators
       issued_at,expires_at FROM bilateral_invitations WHERE id=$1`,[id])).rows[0];
     const legacyBefore=(await client.query('SELECT id,status FROM care_relationships ORDER BY id')).rows;
     const notesBefore=(await client.query('SELECT * FROM patient_clinical_notes ORDER BY id')).rows;
+    await t.test('020 lists only the authorized minimum name after acceptance and removes it on restriction, identity revocation or termination',async()=>{
+      const psy='bp_linked',pac='bq_linked',other='bp1',phone='+525599990011';
+      await client.query("INSERT INTO patients(id,first_name,last_name,full_name,phone,global_birth_date) VALUES($1,'Lucía','García','Lucía García',$2,'1990-01-01')",[pac,phone]);
+      for(const [id,name,role,patient]of [[psy,'Profesional ficticio '+psy,'psychologist',null],[pac,'Lucía','patient',pac]]) {
+        await client.query("INSERT INTO users(id,first_name,email,password_hash,role,patient_id) SELECT $1,$2,$3,password_hash,$4,$5 FROM users WHERE id='bp1'",[id,name,id+'@bilateral.invalid',role,patient]);
+      }
+      await client.query("INSERT INTO psychologist_profiles(user_id,approval_status) VALUES($1,'active')",[psy]);
+      const restrict=state=>client.query("INSERT INTO bilateral_restrictions(psychologist_id,state,justification) VALUES($1,$2,'Ensayo ficticio de visibilidad autorizado') ON CONFLICT(psychologist_id) DO UPDATE SET state=excluded.state",[psy,state]);
+      const verify=(channel,value)=>client.query('INSERT INTO contact_verification_state VALUES($1,$2,$3,clock_timestamp())',[pac,channel,contactDigest(channel,value)]);
+      await restrict('enabled');
+      await verify('email',pac+'@bilateral.invalid');
+      await verify('sms',phone);
+      const endpoint='/bilateral-invitations/linked-patients';
+      const list=async id=>{
+        const response=await http(id,endpoint);
+        assert.equal(response.status,200);
+        assert.equal(response.headers.get('cache-control'),'no-store');
+        return response.body.data;
+      };
+      assert.deepEqual(await list(psy),[]);
+      const id=await issue(psy,pac);
+      assert.deepEqual(await list(psy),[]);
+      assert.equal((await http(psy,endpoint+'?patient='+pac)).status,400);
+      const invitation=await incoming(pac,id);
+      assert.equal(invitation.conditionsVersion,'fictional-individual-v2');
+      const accepted={...express(),expectedVersion:invitation.version,conditionsVersion:invitation.conditionsVersion,conditionsHash:invitation.conditionsHash};
+      const post=()=>http(pac,'/bilateral-invitations/'+id+'/accept',accepted);
+      const [first,retry]=await Promise.all([post(),post()]);
+      assert.equal(first.status,200);
+      assert.deepEqual(retry.body,first.body);
+      const {agreementId}=first.body.data;
+      const expected=[{agreementId,displayName:'Lucía García'}];
+      assert.deepEqual(await list(psy),expected);
+      assert.deepEqual(await list(other),[]);
+      for(const who of [pac,'bq2','bil-support','bil-admin','bil-superadmin']) assert.equal((await http(who,endpoint)).status,403);
+      assert.doesNotMatch(JSON.stringify((await http(psy,'/bilateral-invitations/agreements')).body),/Lucía|García|bq_linked/);
+      assert.doesNotMatch(JSON.stringify((await http(psy,'/bilateral-invitations/sent')).body),/Lucía|García|bq_linked/);
+      const access=(await client.query("SELECT has_function_privilege($1,'public.bilateral_linked_patients(text,integer,double precision)','EXECUTE') AS ordinary",[options.consultationLegacyRole])).rows[0];
+      assert.equal(access.ordinary,false);
+      await assert.rejects(restricted.query("SELECT public.bilateral_linked_patients($1,0,0)",[psy]),/bilateral_session/);
+      await assert.rejects(restricted.query("SELECT public.bilateral_linked_patients($1,1,extract(epoch FROM now())+60)",[psy]),/bilateral_forbidden/);
+      for(const restriction of ['suspended','disabled']) {
+        await restrict(restriction);
+        assert.deepEqual(await list(psy),[]);
+      }
+      await client.query('DELETE FROM bilateral_restrictions WHERE psychologist_id=$1',[psy]);
+      assert.deepEqual(await list(psy),[]);
+      await restrict('enabled');
+      await client.query("DELETE FROM contact_verification_state WHERE user_id=$1 AND channel='sms'",[pac]);
+      assert.deepEqual(await list(psy),[]);
+      await verify('sms',phone);
+      assert.deepEqual(await list(psy),expected);
+      assert.equal((await http(pac,'/bilateral-invitations/'+agreementId+'/unlink',{...express(),expectedVersion:1})).status,200);
+      assert.deepEqual(await list(psy),[]);
+      assert.equal((await post()).body.data.status,'unlinked');
+      assert.equal((await client.query('SELECT count(*)::int n FROM bilateral_agreements WHERE invitation_id=$1',[id])).rows[0].n,1);
+    });
     await t.test('invitation immediate issuance has exactly fourteen days from the effective server emission',async()=>{
       const q=await queueClockCase('immediate');
       const before=(await client.query('SELECT clock_timestamp() stamp')).rows[0].stamp;
@@ -473,6 +531,44 @@ test('013: isolated bilateral workflow, actual PostgreSQL privileges, revocators
         const response=await fetch(url+'/api/bilateral-invitations',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"recipientReference":"private-reference-never-log"'});
         assert.equal(response.status,400);assert.deepEqual(await response.json(),{success:false,message:'Entrada no válida.'});assert.equal(logs.length,0);
       }finally{console.error=original;}
+    });
+    await t.test('020 keeps accepted v1 agreements and their evidence without projecting their names',async()=>{
+      const {psy,pac,id}=await queueClockCase('historical_name');
+      const historicalText=[
+        'Acepto la propuesta de vinculación preclínica individual de Profesional ficticio '+psy+', con las condiciones y versión mostradas.',
+        'Esto completa un acuerdo bilateral y deja la admisión pendiente.',
+        'No inicia tratamiento, no autoriza al profesional a consultar mi entrevista o expediente y no sustituye los consentimientos clínicos que correspondan.',
+        'Cualquiera de las partes puede terminar este acuerdo de inmediato, sin autorización de la otra.',
+        'Si existe un tratamiento activo o pausado, su continuidad, pausa o cierre se tramitan por su procedimiento propio.',
+      ].join(' ');
+      const historicalTerms={conditionsVersion:'fictional-individual-v1',conditionsText:historicalText,conditionsHash:sha256(historicalText)};
+      // Reproduce a proposal queued by the v1 writer before any invitation or acceptance exists.
+      const seeded=await client.query('UPDATE bilateral_attempts SET proposal=proposal||$2::jsonb WHERE id=$1 AND processed_at IS NULL',[id,historicalTerms]);
+      assert.equal(seeded.rowCount,1);
+      assert.equal((await processQueue()).deferred,0);
+      const invitation=await incoming(pac,id);
+      assert.equal(invitation.status,'pending');
+      for(const [field,value] of Object.entries(historicalTerms)) assert.equal(invitation[field],value);
+      const path='/bilateral-invitations/'+id+'/accept';
+      assert.equal((await http(pac,path,{...express(),expectedVersion:invitation.version,conditionsVersion,conditionsHash:proposalHash(psy)})).status,409);
+      const accepted=await http(pac,path,{...express(),expectedVersion:invitation.version,
+        conditionsVersion:invitation.conditionsVersion,conditionsHash:invitation.conditionsHash});
+      assert.equal(accepted.status,200);
+      assert.equal(accepted.body.data.status,'completed');
+
+      const linked=await http(psy,'/bilateral-invitations/linked-patients');
+      assert.equal(linked.status,200);
+      assert.deepEqual(linked.body.data,[]);
+      const preserved=await incoming(pac,id);
+      assert.equal(preserved.status,'accepted');
+      for(const [field,value] of Object.entries(historicalTerms)) assert.equal(preserved[field],value);
+      const agreements=await http(psy,'/bilateral-invitations/agreements');
+      assert.equal(agreements.status,200);
+      const agreement=agreements.body.data.find(item=>item.id===accepted.body.data.agreementId);
+      assert.equal(agreement.status,'completed');
+      assert.equal(agreement.conditionsVersion,historicalTerms.conditionsVersion);
+      assert.equal(agreement.conditionsText,historicalText);
+      assert.equal((await client.query("SELECT count(*)::int AS n FROM bilateral_events WHERE invitation_id=$1 AND actor_id=$2 AND action='accepted'",[id,pac])).rows[0].n,1);
     });
     await t.test('legacy barrier and originals remain unchanged after every bilateral operation',async()=>{
       for(const [path,body]of [['/auth/care-relationships/request',{}],['/auth/care-relationships/invite',{}]])assert.equal((await http('bp1',path,body)).status,403);

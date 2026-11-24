@@ -181,13 +181,17 @@ function RemindersPanel({ reminders, patients, isPsychologist, onOpenPatient, on
   );
 }
 
-function ExistingRelationships({ relationships = [], patient = false }) {
+function ExistingRelationships({ relationships = [], patient = false, bilateralInvitationsEnabled = false }) {
   const active = relationships.filter(r => r.status === 'active');
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
       <h3 className="font-bold text-slate-900">Vinculación clínica</h3>
-      <p className="text-sm text-slate-600">Las nuevas vinculaciones y la respuesta a pendientes están temporalmente deshabilitadas. Las relaciones existentes se conservan.</p>
-      {patient && !active.length && <p className="text-sm font-semibold text-indigo-700">Todavía no tienes psicólogo vinculado.</p>}
+      <p className="text-sm text-slate-600">{bilateralInvitationsEnabled
+        ? 'Este panel conserva las relaciones clínicas existentes. Consulta las invitaciones bilaterales en «Mi atención».'
+        : 'Las nuevas vinculaciones y la respuesta a pendientes están temporalmente deshabilitadas. Las relaciones existentes se conservan.'}</p>
+      {patient && !active.length && <p className="text-sm font-semibold text-indigo-700">
+        {bilateralInvitationsEnabled ? 'Este panel no tiene relaciones clínicas activas.' : 'Todavía no tienes psicólogo vinculado.'}
+      </p>}
       {relationships.map(r => <div key={r.id} className="rounded-xl border border-slate-200 p-3 text-sm">
         <span className="font-semibold">{patient ? r.psychologist.fullName : r.patient.fullName}</span>
         <span className="ml-2 text-slate-500">{r.status === 'active' ? 'Activa' : r.status === 'pending' ? 'Pendiente conservada; sin acciones disponibles' : r.status}</span>
@@ -195,11 +199,13 @@ function ExistingRelationships({ relationships = [], patient = false }) {
     </section>
   );
 }
-const PatientCareRelationshipPanel = ({ relationships }) => <ExistingRelationships relationships={relationships} patient />;
+const PatientCareRelationshipPanel = ({ relationships, bilateralInvitationsEnabled }) =>
+  <ExistingRelationships relationships={relationships} patient bilateralInvitationsEnabled={bilateralInvitationsEnabled} />;
 const PsychologistCareRelationshipPanel = ({ relationships }) => <ExistingRelationships relationships={relationships} />;
 
 export default function DashboardScreen({
   currentUser,
+  bilateralInvitationsEnabled = false,
   patients,
   appointments,
   reminders,
@@ -418,6 +424,7 @@ export default function DashboardScreen({
           <div className="space-y-6">
             <PatientCareRelationshipPanel
               relationships={careRelationships}
+              bilateralInvitationsEnabled={bilateralInvitationsEnabled}
               onRequestCareRelationship={onRequestCareRelationship}
               onRespondToCareRelationship={onRespondToCareRelationship}
               onAcceptCareRelationshipByCode={onAcceptCareRelationshipByCode}

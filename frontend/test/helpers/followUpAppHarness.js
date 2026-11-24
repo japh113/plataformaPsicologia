@@ -17,6 +17,7 @@ export function harness({ previous = null, followRequest = async () => follow } 
   const context = {
     currentUser: { id: 'p',role: 'patient',patientId: 'p' },useCallback: fn => fn,
     getAuthToken: () => state.token,sessionEpoch,followUpRequests: { current: new Map() },
+    receivedInvitations: { clear: () => {} }, setInvitationSession: () => {},
     clinicalAccess: { current: { generation: 0, denied: false } },patientRevisions: { current: new Map() },
     clinicalRecordSyncRef: { current: new Map() },clinicalRecordSync: {},setClinicalRecordSync: assign('recordSync'),
     getPatientFollowUp: async id => { state.followReads++; assert.equal(id,context.currentUser.patientId); return followRequest(); },

@@ -30,6 +30,8 @@ Mantener objetivo, alcance y criterio de cierre acordados. Antes de iniciar una 
 
 ## Invariantes y UX
 
+Conservar la identidad visual y el diseño aprobados. Justificar cada cambio visual y documentarlo brevemente en su PR. Avisar previamente al propietario sobre cambios significativos de marca, navegación, distribución o experiencia y obtener su aprobación antes de apartarse de la dirección acordada. Los ajustes técnicos menores que respetan el diseño vigente se resuelven en el encargo autorizado.
+
 Backoffice separado de clínica: support lector operativo; admin/superadmin gestionan funciones autorizadas, sin acceso clínico global ordinario ni break-glass implícito (RN-27).
 
 Citas de 60 minutos exactos a la hora cerrada. El mismo paciente puede tener varias citas en un día si pertenecen a episodios y profesionales distintos y sus horarios son disjuntos. Mantener el cupo diario en la agenda legacy sin atribución y para el mismo paciente/profesional. Las colisiones ajenas devuelven indisponibilidad neutra. No completar citas futuras. Nota solo desde cita completada no futura; cita con nota no vuelve a pendiente/cancelada. Conservar historia; finalización/adendas RN-23 siguen pendientes (#35).
