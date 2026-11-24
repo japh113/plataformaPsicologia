@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../api/client';
+import { episodeTitle } from './individualCareState';
 
 const button = 'rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50';
 const field = 'rounded-lg border border-slate-300 p-2';
@@ -23,8 +24,9 @@ function confirmationFor(detail, professional) {
   return { key, operation, payload };
 }
 
-function ConsultationDetail({ assignmentId, professional, onRefresh }) {
-  const [detail, setDetail] = useState(null);
+export function ConsultationDetail({ assignmentId, professional, onRefresh, revision, onDetail, onUnavailable, contextual = false }) {
+  const [read, setRead] = useState(null);
+  const detail = read?.revision === revision ? read?.data : null;
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
   const [confirmation, setConfirmation] = useState(null);
@@ -42,18 +44,18 @@ function ConsultationDetail({ assignmentId, professional, onRefresh }) {
     if (current !== generation.current) return;
     const next = confirmationFor(response.data, professional);
     setConfirmation(previous => previous?.key === next?.key ? previous : null);
-    setDetail(response.data);
-  }, [path, professional]);
+    setRead({ revision, data: response.data });
+    onDetail?.(response.data);
+  }, [path, professional, onDetail, revision]);
 
   const report = useCallback((failure, current) => {
     if (current !== generation.current) return;
     setError(failure.message);
     setConfirmation(null);
-    if ([401, 403, 404, 503].includes(failure.status)) {
-      setDetail(null);
-      setNote('');
-    }
-  }, []);
+    setRead(null);
+    onUnavailable?.();
+    if ([401, 403, 404].includes(failure.status)) setNote('');
+  }, [onUnavailable]);
 
   useEffect(() => {
     const current = ++generation.current;
@@ -61,7 +63,7 @@ function ConsultationDetail({ assignmentId, professional, onRefresh }) {
       if (current === generation.current) setBusy(false);
     });
     return invalidate;
-  }, [load, report, invalidate]);
+  }, [load, report, invalidate, revision]);
 
   const submit = async (operation, payload) => {
     if (busy || !detail) return;
@@ -77,7 +79,7 @@ function ConsultationDetail({ assignmentId, professional, onRefresh }) {
       setConfirmation(null);
       if (operation === 'note' || operation === 'withdraw' || operation === 'revoke-admission') setNote('');
       await load(current);
-      if (current === generation.current) await onRefresh();
+      if (current === generation.current) await onRefresh?.();
     } catch (failure) {
       report(failure, current);
     } finally {
@@ -108,14 +110,14 @@ function ConsultationDetail({ assignmentId, professional, onRefresh }) {
 
   return <section className="space-y-4" aria-label="Estado de la primera consulta">
     {error && <p role="alert">{error}</p>}
-    {!detail && busy && <p role="status">Cargando episodio…</p>}
+    {!detail && !error && <p role="status">Cargando episodio…</p>}
     <button type="button" className={field} disabled={busy} onClick={reload}>Actualizar episodio</button>
     {detail && <>
-      <p>Episodio {detail.episodeId} · {detail.professionalName} · {statusLabels[detail.status]}</p>
+      <p>{!contextual && 'Episodio '}{!contextual && detail.episodeId + ' · '}{detail.professionalName} · {statusLabels[detail.status]}</p>
       {detail.status === 'prepared' && <>
         {!detail.documentVersion && <p>Falta validar la versión vigente de la admisión.</p>}
         {detail.documentVersion && !detail.sufficiencyId && (professional ? <>
-          <label className="block"><input type="checkbox" checked={confirmed} onChange={confirmDisplayed} /> Declaro suficiente para este ensayo la admisión validada, versión {detail.documentVersion}, del episodio {detail.episodeId}.</label>
+          <label className="block"><input type="checkbox" checked={confirmed} onChange={confirmDisplayed} /> Declaro suficiente para este ensayo la admisión validada, versión {detail.documentVersion}, del episodio{contextual ? ' seleccionado' : ' ' + detail.episodeId}.</label>
           <button type="button" className={button} disabled={busy || !confirmed} onClick={submitConfirmation}>Declarar suficiencia</button>
         </> : <p>El profesional debe declarar la suficiencia de la admisión.</p>)}
         {detail.sufficiencyId && !detail.consentAccepted && !detail.consentId && (professional
@@ -156,7 +158,7 @@ function ConsultationDetail({ assignmentId, professional, onRefresh }) {
           </form>)}
       </>}
       {!professional && detail.consentAccepted && (
-        <button type="button" className={field} disabled={busy} onClick={() => submit('withdraw', { consentId: detail.consentId })}>Retirar consentimiento de tratamiento</button>
+        <button type="button" className={field} disabled={busy} onClick={() => { if (!contextual || window.confirm('¿Retirar el consentimiento y el acceso a la primera consulta de este episodio?')) void submit('withdraw', { consentId: detail.consentId }); }}>Retirar consentimiento de tratamiento</button>
       )}
       {detail.status === 'active' && (
         <button type="button" className={field} disabled={busy} onClick={() => submit('revoke-admission', { assignmentVersion: detail.admissionVersion })}>Revocar admisión</button>
@@ -165,8 +167,8 @@ function ConsultationDetail({ assignmentId, professional, onRefresh }) {
   </section>;
 }
 
-function TreatmentWithdrawals({ revision, onWithdraw }) {
-  const [references, setReferences] = useState([]);
+export function TreatmentWithdrawals({ revision, onWithdraw, assignment, contextual = false }) {
+  const [references, setReferences] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(null);
   const generation = useRef(0);
@@ -187,7 +189,7 @@ function TreatmentWithdrawals({ revision, onWithdraw }) {
   }, [revision, invalidate]);
 
   const withdraw = async reference => {
-    if (busy) return;
+    if (busy || ((contextual || assignment) && !window.confirm('¿Retirar el consentimiento de tratamiento de este episodio?'))) return;
     const current = generation.current;
     setBusy(reference.consentId);
     try {
@@ -197,21 +199,26 @@ function TreatmentWithdrawals({ revision, onWithdraw }) {
       });
       if (current !== generation.current) return;
       setReferences(values => values.filter(value => value.consentId !== reference.consentId));
+      setBusy(null);
       await onWithdraw();
     } catch (failure) {
       if (current === generation.current) setError(failure.message);
     } finally {
-      setBusy(null);
+      if (current === generation.current) setBusy(null);
     }
   };
 
-  if (!references.length && !error) return null;
+  const visible = (references ?? []).filter(reference => !assignment || reference.assignmentId === assignment.id);
+  if (references === null) return contextual ? <p role="status">Consultando consentimientos vigentes…</p> : null;
+  if (!visible.length && !error) return contextual ? <p>No hay consentimientos disponibles para retirar.</p> : null;
   return <section className="space-y-2" aria-label="Consentimientos de tratamiento">
     <h3 className="font-bold">Consentimientos de tratamiento</h3>
     {error && <p role="alert">{error}</p>}
-    {references.map(reference => (
+    {visible.map(reference => (
       <button key={reference.consentId} type="button" className={field} disabled={Boolean(busy)}
-        onClick={() => withdraw(reference)}>Retirar consentimiento del episodio {reference.episodeId}</button>
+        onClick={() => withdraw(reference)}>{assignment ? 'Retirar consentimiento de tratamiento' : contextual
+          ? 'Retirar consentimiento · ' + reference.professionalName + ' · ' + episodeTitle(reference)
+          : 'Retirar consentimiento del episodio ' + reference.episodeId}</button>
     ))}
   </section>;
 }

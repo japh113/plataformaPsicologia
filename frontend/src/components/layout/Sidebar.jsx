@@ -24,8 +24,9 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
   const showCare = import.meta.env.VITE_BILATERAL_ENABLED === 'true' && currentUser?.role === 'patient';
   const showLinked = import.meta.env.VITE_BILATERAL_ENABLED === 'true' && isPsychologist;
   const careNav = showCare || showLinked;
+  const unifiedCare = import.meta.env.VITE_UNIFIED_CARE_ENABLED === 'true';
   const primaryNavLabel = isBackoffice ? 'Backoffice' : 'Tablero';
-  const appointmentsLabel = isBackoffice ? 'Solicitudes' : isPsychologist ? 'Citas' : 'Mis Citas';
+  const appointmentsLabel = isBackoffice ? 'Solicitudes' : isPsychologist ? 'Citas' : 'Mis citas';
   const secondaryNavLabel = isBackoffice ? 'Usuarios' : isPsychologist ? 'Mis Pacientes' : 'Mi Seguimiento';
   const roleLabel = currentUser?.role === 'superadmin'
     ? 'Superadmin'
@@ -50,18 +51,18 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
         {showLinked && <NavButton active={['my-patients', 'legacy-patients'].includes(vistaActiva)} onClick={() => setVistaActiva('my-patients')}>
           <UsersRound className="mr-3 shrink-0" size={20} aria-hidden="true" /> Mis pacientes
         </NavButton>}
-        {showCare && <NavButton active={['my-care', 'legacy-patients', 'admissions', 'appointments'].includes(vistaActiva)} onClick={() => setVistaActiva('my-care')}
+        {showCare && <NavButton active={['my-care', 'legacy-patients'].includes(vistaActiva)} onClick={() => setVistaActiva('my-care')}
           label="Mi atención" describedBy={pendingCount ? 'desktop-invitation-count' : undefined}>
           <UsersRound className="mr-3 shrink-0" size={20} aria-hidden="true" /> Mi atención
           <PendingInvitationCount count={pendingCount} id="desktop-invitation-count" className="ml-auto" />
         </NavButton>}
-        {!showCare && <NavButton active={vistaActiva === 'appointments'} onClick={() => setVistaActiva('appointments')}>
+        <NavButton active={vistaActiva === 'appointments'} onClick={() => setVistaActiva('appointments')}>
           <CalendarRange className="mr-3" size={20} aria-hidden="true" /> {showLinked ? 'Agenda' : appointmentsLabel}
-        </NavButton>}
+        </NavButton>
         {!careNav && <NavButton active={vistaActiva === 'patients'} onClick={() => setVistaActiva('patients')}>
           <User className="mr-3" size={20} /> {secondaryNavLabel}
         </NavButton>}
-        {!showCare && import.meta.env.VITE_ADMISSION_ENABLED === 'true' && ['patient', 'psychologist'].includes(currentUser?.role) &&
+        {!showCare && (!showLinked || !unifiedCare) && import.meta.env.VITE_ADMISSION_ENABLED === 'true' && ['patient', 'psychologist'].includes(currentUser?.role) &&
           <NavButton active={vistaActiva === 'admissions'} onClick={() => setVistaActiva('admissions')}>
             <ClipboardList className="mr-3 shrink-0" size={20} aria-hidden="true" /> Admisión
           </NavButton>}

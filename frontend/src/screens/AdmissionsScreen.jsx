@@ -7,8 +7,9 @@ const style='rounded-lg border border-slate-300 p-2';
 const button='rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50';
 const labels={awaiting_document:'Esperando documentación',documented:'Documentada para revisión',revoked:'Revocada: consulta propia',proposed:'Pendiente de aceptación',accepted:'Aceptada',awaiting_submission:'Esperando envío',submitted:'Enviada para revisión',correction_requested:'Corrección solicitada',validated:'Validación registrada'};
 const get=async path=>(await apiRequest('/admissions'+path)).data;
-function AdmissionDetail({id,professional,onRefresh,onRevoked}){
+export function AdmissionDetail({id,professional,onRefresh,onRevoked,contextual=false,historyOnly=false}){
   const [data,setData]=useState(null),[draft,setDraft]=useState(null),[answers,setAnswers]=useState({}),[confirmed,setConfirmed]=useState(false),[revokeConfirmed,setRevokeConfirmed]=useState(false),[send,setSend]=useState(false);
+  const [stale,setStale]=useState(false);
   const [message,setMessage]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const operations=useRef(new Map()),alive=useRef(false),generation=useRef(0),denied=useRef(false);
   const unavailable=useCallback(()=>{
@@ -19,13 +20,13 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
     setData(null);setDraft(null);setAnswers({});setMessage('');
     setConfirmed(false);setRevokeConfirmed(false);setSend(false);setBusy(false);
   },[]);
-  const loadDetail=useCallback(async isCurrent=>{
+  const loadDetail=useCallback(async (isCurrent,preserve=false)=>{
     const detail=await get('/'+id);
     if(!isCurrent())return;
-    setData(detail);
+    setData(detail);setStale(false);
     if(!professional&&(detail.state==='accepted'||detail.readOnly)){
       const own=await get('/'+id+'/draft');
-      if(isCurrent()){setDraft(own);setAnswers(own.answers);}
+      if(isCurrent()){setDraft(own);if(!preserve)setAnswers(own.answers);}
     }
   },[id,professional]);
   useEffect(()=>{
@@ -35,16 +36,17 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
     void loadDetail(isCurrent).catch(e=>{
       if(!isCurrent())return;
       setError(e.message);
+      setConfirmed(false);setSend(false);setRevokeConfirmed(false);setStale(true);
       if([401,403,404].includes(e.status))unavailable();
     });
     return()=>{alive.current=false;++sequence.current;};
   },[loadDetail,unavailable]);
   const act=async(op,payload)=>{
-    if(busy||denied.current||!data)return;
+    if(busy||stale||historyOnly||denied.current||!data)return;
     let request=generation.current;
     const isCurrent=()=>alive.current&&request===generation.current;
     setBusy(true);setError('');
-    const key=JSON.stringify([op,payload]);if(!operations.current.has(key))operations.current.set(key,crypto.randomUUID());
+    const key=JSON.stringify([op,data.version,payload]);if(!operations.current.has(key))operations.current.set(key,crypto.randomUUID());
     try{
       await apiRequest('/admissions/'+id+'/'+op,{method:'POST',body:JSON.stringify({...payload,confirmed:true,operationId:operations.current.get(key),expectedVersion:data.version})});
       if(!isCurrent())return;
@@ -65,18 +67,36 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
       if([401,403,404].includes(e.status))unavailable();
     }finally{if(isCurrent())setBusy(false);}
   };
+  const reload = async () => {
+    const request = ++generation.current;
+    const isCurrent = () => alive.current && request === generation.current;
+    setBusy(true);
+    setError('');
+    try {
+      await loadDetail(isCurrent, true);
+    } catch (failure) {
+      if (!isCurrent()) return;
+      setError(failure.message);
+      if ([401, 403, 404].includes(failure.status)) unavailable();
+    } finally {
+      if (isCurrent()) setBusy(false);
+    }
+  };
   const receiveDetail=useCallback(detail=>{if(alive.current&&!denied.current)setData(detail);},[]);
-  const editable=data&&!data.readOnly&&['awaiting_submission','correction_requested'].includes(data.reviewState);
+  const editable=data&&!historyOnly&&!stale&&!data.readOnly&&['awaiting_submission','correction_requested'].includes(data.reviewState);
   const saved=draft&&JSON.stringify(answers)===JSON.stringify(draft.answers);
   return <article aria-label="Detalle de admisión" className="rounded-xl border bg-white p-5 space-y-4">
     {error&&<p role="alert">{error}</p>}
+    {!data&&!error&&<p role="status">Consultando entrevista…</p>}
+    {stale&&<><p role="status">Revisa la versión actual antes de confirmar de nuevo.</p>
+      <button type="button" className={style} disabled={busy} onClick={reload}>Actualizar entrevista y conservar texto</button></>}
     {data&&<><h2 className="text-xl font-bold">{data.template.title}</h2><p>{data.template.notice}</p>
-      <p>Profesional destinatario: {data.professionalName}. Episodio preparado: {data.episodeId}.</p>
+      <p>Profesional destinatario: {data.professionalName} · Autoadministrada · Versión {data.template.version}{!contextual && '. Episodio preparado: ' + data.episodeId}</p>
       <p>{labels[data.state]} · {labels[data.reviewState]}</p>
       {data.readOnly&&<p>Consulta propia de respuestas conservadas. Esta admisión está revocada y no permite nuevas operaciones.</p>}
-      {!professional&&data.state==='proposed'&&<><p>{data.consentText}</p><p>Versión de consentimiento: {data.consentVersion}</p>
+      {!professional&&!historyOnly&&data.state==='proposed'&&<><p>{data.consentText}</p><p>Versión de consentimiento: {data.consentVersion}</p>
         <label className="block"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> Acepto específicamente esta asignación, plantilla, destinatario y episodio.</label>
-        <button className={button} disabled={busy||!confirmed} onClick={()=>act('accept',{consentVersion:data.consentVersion,consentHash:data.consentHash})}>Aceptar asignación</button></>}
+        <button className={button} disabled={busy||stale||!confirmed} onClick={()=>act('accept',{consentVersion:data.consentVersion,consentHash:data.consentHash})}>Aceptar asignación</button></>}
       {!professional&&draft&&<form className="space-y-3" autoComplete="off" onSubmit={e=>{e.preventDefault();act('save',{expectedRevision:draft.revision,answers});}}>
         <h3 className="font-bold">Borrador privado</h3><p>Guardar conserva tu borrador. El profesional recibe únicamente las versiones que envíes expresamente.</p>
         {data.template.questions.map(q=><div key={q.id}><label className="block" htmlFor={'admission-'+id+'-'+q.id}>{q.label}</label><textarea id={'admission-'+id+'-'+q.id} className={style+' block w-full'} maxLength={q.maxLength} value={answers[q.id]||''} disabled={busy||!editable} onChange={e=>{setAnswers({...answers,[q.id]:e.target.value});setSend(false);}}/></div>)}
@@ -88,16 +108,16 @@ function AdmissionDetail({id,professional,onRefresh,onRevoked}){
       {data.submissions.length===0&&<p>Todavía no hay envíos.</p>}
       {data.submissions.map(s=><details key={s.number} open={s.number===data.latestSubmission}><summary>Envío {s.number}</summary>{data.template.questions.map(q=><p key={q.id} className="whitespace-pre-wrap"><strong>{q.label}: </strong>{s.answers[q.id]}</p>)}</details>)}
       {data.corrections.map(c=><p className="whitespace-pre-wrap" key={c.submission}>Corrección del envío {c.submission}: {c.message}</p>)}
-      {data.validations.map(v=><p key={v.submission}>Validación del envío {v.submission}, episodio {v.episodeId}. Conservada como historia; solo la versión vigente puede estar validada. El tratamiento sigue sin activar.</p>)}
-      {professional&&['submitted','validated'].includes(data.reviewState)&&<><label className="block" htmlFor={'correction-'+id}>Mensaje destinado al paciente para corregir</label><textarea id={'correction-'+id} className={style+' block w-full'} maxLength={1000} value={message} onChange={e=>setMessage(e.target.value)}/>
-        <button className={button} disabled={busy||!message.trim()} onClick={()=>act('correct',{submission:data.latestSubmission,episodeId:data.episodeId,message})}>Solicitar corrección</button>
+      {data.validations.map(v=><p key={v.submission}>Validación del envío {v.submission} · {new Date(v.validatedAt).toLocaleString('es-MX')}. Solo la versión vigente puede estar validada.</p>)}
+      {professional&&!historyOnly&&['submitted','validated'].includes(data.reviewState)&&<><label className="block" htmlFor={'correction-'+id}>Mensaje destinado al paciente para corregir</label><textarea id={'correction-'+id} className={style+' block w-full'} maxLength={1000} value={message} onChange={e=>setMessage(e.target.value)}/>
+        <button className={button} disabled={busy||stale||!message.trim()} onClick={()=>act('correct',{submission:data.latestSubmission,episodeId:data.episodeId,message})}>Solicitar corrección</button>
         {data.reviewState==='submitted'&&<><label className="block"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/> Registro expresamente la validación profesional del envío {data.latestSubmission} para este participante y episodio, solo en este ensayo ficticio.</label>
-          <button className={button} disabled={busy||!confirmed} onClick={()=>act('validate',{submission:data.latestSubmission,episodeId:data.episodeId})}>Registrar validación exacta</button></>}
+          <button className={button} disabled={busy||stale||!confirmed} onClick={()=>act('validate',{submission:data.latestSubmission,episodeId:data.episodeId})}>Registrar validación exacta</button></>}
       </>}
       {professional&&data.state==='accepted'&&data.consentVersion==='fictional-admission-v2'&&data.latestSubmission===0&&<p>Valoración profesional: NO EVALUADO. Se requiere un envío para consultar y registrar valoraciones.</p>}
       {professional&&data.state==='accepted'&&data.consentVersion==='fictional-admission-v2'&&data.latestSubmission>0&&<AdmissionAssessment key={id} id={id} version={data.version} submission={data.latestSubmission} reviewState={data.reviewState} professionalName={data.professionalName} onUnavailable={unavailable} onDetail={receiveDetail}/>}
-      {!data.readOnly&&<><label className="block"><input type="checkbox" checked={revokeConfirmed} onChange={e=>setRevokeConfirmed(e.target.checked)}/> Confirmo cancelar esta admisión{professional?'':' y retirar mi consentimiento'}.</label>
-      <button className={button} disabled={busy||!revokeConfirmed} onClick={()=>act('revoke',{})}>{professional?'Cancelar admisión':'Retirar consentimiento'}</button></>}
+      {!data.readOnly&&!historyOnly&&<><label className="block"><input type="checkbox" checked={revokeConfirmed} onChange={e=>setRevokeConfirmed(e.target.checked)}/> Confirmo cancelar esta admisión{professional?'':' y retirar mi consentimiento'}.</label>
+      <button className={button} disabled={busy||stale||!revokeConfirmed} onClick={()=>act('revoke',{})}>{professional?'Cancelar admisión':'Retirar consentimiento'}</button></>}
     </>}
   </article>;
 }

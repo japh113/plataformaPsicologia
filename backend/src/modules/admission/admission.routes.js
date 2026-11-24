@@ -60,6 +60,9 @@ for(const op of ['sufficiency','consent','withdraw','revoke-admission','activate
 
 protect(router);
 router.get('/',handle('list'));
+router.get('/templates', handle('templates'));
+router.post('/preparations', handle('preparations'));
+router.post('/prepare-current', handle('prepare-current'));
 router.post('/assign-directed',handle('assign-directed'));
 router.get('/:id/directed/record',handle('directed-record'));
 for(const op of ['attest','document','request','resolve','validate','assess'])router.post('/:id/directed/'+op,handle('directed-'+op));

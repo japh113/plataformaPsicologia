@@ -1,9 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft, CalendarDays, Check, ChevronRight, ClipboardList, Copy, FilePenLine,
+  ArrowLeft, Check, ChevronRight, ClipboardList, Copy, FilePenLine,
   Plus, RefreshCw, Search, Trash2, UserRound, UserRoundPlus,
 } from 'lucide-react';
 import { apiRequest } from '../api/client';
+import IndividualCare from '../components/IndividualCare';
+import { TreatmentWithdrawals } from '../components/FirstConsultation';
+import { useCareRead } from '../components/useCareRead';
+import { careProgress, firstConsultationEnabled, unifiedCareEnabled } from '../components/individualCareState';
 
 const base = '/bilateral-invitations';
 const formatDate = value => new Date(value).toLocaleString('es-MX', {
@@ -360,7 +364,7 @@ function LinkedPatients({ onAgreement, onLegacy }) {
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <span className="rounded-lg bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-900">Vinculación completada</span>
                 <button type="button" className={`${link} whitespace-nowrap`} aria-label={`Ver acuerdo de ${patient.displayName}`}
-                  onClick={() => onAgreement(patient.agreementId)}>Ver acuerdo <ChevronRight className="shrink-0" size={16} aria-hidden="true" /></button>
+                  onClick={() => onAgreement(patient)}>Ver acuerdo <ChevronRight className="shrink-0" size={16} aria-hidden="true" /></button>
               </div>
             </td>
           </tr>)}
@@ -415,13 +419,20 @@ function InvitationDetail({ item, status, acceptanceAvailable, action, terminal,
   </div>;
 }
 
-function Invitations({ professional, receivedInvitations, selectedAgreement, selectedInvitation, onInvitation, registered }) {
+function Invitations({
+  professional, receivedInvitations, selectedAgreement, selectedInvitation, onInvitation, onAgreement, registered, showAdmission,
+}) {
   const [data, setData] = useState(null);
   const [hasNotices, setHasNotices] = useState(false);
   const [readError, setReadError] = useState('');
   const [notice, setNotice] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const [acceptedAgreement, setAcceptedAgreement] = useState(null);
+  const [showWithdrawals, setShowWithdrawals] = useState(false);
   const action = useBilateralAction();
+  const patientOverview = !professional && !selectedAgreement && !selectedInvitation && showAdmission;
+  const admissions = useCareRead(patientOverview ? '/admissions' : null);
+  const consultations = useCareRead(patientOverview && firstConsultationEnabled ? '/admissions/consultations' : null);
 
   function refreshLists() {
     setData(null);
@@ -433,6 +444,8 @@ function Invitations({ professional, receivedInvitations, selectedAgreement, sel
   function refresh() {
     refreshLists();
     receivedInvitations?.refresh();
+    void admissions.reload();
+    void consultations.reload();
   }
 
   function revalidateDecision(id) {
@@ -443,10 +456,11 @@ function Invitations({ professional, receivedInvitations, selectedAgreement, sel
   useEffect(() => {
     const controller = new AbortController();
     const names = professional ? ['sent', 'agreements'] : ['agreements', 'blocks'];
+    if (professional && selectedAgreement) names.push('linked-patients');
     Promise.all(names.map(name => apiRequest(base + '/' + name, { signal: controller.signal }))).then(
-      ([first, second]) => {
+      ([first, second, linked]) => {
         if (!controller.signal.aborted) setData(professional
-          ? { items: first.data, agreements: second.data }
+          ? { items: first.data, agreements: second.data, linked: linked?.data }
           : { agreements: first.data, blocks: second.data });
       },
     ).catch(failure => {
@@ -460,7 +474,7 @@ function Invitations({ professional, receivedInvitations, selectedAgreement, sel
       });
     }
     return () => controller.abort();
-  }, [professional, attempt]);
+  }, [professional, attempt, selectedAgreement]);
 
   function terminal(item, verb) {
     const version = ['withdraw', 'decline', 'unlink'].includes(verb) ? { expectedVersion: item.version } : {};
@@ -490,8 +504,17 @@ function Invitations({ professional, receivedInvitations, selectedAgreement, sel
   const pendingIds = new Set(actionable.map(item => item.id));
   const orderedItems = items && (professional ? items : [...actionable, ...items.filter(item => !pendingIds.has(item.id))]);
   const invitation = items?.find(item => item.id === selectedInvitation);
-  const agreements = data?.agreements.filter(item => !selectedAgreement || item.id === selectedAgreement);
+  const agreements = data?.agreements.filter(item => !selectedAgreement || item.id === selectedAgreement.id);
   const loadError = readError || receivedInvitations?.error;
+  const showOverview = !professional && !selectedAgreement && !selectedInvitation;
+  const history = showOverview && orderedItems?.filter(item => !pendingIds.has(item.id));
+  const visibleInvitations = showOverview ? items && actionable : orderedItems;
+  const invitationGroups = professional
+    ? [
+        { label: 'Solicitudes vigentes', items: visibleInvitations?.filter(item => item.status === 'received') },
+        { label: 'Historial de solicitudes', items: visibleInvitations?.filter(item => item.status !== 'received') },
+      ]
+    : [{ items: visibleInvitations }];
   return <div className={content}>
     {registered && <div role="status" className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950">
       <Check className="mt-0.5 shrink-0" aria-hidden="true" />
@@ -504,18 +527,22 @@ function Invitations({ professional, receivedInvitations, selectedAgreement, sel
     </button>
     {!selectedInvitation && !selectedAgreement && hasNotices && <p role="status" className="text-sm text-slate-600">Hay novedades en tu bandeja.</p>}
     {!items && !loadError && <p role="status">Consultando la bandeja…</p>}
+    {selectedInvitation && acceptedAgreement && showAdmission && <button type="button" className={primary} onClick={() => onAgreement({ id: acceptedAgreement })}>Continuar a mi atención</button>}
     {selectedInvitation ? items && (invitation ? <InvitationDetail
       key={JSON.stringify([invitation.id, invitation.version, invitation.conditionsVersion, invitation.conditionsHash, pendingIds.has(invitation.id)])}
       item={invitation} status={receivedInvitations.displayStatus(invitation)} acceptanceAvailable={pendingIds.has(invitation.id)} action={action} terminal={terminal} onConflict={revalidateDecision} onAccepted={result => {
         receivedInvitations.afterAction(invitation.id, 'accepted');
+        setAcceptedAgreement(result.status === 'completed' ? result.agreementId : null);
         setNotice(result.status === 'completed' ? 'Acuerdo bilateral completado.' : 'El acuerdo ya no está vigente.');
         refreshLists();
       }} /> : <p className={card}>La invitación ya no está disponible.</p>) : <>
-      {!selectedAgreement && orderedItems && <section aria-labelledby="bilateral-invitations-title" className={content}>
-        <h2 id="bilateral-invitations-title" className={heading}>{professional ? 'Solicitudes de vinculación' : 'Invitaciones'}</h2>
+      {!selectedAgreement && visibleInvitations && <section aria-labelledby="bilateral-invitations-title" className={content}>
+        <h2 id="bilateral-invitations-title" className={heading}>{professional ? 'Solicitudes de vinculación' : 'Invitaciones por responder'}</h2>
         {professional && <p className="text-sm text-slate-600">El reenvío solo aplica a una invitación existente y disponible. No crea una invitación ni revierte un rechazo. Para presentar una propuesta nueva deben cumplirse las condiciones y los plazos aplicables.</p>}
-        {!orderedItems.length && <p className={card}>{professional ? 'Todavía no has registrado solicitudes.' : 'No tienes invitaciones disponibles.'}</p>}
-        {orderedItems.map(item => <article key={item.id} className={card}>
+        {!visibleInvitations.length && <p className={card}>{professional ? 'Todavía no has registrado solicitudes.' : 'No tienes invitaciones disponibles.'}</p>}
+        {invitationGroups.filter(group => group.items?.length).map(group => <div key={group.label || 'inbox'} className={content}>
+          {group.label && <h3 className="font-semibold text-slate-700">{group.label}</h3>}
+          {group.items.map(item => <article key={item.id} className={card}>
           <h3 className="break-words font-bold">{professional ? statusLabels[item.status] : item.professionalName}</h3>
           {professional ? <>
             <p className="text-slate-600">{neutralReceipt}</p>
@@ -535,9 +562,67 @@ function Invitations({ professional, receivedInvitations, selectedAgreement, sel
             <p>{pendingIds.has(item.id) ? 'Pendiente de respuesta' : item.status === 'pending' ? 'No disponible para responder' : statusLabels[item.status]} · Vence el {formatDate(item.expiresAt)}</p>
             <button type="button" className={link} onClick={() => onInvitation(item.id)}>Ver invitación <ChevronRight size={16} aria-hidden="true" /></button>
           </div>}
-        </article>)}
+          </article>)}
+        </div>)}
       </section>}
-      {agreements && <>
+      {showOverview && history?.some(item => item.status === 'accepted') && !data?.agreements.length && !readError &&
+        <p role="status">Actualizando los acuerdos de las invitaciones aceptadas…</p>}
+      {selectedAgreement && agreements && !agreements.length && <p role="status">El acuerdo ya no está disponible.</p>}
+      {selectedAgreement && agreements?.map(agreement => <article key={agreement.id} className={card}>
+        <h2 className={heading}>{professional ? data?.linked?.find(item => item.agreementId === agreement.id)?.displayName || statusLabels[agreement.status] : agreement.professionalName}</h2>
+        <p>{agreement.status === 'completed' ? 'Vinculación completada' : 'Vinculación terminada'} · {formatDate(agreement.completedAt)}</p>
+        {showAdmission && <IndividualCare key={agreement.id} agreement={agreement} professional={professional} />}
+        <details>
+          <summary className={`cursor-pointer rounded-md font-semibold text-indigo-700 ${focus}`}>Consultar las condiciones acordadas</summary>
+          <div className="mt-3"><Terms value={agreement} /></div>
+        </details>
+        {agreement.status === 'completed' && <button type="button" className={secondary} disabled={action.busy} onClick={() => {
+          if (window.confirm('¿Terminar de inmediato este acuerdo? Los tratamientos activos o pausados tienen su propio procedimiento.')) terminal(agreement, 'unlink');
+        }}>Terminar acuerdo unilateralmente</button>}
+      </article>)}
+      {showOverview && agreements && <section className={content} aria-label="Vinculaciones actuales">
+        <h2 className={heading}>Vinculaciones actuales</h2>
+        {admissions.error && <ErrorMessage error={admissions.error} />}
+        {consultations.error && <ErrorMessage error={consultations.error} />}
+        {(admissions.loading || consultations.loading) && <p role="status">Consultando tus próximas acciones…</p>}
+        {!agreements.some(agreement => agreement.status === 'completed') && <p className={card}>No tienes vinculaciones vigentes.</p>}
+        {agreements.filter(agreement => agreement.status === 'completed').map(agreement => {
+          const episodes = admissions.data?.filter(item => item.agreementId === agreement.id && item.state !== 'revoked');
+          return <article key={agreement.id} className={card}>
+            <h3 className="break-words font-bold">{agreement.professionalName}</h3>
+            <p>{unifiedCareEnabled ? 'Vinculación completada' : 'Acuerdo completado'} · {formatDate(agreement.completedAt)}</p>
+            {episodes?.length === 0 && <p>{admissions.data.some(item => item.agreementId === agreement.id && item.state === 'revoked')
+              ? 'Admisión revocada. Puedes consultar tus documentos conservados.'
+              : 'Tu profesional está preparando la admisión.'}</p>}
+            {episodes?.length > 0 && <ul className="list-disc space-y-1 pl-5">
+              {episodes.map(item => {
+                const progress = careProgress(item, consultations.data?.find(value => value.id === item.id), false, consultations.error ? 'error' : 'loading');
+                return <li key={item.id}><strong>{progress.stage}</strong> · {progress.next}</li>;
+              })}
+            </ul>}
+            <button type="button" className={link} onClick={() => onAgreement(agreement)}>Ver atención <ChevronRight size={16} aria-hidden="true" /></button>
+          </article>;
+        })}
+      </section>}
+      {patientOverview && firstConsultationEnabled && <details className={card} onToggle={event => setShowWithdrawals(event.currentTarget.open)}>
+        <summary className={`cursor-pointer font-bold ${focus}`}>Retirar un consentimiento de tratamiento</summary>
+        {showWithdrawals && <TreatmentWithdrawals revision={attempt} onWithdraw={refresh} contextual />}
+      </details>}
+      {showOverview && ((history?.length ?? 0) > 0 || agreements?.some(agreement => agreement.status !== 'completed')) &&
+        <details className={card}>
+          <summary className={`cursor-pointer font-bold ${focus}`}>Historial</summary>
+          {agreements?.filter(agreement => agreement.status !== 'completed').map(agreement => <div key={agreement.id} className="flex flex-wrap items-center justify-between gap-2">
+            <h3>{agreement.professionalName} · {statusLabels[agreement.status]} · {formatDate(agreement.unlinkedAt || agreement.completedAt)}</h3>
+            <button type="button" className={link} onClick={() => onAgreement(agreement)}>Consultar vinculación</button>
+          </div>)}
+          {history?.length > 0 && <ul className="space-y-2">
+            {history.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-2">
+              <p>{item.professionalName} · {statusLabels[receivedInvitations.displayStatus(item)]} · Vence el {formatDate(item.expiresAt)}</p>
+              <button type="button" className={link} onClick={() => onInvitation(item.id)}>{item.status === 'accepted' ? 'Ver evidencia de invitación' : 'Ver invitación'}</button>
+            </li>)}
+          </ul>}
+        </details>}
+      {professional && !selectedAgreement && agreements && <>
       <h2 className={heading}>{selectedAgreement ? 'Acuerdo de vinculación' : 'Acuerdos de vinculación'}</h2>
       {!agreements.length && <p className={card}>No hay acuerdos para mostrar.</p>}
       {agreements.map(agreement => <article key={agreement.id} className={card}>
@@ -547,6 +632,8 @@ function Invitations({ professional, receivedInvitations, selectedAgreement, sel
           <summary className={`cursor-pointer rounded-md font-semibold text-indigo-700 ${focus}`}>Consultar las condiciones acordadas</summary>
           <div className="mt-3"><Terms value={agreement} /></div>
         </details>
+        {showAdmission && agreement.status === 'completed' &&
+          <button type="button" className={link} onClick={() => onAgreement(agreement)}>Ver atención del acuerdo</button>}
         {agreement.status === 'unlinked' && <p>La admisión dependiente de este acuerdo ya no puede avanzar.</p>}
         {agreement.status === 'completed' && <button type="button" className={secondary} disabled={action.busy} onClick={() => {
           if (window.confirm('¿Terminar de inmediato este acuerdo? Los tratamientos activos o pausados tienen su propio procedimiento.')) terminal(agreement, 'unlink');
@@ -613,18 +700,18 @@ export default function BilateralInvitationsScreen({ currentUser, navigate, show
           onClick={() => open(target)}>{label}</button>)}
     </nav>}
     {!professional && page === 'invitations' && <div className="flex flex-wrap gap-2">
-      {showAdmission && <button type="button" className={secondary} onClick={() => navigate('admissions')}>
+      {showAdmission && !unifiedCareEnabled && <button type="button" className={secondary} onClick={() => navigate('admissions')}>
         <ClipboardList size={18} aria-hidden="true" /> Admisión
       </button>}
-      <button type="button" className={secondary} onClick={() => navigate('appointments')}><CalendarDays size={18} aria-hidden="true" /> Mis citas</button>
       <button type="button" className={secondary} onClick={() => navigate('legacy-patients')}><UserRound size={18} aria-hidden="true" /> Mi seguimiento</button>
     </div>}
-    {page === 'linked' && <LinkedPatients onAgreement={id => open('agreement', id)} onLegacy={() => navigate('legacy-patients')} />}
+    {page === 'linked' && <LinkedPatients onAgreement={agreement => open('agreement', { id: agreement.agreementId })} onLegacy={() => navigate('legacy-patients')} />}
     {page === 'invite' && <ProfessionalInvite onRegistered={() => { setRegistered(true); open('invitations'); }} />}
     {page === 'reference' && <PatientReference />}
-    {['invitations', 'detail', 'agreement'].includes(page) && <Invitations professional={professional} receivedInvitations={receivedInvitations} registered={registered && page === 'invitations'}
+    {['invitations', 'detail', 'agreement'].includes(page) && <Invitations key={page + ':' + (selection?.id ?? selection ?? '')}
+      professional={professional} showAdmission={showAdmission && unifiedCareEnabled} receivedInvitations={receivedInvitations} registered={registered && page === 'invitations'}
       selectedAgreement={page === 'agreement' ? selection : null} selectedInvitation={page === 'detail' ? selection : null}
-      onInvitation={id => open('detail', id)} />}
+      onInvitation={id => open('detail', id)} onAgreement={agreement => open('agreement', agreement)} />}
     <p className="text-sm text-slate-600">Entorno de ensayo con cuentas ficticias y entrega simulada.</p>
   </section>;
 }

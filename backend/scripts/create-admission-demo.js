@@ -11,10 +11,11 @@ const act=()=>({operationId:randomUUID(),confirmed:true});
 try{
   control=await sandboxControl({demo:true});const name='psicopanel_episode_demo';client=await createSandboxDatabase(control,name);await installBaseline(client);
   await installConsultationSandbox(client,name,{runtimeRole:'bilateral_runtime_demo',admissionRole:'admission_runtime_demo',
-    legacyRole:'consultation_legacy_demo',linkedPatients:true});await bilateralFixture(client);
+    legacyRole:'consultation_legacy_demo',unifiedCare:true});await bilateralFixture(client);
   if(process.env.FIRST_CONSULTATION_ENABLED==='true') {
     await client.query(`INSERT INTO psychologist_availability_blocks(psychologist_user_id,weekday,start_time,end_time)
-      SELECT 'bp3',weekday,'08:00','18:00' FROM generate_series(0,6) AS weekday`);
+      SELECT id,weekday,'08:00','18:00' FROM users CROSS JOIN generate_series(0,6) AS weekday
+      WHERE id IN ('bp2','bp3')`);
   }
   Object.assign(process.env,{BILATERAL_ENABLED:'true',BILATERAL_SECRET:'fictitious-bilateral-independent-demo-key-32bytes',BILATERAL_DATABASE_URL:'postgres://bilateral_runtime_demo:disposable_bilateral_roles@db:5432/'+name,
     ADMISSION_ENABLED:'true',ADMISSION_SECRET:'fictitious-admission-independent-demo-key-32bytes',ADMISSION_DATABASE_URL:'postgres://admission_runtime_demo:disposable_admission_roles@db:5432/'+name});

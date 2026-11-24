@@ -45,7 +45,7 @@ export async function verifyAdmissionContract(client,role,{install=false,runtime
   // 016/017 internal content boundaries has no executable grant to any LOGIN or PUBLIC.
   const internals=(await client.query(`SELECT p.prosecdef,p.proconfig,p.proowner::regrole::text AS owner,
     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) WHERE grantee<>p.proowner) exposed
-    FROM pg_proc p WHERE p.pronamespace='public'::regnamespace AND p.proname IN ('admission_record_command','admission_directed_command','admission_directed_version_guard')`)).rows;
+    FROM pg_proc p WHERE p.pronamespace='public'::regnamespace AND p.proname IN ('admission_record_command','admission_directed_command','admission_directed_version_guard','admission_response_guard')`)).rows;
   for(const internal of internals)
   if(internal&&(!internal.prosecdef||internal.owner!==owner.rolname||internal.exposed||
     JSON.stringify(internal.proconfig)!==JSON.stringify(['search_path=pg_catalog, public'])))throw new Error('Expanded admission assessment boundary');

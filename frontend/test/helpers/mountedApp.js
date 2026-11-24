@@ -21,8 +21,12 @@ const apiNames = [...source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"](.\/api\
   .flatMap(match => match[1].split(',').map(name => name.trim()).filter(Boolean));
 const apiUrl = stubUrl(apiNames.map(name => `export const ${name}=(...args)=>globalThis.${key}.api.${name}(...args);`).join('\n'));
 const emptyUrl = stubUrl('export {};');
+const careFlagsUrl = stubUrl('export const firstConsultationEnabled = false, unifiedCareEnabled = false;');
+const appointmentComponentsUrl = stubUrl('export const OwnFirstAppointments = () => null, OwnFirstAppointmentDetail = () => null;');
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (context.parentURL === appUrl && specifier === './components/individualCareState') return { url: careFlagsUrl, shortCircuit: true };
+    if (context.parentURL === appUrl && specifier === './components/IndividualCare') return { url: appointmentComponentsUrl, shortCircuit: true };
     if (context.parentURL === appUrl && specifier.startsWith('./api/')) return { url: apiUrl, shortCircuit: true };
     if (context.parentURL === appUrl && (/\.css$/.test(specifier))) return { url: emptyUrl, shortCircuit: true };
     if (context.parentURL === appUrl && /^(\.\/components\/|\.\/screens\/|\.\/modals\/)/.test(specifier)) {

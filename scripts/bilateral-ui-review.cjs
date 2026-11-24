@@ -128,7 +128,7 @@ async function login(id, mobile = true) {
   await heading(page, label).waitFor();
   assert.equal(await entry.getAttribute('aria-current'), 'page');
   if (mobile) {
-    assert.equal(await nav.getByRole('button').count(), professional ? 5 : 3);
+    assert.equal(await nav.getByRole('button').count(), professional ? 5 : 4);
     for (const item of await nav.getByRole('button').all()) {
       const rect = await item.boundingBox();
       assert.ok(rect.x >= 0 && rect.x + rect.width <= 375);
@@ -396,6 +396,7 @@ async function main() {
     assert.equal(newNotices.length, 1);
     assert.equal(newNotices[0].message, 'Hay una acción disponible en tu cuenta');
     await pac.getByRole('status').filter({ hasText: /^Hay novedades en tu bandeja\.$/ }).waitFor();
+    await pac.locator('summary').filter({ hasText: /^Historial$/ }).click();
     await pac.getByRole('heading', { name: /Acuerdo terminado/ }).waitFor();
     assert.equal(await pac.locator('#mobile-invitation-count').count(), 0);
     await shot('VIN05-aviso-neutral', pac);
@@ -475,7 +476,7 @@ async function main() {
       await heading(page, 'Tienes 2 invitaciones pendientes').waitFor();
       assert.equal(await page.locator('#mobile-invitation-count').textContent(), '2 invitaciones pendientes');
       await button(page, 'Revisar invitaciones').click();
-      const inbox = page.getByRole('region', { name: 'Invitaciones', exact: true });
+      const inbox = page.getByRole('region', { name: 'Invitaciones por responder', exact: true });
       await heading(inbox, 'Fixture pendiente B').waitFor();
       const names = await inbox.getByRole('heading', { level: 3 }).allTextContents();
       assert.deepEqual(names.slice(0, 2), ['Fixture pendiente A', 'Fixture pendiente B']);
@@ -538,7 +539,7 @@ async function main() {
       rows = [first];
       await button(mobile, 'Mi atención').click();
       await page.getByText('Pendiente de respuesta', { exact: false }).waitFor();
-      await page.getByText('No hay acuerdos para mostrar.', { exact: true }).waitFor();
+      await page.getByText('No tienes vinculaciones vigentes.', { exact: true }).waitFor();
       assert.equal(await count.textContent(), '1 invitación pendiente');
 
       await holdInboxReads(page, 'received');
@@ -546,6 +547,7 @@ async function main() {
       await waitForHeldInboxReads(page, 'received');
       rows = [withdrawn(first)];
       await button(page, 'Actualizar bandeja').click();
+      await page.locator('summary').filter({ hasText: /^Historial$/ }).click();
       await page.getByText(/Retirada · Vence/).waitFor();
       await releaseInboxReads(page, 'received');
       assert.equal(await page.getByText('Pendiente de respuesta', { exact: false }).count(), 0);
@@ -573,6 +575,7 @@ async function main() {
         assert.equal(await homeCard.count(), 0);
       }
       await button(mobile, 'Mi atención').click();
+      await page.locator('summary').filter({ hasText: /^Historial$/ }).click();
       await page.getByText(/Retirada · Vence/).waitFor();
       assert.equal(await count.count(), 0);
       await shot('VIN10-bandeja-revalidada', page);

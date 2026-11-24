@@ -8,13 +8,14 @@ export default function MobileNav({ currentUser, onLogout, vistaActiva, setVista
   const isBackoffice = ['admin', 'support', 'superadmin'].includes(role);
   const showLinked = import.meta.env.VITE_BILATERAL_ENABLED === 'true' && isPsychologist;
   const showCare = import.meta.env.VITE_BILATERAL_ENABLED === 'true' && role === 'patient';
-  const showAdmission = import.meta.env.VITE_ADMISSION_ENABLED === 'true' && ['patient', 'psychologist'].includes(role) && !showCare;
+  const showAdmission = import.meta.env.VITE_ADMISSION_ENABLED === 'true' && ['patient', 'psychologist'].includes(role) && !showCare && (!showLinked || import.meta.env.VITE_UNIFIED_CARE_ENABLED !== 'true');
   const showProfessional = import.meta.env.VITE_D2_ENABLED === 'true' && (isPsychologist || ['admin', 'superadmin'].includes(role));
   const entries = [{ view: 'dashboard', label: isBackoffice ? 'Panel' : 'Inicio', Icon: House }];
 
   if (showCare) {
     entries.push(
-      { view: 'my-care', label: 'Mi atención', Icon: UsersRound, related: ['appointments', 'admissions', 'legacy-patients'] },
+      { view: 'my-care', label: 'Mi atención', Icon: UsersRound, related: ['legacy-patients'] },
+      { view: 'appointments', label: 'Mis citas', Icon: CalendarRange },
       { view: 'account', label: 'Cuenta', Icon: User },
     );
   } else {

@@ -1,3 +1,5 @@
+import { OwnFirstAppointments, OwnFirstAppointmentDetail } from './components/IndividualCare';
+import { firstConsultationEnabled, unifiedCareEnabled } from './components/individualCareState';
 import AdmissionsScreen from './screens/AdmissionsScreen';
 import BilateralInvitationsScreen from './screens/BilateralInvitationsScreen';
 import { preservePatientFollowUp } from './utils/patientFollowUp';
@@ -155,6 +157,7 @@ export default function App({onRestrictedSession}) {
   const [savingAvailabilityException, setSavingAvailabilityException] = useState(false);
   const [availabilityExceptionActionError, setAvailabilityExceptionActionError] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
+  const [firstAppointmentView, setFirstAppointmentView] = useState(null);
   const [invitationSession, setInvitationSession] = useState(0);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
@@ -213,6 +216,7 @@ export default function App({onRestrictedSession}) {
     sessionEpoch.current += 1;
     receivedInvitations.clear();
     setInvitationSession(value => value + 1);
+    setFirstAppointmentView(null);
     clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: false };
     patientRevisions.current.clear();
     clinicalRecordSyncRef.current.clear();
@@ -1742,13 +1746,16 @@ export default function App({onRestrictedSession}) {
     }
   };
 
+  const appointmentScope = JSON.stringify([currentUser?.id, invitationSession]);
+  const selectedFirstAppointment = firstAppointmentView?.scope === appointmentScope ? firstAppointmentView.id : null;
+
   const renderMainContent = () => {
     if(import.meta.env?.VITE_ADMISSION_ENABLED==='true' && vistaActiva==='admissions' && ['patient','psychologist'].includes(currentUser?.role))return <AdmissionsScreen key={currentUser.id} currentUser={currentUser}/>;
     if (bilateralEnabled && (
       (vistaActiva === 'my-patients' && currentUser?.role === 'psychologist') ||
       (vistaActiva === 'my-care' && invitationScope)
     )) {
-      return <BilateralInvitationsScreen key={invitationScope ?? currentUser.id} currentUser={currentUser}
+      return <BilateralInvitationsScreen key={JSON.stringify([currentUser.id, invitationSession])} currentUser={currentUser}
         receivedInvitations={patientCare ? receivedInvitations : null}
         navigate={setVistaActiva} showAdmission={import.meta.env?.VITE_ADMISSION_ENABLED === 'true'} />;
     }
@@ -2055,6 +2062,14 @@ export default function App({onRestrictedSession}) {
                 {pendingCount === 1 ? 'Revisar invitación' : 'Revisar invitaciones'}
               </button>
             </section>
+          )}
+          {vistaActiva === 'appointments' && invitationScope && unifiedCareEnabled && firstConsultationEnabled && (
+            <div className="mb-5 space-y-3" key={appointmentScope}>
+              {selectedFirstAppointment ? <>
+                <button type="button" className="font-semibold text-indigo-700" onClick={() => setFirstAppointmentView(null)}>Volver a primeras citas</button>
+                <OwnFirstAppointmentDetail key={selectedFirstAppointment} assignmentId={selectedFirstAppointment} />
+              </> : <OwnFirstAppointments onOpen={id => setFirstAppointmentView({ id, scope: appointmentScope })} />}
+            </div>
           )}
           {renderMainContent()}
         </div>

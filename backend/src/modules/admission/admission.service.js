@@ -6,7 +6,7 @@ import db from '../../config/db.js';
 import { contactDigest } from '../auth/identity.service.js';
 import { normalizeEmail,normalizePhone } from '../auth/identity.validation.js';
 import { verifyAdmissionContract } from '../../../scripts/admission-contract.js';
-import { validate,uuid,fail,fingerprint } from './admission.policy.js';
+import { validate,validateResponses,uuid,fail,fingerprint } from './admission.policy.js';
 let pool;
 export function configuration(){
   if(process.env.ADMISSION_ENABLED!=='true')throw fail('Admisión deshabilitada.',404);
@@ -48,12 +48,23 @@ export async function command(actor,op,input={},id){
     fingerprint:fingerprint({op,input,id:id??null},key),newId:randomUUID()};
   return transaction(async client=>{
     if(['record','assess','directed-record','directed-assess'].includes(op))await verifyEpisodeRecordContract(client);
-    const c=(await client.query('SELECT public.admission_context($1,$2,$3,$4::jsonb) AS data',[actor.id,actor.sessionVersion,op==='assign-directed'?'assign':op,JSON.stringify(p)])).rows[0].data;
+    const execute = async (operation) => (await client.query(
+      'SELECT public.admission_command($1,$2,$3,$4::jsonb) AS data',
+      [actor.id, actor.sessionVersion, operation, JSON.stringify(p)]
+    )).rows[0].data;
+    if (op === 'templates') return execute(op);
+    const agreementOperation = ['preparations', 'prepare-current'].includes(op);
+    const contextOperation = op === 'assign-directed' ? 'assign' : agreementOperation ? 'prepare' : op;
+    const c=(await client.query('SELECT public.admission_context($1,$2,$3,$4::jsonb) AS data',[actor.id,actor.sessionVersion,contextOperation,JSON.stringify(p)])).rows[0].data;
     if(!c.ownRead){
       const phone=normalizePhone(c.phone);
       p.emailDigest=contactDigest('email',normalizeEmail(c.email));p.phoneDigest=phone?contactDigest('sms',phone):null;
     }
-    return (await client.query('SELECT public.admission_command($1,$2,$3,$4::jsonb) AS data',[actor.id,actor.sessionVersion,op,JSON.stringify(p)])).rows[0].data;
+    if (op === 'save' || Object.hasOwn(input, 'declarations')) {
+      const assigned = await execute('summary');
+      validateResponses(input.answers ?? input.declarations, op !== 'save', assigned.templateId);
+    }
+    return execute(op);
   });
 }
 
