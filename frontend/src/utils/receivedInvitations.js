@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+function pendingExpiry(invitation) {
+  return invitation.status === 'pending' ? Date.parse(invitation.expiresAt) : NaN;
+}
+
 export function isActionableInvitation(invitation, now) {
-  return invitation.status === 'pending' && invitation.acceptanceAvailable === true && Date.parse(invitation.expiresAt) > now;
+  return invitation.acceptanceAvailable === true && pendingExpiry(invitation) > now;
 }
 
 export function useReceivedInvitations(scope, apiRequest) {
@@ -75,7 +79,8 @@ export function useReceivedInvitations(scope, apiRequest) {
 
   const current = scope && snapshot?.scope === scope ? snapshot : null;
   const actionable = current?.items?.filter(item => isActionableInvitation(item, current.checkedAt)) ?? [];
-  const nextExpiry = Math.min(...actionable.map(item => Date.parse(item.expiresAt)));
+  // Pending invitations that cannot be accepted can still expire while their detail is open.
+  const nextExpiry = Math.min(...(current?.items ?? []).map(pendingExpiry).filter(expiry => expiry > current.checkedAt));
   useEffect(() => {
     if (!Number.isFinite(nextExpiry)) return;
     const timeout = window.setTimeout(() => {
@@ -85,5 +90,9 @@ export function useReceivedInvitations(scope, apiRequest) {
     return () => window.clearTimeout(timeout);
   }, [scope, nextExpiry]);
 
-  return { items: current?.items ?? null, error: current?.error ?? '', actionable, refresh, afterAction, clear };
+  function displayStatus(invitation) {
+    return pendingExpiry(invitation) <= current?.checkedAt ? 'expired' : invitation.status;
+  }
+
+  return { items: current?.items ?? null, error: current?.error ?? '', actionable, displayStatus, refresh, afterAction, clear };
 }

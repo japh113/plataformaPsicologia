@@ -373,7 +373,7 @@ function LinkedPatients({ onAgreement, onLegacy }) {
   </section>;
 }
 
-function InvitationDetail({ item, acceptanceAvailable, action, terminal, onAccepted, onConflict }) {
+function InvitationDetail({ item, status, acceptanceAvailable, action, terminal, onAccepted, onConflict }) {
   const [checked, setChecked] = useState(false);
   return <div className="max-w-2xl space-y-4">
     <section className={card}>
@@ -381,14 +381,14 @@ function InvitationDetail({ item, acceptanceAvailable, action, terminal, onAccep
         <Avatar name={item.professionalName} />
         <div className="min-w-0">
           <h2 className={heading}>{item.professionalName}</h2>
-          <p>Vinculación individual · {statusLabels[item.status]}</p>
+          <p>Vinculación individual · {statusLabels[status]}</p>
           <p className="text-sm text-slate-600">Vence el {formatDate(item.expiresAt)}</p>
         </div>
       </div>
     </section>
     <section className={card}>
       <Terms value={item} />
-      {item.status === 'pending' && <>
+      {status === 'pending' && <>
         <CheckField checked={checked} onChange={setChecked} disabled={action.busy || !acceptanceAvailable}>
           Acepto expresamente las condiciones y la versión mostradas.
         </CheckField>
@@ -506,7 +506,7 @@ function Invitations({ professional, receivedInvitations, selectedAgreement, sel
     {!items && !loadError && <p role="status">Consultando la bandeja…</p>}
     {selectedInvitation ? items && (invitation ? <InvitationDetail
       key={JSON.stringify([invitation.id, invitation.version, invitation.conditionsVersion, invitation.conditionsHash, pendingIds.has(invitation.id)])}
-      item={invitation} acceptanceAvailable={pendingIds.has(invitation.id)} action={action} terminal={terminal} onConflict={revalidateDecision} onAccepted={result => {
+      item={invitation} status={receivedInvitations.displayStatus(invitation)} acceptanceAvailable={pendingIds.has(invitation.id)} action={action} terminal={terminal} onConflict={revalidateDecision} onAccepted={result => {
         receivedInvitations.afterAction(invitation.id, 'accepted');
         setNotice(result.status === 'completed' ? 'Acuerdo bilateral completado.' : 'El acuerdo ya no está vigente.');
         refreshLists();

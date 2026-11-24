@@ -580,6 +580,74 @@ async function main() {
       await context.close();
     }
   }, [409, 503]);
+  await scenario('VIN11', async () => {
+    const context = await browser.newContext({ viewport: { width: 375, height: 812 }, locale: 'es-MX' });
+    const page = await context.newPage();
+    watch(page);
+    const expiry = Date.now() + 24 * 60 * 60 * 1000;
+    const terms = 'Condiciones originales de la invitación ficticia.';
+    const invitation = {
+      id: randomUUID(), professionalName: 'Profesional ficticio', status: 'pending', acceptanceAvailable: true,
+      expiresAt: new Date(expiry).toISOString(), version: 1, conditionsVersion: 'fictional-individual-v2',
+      conditionsHash: 'fixture', conditionsText: terms,
+    };
+    let item = invitation;
+    await page.route('**/bilateral-invitations/received', route => route.request().method() === 'GET'
+      ? route.fulfill({ json: { success: true, data: [item] }, headers: { 'access-control-allow-origin': '*' } })
+      : route.continue());
+    try {
+      await page.clock.install();
+      await page.goto(base);
+      await submitLogin(page, 'bq7');
+      await heading(page, 'Tienes 1 invitación pendiente').waitFor();
+      await button(page, 'Revisar invitación').click();
+      await button(page, 'Ver invitación').click();
+      const accept = button(page, 'Aceptar vinculación');
+      const decline = button(page, 'Rechazar invitación');
+      const count = page.locator('#mobile-invitation-count');
+      const state = label => page.getByText('Vinculación individual · ' + label, { exact: true });
+      await page.getByLabel(/Acepto expresamente/).check();
+      await page.clock.pauseAt(expiry - 1);
+      assert.equal(await count.textContent(), '1 invitación pendiente');
+      assert.ok(await state('Pendiente').isVisible());
+      assert.ok(await accept.isEnabled());
+      assert.ok(await decline.isEnabled());
+
+      await page.clock.runFor(1);
+      await state('Vencida').waitFor();
+      assert.ok(await heading(page, 'Invitación de vinculación').isVisible());
+      assert.equal(await count.count(), 0);
+      assert.equal(await accept.count(), 0);
+      assert.equal(await decline.count(), 0);
+      assert.ok(await page.getByText(terms, { exact: true }).isVisible());
+      assert.ok(await page.getByText('Versión fictional-individual-v2', { exact: true }).isVisible());
+      await page.clock.resume();
+      await shot('VIN11-detalle-vencido', page);
+
+      for (const [status, label] of [['declined', 'Rechazada'], ['accepted', 'Aceptada'], ['withdrawn', 'Retirada'], ['invalidated', 'No disponible']]) {
+        item = { ...invitation, status, acceptanceAvailable: false, version: 2 };
+        await button(page, 'Actualizar bandeja').click();
+        await state(label).waitFor();
+        assert.equal(await count.count(), 0);
+        assert.ok(await page.getByText(terms, { exact: true }).isVisible());
+      }
+
+      const laterExpiry = expiry + 60_000;
+      item = { ...invitation, acceptanceAvailable: false, expiresAt: new Date(laterExpiry).toISOString() };
+      await button(page, 'Actualizar bandeja').click();
+      await state('Pendiente').waitFor();
+      assert.ok(await accept.isDisabled());
+      assert.ok(await decline.isEnabled());
+      await page.clock.pauseAt(laterExpiry);
+      await state('Vencida').waitFor();
+      assert.equal(await decline.count(), 0);
+      await page.clock.resume();
+      await button(page.getByRole('navigation', { name: 'Navegación móvil' }), 'Inicio').click();
+      assert.equal(await heading(page, 'Tienes 1 invitación pendiente').count(), 0);
+    } finally {
+      await context.close();
+    }
+  });
   assert.equal(events.filter(event => !event.expected).length, 0);
   save();
   await browser.close();
