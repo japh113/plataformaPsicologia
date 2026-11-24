@@ -5,8 +5,9 @@ export function useCareRead(path, agreementId) {
   const scope = JSON.stringify([path, agreementId]);
   const [read, setRead] = useState({ scope, data: null, error: '', loading: Boolean(path) });
   const request = useRef(null);
+  const lifetime = useRef(null);
   const reload = useCallback(async (retain = false) => {
-    if (!path) return;
+    if (!path || lifetime.current?.scope !== scope) return;
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
@@ -29,10 +30,15 @@ export function useCareRead(path, agreementId) {
   }, [path, agreementId, scope]);
 
   useEffect(() => {
-    let active = true;
-    queueMicrotask(() => { if (active) void reload(); });
-    return () => { active = false; request.current?.abort(); };
-  }, [reload]);
+    const owner = { scope };
+    lifetime.current = owner;
+    queueMicrotask(() => { if (lifetime.current === owner) void reload(); });
+    return () => {
+      if (lifetime.current !== owner) return;
+      lifetime.current = null;
+      request.current?.abort();
+    };
+  }, [reload, scope]);
 
   return { ...(read.scope === scope ? read : { data: null, error: '', loading: Boolean(path) }), reload };
 }

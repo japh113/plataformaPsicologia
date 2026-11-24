@@ -52,15 +52,15 @@ export async function command(actor,op,input={},id){
       'SELECT public.admission_command($1,$2,$3,$4::jsonb) AS data',
       [actor.id, actor.sessionVersion, operation, JSON.stringify(p)]
     )).rows[0].data;
-    if (op === 'templates') return execute(op);
-    const agreementOperation = ['preparations', 'prepare-current'].includes(op);
-    const contextOperation = op === 'assign-directed' ? 'assign' : agreementOperation ? 'prepare' : op;
+    if (op === 'care-context' && actor.role !== 'psychologist') return execute(op);
+    const contextOperation = { 'assign-directed':'assign', 'care-start':'assign', 'care-context':'assign',
+      'care-send':'submit', 'care-register':'validate' }[op] ?? op;
     const c=(await client.query('SELECT public.admission_context($1,$2,$3,$4::jsonb) AS data',[actor.id,actor.sessionVersion,contextOperation,JSON.stringify(p)])).rows[0].data;
     if(!c.ownRead){
       const phone=normalizePhone(c.phone);
       p.emailDigest=contactDigest('email',normalizeEmail(c.email));p.phoneDigest=phone?contactDigest('sms',phone):null;
     }
-    if (op === 'save' || Object.hasOwn(input, 'declarations')) {
+    if (op === 'save' || op === 'care-send' || Object.hasOwn(input, 'declarations')) {
       const assigned = await execute('summary');
       validateResponses(input.answers ?? input.declarations, op !== 'save', assigned.templateId);
     }
@@ -72,6 +72,8 @@ const agendaDestination = `SELECT current_database() AS name, inet_server_addr()
   inet_server_port() AS port`;
 const consultationFields = {
   status: [],
+  interview: [],
+  'care-review': ['assignmentVersion', 'documentVersion', 'criteriaVersion', 'operationId'],
   sufficiency: ['assignmentVersion', 'documentVersion', 'criteriaVersion'],
   consent: ['sufficiencyId', 'consentVersion', 'consentHash'],
   withdraw: ['consentId'],
@@ -84,19 +86,20 @@ const consultationFields = {
 
 function validateConsultation(operation, input) {
   const fields = Object.hasOwn(consultationFields, operation) && consultationFields[operation];
-  const keys = fields && (operation === 'status' ? fields : ['confirmed', ...fields]);
+  const read = ['status', 'interview'].includes(operation);
+  const keys = fields && (read ? fields : ['confirmed', ...fields]);
   if (!keys || typeof input !== 'object' || !input || Array.isArray(input)
     || Object.keys(input).length !== keys.length || !keys.every(key => Object.hasOwn(input, key))
-    || (operation !== 'status' && input.confirmed !== true)) throw fail('Entrada no válida.');
+    || (!read && input.confirmed !== true)) throw fail('Entrada no válida.');
   for (const key of ['assignmentVersion', 'documentVersion']) {
     if (keys.includes(key) && (!Number.isInteger(input[key]) || input[key] < 1 || input[key] > 2147483646)) {
       throw fail('Versión no válida.');
     }
   }
-  for (const key of ['sufficiencyId', 'consentId', 'appointmentId']) {
+  for (const key of ['sufficiencyId', 'consentId', 'appointmentId', 'operationId']) {
     if (keys.includes(key) && !uuid(input[key])) throw fail('Entrada no válida.');
   }
-  if (operation === 'sufficiency' && input.criteriaVersion !== 'fictional-sufficiency-v1') throw fail('Versión no válida.');
+  if (['sufficiency','care-review'].includes(operation) && input.criteriaVersion !== 'fictional-sufficiency-v1') throw fail('Versión no válida.');
   if (operation === 'consent' && (input.consentVersion !== 'fictional-first-consultation-v1'
     || typeof input.consentHash !== 'string' || !/^[a-f0-9]{64}$/.test(input.consentHash))) throw fail('Consentimiento no válido.');
   if (operation === 'book') {
@@ -171,6 +174,7 @@ async function ensureConsultationDestination(client, legacy) {
 
 async function consultationCommand(actor, operation, input, id, legacy) {
   const data = { ...input, id, sessionExpiresAt: actor.sessionExpiresAt };
+  if (operation === 'care-review') data.fingerprint = fingerprint({ operation, input, id }, configuration().key);
   return transaction(async client => {
     await ensureConsultationDestination(client, legacy);
     const contextOperation = operation === 'withdraw' ? 'detail' : 'consultation';

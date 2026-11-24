@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../api/client';
+import { useVisibleCareRefresh } from './useVisibleCareRefresh';
 import { episodeTitle } from './individualCareState';
 
 const button = 'rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50';
@@ -22,6 +23,10 @@ function confirmationFor(detail, professional) {
   const key = JSON.stringify([operation, detail.id, detail.episodeId, detail.professionalName, detail.admissionVersion,
     detail.documentVersion, detail.criteriaVersion, detail.consentTerms, payload]);
   return { key, operation, payload };
+}
+
+function waitingForPatient(detail, professional) {
+  return professional && !detail.consentAccepted && !detail.consentId;
 }
 
 export function ConsultationDetail({ assignmentId, professional, onRefresh, revision, onDetail, onUnavailable, contextual = false }) {
@@ -82,6 +87,9 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
       if (current === generation.current) await onRefresh?.();
     } catch (failure) {
       report(failure, current);
+      if (contextual && failure.status === 409 && current === generation.current) {
+        try { await load(current); } catch (refreshFailure) { report(refreshFailure, current); }
+      }
     } finally {
       if (current === generation.current) setBusy(false);
     }
@@ -108,40 +116,50 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
     }
   };
 
+  useVisibleCareRefresh(() => { if (!busy) return reload(); }, contextual);
+
+  if (contextual && detail?.status === 'prepared' && (!detail.sufficiencyId
+    || waitingForPatient(detail, professional))) return null;
+
   return <section className="space-y-4" aria-label="Estado de la primera consulta">
     {error && <p role="alert">{error}</p>}
-    {!detail && !error && <p role="status">Cargando episodio…</p>}
-    <button type="button" className={field} disabled={busy} onClick={reload}>Actualizar episodio</button>
+    {!detail && !error && <p role="status">Consultando el estado de la atención…</p>}
+    {(!contextual || error) && <button type="button" className={field} disabled={busy} onClick={reload}>{contextual ? 'Reintentar consulta de atención' : 'Actualizar episodio'}</button>}
     {detail && <>
-      <p>{!contextual && 'Episodio '}{!contextual && detail.episodeId + ' · '}{detail.professionalName} · {statusLabels[detail.status]}</p>
+      {!contextual && <p>Episodio {detail.episodeId} · {detail.professionalName} · {statusLabels[detail.status]}</p>}
       {detail.status === 'prepared' && <>
-        {!detail.documentVersion && <p>Falta validar la versión vigente de la admisión.</p>}
-        {detail.documentVersion && !detail.sufficiencyId && (professional ? <>
+        {!contextual && !detail.documentVersion && <p>Falta validar la versión vigente de la admisión.</p>}
+        {!contextual && detail.documentVersion && !detail.sufficiencyId && (professional ? <>
           <label className="block"><input type="checkbox" checked={confirmed} onChange={confirmDisplayed} /> Declaro suficiente para este ensayo la admisión validada, versión {detail.documentVersion}, del episodio{contextual ? ' seleccionado' : ' ' + detail.episodeId}.</label>
           <button type="button" className={button} disabled={busy || !confirmed} onClick={submitConfirmation}>Declarar suficiencia</button>
         </> : <p>El profesional debe declarar la suficiencia de la admisión.</p>)}
         {detail.sufficiencyId && !detail.consentAccepted && !detail.consentId && (professional
           ? <p>El paciente debe aceptar el consentimiento de tratamiento.</p>
           : <>
+            {contextual && <h3 className="font-bold">Consentimiento de tratamiento</h3>}
             <p>{detail.consentTerms}</p>
-            <label className="block"><input type="checkbox" checked={confirmed} onChange={confirmDisplayed} /> He leído y acepto el consentimiento de tratamiento de este episodio.</label>
-            <button type="button" className={button} disabled={busy || !confirmed} onClick={submitConfirmation}>Aceptar tratamiento ficticio</button>
+            {!contextual && <label className="block"><input type="checkbox" checked={confirmed} onChange={confirmDisplayed} /> He leído y acepto el consentimiento de tratamiento de este episodio.</label>}
+            <button type="button" className={button} disabled={busy || (contextual ? !displayed : !confirmed)}
+              onClick={contextual ? () => void submit(displayed.operation, displayed.payload) : submitConfirmation}>
+              {contextual ? 'Aceptar tratamiento' : 'Aceptar tratamiento ficticio'}
+            </button>
           </>)}
         {detail.consentId && !detail.consentAccepted && <p>Consentimiento de tratamiento retirado.</p>}
         {detail.consentAccepted && (professional
-          ? <button type="button" className={button} disabled={busy} onClick={() => submit('activate', { consentId: detail.consentId })}>Activar episodio ficticio</button>
-          : <p>El profesional puede activar el episodio.</p>)}
+          ? <button type="button" className={button} disabled={busy} onClick={() => submit('activate', { consentId: detail.consentId })}>{contextual ? 'Iniciar tratamiento' : 'Activar episodio ficticio'}</button>
+          : !contextual && <p>El profesional puede activar el episodio.</p>)}
       </>}
       {detail.status === 'active' && !detail.appointment && (professional
         ? <form className="space-y-3" onSubmit={event => { event.preventDefault(); void submit('book', { date, time }); }}>
+          {contextual && <p>Elige una fecha y una hora cerrada. La consulta dura 60 minutos.</p>}
           <label className="block">Fecha de la primera cita <input className={field} type="date" value={date} required onChange={event => setDate(event.target.value)} /></label>
           <label className="block">Hora de inicio <select className={field} value={time} required onChange={event => setTime(event.target.value)}>
             <option value="">Seleccionar hora</option>
             {hours.map(hour => <option key={hour}>{hour}</option>)}
           </select></label>
-          <button className={button} disabled={busy || !date || !time}>Reservar cita de 60 minutos</button>
+          <button className={button} disabled={busy || !date || !time}>{contextual ? 'Reservar primera cita' : 'Reservar cita de 60 minutos'}</button>
         </form>
-        : <p>Todavía no hay una cita reservada.</p>)}
+        : !contextual && <p>Todavía no hay una cita reservada.</p>)}
       {detail.appointment && <>
         <p>Cita del {detail.appointment.date} a las {detail.appointment.time} · {detail.appointment.durationMinutes} minutos · {detail.appointment.status === 'completed' ? 'Completada' : 'Pendiente'}</p>
         {professional && detail.appointment.canComplete && (
@@ -157,12 +175,22 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
             <button className={button} disabled={busy || !note.trim()}>Registrar nota privada</button>
           </form>)}
       </>}
-      {!professional && detail.consentAccepted && (
-        <button type="button" className={field} disabled={busy} onClick={() => { if (!contextual || window.confirm('¿Retirar el consentimiento y el acceso a la primera consulta de este episodio?')) void submit('withdraw', { consentId: detail.consentId }); }}>Retirar consentimiento de tratamiento</button>
-      )}
-      {detail.status === 'active' && (
-        <button type="button" className={field} disabled={busy} onClick={() => submit('revoke-admission', { assignmentVersion: detail.admissionVersion })}>Revocar admisión</button>
-      )}
+      {!professional && detail.consentAccepted && (contextual
+        ? <details className="space-y-2"><summary className="cursor-pointer font-semibold">Condiciones de tratamiento</summary>
+          <p>{detail.consentTerms}</p>
+          <button type="button" className={field} disabled={busy} onClick={() => {
+            if (window.confirm('¿Retirar el consentimiento de tratamiento? Dejarás de tener acceso a la primera consulta.')) void submit('withdraw', { consentId: detail.consentId });
+          }}>Retirar consentimiento de tratamiento</button>
+        </details>
+        : <button type="button" className={field} disabled={busy} onClick={() => submit('withdraw', { consentId: detail.consentId })}>Retirar consentimiento de tratamiento</button>)}
+      {detail.status === 'active' && (!contextual
+        ? <button type="button" className={field} disabled={busy} onClick={() => submit('revoke-admission', { assignmentVersion: detail.admissionVersion })}>Revocar admisión</button>
+        : <details className="space-y-2"><summary className="cursor-pointer font-semibold">Opciones de entrevista</summary>
+          <p>Si se retira la autorización de entrevista, se cierran las acciones que dependen de ella. Se conserva la documentación.</p>
+          <button type="button" className={field} disabled={busy} onClick={() => {
+            if (window.confirm('¿Retirar la autorización de entrevista para esta atención?')) void submit('revoke-admission', { assignmentVersion: detail.admissionVersion });
+          }}>Retirar autorización de entrevista</button>
+        </details>)}
     </>}
   </section>;
 }

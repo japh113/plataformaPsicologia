@@ -236,11 +236,13 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
       assert.equal(withdrawn.appointment, null);
       assert.equal(withdrawn.note, null);
       assert.equal((await consult(e1.psy, e1, 'complete', { appointmentId: ownAppointment.id })).status, 404);
+      assert.equal((await http(e1.psy, '/admissions/consultations/' + e1.id + '/interview')).status, 404);
       const e2Status = await ownStatus(e2.pac, e2);
       await expectOk(e2.pac, e2, 'revoke-admission', { assignmentVersion: e2Status.admissionVersion });
       assert.equal((await ownStatus(e2.pac, e2)).status, 'withdrawn');
       await client.query("UPDATE bilateral_agreements SET state='unlinked',unlinked_at=clock_timestamp(),version=version+1 WHERE id=$1", [e3.agreementId]);
       assert.equal((await consult(e3.psy, e3)).status, 404);
+      assert.equal((await http(e3.psy, '/admissions/consultations/' + e3.id + '/interview')).status, 404);
       assert.equal((await client.query('SELECT count(*)::int AS n FROM consultation_notes')).rows[0].n, 1);
       assert.equal((await client.query('SELECT count(*)::int AS n FROM psychologist_patient_access')).rows[0].n, 2);
     });
@@ -301,13 +303,15 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
       assert.deepEqual((await http(prepared.pac, '/admissions/consultations/withdrawals')).body.data, []);
       assert.equal((await client.query('SELECT status FROM clinical_episodes WHERE id=$1', [prepared.episodeId])).rows[0].status, 'prepared');
     });
-    await t.test('021 scopes recovery to the exact agreement and validates all three templates in both modes', async () => {
+    await t.test('021 composes enrollment, interview and sufficiency for all three templates in both modes', async () => {
       const path = '/admissions';
       const { psy, pac, agreementId } = e2;
-      const catalogResponse = await http(psy, path + '/templates');
+      const context = who => http(who, path + '/care-context', { agreementId });
+      const catalogResponse = await context(psy);
       assert.equal(catalogResponse.status, 200);
-      assert.equal((await http(pac, path + '/templates')).status, 404);
-      const catalog = catalogResponse.body.data;
+      const patientContext = await context(pac);
+      assert.deepEqual(Object.keys(patientContext.body.data), ['assignments']);
+      const catalog = catalogResponse.body.data.templates;
       assert.deepEqual(catalog.map(template => template.id), [
         'fictional-initial-interview-v1', 'fictional-daily-wellbeing-v1', 'fictional-personal-changes-v1',
       ]);
@@ -319,47 +323,65 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
       assert.deepEqual(catalog.map(template => template.questions.map(question => question.id)), keys);
       assert.ok(catalog.every(template => template.version === 1 && template.questions.every(q => q.required && q.maxLength === 1000)));
 
-      const readPreparations = who => http(who, path + '/preparations', { agreementId });
-      assert.equal((await readPreparations(e1.psy)).status, 404);
-      assert.equal((await readPreparations(pac)).status, 404);
-      assert.equal((await http(psy, path + '/preparations', { agreementId: e1.agreementId })).status, 404);
-      assert.deepEqual((await readPreparations(psy)).body.data, []);
-      const requests = [{ ...action(), agreementId }, { ...action(), agreementId }];
-      const race = await Promise.all(requests.map(request => http(psy, path + '/prepare-current', request)));
-      assert.deepEqual(race.map(result => result.status).sort(), [200, 409]);
-      const winner = race.findIndex(result => result.status === 200);
-      const prepared = race[winner].body.data;
-      assert.deepEqual(await http(psy, path + '/prepare-current', requests[winner]), race[winner]);
-      const recovery = (await readPreparations(psy)).body.data;
+      const readPreparations = async () => (await context(psy)).body.data.preparations;
+      assert.equal((await context(e1.psy)).status, 404);
+      assert.equal((await http(psy, path + '/care-context', { agreementId: e1.agreementId })).status, 404);
+      assert.deepEqual(await readPreparations(), []);
+      const prepared = (await http(psy, path + '/prepare', { ...action(), agreementId })).body.data;
+      const recovery = await readPreparations();
       assert.equal(recovery.length, 1);
       assert.equal(recovery[0].episodeId, prepared.episodeId);
       assert.equal(recovery[0].agreementId, agreementId);
       assert.ok(Date.parse(recovery[0].preparedAt));
-      assert.ok((await http(pac, path)).body.data.every(item => item.episodeId !== prepared.episodeId));
-      const checkAssignment = (mode, episodeId, templateId, scope = agreementId) =>
-        http(psy, path + '/' + mode, { ...action(), agreementId: scope, episodeId, templateId });
+      assert.ok((await context(pac)).body.data.assignments.every(item => item.episodeId !== prepared.episodeId));
+      const checkAssignment = (mode, episodeId, templateId) =>
+        http(psy, path + '/' + mode, { ...action(), agreementId, episodeId, templateId });
       for (const wrong of ['fictional-personal-changes-v2', 'unknown']) {
         assert.equal((await checkAssignment('assign', prepared.episodeId, wrong)).status, 400);
       }
       assert.equal((await checkAssignment('assign', e1.episodeId, catalog[0].id)).status, 404);
-
-      let episodeId = prepared.episodeId;
+      const second = (await http(psy, path + '/prepare', { ...action(), agreementId })).body.data;
+      const firstTemplate = catalog[0].id;
+      const ambiguous = { ...action(), agreementId, templateId: firstTemplate, mode: 'self' };
+      assert.equal((await http(psy, path + '/care-start', ambiguous)).status, 409);
+      assert.equal((await readPreparations()).length, 2);
+      assert.equal((await http(psy, path + '/care-start', { ...ambiguous, episodeId: e1.episodeId })).status, 404);
+      assert.equal((await http(pac, path + '/care-start', ambiguous)).status, 404);
+      assert.deepEqual((await context(e3.pac)).body.data, { assignments: [] });
+      const suspendSamples = [];
       for (const [index, template] of catalog.entries()) {
         const responses = Object.fromEntries(keys[index].map(key => [key, 'Texto ficticio para ' + key]));
         const foreign = Object.fromEntries(keys[(index + 1) % keys.length].map(key => [key, 'Ajeno']));
-        for (const mode of ['assign', 'assign-directed']) {
-          const directed = mode === 'assign-directed';
-          if (!episodeId) {
-            const next = await http(psy, path + '/prepare-current', { ...action(), agreementId });
-            assert.equal(next.status, 200, JSON.stringify(next.body));
-            episodeId = next.body.data.episodeId;
+        for (const mode of ['self', 'directed']) {
+          const directed = mode === 'directed';
+          const start = { ...action(), agreementId, templateId: template.id, mode,
+            ...(index === 0 && !directed && { episodeId: prepared.episodeId }) };
+          if (index === 1 && !directed) {
+            const countPreparations = async () => (await client.query(
+              'SELECT count(*)::int AS n FROM admission_preparations WHERE agreement_id=$1', [agreementId]
+            )).rows[0].n;
+            const before = await countPreparations();
+            await client.query(`CREATE FUNCTION test_assignment_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+              BEGIN RAISE EXCEPTION 'admission_conflict'; END $$;
+              CREATE TRIGGER test_assignment_failure BEFORE INSERT ON admission_assignments
+              FOR EACH ROW EXECUTE FUNCTION test_assignment_failure()`);
+            assert.equal((await http(psy, path + '/care-start', start)).status, 409);
+            await client.query('DROP TRIGGER test_assignment_failure ON admission_assignments; DROP FUNCTION test_assignment_failure()');
+            assert.equal(await countPreparations(), before);
           }
-          const assignment = await checkAssignment(mode, episodeId, template.id);
-          assert.equal(assignment.status, 200, JSON.stringify(assignment.body));
-          assert.deepEqual((await readPreparations(psy)).body.data, []);
+          const attempts = [start, { ...start, ...action() }];
+          const race = await Promise.all(attempts.map(input => http(psy, path + '/care-start', input)));
+          assert.deepEqual(race.map(entry => entry.status).sort(), [200, 409], JSON.stringify(race));
+          const winner = race.findIndex(entry => entry.status === 200);
+          const assignment = race[winner];
+          assert.deepEqual(await http(psy, path + '/care-start', attempts[winner]), assignment);
+          const { episodeId } = assignment.body.data;
+          const preparations = await readPreparations();
+          assert.equal(preparations.length, index === 0 && !directed ? 1 : 0);
+          if (index === 0) assert.equal(episodeId, directed ? second.episodeId : prepared.episodeId);
           const { id } = assignment.body.data;
           const detail = async who => (await http(who, path + '/' + id)).body.data;
-          const summary = async who => (await http(who, path)).body.data.find(item => item.id === id);
+          const summary = async who => (await context(who)).body.data?.assignments.find(item => item.id === id);
           for (const who of [psy, pac]) {
             const row = await summary(who);
             assert.equal(row.episodeId, episodeId);
@@ -384,12 +406,26 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
           assert.equal((await write(pac, 'accept', { consentVersion: terms.consentVersion, consentHash: 'f'.repeat(64) })).status, 409);
           await ok(pac, 'accept', { consentVersion: terms.consentVersion, consentHash: terms.consentHash });
           if (directed) {
-            await ok(psy, 'directed/attest');
-            const body = { expectedDocumentRevision: 0, declarations: foreign };
-            assert.equal((await write(psy, 'directed/document', body)).status, 400);
-            await ok(psy, 'directed/document', { ...body, declarations: responses });
+            assert.equal((await write(psy, 'care-register', { declarations: foreign })).status, 400);
+            const recordPath = path + '/' + id + '/care-register';
+            const record = { ...action(), expectedVersion: (await detail(pac)).version, declarations: responses };
+            if (index === 0) {
+              await client.query(`CREATE FUNCTION test_interview_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN RAISE EXCEPTION 'admission_conflict'; END $$;
+                CREATE TRIGGER test_interview_failure BEFORE INSERT ON admission_directed_versions
+                FOR EACH ROW EXECUTE FUNCTION test_interview_failure()`);
+              assert.equal((await http(psy, recordPath, record)).status, 409);
+              await client.query('DROP TRIGGER test_interview_failure ON admission_directed_versions; DROP FUNCTION test_interview_failure()');
+              const rolledBack = await detail(pac);
+              assert.equal(rolledBack.attestation, null);
+              assert.equal(rolledBack.documents.length, 0);
+              assert.equal(rolledBack.version, record.expectedVersion);
+            }
+            const recorded = await http(psy, recordPath, record);
+            assert.equal(recorded.status, 200, JSON.stringify(recorded));
+            assert.deepEqual(await http(psy, recordPath, record), recorded);
             assert.equal((await detail(pac)).documents[0].authorId, psy);
-            await ok(psy, 'directed/validate', { episodeId, documentRevision: 1 });
+            assert.equal((await detail(pac)).documents.length, 1);
           } else {
             assert.equal((await write(pac, 'save', { expectedRevision: 0, answers: foreign })).status, 400);
             assert.equal((await write(pac, 'save', { expectedRevision: 0, answers: { ...responses, extra: 'ajeno' } })).status, 400);
@@ -399,22 +435,81 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
             await ok(pac, 'save', { expectedRevision: 0, answers: {} });
             assert.equal((await write(pac, 'submit', { expectedRevision: 1 })).status, 409);
             await ok(pac, 'save', { expectedRevision: 1, answers: responses });
-            await ok(pac, 'submit', { expectedRevision: 2 });
-            await ok(psy, 'validate', { episodeId, submission: 1 });
+            const exact = { ...responses, [keys[index][0]]: 'Texto confirmado mientras se guardaba' };
+            const sendPath = path + '/' + id + '/care-send';
+            const send = { ...action(), expectedVersion: (await detail(pac)).version, expectedRevision: 2, answers: exact };
+            assert.equal((await http(pac, sendPath, { ...send, expectedRevision: 1 })).status, 409);
+            const sent = await http(pac, sendPath, send);
+            assert.equal(sent.status, 200, JSON.stringify(sent));
+            assert.deepEqual(await http(pac, sendPath, send), sent);
+            assert.deepEqual((await detail(psy)).submissions[0].answers, exact);
+            assert.equal((await detail(psy)).submissions.length, 1);
           }
           const episode = { id, episodeId, psy, pac };
-          const proof = await declare(episode);
+          const status = await ownStatus(psy, episode);
+          const review = { ...action(), assignmentVersion: status.admissionVersion, documentVersion: 1, criteriaVersion: status.criteriaVersion };
+          assert.equal((await consult(pac, episode, 'care-review', review)).status, 404);
+          assert.equal((await consult(psy, episode, 'care-review', { ...review, documentVersion: 2 })).status, 409);
+          if (!index && !directed) {
+            await client.query(`CREATE FUNCTION test_review_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+              BEGIN RAISE EXCEPTION 'admission_conflict'; END $$;
+              CREATE TRIGGER test_review_failure BEFORE INSERT ON consultation_sufficiency
+              FOR EACH ROW EXECUTE FUNCTION test_review_failure()`);
+            assert.equal((await consult(psy, episode, 'care-review', review)).status, 409);
+            await client.query('DROP TRIGGER test_review_failure ON consultation_sufficiency; DROP FUNCTION test_review_failure()');
+            assert.equal((await detail(pac)).reviewState, 'submitted');
+            assert.equal((await detail(pac)).version, review.assignmentVersion);
+          }
+          await expectOk(psy, episode, 'care-review', review);
+          await expectOk(psy, episode, 'care-review', review);
+          let proof = await ownStatus(pac, episode);
           const evidence = (await client.query(
             'SELECT template_id,template_version FROM consultation_sufficiency WHERE id=$1', [proof.sufficiencyId]
           )).rows[0];
           assert.deepEqual(evidence, { template_id: template.id, template_version: 1 });
-          const accepted = await accept(episode, proof);
+          let accepted = await accept(episode, proof);
+          if (!index && directed) {
+            const request = await ok(pac, 'directed/request', { documentRevision: 1, reason: 'Aclaración del paciente' });
+            await ok(psy, 'directed/resolve', { expectedDocumentRevision: 1, requestId: request.requestId,
+              decision: 'reject', explanation: 'Respuesta profesional' });
+            const current = await ownStatus(psy, episode);
+            await expectOk(psy, episode, 'care-review', { ...review, ...action(), assignmentVersion: current.admissionVersion });
+            assert.equal((await consult(psy, episode, 'activate', { consentId: accepted.consentId })).status, 409);
+            const previousProof = proof.sufficiencyId;
+            proof = await ownStatus(pac, episode);
+            assert.notEqual(proof.sufficiencyId, previousProof);
+            assert.equal(proof.consentAccepted, false);
+            accepted = await accept(episode, proof);
+          }
+          const interviewPath = path + '/consultations/' + id + '/interview';
+          assert.equal((await http(psy, interviewPath)).status, 404);
           await expectOk(psy, episode, 'activate', { consentId: accepted.consentId });
           assert.equal((await ownStatus(pac, episode)).status, 'active');
+          const read = await http(psy, interviewPath);
+          assert.equal(read.status, 200, JSON.stringify(read));
+          assert.deepEqual(Object.keys(read.body.data).sort(), ['answers', 'authorName', 'recordedAt', 'template']);
+          assert.deepEqual(read.body.data.template, template);
+          assert.ok(Date.parse(read.body.data.recordedAt));
+          assert.equal(read.body.data.answers[keys[index][0]], directed ? responses[keys[index][0]] : 'Texto confirmado mientras se guardaba');
+          for (const who of [pac, e1.psy, 'bil-support']) assert.equal((await http(who, interviewPath)).status, 404);
+          assert.equal((await write(psy, directed ? 'care-register' : 'correct', directed ? { declarations: responses }
+            : { episodeId, submission: 1, message: 'Cambio posterior' })).status, 404);
           assert.doesNotMatch(JSON.stringify(await detail(pac)), /professional_context|riskLevel|note/);
-          episodeId = null;
+          suspendSamples.push(interviewPath);
         }
       }
+      await client.query("UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id=$1", [psy]);
+      for (const interviewPath of [suspendSamples[0], suspendSamples.at(-1)]) {
+        const denied = await http(psy, interviewPath);
+        assert.ok([401, 403, 404].includes(denied.status));
+        assert.equal(denied.body.success, false);
+        assert.equal(Object.hasOwn(denied.body, 'data'), false);
+      }
+      const retained = await http(pac, path + '/care-context', { agreementId });
+      assert.equal(retained.body.data.assignments.length, 7);
+      assert.ok(retained.body.data.assignments.every(item => item.readOnly));
+      await assert.rejects(restricted.query("SELECT admission_care_command('bp2',0,'care-start','{}')"),
+        error => error.code === '42501');
     });
   } finally {
     Object.assign(db, original);

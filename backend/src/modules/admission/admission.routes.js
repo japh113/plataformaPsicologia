@@ -4,7 +4,7 @@ import { createPublicAuthLimiter } from '../auth/public-auth-limiter.js';
 import { command,configuration,consultation } from './admission.service.js';
 import { errorFor } from './admission.policy.js';
 
-const listOperations = new Set(['list', 'withdrawals']);
+const listOperations = new Set(['list', 'withdrawals', 'care-context']);
 const authenticatedAccount = req => req.user?.id || null;
 // Shared by both routers. The list budget counts requests with fan-out and
 // leaves two of the four clinical work slots available for short operations.
@@ -54,19 +54,19 @@ protect(consultations);
 consultations.get('/',handle('list',consultation));
 consultations.get('/withdrawals',handle('withdrawals',consultation));
 consultations.get('/:id',handle('status',consultation));
-for(const op of ['sufficiency','consent','withdraw','revoke-admission','activate','book','complete','note']) {
+consultations.get('/:id/interview',handle('interview',consultation));
+for(const op of ['care-review','sufficiency','consent','withdraw','revoke-admission','activate','book','complete','note']) {
   consultations.post('/:id/'+op,handle(op,consultation));
 }
 
 protect(router);
 router.get('/',handle('list'));
-router.get('/templates', handle('templates'));
-router.post('/preparations', handle('preparations'));
-router.post('/prepare-current', handle('prepare-current'));
+router.post('/care-context', handle('care-context'));
+router.post('/care-start', handle('care-start'));
 router.post('/assign-directed',handle('assign-directed'));
 router.get('/:id/directed/record',handle('directed-record'));
 for(const op of ['attest','document','request','resolve','validate','assess'])router.post('/:id/directed/'+op,handle('directed-'+op));
 router.post('/prepare',handle('prepare'));router.post('/assign',handle('assign'));
 router.get('/:id',handle('detail'));router.get('/:id/record',handle('record'));router.get('/:id/draft',handle('draft'));
-for(const op of ['accept','save','submit','correct','validate','revoke','assess'])router.post('/:id/'+op,handle(op));
+for(const op of ['accept','save','care-send','care-register','submit','correct','validate','revoke','assess'])router.post('/:id/'+op,handle(op));
 export default router;

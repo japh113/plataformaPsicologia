@@ -11,30 +11,40 @@ export function episodeTitle(item) {
 
 export function careProgress(item, consultation, professional, consultationRead) {
   const result = (stage, next) => ({ stage, next });
-  if (item.state === 'revoked') return result('Admisión revocada', 'Puedes consultar los documentos propios disponibles.');
-  if (!item.id) return result('Episodio preparado', 'El psicólogo debe elegir y asignar la entrevista.');
+  if (item.state === 'revoked') return result('Entrevista cerrada', 'Puedes consultar los documentos propios disponibles.');
+  if (!item.id) return result('Entrevista por enviar', 'Puedes retomar esta atención y enviar la entrevista inicial.');
   if (consultation?.status === 'withdrawn' || consultation?.consentWithdrawn
     || (consultation?.consentId && !consultation.consentAccepted)) {
-    return result('Acceso de tratamiento retirado', 'Consulta la información propia disponible.');
+    return result('Consentimiento retirado', 'Consulta la información propia disponible.');
   }
   if (consultation?.appointment) {
     return consultation.appointment.status === 'completed'
       ? result('Primera consulta completada', professional ? 'El psicólogo puede consultar o registrar su nota privada.' : 'Puedes consultar tu cita.')
       : result('Primera consulta reservada', 'Consulta la fecha y la hora de la cita.');
   }
-  if (consultation?.status === 'active') return result('Episodio activo', 'El psicólogo debe agendar la primera consulta.');
-  if (!consultation && item.episodeStatus === 'active') return result('Episodio activo', 'Consulta el estado confirmado de la primera cita.');
-  if (consultation?.consentAccepted) return result('Consentimiento de tratamiento vigente', 'El psicólogo debe activar el episodio.');
-  if (consultation?.sufficiencyId || consultation?.sufficiencyConfirmed) return result('Suficiencia confirmada', 'El paciente debe revisar el consentimiento de tratamiento.');
-  if (consultation?.documentVersion) return result('Entrevista validada', 'El psicólogo debe confirmar la suficiencia de la versión.');
-  if (item.state === 'proposed') return result('Entrevista asignada', 'El paciente debe revisar el consentimiento de admisión.');
+  if (consultation?.status === 'active') return result('Tratamiento iniciado', professional ? 'Reserva la primera cita.' : 'Tu profesional reservará la primera cita.');
+  if (!consultation && item.episodeStatus === 'active') return result('Tratamiento iniciado', 'Consultando el estado de la primera cita.');
+  if (consultation?.consentAccepted) return result('Tratamiento aceptado', professional ? 'Ya puedes decidir si inicia la atención.' : 'Tu profesional decidirá cuándo iniciar la atención.');
+  if (consultation?.sufficiencyId || consultation?.sufficiencyConfirmed) return result('Entrevista confirmada', professional ? 'El paciente revisará las condiciones de tratamiento.' : 'Revisa las condiciones de tratamiento y decide si quieres aceptar.');
+  if (consultation?.documentVersion) return result('Entrevista lista para confirmar', professional ? 'Revisa el documento y confirma si está completo para iniciar.' : 'Tu profesional está revisando la entrevista.');
+  if (item.state === 'proposed') return result('Entrevista enviada al paciente', professional ? 'El paciente revisará las condiciones de entrevista.' : 'Revisa las condiciones para comenzar tu entrevista.');
   if (item.reviewState === 'correction_requested') return result('Corrección pendiente', item.mode === 'directed'
     ? 'El psicólogo debe resolver la solicitud.' : 'El paciente debe corregir y enviar una nueva versión.');
   if (['documented', 'submitted'].includes(item.reviewState)) return result(
-    item.mode === 'directed' ? 'Entrevista documentada' : 'Entrevista enviada', 'El psicólogo debe revisar la versión vigente.'
+    professional ? 'Entrevista lista para revisar' : 'Entrevista en revisión',
+    professional ? 'Lee las respuestas antes de confirmar.' : 'Tu profesional está revisando la entrevista.'
   );
   if (item.reviewState === 'validated') return result('Entrevista validada', consultationRead === 'error'
     ? 'El estado de tratamiento requiere actualización.' : 'Consulta el estado confirmado del tratamiento.');
-  return result('Consentimiento de admisión aceptado', item.mode === 'directed'
-    ? 'El psicólogo debe declarar y documentar la entrevista.' : 'El paciente debe completar y enviar su entrevista.');
+  return item.mode === 'directed'
+    ? result('Entrevista aceptada', professional ? 'Después de conversar, registra lo que te contó el paciente.' : 'Tu profesional registrará la entrevista después de conversar contigo.')
+    : result('Entrevista por responder', professional ? 'El paciente puede redactar y enviarte sus respuestas.' : 'Completa la entrevista y decide cuándo enviar tus respuestas.');
+}
+
+export function patientHasNextTask(assignment, consultation) {
+  if (assignment.state === 'revoked') return false;
+  if (consultation?.status === 'prepared' && consultation.sufficiencyConfirmed
+    && !consultation.consentAccepted && !consultation.consentWithdrawn) return true;
+  return assignment.state === 'proposed' || (assignment.state === 'accepted' && assignment.mode !== 'directed'
+    && assignment.episodeStatus === 'prepared' && ['awaiting_submission', 'correction_requested'].includes(assignment.reviewState));
 }

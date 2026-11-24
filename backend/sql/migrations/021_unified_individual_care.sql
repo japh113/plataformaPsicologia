@@ -167,7 +167,7 @@ BEGIN
       NOT EXISTS(SELECT 1 FROM public.admission_templates WHERE id=p->>'templateId') OR EXISTS(SELECT 1 FROM public.admission_assignments WHERE episode_id=(p->>'episodeId')::bigint) THEN RAISE EXCEPTION 'admission_conflict'; END IF;
     assignment:=(p->>'newId')::uuid;
     SELECT btrim(first_name||' '||coalesce(last_name,'')) INTO name FROM public.users WHERE id=actor;
-    consent:='Ensayo ficticio de entrevista individual dirigida. Sujeto paciente '||(c->>'patient')||', cuenta '||(c->>'account')||', profesional responsable '||name||' ('||actor||'), asignación '||assignment::text||', episodio preparado '||(p->>'episodeId')||', plantilla '||(SELECT definition->>'title' FROM public.admission_templates WHERE id=p->>'templateId')||' (versión 1). Acepto que este profesional realice la entrevista, declare su realización y documente mis declaraciones. El autor de la documentación es el profesional: no son respuestas escritas, enviadas ni ratificadas por mí. Cada versión que incorpore será visible para mí y para este profesional mientras mantenga permiso; no hay segunda publicación. Los borradores profesionales no incorporados no son visibles. Puedo consultar versiones incorporadas y solicitar rectificación motivada, que el profesional aceptará incorporando otra versión o rechazará con explicación; se conserva el original y la decisión. Autorizo valoraciones privadas de riesgo y contexto por versión exacta: solo el responsable autorizado las consulta, nunca se muestran automáticamente al paciente, terceros o backoffice. Puedo retirar el consentimiento y cualquiera de las partes puede cancelar la admisión. La revocación impide nuevas lecturas, escrituras y reintentos profesionales, sin archivo profesional implícito ni borrado automático. Conservo consulta autenticada de las versiones incorporadas y las correcciones destinadas a mí. Se conservan versiones, autoría y fechas; ARCO, custodia y retención jurídica siguen sus procesos separados. No autoriza expediente general, otros episodios, tratamiento, citas ni notas ordinarias; no acredita identidad física, asistencia por aceptar ni mínimos clínicos reales.';
+    consent:='Ensayo ficticio de entrevista individual dirigida. Profesional responsable: '||name||'. Esta entrevista usa la plantilla '||(SELECT definition->>'title' FROM public.admission_templates WHERE id=p->>'templateId')||' (versión 1). Acepto que este profesional realice la entrevista, declare su realización y documente mis declaraciones. El autor de la documentación es el profesional: no son respuestas escritas, enviadas ni ratificadas por mí. Cada versión que incorpore será visible para mí y para este profesional mientras mantenga permiso; no hay segunda publicación. Los borradores profesionales no incorporados no son visibles. Puedo consultar versiones incorporadas y solicitar rectificación motivada, que el profesional aceptará incorporando otra versión o rechazará con explicación; se conserva el original y la decisión. Autorizo valoraciones privadas de riesgo y contexto por versión exacta: solo el responsable autorizado las consulta, nunca se muestran automáticamente al paciente, terceros o backoffice. Puedo retirar el consentimiento y cualquiera de las partes puede cancelar la admisión. La revocación impide nuevas lecturas, escrituras y reintentos profesionales, sin archivo profesional implícito ni borrado automático. Conservo consulta autenticada de las versiones incorporadas y las correcciones destinadas a mí. Se conservan versiones, autoría y fechas; ARCO, custodia y retención jurídica siguen sus procesos separados. No autoriza expediente general, otros episodios, tratamiento, citas ni notas ordinarias; no acredita identidad física, asistencia por aceptar ni mínimos clínicos reales.';
     INSERT INTO public.admission_assignments(id,agreement_id,episode_id,account_id,patient_id,psychologist_id,template_id,professional_name,consent_version,consent_text,consent_hash,directed_review)
       VALUES(assignment,(p->>'agreementId')::uuid,(p->>'episodeId')::bigint,c->>'account',c->>'patient',actor,p->>'templateId',name,'fictional-directed-v1',consent,encode(sha256(convert_to(consent,'UTF8')),'hex'),'awaiting_document');
     result:=jsonb_build_object('id',assignment,'episodeId',p->>'episodeId','state','proposed','version',1);
@@ -242,6 +242,12 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 DECLARE c jsonb; a public.admission_assignments%ROWTYPE; d public.admission_drafts%ROWTYPE; prior public.admission_operations%ROWTYPE; result jsonb; episode bigint; assignment uuid;
   consent text; name text; submitted integer; own_read boolean;
 BEGIN
+  IF op='care-context' THEN
+    RETURN public.admission_care_context(actor,sv,p);
+  END IF;
+  IF op IN ('care-start','care-send','care-register') THEN
+    RETURN public.admission_care_command(actor,sv,op,p);
+  END IF;
   IF op='templates' THEN
     PERFORM public.admission_candidates(actor,sv,(p->>'sessionExpiresAt')::double precision);
     IF NOT EXISTS(SELECT 1 FROM public.users WHERE id=actor AND role='psychologist') THEN
@@ -311,7 +317,7 @@ BEGIN
     assignment:=(p->>'newId')::uuid;
     SELECT btrim(first_name||' '||coalesce(last_name,'')) INTO name FROM public.users WHERE id=actor;
     consent:='Ensayo ficticio: acepto la modalidad autoadministrada y responder la plantilla '||
-      (SELECT definition->>'title' FROM public.admission_templates WHERE id=p->>'templateId')||' (versión 1)'||' para la asignación '||assignment::text||', episodio preparado '||episode::text||', y enviar explícitamente mis respuestas a '||name||'. Mi borrador es privado. Solo mis envíos serán visibles para este profesional mientras siga vigente esta autorización. Puedo retirarla y cualquiera puede cancelar esta admisión. Esto no inicia tratamiento ni autoriza acceso al expediente legacy. No acredita mínimos ni suficiencia clínica. Autorizo además que el profesional responsable lea y registre valoraciones privadas de riesgo y contexto para esta admisión, vinculadas a cada envío exacto. Solo ese profesional puede consultarlas mientras conserve esta autorización; no se muestran al paciente, terceros ni backoffice. Las valoraciones y sus revisiones se conservan sin eliminación automática. Al retirar el consentimiento o revocarse la admisión se bloquean nuevas lecturas, escrituras y replays profesionales; no se concede acceso archivado. La valoración es independiente de la validación de entrevista y no activa tratamiento.';
+      (SELECT definition->>'title' FROM public.admission_templates WHERE id=p->>'templateId')||' (versión 1) para esta atención y enviar explícitamente mis respuestas a '||name||'. Mi borrador es privado. Solo mis envíos serán visibles para este profesional mientras siga vigente esta autorización. Puedo retirarla y cualquiera puede cancelar esta admisión. Esto no inicia tratamiento ni autoriza acceso al expediente legacy. No acredita mínimos ni suficiencia clínica. Autorizo además que el profesional responsable lea y registre valoraciones privadas de riesgo y contexto para esta admisión, vinculadas a cada envío exacto. Solo ese profesional puede consultarlas mientras conserve esta autorización; no se muestran al paciente, terceros ni backoffice. Las valoraciones y sus revisiones se conservan sin eliminación automática. Al retirar el consentimiento o revocarse la admisión se bloquean nuevas lecturas, escrituras y replays profesionales; no se concede acceso archivado. La valoración es independiente de la validación de entrevista y no activa tratamiento.';
     INSERT INTO public.admission_assignments(id,agreement_id,episode_id,account_id,patient_id,psychologist_id,template_id,professional_name,consent_version,consent_text,consent_hash)
       VALUES(assignment,(p->>'agreementId')::uuid,episode,c->>'account',c->>'patient',actor,p->>'templateId',name,'fictional-admission-v2',consent,encode(sha256(convert_to(consent,'UTF8')),'hex'));
     result:=jsonb_build_object('id',assignment,'version',1,'state','proposed','episodeId',episode::text);
@@ -377,6 +383,15 @@ BEGIN
   RETURN result;
 END $$;
 
+-- A new review of the same directed document after a rejected correction
+-- must not revive an earlier sufficiency or the treatment consent it supported.
+ALTER TABLE consultation_sufficiency
+  ADD COLUMN assignment_version integer NOT NULL CHECK (assignment_version > 0),
+  DROP CONSTRAINT consultation_sufficiency_assignment_id_submission_key,
+  DROP CONSTRAINT consultation_sufficiency_assignment_id_directed_revision_key,
+  ADD UNIQUE (assignment_id, submission, assignment_version),
+  ADD UNIQUE (assignment_id, directed_revision, assignment_version);
+
 CREATE OR REPLACE FUNCTION admission_consultation(actor text, sv integer, op text, p jsonb) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 DECLARE
@@ -400,7 +415,7 @@ DECLARE
   stamp timestamptz;
   private_note jsonb;
 BEGIN
-  IF op NOT IN ('status','summary','sufficiency','consent','withdraw','revoke-admission','activate','book','complete','note') THEN
+  IF op NOT IN ('status','summary','interview','care-review','sufficiency','consent','withdraw','revoke-admission','activate','book','complete','note') THEN
     RAISE EXCEPTION 'admission_missing';
   END IF;
   -- Derive withdrawal authority from the current patient account even during
@@ -411,7 +426,7 @@ BEGIN
     OR ctx->>'psychologist' IS DISTINCT FROM a.psychologist_id THEN RAISE EXCEPTION 'admission_missing'; END IF;
   actor_is_patient:=ctx->>'role'='patient';
   IF (op IN ('consent','withdraw') AND NOT actor_is_patient)
-    OR (op IN ('sufficiency','activate','book','complete','note') AND actor_is_patient) THEN
+    OR (op IN ('interview','care-review','sufficiency','activate','book','complete','note') AND actor_is_patient) THEN
     RAISE EXCEPTION 'admission_missing';
   END IF;
   IF op<>'withdraw' AND (
@@ -421,9 +436,13 @@ BEGIN
       AND v.channel='sms' AND v.contact_digest=p->>'phoneDigest')
   ) THEN RAISE EXCEPTION 'admission_missing'; END IF;
   SELECT * INTO e FROM public.clinical_episodes WHERE id=a.episode_id AND modality='individual'
-    AND participant_one_id=a.patient_id AND psychologist_user_id=a.psychologist_id;
+    AND participant_one_id=a.patient_id AND psychologist_user_id=a.psychologist_id
+    AND participant_two_id IS NULL AND finalized_at IS NULL;
   IF NOT FOUND THEN RAISE EXCEPTION 'admission_missing'; END IF;
 
+  IF op='care-review' THEN
+    RETURN public.admission_care_command(actor,sv,op,p);
+  END IF;
   IF e.status='active' THEN
     SELECT c.* INTO consent FROM public.consultation_activations x
     JOIN public.consultation_consents c ON c.id=x.consent_id
@@ -454,6 +473,7 @@ BEGIN
     IF doc IS NOT NULL THEN
       SELECT * INTO proof FROM public.consultation_sufficiency s WHERE s.assignment_id=a.id
         AND s.template_id=a.template_id AND s.template_version=selected_template_version::integer
+        AND s.assignment_version=a.version
         AND (mode='directed' AND s.directed_revision=doc OR mode='self' AND s.submission=doc);
       SELECT * INTO consent FROM public.consultation_consents c WHERE c.sufficiency_id=proof.id;
     END IF;
@@ -462,8 +482,33 @@ BEGIN
     SELECT 1 FROM public.consultation_withdrawals w WHERE w.consent_id=consent.id
   );
   live:=e.status='active' AND accepted AND a.state='accepted';
-  terms:='Ensayo ficticio individual. Autorizo iniciar tratamiento en el episodio '||e.id||' con '
-    ||a.professional_name||' ('||a.psychologist_id||'). El alcance es una cita de 60 minutos y una nota privada '
+  IF op='interview' THEN
+    IF NOT live OR proof.id IS NULL OR proof.assignment_version<>a.version OR NOT EXISTS (
+      SELECT 1 FROM public.admission_consents c WHERE c.assignment_id=a.id AND c.actor_id=a.account_id
+        AND c.consent_hash=a.consent_hash AND c.consent_version=a.consent_version
+    ) THEN RAISE EXCEPTION 'admission_missing'; END IF;
+    IF proof.directed_revision IS NOT NULL THEN
+      SELECT jsonb_build_object('answers',d.declarations,'recordedAt',d.recorded_at,'authorName',a.professional_name)
+      INTO private_note FROM public.admission_directed_versions d
+      WHERE d.assignment_id=a.id AND d.episode_id=e.id AND d.revision=proof.directed_revision
+        AND d.revision=a.latest_document AND a.directed_review='validated' AND d.template_id=a.template_id
+        AND d.patient_id=a.patient_id AND d.author_id=actor;
+    ELSE
+      SELECT jsonb_build_object('answers',d.answers,'recordedAt',d.submitted_at,'authorName',btrim(u.first_name||' '||coalesce(u.last_name,'')))
+      INTO private_note FROM public.admission_submissions d JOIN public.users u ON u.id=d.author_id
+      WHERE d.assignment_id=a.id AND d.episode_id=e.id AND d.number=proof.submission
+        AND d.number=a.latest_submission AND a.review_state='validated' AND d.template_id=a.template_id
+        AND d.patient_id=a.patient_id AND d.author_id=a.account_id;
+    END IF;
+    IF private_note IS NULL THEN RAISE EXCEPTION 'admission_missing'; END IF;
+    IF (p->>'sessionExpiresAt')::double precision<=extract(epoch FROM clock_timestamp()) THEN
+      RAISE EXCEPTION 'admission_session';
+    END IF;
+    RETURN private_note || jsonb_build_object('template',(SELECT definition FROM public.admission_templates WHERE id=a.template_id));
+  END IF;
+  terms:='Ensayo ficticio individual. Autorizo iniciar tratamiento con '
+    ||a.professional_name||'. El alcance es una cita de 60 minutos y una nota privada '
+
     ||'de autoría profesional. Puedo retirar este consentimiento; la nota y su procedencia se conservan.';
   IF op NOT IN ('status','summary') AND p->'confirmed' IS DISTINCT FROM 'true'::jsonb THEN RAISE EXCEPTION 'admission_conflict'; END IF;
   IF op='sufficiency' THEN
@@ -472,8 +517,8 @@ BEGIN
       RAISE EXCEPTION 'admission_conflict';
     END IF;
     INSERT INTO public.consultation_sufficiency(assignment_id,episode_id,patient_id,author_id,template_id,
-      criteria_version,template_version,submission,directed_revision)
-      VALUES(a.id,e.id,a.patient_id,actor,a.template_id,criteria_revision,selected_template_version::integer,CASE WHEN mode='self' THEN doc END,
+      criteria_version,template_version,assignment_version,submission,directed_revision)
+      VALUES(a.id,e.id,a.patient_id,actor,a.template_id,criteria_revision,selected_template_version::integer,a.version,CASE WHEN mode='self' THEN doc END,
         CASE WHEN mode='directed' THEN doc END) ON CONFLICT DO NOTHING;
   ELSIF op='consent' THEN
     IF e.status<>'prepared' OR proof.id IS NULL OR p->>'sufficiencyId' IS DISTINCT FROM proof.id::text
@@ -615,11 +660,184 @@ BEGIN
     WHERE a.account_id=actor AND a.patient_id=subject
       AND (EXISTS (SELECT 1 FROM public.consultation_activations x WHERE x.consent_id=c.id AND x.episode_id=e.id)
         OR (e.status='prepared' AND (
-          s.submission=a.latest_submission OR s.directed_revision=a.latest_document)))
+          s.assignment_version=a.version-CASE WHEN a.state='revoked' THEN 1 ELSE 0 END
+          AND (s.submission=a.latest_submission OR s.directed_revision=a.latest_document))))
       AND NOT EXISTS (SELECT 1 FROM public.consultation_withdrawals w WHERE w.consent_id=c.id)
   ),'[]'::jsonb) INTO references_list;
   IF expires<=extract(epoch FROM clock_timestamp()) THEN RAISE EXCEPTION 'admission_session'; END IF;
   RETURN references_list;
+END $$;
+
+-- Lock once and reuse the existing per-assignment projection. The patient
+-- reads their own retained contributions even if the agreement is no longer live.
+CREATE FUNCTION admission_care_context(actor text, sv integer, p jsonb) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+DECLARE
+  typed_role text;
+  candidate uuid;
+  found_count integer:=0;
+  assignments jsonb:='[]'::jsonb;
+  preparations jsonb;
+BEGIN
+  SELECT role INTO typed_role FROM public.users WHERE id=actor AND is_active AND session_version=sv;
+  IF NOT FOUND THEN RAISE EXCEPTION 'admission_session'; END IF;
+  IF typed_role='psychologist' THEN
+    preparations:=public.admission_command(actor,sv,'preparations',p);
+  ELSIF typed_role='patient' THEN
+    PERFORM id FROM public.users WHERE id=actor AND role='patient' AND is_active AND session_version=sv FOR NO KEY UPDATE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'admission_session'; END IF;
+  ELSE
+    RAISE EXCEPTION 'admission_missing';
+  END IF;
+  IF coalesce((p->>'sessionExpiresAt')::double precision,0)<=extract(epoch FROM clock_timestamp()) THEN
+    RAISE EXCEPTION 'admission_session';
+  END IF;
+  FOR candidate IN
+    SELECT a.id FROM public.admission_assignments a JOIN public.users u ON u.id=actor
+    WHERE a.agreement_id=(p->>'agreementId')::uuid AND (
+      (typed_role='patient' AND a.account_id=actor AND a.patient_id=u.patient_id)
+      OR (typed_role='psychologist' AND a.psychologist_id=actor AND a.state<>'revoked')
+    ) ORDER BY a.created_at DESC,a.id LIMIT 101
+  LOOP
+    found_count:=found_count+1;
+    IF found_count>100 THEN RAISE EXCEPTION 'admission_context_limit'; END IF;
+    BEGIN
+      assignments:=assignments||jsonb_build_array(public.admission_command(actor,sv,'summary',p||jsonb_build_object('id',candidate)));
+    EXCEPTION WHEN SQLSTATE 'P0001' THEN
+      IF SQLERRM<>'admission_missing' THEN RAISE; END IF;
+    END;
+  END LOOP;
+  IF (p->>'sessionExpiresAt')::double precision<=extract(epoch FROM clock_timestamp()) THEN
+    RAISE EXCEPTION 'admission_session';
+  END IF;
+  RETURN jsonb_build_object('assignments',assignments)
+    || CASE WHEN typed_role='psychologist' THEN jsonb_build_object('preparations',preparations,
+      'templates',public.admission_command(actor,sv,'templates',p)) ELSE '{}'::jsonb END;
+END $$;
+
+-- One receipt and one PostgreSQL transaction per deliberate action. The existing
+-- writers still perform actor, version, document and revocation checks.
+CREATE FUNCTION admission_care_command(actor text, sv integer, op text, p jsonb) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+DECLARE
+  ctx jsonb;
+  a public.admission_assignments%ROWTYPE;
+  prior public.admission_operations%ROWTYPE;
+  candidates jsonb;
+  child jsonb;
+  result jsonb;
+  revision jsonb;
+  episode text;
+  directed boolean;
+  scope_op text;
+BEGIN
+  IF op NOT IN ('care-start','care-send','care-register','care-review')
+    OR p->'confirmed' IS DISTINCT FROM 'true'::jsonb OR p->>'operationId' IS NULL
+    OR p->>'fingerprint' IS NULL OR length(p->>'fingerprint')<>64 THEN
+    RAISE EXCEPTION 'admission_conflict';
+  END IF;
+  scope_op:=CASE op WHEN 'care-start' THEN 'assign' WHEN 'care-send' THEN 'submit' ELSE 'validate' END;
+  ctx:=public.admission_context(actor,sv,scope_op,p);
+  IF NOT EXISTS(SELECT 1 FROM public.contact_verification_state WHERE user_id=ctx->>'account' AND channel='email' AND contact_digest=p->>'emailDigest')
+    OR NOT EXISTS(SELECT 1 FROM public.contact_verification_state WHERE user_id=ctx->>'account' AND channel='sms' AND contact_digest=p->>'phoneDigest') THEN
+    RAISE EXCEPTION 'admission_missing';
+  END IF;
+  IF op<>'care-start' THEN
+    SELECT * INTO a FROM public.admission_assignments WHERE id=(p->>'id')::uuid FOR UPDATE;
+    IF NOT FOUND OR a.state<>'accepted' OR a.account_id IS DISTINCT FROM ctx->>'account'
+      OR a.patient_id IS DISTINCT FROM ctx->>'patient' OR a.psychologist_id IS DISTINCT FROM ctx->>'psychologist'
+      OR NOT EXISTS (SELECT 1 FROM public.admission_consents c WHERE c.assignment_id=a.id
+        AND c.actor_id=a.account_id AND c.consent_hash=a.consent_hash AND c.consent_version=a.consent_version) THEN
+      RAISE EXCEPTION 'admission_missing';
+    END IF;
+    directed:=a.consent_version='fictional-directed-v1';
+    IF (op='care-register' AND NOT directed) OR (op='care-send' AND directed) THEN
+      RAISE EXCEPTION 'admission_missing';
+    END IF;
+  END IF;
+  SELECT * INTO prior FROM public.admission_operations WHERE actor_id=actor AND operation_id=(p->>'operationId')::uuid;
+  IF FOUND THEN
+    IF prior.fingerprint IS DISTINCT FROM p->>'fingerprint' THEN RAISE EXCEPTION 'admission_conflict'; END IF;
+    IF op='care-start' AND NOT EXISTS (SELECT 1 FROM public.admission_assignments x
+      WHERE x.id=(prior.result->>'id')::uuid AND x.agreement_id=(p->>'agreementId')::uuid
+        AND x.psychologist_id=actor AND x.state<>'revoked') THEN RAISE EXCEPTION 'admission_missing'; END IF;
+    -- A receipt describes a committed act. The client reloads current state.
+    RETURN prior.result;
+  END IF;
+
+  IF op<>'care-start' AND NOT EXISTS (
+    SELECT 1 FROM public.clinical_episodes e JOIN public.clinical_episode_participants cp ON cp.episode_id=e.id
+    WHERE e.id=a.episode_id AND e.status='prepared' AND e.modality='individual'
+      AND e.participant_two_id IS NULL AND e.started_at IS NULL AND e.finalized_at IS NULL
+      AND e.psychologist_user_id=a.psychologist_id AND cp.psychologist_user_id=a.psychologist_id
+      AND cp.patient_id=a.patient_id
+  ) THEN RAISE EXCEPTION 'admission_missing'; END IF;
+
+  child:=p||jsonb_build_object('operationId',gen_random_uuid());
+  IF op='care-start' THEN
+    IF p->>'mode' IS NULL OR p->>'mode' NOT IN ('self','directed')
+      OR p->>'templateId' IS NULL OR p->>'templateId'='fictional-adult-v1'
+      OR NOT EXISTS (SELECT 1 FROM public.admission_templates WHERE id=p->>'templateId') THEN
+      RAISE EXCEPTION 'admission_conflict';
+    END IF;
+    -- Under the agreement barrier another tab may already have started the
+    -- interview. Require the clinician to resume that confirmed assignment.
+    IF EXISTS (SELECT 1 FROM public.admission_assignments x JOIN public.clinical_episodes e ON e.id=x.episode_id
+      WHERE x.agreement_id=(p->>'agreementId')::uuid AND x.state<>'revoked' AND e.status='prepared') THEN
+      RAISE EXCEPTION 'admission_conflict';
+    END IF;
+    candidates:=public.admission_command(actor,sv,'preparations',p);
+    episode:=p->>'episodeId';
+    IF episode IS NOT NULL AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(candidates) v WHERE v->>'episodeId'=episode) THEN
+      RAISE EXCEPTION 'admission_missing';
+    ELSIF episode IS NULL AND jsonb_array_length(candidates)>1 THEN
+      RAISE EXCEPTION 'admission_preparation_choice';
+    ELSIF episode IS NULL AND jsonb_array_length(candidates)=1 THEN
+      episode:=candidates->0->>'episodeId';
+    ELSIF episode IS NULL THEN
+      revision:=public.admission_command(actor,sv,'prepare-current',child);
+      episode:=revision->>'episodeId';
+    END IF;
+    result:=public.admission_command(actor,sv,CASE WHEN p->>'mode'='directed' THEN 'assign-directed' ELSE 'assign' END,
+      child||jsonb_build_object('operationId',gen_random_uuid(),'episodeId',episode));
+  ELSIF op='care-send' THEN
+    IF NOT public.admission_responses_valid(a.template_id,p->'answers',true) THEN
+      RAISE EXCEPTION 'admission_conflict';
+    END IF;
+    revision:=public.admission_command(actor,sv,'save',child);
+    result:=public.admission_command(actor,sv,'submit',child||jsonb_build_object(
+      'operationId',gen_random_uuid(),'expectedRevision',revision->'revision'));
+  ELSIF op='care-register' THEN
+    IF a.latest_document<>0 OR p->>'expectedVersion' IS DISTINCT FROM a.version::text THEN
+      RAISE EXCEPTION 'admission_conflict';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.admission_directed_attestations WHERE assignment_id=a.id) THEN
+      revision:=public.admission_directed_command(actor,sv,'directed-attest',child);
+      child:=child||jsonb_build_object('expectedVersion',revision->'version');
+    END IF;
+    result:=public.admission_directed_command(actor,sv,'directed-document',child||jsonb_build_object(
+      'operationId',gen_random_uuid(),'expectedDocumentRevision',0));
+  ELSE
+    IF p->>'assignmentVersion' IS DISTINCT FROM a.version::text OR p->>'documentVersion' IS NULL THEN
+      RAISE EXCEPTION 'admission_conflict';
+    END IF;
+    IF (directed AND a.directed_review='validated' AND p->>'documentVersion'=a.latest_document::text)
+      OR (NOT directed AND a.review_state='validated' AND p->>'documentVersion'=a.latest_submission::text) THEN
+      revision:=jsonb_build_object('version',a.version);
+    ELSE
+      revision:=public.admission_command(actor,sv,CASE WHEN directed THEN 'directed-validate' ELSE 'validate' END,
+        child||jsonb_build_object('expectedVersion',a.version,'episodeId',a.episode_id::text,
+          'submission',p->'documentVersion','documentRevision',p->'documentVersion'));
+    END IF;
+    PERFORM public.admission_consultation(actor,sv,'sufficiency',p||jsonb_build_object('assignmentVersion',revision->'version'));
+    result:=jsonb_build_object('saved',true);
+  END IF;
+  IF (p->>'sessionExpiresAt')::double precision<=extract(epoch FROM clock_timestamp()) THEN
+    RAISE EXCEPTION 'admission_session';
+  END IF;
+  INSERT INTO public.admission_operations(actor_id,operation_id,fingerprint,result)
+    VALUES(actor,(p->>'operationId')::uuid,p->>'fingerprint',result);
+  RETURN result;
 END $$;
 
 DO $$
@@ -627,7 +845,8 @@ DECLARE owner_name text; signature text;
 BEGIN
   SELECT proowner::regrole::text INTO owner_name
   FROM pg_proc WHERE oid='public.admission_command(text,integer,text,jsonb)'::regprocedure;
-  FOREACH signature IN ARRAY ARRAY['admission_responses_valid(text,jsonb,boolean)','admission_response_guard()'] LOOP
+  FOREACH signature IN ARRAY ARRAY['admission_responses_valid(text,jsonb,boolean)','admission_response_guard()','admission_care_command(text,integer,text,jsonb)',
+    'admission_care_context(text,integer,jsonb)'] LOOP
     EXECUTE format('ALTER FUNCTION public.%s OWNER TO %I',signature,owner_name);
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC',signature);
   END LOOP;

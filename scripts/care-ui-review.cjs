@@ -5,12 +5,12 @@ const { chromium } = require('playwright');
 
 const root = process.env.REVIEW_BASE;
 const results = [], events = [], screenshots = [];
-let browser, professional, patient, current, expected, selectedPage, preparedId;
+let browser, professional, patient, current, expected, selectedPage, selfInterview, directedInterview;
 const button = (scope, name) => scope.getByRole('button', { name, exact: true });
 const heading = (scope, name) => scope.getByRole('heading', { name, exact: true });
 const nav = (page, desktop = false) => page.getByRole('navigation', { name: 'Navegación ' + (desktop ? 'principal' : 'móvil') });
 const save = () => fs.writeFileSync('/control/results.json', JSON.stringify({ results, events, screenshots }, null, 2));
-const interview = page => page.locator('details').filter({ has: page.locator('summary').filter({ hasText: /^Entrevista y versiones$/ }) });
+const summary = (page, title) => page.locator('summary').filter({ hasText: title });
 
 async function screenshot(id, page) {
   const file = 'screenshots/' + id + '.png';
@@ -79,12 +79,66 @@ async function openPatient() {
   await heading(patient, 'Profesional ficticio bp2').waitFor();
 }
 
-async function assign(mode, template, question) {
-  await professional.getByLabel('Modalidad', { exact: true }).selectOption(mode);
-  await professional.getByLabel('Plantilla', { exact: true }).selectOption(template);
-  await professional.getByText(question, { exact: true }).waitFor();
-  await button(professional, 'Asignar entrevista').click();
-  await professional.getByText('Entrevista asignada', { exact: true }).waitFor();
+async function confirmed(page, path, data) {
+  return page.evaluate(async ({ path, data }) => {
+    const response = await fetch('http://api:5000/api/admissions' + path, {
+      method: data ? 'POST' : 'GET',
+      headers: { Authorization: 'Bearer ' + localStorage.getItem('psicopanel_auth_token'), 'Content-Type': 'application/json' },
+      ...(data ? { body: JSON.stringify(data) } : {}),
+    });
+    return { status: response.status, body: await response.json() };
+  }, { path, data });
+}
+
+const focus = page => page.evaluate(() => window.dispatchEvent(new Event('focus')));
+const label = (page, text) => page.getByLabel(text, { exact: true });
+const statusBox = page => page.getByRole('region', { name: 'Estado de la primera consulta' });
+const selector = page => label(page, 'Selecciona la atención que quieres abrir');
+
+function steps() {
+  const acts = [];
+  return {
+    async click(page, name) {
+      await button(page, name).click();
+      acts.push(name);
+    },
+    async select(page, name, value) {
+      await page.getByLabel(name).selectOption(value);
+      acts.push(name);
+    },
+    async fill(page, name, value) {
+      await page.getByLabel(name).fill(value);
+      acts.push(name);
+    },
+    assertCount(expected) { assert.equal(acts.length, expected, acts.join(' · ')); },
+  };
+}
+
+async function conclude(flow, hour, daysAgo) {
+  await focus(professional);
+  await flow.click(professional, 'Confirmar entrevista para iniciar la atención');
+  await professional.getByRole('heading', { name: 'Entrevista confirmada', exact: true }).waitFor();
+  await focus(patient);
+  await flow.click(patient, 'Aceptar tratamiento');
+  await patient.getByRole('heading', { name: 'Tratamiento aceptado', exact: true }).waitFor();
+  await focus(professional);
+  await flow.click(professional, 'Iniciar tratamiento');
+  const date = new Date(Date.now() - daysAgo * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  await flow.fill(professional, 'Fecha de la primera cita', date);
+  await flow.select(professional, 'Hora de inicio', hour);
+  await flow.click(professional, 'Reservar primera cita');
+  await statusBox(professional).getByText(new RegExp(hour + ' · 60 minutos · Pendiente')).waitFor();
+  await focus(patient);
+  await statusBox(patient).getByText(new RegExp(hour + ' · 60 minutos · Pendiente')).waitFor();
+}
+
+async function timeout(promise, message) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), 10000);
+    })]);
+  } finally { clearTimeout(timer); }
 }
 
 async function main() {
@@ -123,8 +177,8 @@ async function main() {
     await button(patient, 'Ver invitación').click();
     await patient.getByLabel(/Acepto expresamente/).check();
     await button(patient, 'Aceptar vinculación').click();
-    await button(patient, 'Continuar a mi atención').click();
-    await patient.getByText('Tu profesional está preparando la admisión.', { exact: true }).waitFor();
+    await patient.getByText('Tu profesional te enviará la entrevista inicial desde esta ficha.', { exact: true }).waitFor();
+    assert.equal(await button(patient, 'Continuar a mi atención').count(), 0);
     await button(patient, 'Volver a Mi atención').click();
     await button(patient, 'Ver atención').waitFor();
     assert.equal(await button(patient, 'Ver atención').count(), 1);
@@ -135,68 +189,68 @@ async function main() {
 
   await scenario('CARE02', async () => {
     selectedPage = professional;
+    const flow = steps();
     await openProfessional();
-    const path = '**/api/admissions/prepare-current';
+    await openPatient();
+    const path = '**/api/admissions/care-start';
     await professional.route(path, async route => {
+      if (route.request().method() !== 'POST') return route.continue();
       const response = await route.fetch();
       assert.equal(response.status(), 200);
-      preparedId = (await response.json()).data.episodeId;
+      selfInterview = (await response.json()).data;
       await route.fulfill({ response, status: 503, json: { success: false, message: 'Respuesta ficticia perdida' } });
     });
-    await button(professional, 'Preparar episodio individual').press('Enter');
-    await heading(professional, 'Elegir entrevista').waitFor();
+    await flow.click(professional, 'Enviar entrevista inicial');
+    await heading(professional, 'Entrevista enviada al paciente').waitFor();
     await professional.unroute(path);
     await professional.reload();
     await openProfessional();
-    await heading(professional, 'Elegir entrevista').waitFor();
+    await heading(professional, 'Entrevista enviada al paciente').waitFor();
     assert.equal(await button(professional, 'Preparar episodio individual').count(), 0);
-    const templates = professional.getByLabel('Plantilla', { exact: true }).locator('option');
-    await templates.nth(3).waitFor({ state: 'attached' });
-    assert.equal(await templates.count(), 4);
-    await assign('self', 'fictional-initial-interview-v1', '¿Qué te gustaría conversar en este espacio?');
-
+    await focus(patient);
+    await flow.click(patient, 'Aceptar y empezar');
+    const answers = patient.locator('textarea');
+    await answers.first().waitFor();
+    for (const field of await answers.all()) await field.fill('Respuesta ficticia de prueba');
+    await patient.getByText('Borrador guardado en privado.', { exact: true }).waitFor();
+    await patient.reload();
     await openPatient();
-    await patient.getByLabel(/Acepto específicamente esta asignación/).check();
-    await button(patient, 'Aceptar asignación').click();
-    await heading(patient, 'Borrador privado').waitFor();
-    for (const field of await patient.locator('textarea').all()) await field.fill('Respuesta ficticia CARE02');
-    await button(patient, 'Guardar borrador privado').click();
-    await patient.getByLabel(/Confirmo enviar esta versión guardada/).check();
-    await button(patient, 'Enviar versión inmutable').click();
-    await patient.getByText('Envío 1', { exact: true }).waitFor();
-    await button(professional, 'Actualizar atención').click();
-    await professional.getByText('Envío 1', { exact: true }).waitFor();
-    await professional.getByLabel('Mensaje destinado al paciente para corregir').fill('Precisión de ensayo');
-    await button(professional, 'Solicitar corrección').click();
-    await professional.getByText('Corrección pendiente', { exact: true }).waitFor();
-    await button(patient, 'Actualizar atención').click();
-    await patient.getByText('Corrección del envío 1: Precisión de ensayo', { exact: true }).waitFor();
-    await patient.locator('textarea').first().fill('Respuesta ficticia corregida');
-    await button(patient, 'Guardar borrador privado').click();
-    await patient.getByLabel(/Confirmo enviar esta versión guardada/).check();
-    await button(patient, 'Enviar versión inmutable').click();
-    await patient.getByText('Envío 2', { exact: true }).waitFor();
-    await button(professional, 'Actualizar atención').click();
-    await professional.getByLabel(/Registro expresamente la validación profesional/).check();
-    await button(professional, 'Registrar validación exacta').click();
-    await professional.getByText('Entrevista validada', { exact: true }).waitFor();
-  }, [503]);
+    assert.equal(await patient.locator('textarea').first().inputValue(), 'Respuesta ficticia de prueba');
+    assert.equal(await professional.getByText('Respuesta ficticia de prueba', { exact: true }).count(), 0);
+
+    let held, deliver;
+    const ready = new Promise(resolve => { held = resolve; });
+    const gate = new Promise(resolve => { deliver = resolve; });
+    const autosave = '**/api/admissions/' + selfInterview.id + '/save';
+    await patient.route(autosave, async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      const response = await route.fetch();
+      held(response.status());
+      await gate;
+      await route.fulfill({ response }).catch(() => {});
+    });
+    try {
+      await patient.locator('textarea').first().fill('Borrador anterior a la confirmación');
+      assert.equal(await timeout(ready, 'No se inició el autoguardado'), 200);
+      await patient.locator('textarea').first().fill('Texto exacto confirmado por el paciente');
+      await flow.click(patient, 'Enviar mis respuestas a Profesional ficticio bp2');
+    } finally {
+      deliver();
+      await patient.unroute(autosave);
+    }
+    await patient.getByRole('heading', { name: 'Entrevista en revisión', exact: true }).waitFor();
+    await focus(professional);
+    await professional.getByText('Texto exacto confirmado por el paciente', { exact: true }).waitFor();
+    await conclude(flow, '10:00', 2);
+    flow.assertCount(9);
+    assert.equal(await professional.locator('input[type=checkbox]').count(), 0);
+    assert.equal(await patient.locator('input[type=checkbox]').count(), 0);
+  }, [503, 429]);
 
   await scenario('CARE03', async () => {
     selectedPage = patient;
-    await professional.getByLabel(/Declaro suficiente para este ensayo/).check();
-    await button(professional, 'Declarar suficiencia').click();
-    await professional.getByText('Suficiencia confirmada', { exact: true }).waitFor();
-    await button(patient, 'Actualizar atención').click();
-    await patient.getByLabel(/He leído y acepto el consentimiento de tratamiento/).check();
-    await button(patient, 'Aceptar tratamiento ficticio').click();
-    await patient.getByText('Consentimiento de tratamiento vigente', { exact: true }).waitFor();
-    await button(professional, 'Actualizar atención').click();
-    await button(professional, 'Activar episodio ficticio').click();
-    const date = new Date(Date.now() - 48 * 3600 * 1000).toISOString().slice(0, 10);
-    await professional.getByLabel('Fecha de la primera cita').fill(date);
-    await professional.getByLabel('Hora de inicio').selectOption('10:00');
-    await button(professional, 'Reservar cita de 60 minutos').click();
+    await summary(professional, /^Ver entrevista inicial$/).click();
+    await professional.getByText('Texto exacto confirmado por el paciente', { exact: true }).waitFor();
     await button(professional, 'Completar cita').click();
     await professional.getByLabel('Nota profesional privada').fill('Original ficticio reservado CARE03');
     await button(professional, 'Registrar nota privada').click();
@@ -208,75 +262,77 @@ async function main() {
     const detail = patient.getByRole('region', { name: 'Detalle de primera cita' });
     await detail.getByText(/10:00 · 60 minutos · Completada/).waitFor();
     assert.doesNotMatch(await detail.innerText(), /Original ficticio reservado|Nota profesional privada/i);
+
+    const clinician = await login('bp3', 1280);
+    const owner = await login('bq3', 320);
+    try {
+      await button(nav(clinician, true), 'Mis pacientes').click();
+      await button(clinician, 'Ver acuerdo de bq3').click();
+      await summary(clinician, /^Pedir una aclaración$/).click();
+      await clinician.getByLabel('Qué necesita aclararse').fill('Describe un ejemplo ficticio');
+      await button(clinician, 'Pedir una aclaración').click();
+      await clinician.getByRole('heading', { name: 'Corrección pendiente', exact: true }).waitFor();
+      await button(nav(owner), 'Mi atención').click();
+      await button(owner, 'Ver atención').click();
+      await owner.getByText('Aclaración solicitada · Describe un ejemplo ficticio', { exact: true }).waitFor();
+      await owner.locator('textarea').first().fill('Aclaración ficticia guardada en la atención');
+      await button(owner, 'Enviar mis respuestas a Profesional ficticio bp3').click();
+      await focus(clinician);
+      await clinician.getByText('Aclaración ficticia guardada en la atención', { exact: true }).waitFor();
+      await summary(clinician, /^Ver versiones anteriores$/).waitFor();
+    } finally {
+      await clinician.context().close();
+      await owner.context().close();
+    }
   });
 
   await scenario('CARE04', async () => {
     selectedPage = professional;
-    await professional.locator('summary').filter({ hasText: /^Preparar otro episodio$/ }).click();
-    await button(professional, 'Preparar episodio individual').click();
-    const select = professional.getByLabel('Episodio de atención', { exact: true });
-    await select.locator('option').nth(2).waitFor({ state: 'attached' });
-    const options = await select.locator('option').evaluateAll(elements => elements.map(option => option.value));
-    const secondId = options.find(value => value && value !== preparedId);
-    assert.ok(secondId);
-    await select.selectOption(secondId);
-    await assign('directed', 'fictional-daily-wellbeing-v1', '¿Qué situaciones te han generado estrés últimamente?');
+    const flow = steps();
+    await summary(professional, /^Iniciar otra atención$/).click();
+    await flow.select(professional, 'Modalidad', 'directed');
+    const started = professional.waitForResponse(response => response.url().endsWith('/admissions/care-start')
+      && response.request().method() === 'POST' && response.status() === 200);
+    await flow.click(professional, 'Enviar entrevista inicial');
+    directedInterview = (await (await started).json()).data;
+    await selector(professional).selectOption(directedInterview.episodeId);
 
     await openPatient();
-    const patientSelect = patient.getByLabel('Episodio de atención', { exact: true });
-    await patientSelect.selectOption(secondId);
-    await patient.getByLabel(/Confirmo expresamente la acción y la versión/).check();
-    await button(patient, 'Aceptar entrevista dirigida').click();
-    await patient.getByText('Consentimiento de admisión aceptado', { exact: true }).waitFor();
-    await button(professional, 'Actualizar atención').click();
-    await select.selectOption(secondId);
-    await professional.getByLabel(/Confirmo expresamente la acción y la versión/).check();
-    await button(professional, 'Declaro que realicé la entrevista').click();
-    await heading(professional, 'Declaraciones para incorporar').waitFor();
+    await selector(patient).selectOption(directedInterview.episodeId);
+    await flow.click(patient, 'Aceptar entrevista con mi profesional');
+    await focus(professional);
+    await professional.locator('textarea').first().waitFor();
     for (const field of await professional.locator('textarea').all()) await field.fill('Declaración ficticia CARE04');
-    await professional.getByLabel(/Confirmo expresamente la acción y la versión/).check();
-    await button(professional, 'Incorporar versión dirigida').click();
-    await professional.getByText('Entrevista documentada', { exact: true }).waitFor();
-    await professional.getByLabel(/Confirmo expresamente la acción y la versión/).check();
-    await button(professional, 'Validar expresamente esta versión ficticia').click();
-    await professional.getByLabel(/Declaro suficiente para este ensayo/).waitFor();
+    await flow.click(professional, 'Registrar entrevista realizada');
+    await conclude(flow, '11:00', 3);
+    flow.assertCount(10);
+    await summary(professional, /^Ver entrevista inicial$/).click();
+    await professional.getByText('Declaración ficticia CARE04', { exact: true }).first().waitFor();
 
-    // Delay an authorized detail, switch episodes, then release the old response.
-    await button(patient, 'Actualizar atención').click();
-    await patientSelect.selectOption(preparedId);
-    const delayed = await patient.evaluate(async episodeId => {
-      const headers = { Authorization: 'Bearer ' + localStorage.getItem('psicopanel_auth_token') };
-      const base = 'http://api:5000/api/admissions';
-      const list = await (await fetch(base, { headers })).json();
-      const target = list.data.find(item => item.episodeId === episodeId);
-      const response = await fetch(base + '/' + target.id, { headers });
-      return { id: target.id, body: await response.json() };
-    }, secondId);
-    assert.equal(delayed.body.data.episodeId, secondId);
-    let deliver, started, timeout;
-    const pending = new Promise(resolve => { started = resolve; });
-    const gate = new Promise(resolve => { deliver = resolve; });
-    const deadline = new Promise((_, reject) => {
-      timeout = setTimeout(() => reject(new Error('No se inició la lectura dirigida retenida')), 12000);
-    });
-    const path = '**/api/admissions/' + delayed.id;
-    await patient.route(path, async route => {
+    // Hold the authorized second interview while switching to the first.
+    const target = await confirmed(patient, '/' + directedInterview.id);
+    assert.equal(target.status, 200);
+    await selector(patient).selectOption(selfInterview.episodeId);
+    let delivered, entered;
+    const enteredGate = new Promise(resolve => { entered = resolve; });
+    const deliverGate = new Promise(resolve => { delivered = resolve; });
+    const routePath = '**/api/admissions/' + directedInterview.id;
+    await patient.route(routePath, async route => {
       if (route.request().method() !== 'GET') return route.continue();
-      started();
-      await gate;
-      await route.fulfill({ json: delayed.body, headers: { 'access-control-allow-origin': '*' } }).catch(() => {});
+      entered();
+      await deliverGate;
+      await route.fulfill({ json: target.body, headers: { 'access-control-allow-origin': '*' } }).catch(() => {});
     });
     try {
-      await patientSelect.selectOption(secondId);
-      await Promise.race([pending, deadline]);
-      await patientSelect.selectOption(preparedId);
+      await selector(patient).selectOption(directedInterview.episodeId);
+      await timeout(enteredGate, 'No se inició la lectura del segundo episodio');
+      await selector(patient).selectOption(selfInterview.episodeId);
     } finally {
-      clearTimeout(timeout);
-      deliver();
+      delivered();
       await patient.unrouteAll({ behavior: 'wait' });
     }
-    if ((await interview(patient).getAttribute('open')) === null) await interview(patient).locator('summary').click();
-    await heading(patient, 'Entrevista inicial general').waitFor();
+    await summary(patient, /^Ver entrevista inicial$/).click();
+    await patient.getByText('Texto exacto confirmado por el paciente', { exact: true }).waitFor();
     assert.equal(await patient.getByText(/Declaración ficticia CARE04/).count(), 0);
   }, [429]);
   assert.equal(events.filter(event => !event.expected).length, 0);

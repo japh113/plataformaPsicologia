@@ -19,7 +19,8 @@ test('admission real router rejects request 301 on every read and write before J
     }
     assert.equal(queries,300);
     const paths=[['GET',''],['GET','/'+id],['GET','/'+id+'/draft'],
-      ['POST','/prepare'],['POST','/assign'],...['accept','save','submit','correct','validate','revoke'].map(op=>['POST','/'+id+'/'+op])];
+      ['POST','/care-context'],['POST','/care-start'],
+      ['POST','/prepare'],['POST','/assign'],...['accept','save','care-send','care-register','submit','correct','validate','revoke'].map(op=>['POST','/'+id+'/'+op])];
     for(const [method,path]of paths){
       const response=await fetch(base+path,{method,headers:{Authorization:'Bearer deliberately-invalid-jwt','Content-Type':'application/json',
         'X-Forwarded-For':'192.0.2.99','X-Real-IP':'192.0.2.100','Forwarded':'for=192.0.2.101'},...(method==='POST'?{body:'{private-malformed-body'}:{})});
@@ -32,7 +33,8 @@ test('admission real router rejects request 301 on every read and write before J
       const response=await fetch(base+'/consultations/'+id,{headers:{Authorization:'Bearer '+token}});
       assert.equal(response.status,503);await response.arrayBuffer();
     }
-    for(const [method,path] of [['GET','/consultations'],['POST','/consultations/'+id+'/note']]){
+    for(const [method,path] of [['GET','/consultations'],['GET','/consultations/'+id+'/interview'],
+      ['POST','/consultations/'+id+'/care-review'],['POST','/consultations/'+id+'/note']]){
       const response=await fetch(base+path,{method,headers:{'Content-Type':'application/json'},
         ...(method==='POST'?{body:'{private-malformed-body'}:{})});
       assert.equal(response.status,429,path);

@@ -7,7 +7,8 @@ import { apiRequest } from '../api/client';
 import IndividualCare from '../components/IndividualCare';
 import { TreatmentWithdrawals } from '../components/FirstConsultation';
 import { useCareRead } from '../components/useCareRead';
-import { careProgress, firstConsultationEnabled, unifiedCareEnabled } from '../components/individualCareState';
+import { useVisibleCareRefresh } from '../components/useVisibleCareRefresh';
+import { careProgress, firstConsultationEnabled, patientHasNextTask, unifiedCareEnabled } from '../components/individualCareState';
 
 const base = '/bilateral-invitations';
 const formatDate = value => new Date(value).toLocaleString('es-MX', {
@@ -427,12 +428,16 @@ function Invitations({
   const [readError, setReadError] = useState('');
   const [notice, setNotice] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const [acceptedAgreement, setAcceptedAgreement] = useState(null);
   const [showWithdrawals, setShowWithdrawals] = useState(false);
   const action = useBilateralAction();
   const patientOverview = !professional && !selectedAgreement && !selectedInvitation && showAdmission;
   const admissions = useCareRead(patientOverview ? '/admissions' : null);
   const consultations = useCareRead(patientOverview && firstConsultationEnabled ? '/admissions/consultations' : null);
+
+  useVisibleCareRefresh(() => {
+    if (!admissions.loading) void admissions.reload(true);
+    if (!consultations.loading) void consultations.reload(true);
+  }, patientOverview);
 
   function refreshLists() {
     setData(null);
@@ -505,6 +510,10 @@ function Invitations({
   const orderedItems = items && (professional ? items : [...actionable, ...items.filter(item => !pendingIds.has(item.id))]);
   const invitation = items?.find(item => item.id === selectedInvitation);
   const agreements = data?.agreements.filter(item => !selectedAgreement || item.id === selectedAgreement.id);
+  const hasNextTask = agreement => admissions.data?.some(assignment => assignment.agreementId === agreement.id
+    && patientHasNextTask(assignment, consultations.data?.find(entry => entry.id === assignment.id)));
+  const currentAgreements = agreements?.filter(agreement => agreement.status === 'completed')
+    .sort((left, right) => Number(Boolean(hasNextTask(right))) - Number(Boolean(hasNextTask(left))));
   const loadError = readError || receivedInvitations?.error;
   const showOverview = !professional && !selectedAgreement && !selectedInvitation;
   const history = showOverview && orderedItems?.filter(item => !pendingIds.has(item.id));
@@ -527,12 +536,14 @@ function Invitations({
     </button>
     {!selectedInvitation && !selectedAgreement && hasNotices && <p role="status" className="text-sm text-slate-600">Hay novedades en tu bandeja.</p>}
     {!items && !loadError && <p role="status">Consultando la bandeja…</p>}
-    {selectedInvitation && acceptedAgreement && showAdmission && <button type="button" className={primary} onClick={() => onAgreement({ id: acceptedAgreement })}>Continuar a mi atención</button>}
     {selectedInvitation ? items && (invitation ? <InvitationDetail
       key={JSON.stringify([invitation.id, invitation.version, invitation.conditionsVersion, invitation.conditionsHash, pendingIds.has(invitation.id)])}
       item={invitation} status={receivedInvitations.displayStatus(invitation)} acceptanceAvailable={pendingIds.has(invitation.id)} action={action} terminal={terminal} onConflict={revalidateDecision} onAccepted={result => {
         receivedInvitations.afterAction(invitation.id, 'accepted');
-        setAcceptedAgreement(result.status === 'completed' ? result.agreementId : null);
+        if (showAdmission && result.status === 'completed' && result.agreementId) {
+          onAgreement({ id: result.agreementId });
+          return;
+        }
         setNotice(result.status === 'completed' ? 'Acuerdo bilateral completado.' : 'El acuerdo ya no está vigente.');
         refreshLists();
       }} /> : <p className={card}>La invitación ya no está disponible.</p>) : <>
@@ -586,7 +597,7 @@ function Invitations({
         {consultations.error && <ErrorMessage error={consultations.error} />}
         {(admissions.loading || consultations.loading) && <p role="status">Consultando tus próximas acciones…</p>}
         {!agreements.some(agreement => agreement.status === 'completed') && <p className={card}>No tienes vinculaciones vigentes.</p>}
-        {agreements.filter(agreement => agreement.status === 'completed').map(agreement => {
+        {currentAgreements.map(agreement => {
           const episodes = admissions.data?.filter(item => item.agreementId === agreement.id && item.state !== 'revoked');
           return <article key={agreement.id} className={card}>
             <h3 className="break-words font-bold">{agreement.professionalName}</h3>
