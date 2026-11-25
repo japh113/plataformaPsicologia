@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../api/client';
+import { SensitiveAction } from './CareDisclosure';
 import AdmissionAssessment from './AdmissionAssessment';
 import { useCareAction } from './useCareAction';
 import { useCareRead } from './useCareRead';
@@ -8,7 +9,6 @@ import { useVisibleCareRefresh } from './useVisibleCareRefresh';
 export const primaryButton = 'rounded-lg bg-indigo-700 px-4 py-2.5 font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700 disabled:opacity-50';
 export const secondaryButton = 'rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-indigo-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-700 disabled:opacity-50';
 const area = 'block w-full rounded-lg border border-slate-300 p-2';
-const box = 'space-y-3 rounded-xl border border-slate-200 bg-white p-4 sm:p-5';
 const draftMessage = {
   clean: 'Borrador guardado en privado.',
   dirty: 'Cambios por guardar.',
@@ -24,6 +24,17 @@ function operationIdFor(receipt, operation, payload) {
   const key = JSON.stringify([operation, payload]);
   if (receipt.current?.key !== key) receipt.current = { key, id: crypto.randomUUID() };
   return receipt.current.id;
+}
+
+function InterviewTerms({ text }) {
+  const sentences = Array.from(new Intl.Segmenter('es', { granularity: 'sentence' }).segment(text), entry => entry.segment);
+  const paragraphs = [];
+  for (let index = 0; index < sentences.length; index += 3) {
+    paragraphs.push(sentences.slice(index, index + 3).join('').trim());
+  }
+  return <div className="space-y-3 rounded-lg border border-teal-100 bg-white p-3 text-sm leading-relaxed">
+    {paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+  </div>;
 }
 
 function Answers({ template, values, onChange, disabled }) {
@@ -172,7 +183,7 @@ function SelfDraft({ detail, draft, onChange, onDenied }) {
     {!error && <p role="status">{sending ? 'Enviando tus respuestas…' : draftMessage[stage]}</p>}
     {error && <p role="alert">{error}</p>}
     {error && !serverCopy && <button type="button" className={secondaryButton} disabled={saving || sending} onClick={reloadDraft}>Revisar borrador guardado</button>}
-    {serverCopy && <section className={box} aria-label="Borrador guardado en otra sesión">
+    {serverCopy && <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3" aria-label="Borrador guardado en otra sesión">
       <p>Revisa lo que está guardado antes de elegir qué respuestas conservar.</p>
       <DocumentAnswers template={detail.template} answers={serverCopy.answers} />
       <div className="flex flex-wrap gap-2">
@@ -202,13 +213,13 @@ function SavedDraft({ detail }) {
     : <p>No hay respuestas guardadas en el borrador.</p>;
 }
 
-function InterviewHistory({ document, history, template, professionalName, directed, expanded }) {
+function InterviewHistory({ document, history, template, professionalName, directed }) {
   if (!document) return null;
   const formatDate = value => new Date(value).toLocaleString('es-MX');
   const date = item => formatDate(directed ? item.recordedAt : item.submittedAt);
   const body = item => directed ? item.declarations : item.answers;
   const attribution = directed ? 'Registrada por ' + professionalName : 'Respuestas del paciente';
-  const content = <><p>{attribution} · {date(document)}</p>
+  return <><p>{attribution} · {date(document)}</p>
     <DocumentAnswers template={template} answers={body(document)} />
     {history.length > 1 && <details className="space-y-2">
       <summary className="cursor-pointer font-semibold">Ver versiones anteriores</summary>
@@ -217,7 +228,6 @@ function InterviewHistory({ document, history, template, professionalName, direc
         <DocumentAnswers template={template} answers={body(item)} />
       </details>)}
     </details>}</>;
-  return expanded ? content : <details className="space-y-3"><summary className="cursor-pointer font-semibold">Ver entrevista inicial</summary>{content}</details>;
 }
 
 function Corrections({ detail, professional, document, directed, act, busy }) {
@@ -258,7 +268,7 @@ function Corrections({ detail, professional, document, directed, act, busy }) {
   </details>;
 }
 
-export default function CareInterview({ item, professional, completed, onChange, consultation }) {
+export default function CareInterview({ item, professional, completed, onChange, consultation, panel }) {
   const read = useCareRead('/admissions/' + item.id);
   const reload = read.reload;
   const [declarations, setDeclarations] = useState({});
@@ -272,6 +282,7 @@ export default function CareInterview({ item, professional, completed, onChange,
   useEffect(() => {
     if (item.version > (read.data?.version ?? 0) && !read.loading && !read.error && !busy) void reload(true);
   }, [item.version, read.data?.version, read.loading, read.error, busy, reload]);
+  useVisibleCareRefresh(() => { if (!read.loading && !busy) return reload(true); }, panel !== 'action');
   const onDenied = useCallback(() => { void refresh(); }, [refresh]);
   const detail = read.data;
   if (!detail) return <div><p role={read.error ? 'alert' : 'status'}>{read.error || 'Cargando entrevista…'}</p>{read.error && <button type="button" className={secondaryButton} onClick={() => reload()}>Reintentar consulta de entrevista</button>}</div>;
@@ -290,22 +301,25 @@ export default function CareInterview({ item, professional, completed, onChange,
   const withdrawalLabel = professional ? 'Cancelar entrevista' : 'Retirar consentimiento de entrevista';
   const feedback = error || read.error;
 
-  return <section className={box} aria-label="Entrevista inicial">
-    <h3 className="text-lg font-semibold">{detail.template.title}</h3>
+  const action = panel === 'action';
+  const documentsPanel = panel === 'documents';
+  const management = panel === 'management';
+  return <section className="min-w-0 space-y-3" aria-label="Entrevista inicial">
+    {!management && <h3 className="text-base font-semibold">{detail.template.title}</h3>}
     {feedback && <p role="alert">{feedback}</p>}
-    {!professional && allowed && detail.state === 'proposed' && <>
-      <p>{detail.consentText}</p>
+    {action && !professional && allowed && detail.state === 'proposed' && <>
+      <InterviewTerms text={detail.consentText} />
       <button type="button" className={primaryButton} disabled={busy || read.loading}
         onClick={() => write('accept', { consentVersion: detail.consentVersion, consentHash: detail.consentHash })}>
         {directed ? 'Aceptar entrevista con mi profesional' : 'Aceptar y empezar'}
       </button>
     </>}
-    {!professional && !directed && detail.state === 'revoked' && <details onToggle={event => setShowSavedDraft(event.currentTarget.open)}>
+    {documentsPanel && !professional && !directed && detail.state === 'revoked' && <details onToggle={event => setShowSavedDraft(event.currentTarget.open)}>
       <summary className="cursor-pointer font-semibold">Ver borrador privado guardado</summary>
       {showSavedDraft && <SavedDraft detail={detail} />}
     </details>}
-    {editing && <DraftEditor key={detail.version} detail={detail} onChange={refresh} onDenied={onDenied} />}
-    {recording && <form className="space-y-3" onSubmit={event => {
+    {action && editing && <DraftEditor key={detail.version} detail={detail} onChange={refresh} onDenied={onDenied} />}
+    {action && recording && <form className="space-y-3" onSubmit={event => {
       event.preventDefault();
       void write('care-register', { declarations });
     }}>
@@ -313,9 +327,9 @@ export default function CareInterview({ item, professional, completed, onChange,
       <Answers template={detail.template} values={declarations} onChange={setDeclarations} disabled={busy} />
       <button className={primaryButton} disabled={busy || read.loading || !complete(detail.template, declarations)}>Registrar entrevista realizada</button>
     </form>}
-    <InterviewHistory document={current} history={documents} template={detail.template} professionalName={detail.professionalName}
-      directed={directed} expanded={Boolean(reviewing) || (professional && detail.reviewState === 'correction_requested')} />
-    {reviewing && <>
+    {(documentsPanel || (action && reviewing)) && <InterviewHistory document={current} history={documents} template={detail.template} professionalName={detail.professionalName}
+      directed={directed} />}
+    {action && reviewing && <>
       <p>Al confirmar, declaras que la entrevista que acabas de revisar está completa y es suficiente para la atención propuesta.</p>
       <button type="button" className={primaryButton} disabled={busy || read.loading} onClick={() => act(
         '/admissions/consultations/' + detail.id + '/care-review', {
@@ -324,33 +338,36 @@ export default function CareInterview({ item, professional, completed, onChange,
           criteriaVersion: 'fictional-sufficiency-v1',
         })}>Confirmar entrevista para iniciar la atención</button>
     </>}
-    {detail.corrections?.length > 0 && <p className="whitespace-pre-wrap">Aclaración solicitada · {detail.corrections.at(-1).message}</p>}
-    {detail.requests?.length > 0 && <details className="space-y-2">
+    {(action || documentsPanel) && detail.corrections?.length > 0 && <p className="whitespace-pre-wrap">Aclaración solicitada · {detail.corrections.at(-1).message}</p>}
+    {documentsPanel && detail.requests?.length > 0 && <details className="space-y-2">
       <summary className="cursor-pointer font-semibold">Consultar rectificaciones</summary>
       {detail.requests.map(request => <div key={request.id}>
         <p className="whitespace-pre-wrap">{request.reason}</p>
         <p>{request.resolution?.explanation ?? 'Pendiente de respuesta del profesional.'}</p>
       </div>)}
     </details>}
-    {accepted && current && <Corrections key={current.revision ?? current.number} detail={detail} professional={professional} document={current}
+    {(documentsPanel || (action && professional && (reviewing || detail.reviewState === 'correction_requested'))) && accepted && current && <Corrections key={current.revision ?? current.number} detail={detail} professional={professional} document={current}
       directed={directed} act={act} busy={busy || read.loading} />}
-    {professional && accepted && current && <details className="space-y-2" onToggle={e => setReleased(e.currentTarget.open ? detail.version : null)}>
+    {documentsPanel && professional && accepted && current && <details className="space-y-2" onToggle={e => setReleased(e.currentTarget.open ? detail.version : null)}>
       <summary className="cursor-pointer font-semibold">Valoración profesional privada</summary>
       {released === detail.version && <AdmissionAssessment key={detail.version} id={detail.id} mode={directed ? 'directed' : undefined}
         version={detail.version} documentRevision={detail.latestDocument} submission={detail.latestSubmission}
         reviewState={detail.reviewState} professionalName={detail.professionalName} onUnavailable={onDenied} />}
     </details>}
-    {allowed && (professional || accepted) && <details className="space-y-2">
-      <summary className="cursor-pointer font-semibold">Condiciones de entrevista</summary>
-      <p>{detail.consentText}</p>
-      <button type="button" className={secondaryButton} disabled={busy || read.loading} onClick={() => {
-        if (window.confirm('¿Quieres terminar esta entrevista? Se conservarán los documentos ya incorporados.')) void write('revoke', {});
-      }}>{withdrawalLabel}</button>
-    </details>}
+    {(management || panel === 'terms') && <>
+      <h4 className="font-semibold">Entrevista inicial</h4>
+      <details>
+        <summary className="cursor-pointer text-sm font-semibold text-indigo-800">Condiciones de entrevista</summary>
+        <p className="mt-2">{detail.consentText}</p>
+      </details>
+      {management && allowed && (professional || accepted) && <SensitiveAction label={withdrawalLabel} disabled={busy || read.loading}
+        description="Se cerrarán las acciones que dependen de la entrevista. Se conservarán los documentos ya incorporados."
+        onConfirm={() => void write('revoke', {})} />}
+    </>}
   </section>;
 }
 
-function ActiveDocument({ id }) {
+export function ActiveDocument({ id }) {
   const read = useCareRead('/admissions/consultations/' + id + '/interview');
   useVisibleCareRefresh(() => read.reload());
   if (!read.data) return <p role={read.error ? 'alert' : 'status'}>{read.error || 'Cargando entrevista…'}</p>;
@@ -358,12 +375,4 @@ function ActiveDocument({ id }) {
     <p>{read.data.authorName} · {new Date(read.data.recordedAt).toLocaleString('es-MX')}</p>
     <DocumentAnswers template={read.data.template} answers={read.data.answers} />
   </>;
-}
-
-export function ActiveInterview({ id }) {
-  const [open, setOpen] = useState(false);
-  return <details className={box} onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary className="cursor-pointer font-semibold">Ver entrevista inicial</summary>
-    {open && <ActiveDocument id={id} />}
-  </details>;
 }

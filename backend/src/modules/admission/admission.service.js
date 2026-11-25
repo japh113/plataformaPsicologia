@@ -153,7 +153,8 @@ export async function consultation(actor, operation, input = {}, id) {
     const rows = [];
     for (const candidate of ids) {
       try {
-        rows.push(await consultationCommand(actor, 'summary', {}, candidate, legacy));
+        const professional = actor.role === 'psychologist';
+        rows.push(await consultationCommand(actor, professional ? 'status' : 'summary', {}, candidate, legacy, professional));
       } catch (error) {
         if (error.message !== 'admission_missing') throw error;
       }
@@ -172,7 +173,7 @@ async function ensureConsultationDestination(client, legacy) {
   }
 }
 
-async function consultationCommand(actor, operation, input, id, legacy) {
+async function consultationCommand(actor, operation, input, id, legacy, professionalList = false) {
   const data = { ...input, id, sessionExpiresAt: actor.sessionExpiresAt };
   if (operation === 'care-review') data.fingerprint = fingerprint({ operation, input, id }, configuration().key);
   return transaction(async client => {
@@ -188,7 +189,17 @@ async function consultationCommand(actor, operation, input, id, legacy) {
       data.phoneDigest = phone ? contactDigest('sms', phone) : null;
     }
     const { rows: [result] } = await client.query(
-      'SELECT public.admission_consultation($1,$2,$3,$4::jsonb) AS data',
+      // Project only operational fields before returning anything from PostgreSQL.
+      professionalList
+        ? `SELECT jsonb_build_object('id', data->'id', 'episodeId', data->'episodeId',
+            'professionalName', data->'professionalName', 'status', data->'status',
+            'admissionVersion', data->'admissionVersion', 'documentVersion', data->'documentVersion',
+            'sufficiencyConfirmed', jsonb_typeof(data->'sufficiencyId')='string',
+            'consentAccepted', data->'consentAccepted',
+            'consentWithdrawn', jsonb_typeof(data->'consentId')='string' AND data->'consentAccepted'='false'::jsonb,
+            'hasAppointment', jsonb_typeof(data->'appointment')='object') AS data
+            FROM public.admission_consultation($1,$2,$3,$4::jsonb) AS data`
+        : 'SELECT public.admission_consultation($1,$2,$3,$4::jsonb) AS data',
       [actor.id, actor.sessionVersion, operation, JSON.stringify(data)]
     );
     return result.data;

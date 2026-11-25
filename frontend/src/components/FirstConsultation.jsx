@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { CareDisclosure, SensitiveAction } from './CareDisclosure';
 import { apiRequest } from '../api/client';
 import { useVisibleCareRefresh } from './useVisibleCareRefresh';
 import { episodeTitle } from './individualCareState';
@@ -29,9 +31,10 @@ function waitingForPatient(detail, professional) {
   return professional && !detail.consentAccepted && !detail.consentId;
 }
 
-export function ConsultationDetail({ assignmentId, professional, onRefresh, revision, onDetail, onUnavailable, contextual = false }) {
+export function ConsultationDetail({ assignmentId, professional, onRefresh, revision, onDetail, onUnavailable, contextual = false, managementTarget, treatmentTermsTarget, assignmentVersion }) {
   const [read, setRead] = useState(null);
-  const detail = read?.revision === revision ? read?.data : null;
+  const detail = read?.revision === revision && (assignmentVersion === undefined || read?.data.admissionVersion === assignmentVersion)
+    ? read?.data : null;
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(true);
   const [confirmation, setConfirmation] = useState(null);
@@ -68,7 +71,7 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
       if (current === generation.current) setBusy(false);
     });
     return invalidate;
-  }, [load, report, invalidate, revision]);
+  }, [load, report, invalidate, revision, assignmentVersion]);
 
   const submit = async (operation, payload) => {
     if (busy || !detail) return;
@@ -121,7 +124,18 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
   if (contextual && detail?.status === 'prepared' && (!detail.sufficiencyId
     || waitingForPatient(detail, professional))) return null;
 
-  return <section className="space-y-4" aria-label="Estado de la primera consulta">
+  const noteForm = <form className="space-y-3" autoComplete="off" onSubmit={event => {
+    event.preventDefault();
+    void submit('note', { appointmentId: detail.appointment.id, content: note });
+  }}>
+    <label className="block">Nota profesional privada <textarea className={field + ' block w-full'} required maxLength={10000} value={note} onChange={event => setNote(event.target.value)} /></label>
+    <button className={button} disabled={busy || !note.trim()}>Registrar nota privada</button>
+  </form>;
+  const revoke = detail?.status === 'active' && <SensitiveAction
+    label={professional ? 'Retirar autorización de entrevista' : 'Retirar consentimiento de entrevista'}
+    description="Al retirar la autorización de entrevista, se cierran las acciones que dependen de ella. Se conserva la documentación."
+    disabled={busy} onConfirm={() => void submit('revoke-admission', { assignmentVersion: detail.admissionVersion })} />;
+  return <section className="min-w-0 space-y-4" aria-label="Estado de la primera consulta">
     {error && <p role="alert">{error}</p>}
     {!detail && !error && <p role="status">Consultando el estado de la atención…</p>}
     {(!contextual || error) && <button type="button" className={field} disabled={busy} onClick={reload}>{contextual ? 'Reintentar consulta de atención' : 'Actualizar episodio'}</button>}
@@ -152,11 +166,13 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
       {detail.status === 'active' && !detail.appointment && (professional
         ? <form className="space-y-3" onSubmit={event => { event.preventDefault(); void submit('book', { date, time }); }}>
           {contextual && <p>Elige una fecha y una hora cerrada. La consulta dura 60 minutos.</p>}
-          <label className="block">Fecha de la primera cita <input className={field} type="date" value={date} required onChange={event => setDate(event.target.value)} /></label>
-          <label className="block">Hora de inicio <select className={field} value={time} required onChange={event => setTime(event.target.value)}>
+          <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">Fecha de la primera cita <input className={field + ' mt-1 block w-full'} type="date" value={date} required onChange={event => setDate(event.target.value)} /></label>
+          <label className="block">Hora de inicio <select className={field + ' mt-1 block w-full'} value={time} required onChange={event => setTime(event.target.value)}>
             <option value="">Seleccionar hora</option>
             {hours.map(hour => <option key={hour}>{hour}</option>)}
           </select></label>
+          </div>
           <button className={button} disabled={busy || !date || !time}>{contextual ? 'Reservar primera cita' : 'Reservar cita de 60 minutos'}</button>
         </form>
         : !contextual && <p>Todavía no hay una cita reservada.</p>)}
@@ -165,32 +181,28 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
         {professional && detail.appointment.canComplete && (
           <button type="button" className={button} disabled={busy} onClick={() => submit('complete', { appointmentId: detail.appointment.id })}>Completar cita</button>
         )}
-        {professional && detail.appointment.status === 'completed' && (detail.note
-          ? <section className="space-y-2"><h3 className="font-bold">Nota profesional privada</h3><p className="whitespace-pre-wrap">{detail.note.content}</p></section>
-          : <form className="space-y-3" autoComplete="off" onSubmit={event => {
-            event.preventDefault();
-            void submit('note', { appointmentId: detail.appointment.id, content: note });
-          }}>
-            <label className="block">Nota profesional privada <textarea className={field + ' block w-full'} required maxLength={10000} value={note} onChange={event => setNote(event.target.value)} /></label>
-            <button className={button} disabled={busy || !note.trim()}>Registrar nota privada</button>
-          </form>)}
+        {professional && detail.appointment.status === 'completed' && (contextual
+          ? <CareDisclosure label="Nota profesional privada" keepMounted>
+            {detail.note ? <p className="whitespace-pre-wrap">{detail.note.content}</p> : noteForm}
+          </CareDisclosure>
+          : detail.note
+            ? <section className="space-y-2"><h3 className="font-bold">Nota profesional privada</h3><p className="whitespace-pre-wrap">{detail.note.content}</p></section>
+            : noteForm)}
+
       </>}
-      {!professional && detail.consentAccepted && (contextual
-        ? <details className="space-y-2"><summary className="cursor-pointer font-semibold">Condiciones de tratamiento</summary>
+      {treatmentTermsTarget && detail.consentAccepted && createPortal(
+        <><h4 className="font-semibold">Consentimiento de tratamiento aceptado</h4><p>{detail.consentTerms}</p></>, treatmentTermsTarget)}
+      {managementTarget === undefined && !professional && detail.consentAccepted && (contextual
+        ? <CareDisclosure label="Gestionar consentimiento de tratamiento">
           <p>{detail.consentTerms}</p>
-          <button type="button" className={field} disabled={busy} onClick={() => {
-            if (window.confirm('¿Retirar el consentimiento de tratamiento? Dejarás de tener acceso a la primera consulta.')) void submit('withdraw', { consentId: detail.consentId });
-          }}>Retirar consentimiento de tratamiento</button>
-        </details>
+          <SensitiveAction label="Retirar consentimiento de tratamiento" disabled={busy}
+            description="Se retirará el acceso a la primera consulta y a las acciones de tratamiento que dependen de este consentimiento."
+            onConfirm={() => void submit('withdraw', { consentId: detail.consentId })} />
+        </CareDisclosure>
         : <button type="button" className={field} disabled={busy} onClick={() => submit('withdraw', { consentId: detail.consentId })}>Retirar consentimiento de tratamiento</button>)}
-      {detail.status === 'active' && (!contextual
-        ? <button type="button" className={field} disabled={busy} onClick={() => submit('revoke-admission', { assignmentVersion: detail.admissionVersion })}>Revocar admisión</button>
-        : <details className="space-y-2"><summary className="cursor-pointer font-semibold">Opciones de entrevista</summary>
-          <p>Si se retira la autorización de entrevista, se cierran las acciones que dependen de ella. Se conserva la documentación.</p>
-          <button type="button" className={field} disabled={busy} onClick={() => {
-            if (window.confirm('¿Retirar la autorización de entrevista para esta atención?')) void submit('revoke-admission', { assignmentVersion: detail.admissionVersion });
-          }}>Retirar autorización de entrevista</button>
-        </details>)}
+      {revoke && (managementTarget ? createPortal(revoke, managementTarget) : managementTarget === undefined && (contextual
+        ? <CareDisclosure label="Gestionar autorización de entrevista">{revoke}</CareDisclosure>
+        : <button type="button" className={field} disabled={busy} onClick={() => submit('revoke-admission', { assignmentVersion: detail.admissionVersion })}>Revocar admisión</button>))}
     </>}
   </section>;
 }
@@ -217,7 +229,7 @@ export function TreatmentWithdrawals({ revision, onWithdraw, assignment, context
   }, [revision, invalidate]);
 
   const withdraw = async reference => {
-    if (busy || ((contextual || assignment) && !window.confirm('¿Retirar el consentimiento de tratamiento de este episodio?'))) return;
+    if (busy) return;
     const current = generation.current;
     setBusy(reference.consentId);
     try {
@@ -242,12 +254,13 @@ export function TreatmentWithdrawals({ revision, onWithdraw, assignment, context
   return <section className="space-y-2" aria-label="Consentimientos de tratamiento">
     <h3 className="font-bold">Consentimientos de tratamiento</h3>
     {error && <p role="alert">{error}</p>}
-    {visible.map(reference => (
-      <button key={reference.consentId} type="button" className={field} disabled={Boolean(busy)}
-        onClick={() => withdraw(reference)}>{assignment ? 'Retirar consentimiento de tratamiento' : contextual
-          ? 'Retirar consentimiento · ' + reference.professionalName + ' · ' + episodeTitle(reference)
-          : 'Retirar consentimiento del episodio ' + reference.episodeId}</button>
-    ))}
+    {visible.map(reference => contextual || assignment
+      ? <SensitiveAction key={reference.consentId} label={assignment ? 'Retirar consentimiento de tratamiento'
+        : 'Retirar consentimiento · ' + reference.professionalName + ' · ' + episodeTitle(reference)}
+        description="Se retirará el acceso a la primera consulta y a las acciones de tratamiento que dependen de este consentimiento. La documentación se conserva."
+        disabled={Boolean(busy)} onConfirm={() => void withdraw(reference)} />
+      : <button key={reference.consentId} type="button" className={field} disabled={Boolean(busy)}
+        onClick={() => void withdraw(reference)}>Retirar consentimiento del episodio {reference.episodeId}</button>)}
   </section>;
 }
 

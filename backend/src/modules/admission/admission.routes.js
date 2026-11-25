@@ -1,6 +1,7 @@
 import { Router,json } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { authenticate } from '../../middlewares/authMiddleware.js';
-import { createPublicAuthLimiter } from '../auth/public-auth-limiter.js';
+import { createPublicAuthLimiter, publicAuthClientKey } from '../auth/public-auth-limiter.js';
 import { command,configuration,consultation } from './admission.service.js';
 import { errorFor } from './admission.policy.js';
 
@@ -10,6 +11,18 @@ const authenticatedAccount = req => req.user?.id || null;
 // leaves two of the four clinical work slots available for short operations.
 const authenticatedBudget = createPublicAuthLimiter({ limit: 180, windowMs: 60_000, clientKey: authenticatedAccount });
 const listBudget = createPublicAuthLimiter({ limit: 40, windowMs: 60_000, clientKey: authenticatedAccount });
+// Extra shared budget for the unified workflow across both routers. The
+// original socket-peer guard runs before JSON/auth and bounds the key space.
+const careBudget = rateLimit({
+  windowMs: 60_000,
+  limit: 300,
+  keyGenerator: publicAuthClientKey,
+  // The shared key function already groups IPv6 by /64 and normalizes mapped IPv4.
+  validate: { keyGeneratorIpFallback: false },
+  legacyHeaders: false,
+  standardHeaders: 'draft-7',
+  message: { success: false, message: 'Demasiadas solicitudes. Intenta más tarde.' },
+});
 let active = 0;
 let activeLists = 0;
 
@@ -18,8 +31,10 @@ function protect(router) {
   router.use(createPublicAuthLimiter({limit:300,windowMs:60_000}));
   router.use(json({limit:'80kb'}));
   router.use((error,req,res,next)=>res.status(error.status===413?413:400).json({success:false,message:'Entrada no válida.'}));
-  router.use((req,res,next)=>authenticate(req,res,error=>error?res.status(503).json({success:false,message:'Autenticación temporalmente no disponible.'}):next()));
 }
+const authenticateAdmission = (req, res, next) => authenticate(req, res, error => error
+  ? res.status(503).json({ success: false, message: 'Autenticación temporalmente no disponible.' })
+  : next());
 const handle = (operation, submit = command) => {
   const isList = listOperations.has(operation);
   const execute = async (req, res) => {
@@ -51,22 +66,27 @@ const router=Router();
 const consultations=Router();
 router.use('/consultations',consultations);
 protect(consultations);
+consultations.get('/:id/interview', careBudget, authenticateAdmission, handle('interview', consultation));
+consultations.post('/:id/care-review', careBudget, authenticateAdmission, handle('care-review', consultation));
+consultations.use(authenticateAdmission);
 consultations.get('/',handle('list',consultation));
 consultations.get('/withdrawals',handle('withdrawals',consultation));
 consultations.get('/:id',handle('status',consultation));
-consultations.get('/:id/interview',handle('interview',consultation));
-for(const op of ['care-review','sufficiency','consent','withdraw','revoke-admission','activate','book','complete','note']) {
+for(const op of ['sufficiency','consent','withdraw','revoke-admission','activate','book','complete','note']) {
   consultations.post('/:id/'+op,handle(op,consultation));
 }
 
 protect(router);
+router.post('/care-context', careBudget, authenticateAdmission, handle('care-context'));
+router.post('/care-start', careBudget, authenticateAdmission, handle('care-start'));
+router.post('/:id/care-send', careBudget, authenticateAdmission, handle('care-send'));
+router.post('/:id/care-register', careBudget, authenticateAdmission, handle('care-register'));
+router.use(authenticateAdmission);
 router.get('/',handle('list'));
-router.post('/care-context', handle('care-context'));
-router.post('/care-start', handle('care-start'));
 router.post('/assign-directed',handle('assign-directed'));
 router.get('/:id/directed/record',handle('directed-record'));
 for(const op of ['attest','document','request','resolve','validate','assess'])router.post('/:id/directed/'+op,handle('directed-'+op));
 router.post('/prepare',handle('prepare'));router.post('/assign',handle('assign'));
 router.get('/:id',handle('detail'));router.get('/:id/record',handle('record'));router.get('/:id/draft',handle('draft'));
-for(const op of ['accept','save','care-send','care-register','submit','correct','validate','revoke','assess'])router.post('/:id/'+op,handle(op));
+for(const op of ['accept','save','submit','correct','validate','revoke','assess'])router.post('/:id/'+op,handle(op));
 export default router;

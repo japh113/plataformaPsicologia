@@ -12,13 +12,18 @@ export function episodeTitle(item) {
 export function careProgress(item, consultation, professional, consultationRead) {
   const result = (stage, next) => ({ stage, next });
   if (item.state === 'revoked') return result('Entrevista cerrada', 'Puedes consultar los documentos propios disponibles.');
-  if (!item.id) return result('Entrevista por enviar', 'Puedes retomar esta atención y enviar la entrevista inicial.');
+  if (!item.id) return result('Entrevista por enviar', professional
+    ? 'Envía la entrevista inicial para continuar la atención.'
+    : 'Tu profesional te enviará la entrevista inicial desde esta ficha.');
   if (consultation?.status === 'withdrawn' || consultation?.consentWithdrawn
     || (consultation?.consentId && !consultation.consentAccepted)) {
     return result('Consentimiento retirado', 'Consulta la información propia disponible.');
   }
+  if (item.reviewState === 'correction_requested') return result('Corrección pendiente', item.mode === 'directed'
+    ? 'El psicólogo debe resolver la solicitud.' : 'El paciente debe corregir y enviar una nueva versión.');
+  if (consultation?.hasAppointment) return result('Primera cita registrada', 'Consulta la cita desde la ficha.');
   if (consultation?.appointment) {
-    return consultation.appointment.status === 'completed'
+    return consultation.appointment?.status === 'completed'
       ? result('Primera consulta completada', professional ? 'El psicólogo puede consultar o registrar su nota privada.' : 'Puedes consultar tu cita.')
       : result('Primera consulta reservada', 'Consulta la fecha y la hora de la cita.');
   }
@@ -27,9 +32,7 @@ export function careProgress(item, consultation, professional, consultationRead)
   if (consultation?.consentAccepted) return result('Tratamiento aceptado', professional ? 'Ya puedes decidir si inicia la atención.' : 'Tu profesional decidirá cuándo iniciar la atención.');
   if (consultation?.sufficiencyId || consultation?.sufficiencyConfirmed) return result('Entrevista confirmada', professional ? 'El paciente revisará las condiciones de tratamiento.' : 'Revisa las condiciones de tratamiento y decide si quieres aceptar.');
   if (consultation?.documentVersion) return result('Entrevista lista para confirmar', professional ? 'Revisa el documento y confirma si está completo para iniciar.' : 'Tu profesional está revisando la entrevista.');
-  if (item.state === 'proposed') return result('Entrevista enviada al paciente', professional ? 'El paciente revisará las condiciones de entrevista.' : 'Revisa las condiciones para comenzar tu entrevista.');
-  if (item.reviewState === 'correction_requested') return result('Corrección pendiente', item.mode === 'directed'
-    ? 'El psicólogo debe resolver la solicitud.' : 'El paciente debe corregir y enviar una nueva versión.');
+  if (item.state === 'proposed') return result(professional ? 'Entrevista enviada al paciente' : 'Entrevista por aceptar', professional ? 'El paciente revisará las condiciones de entrevista.' : 'Revisa las condiciones para comenzar tu entrevista.');
   if (['documented', 'submitted'].includes(item.reviewState)) return result(
     professional ? 'Entrevista lista para revisar' : 'Entrevista en revisión',
     professional ? 'Lee las respuestas antes de confirmar.' : 'Tu profesional está revisando la entrevista.'
@@ -41,34 +44,46 @@ export function careProgress(item, consultation, professional, consultationRead)
     : result('Entrevista por responder', professional ? 'El paciente puede redactar y enviarte sus respuestas.' : 'Completa la entrevista y decide cuándo enviar tus respuestas.');
 }
 
-export function patientHasNextTask(assignment, consultation) {
-  if (assignment.state === 'revoked') return false;
-  if (consultation?.status === 'prepared' && consultation.sufficiencyConfirmed
-    && !consultation.consentAccepted && !consultation.consentWithdrawn) return true;
-  return assignment.state === 'proposed' || (assignment.state === 'accepted' && assignment.mode !== 'directed'
-    && assignment.episodeStatus === 'prepared' && ['awaiting_submission', 'correction_requested'].includes(assignment.reviewState));
+export function careChecklist(item, consultation, professional, consultationRead) {
+  const { stage, next } = careProgress(item, consultation, professional, consultationRead);
+  const closed = item.state === 'revoked' || consultation?.status === 'withdrawn' || consultation?.consentWithdrawn
+    || Boolean(consultation?.consentId && !consultation.consentAccepted);
+  const correcting = item.reviewState === 'correction_requested';
+  const active = !correcting && consultation?.status === 'active';
+  const interview = !correcting && (active || ['submitted', 'documented', 'validated'].includes(item.reviewState));
+  const sufficient = interview && Boolean(active || consultation?.sufficiencyId || consultation?.sufficiencyConfirmed);
+  const consent = sufficient && Boolean(active || consultation?.consentAccepted);
+  const appointment = active && Boolean(consultation.appointment || consultation.hasAppointment);
+  const confirmations = [true, interview, sufficient, consent, active, appointment];
+  const labels = ['Vinculación', 'Entrevista inicial', 'Revisión profesional',
+    'Consentimiento de tratamiento', 'Inicio del tratamiento', 'Primera cita'];
+
+  let index = confirmations.indexOf(false);
+  let owner = ['professional', 'patient', 'professional', 'patient', 'professional', 'professional'][index];
+  if (index === 1 && (!item.id || (item.state === 'accepted' && item.mode === 'directed'))) owner = 'professional';
+  const needsConsultation = item.id && (index >= 2 || item.episodeStatus === 'active');
+  const unavailable = item.state !== 'revoked' && (consultationRead === 'error'
+    || (needsConsultation && consultationRead !== 'disabled' && !consultation));
+  if (closed || unavailable || (consultationRead === 'disabled' && index >= 2)) {
+    index = -1;
+    owner = null;
+  }
+  const steps = labels.map((label, i) => ({
+    label, complete: confirmations[i], current: i === index, owner: i === index ? owner : null,
+  }));
+  return { stage, next, steps, completed: steps.filter(step => step.complete).length, closed, unavailable: Boolean(unavailable), owner: owner ?? null };
 }
 
-export function careChecklist(item, consultation, professional, consultationRead) {
-  const current = careProgress(item, consultation, professional, consultationRead);
-  const steps = [
-    { label: 'Vinculación', complete: true, owner: null },
-    { label: 'Entrevista inicial', complete: ['documented', 'submitted', 'correction_requested', 'validated'].includes(item.reviewState)
-      || consultation?.documentVersion > 0 || ['active', 'withdrawn'].includes(consultation?.status), owner: 'patient' },
-    { label: 'Revisión profesional', complete: ['validated'].includes(item.reviewState)
-      || Boolean(consultation?.sufficiencyId || consultation?.sufficiencyConfirmed || consultation?.consentAccepted || consultation?.status === 'active'), owner: 'professional' },
-    { label: 'Consentimiento de tratamiento', complete: Boolean(consultation?.consentAccepted || consultation?.status === 'active'), owner: 'patient' },
-    { label: 'Inicio del tratamiento', complete: consultation?.status === 'active' || Boolean(consultation?.appointment), owner: 'professional' },
-    { label: 'Primera cita', complete: Boolean(consultation?.appointment), owner: 'professional' },
-  ];
-  const index = steps.findIndex(step => !step.complete);
-  if (index >= 0) steps[index].current = true;
-  if (item.state === 'revoked' || consultation?.status === 'withdrawn' || consultation?.consentWithdrawn) {
-    return { ...current, steps: steps.map(step => ({ ...step, current: false, owner: null })), completed: 0, closed: true };
-  }
-  const activeOwner = index < 0 ? null : steps[index].owner;
-  steps.forEach((step, stepIndex) => {
-    if (stepIndex === index) step.owner = activeOwner;
+export function agreementCare(agreementId, assignments, consultations, professional) {
+  if (!Array.isArray(assignments) || (firstConsultationEnabled && !Array.isArray(consultations))) return null;
+  const relevant = assignments.filter(item => item.agreementId === agreementId);
+  const open = relevant.filter(item => item.state !== 'revoked');
+  const episodes = open.length ? open : relevant.length ? relevant : [{}];
+  return episodes.map(item => {
+    const detail = consultations?.find(entry => entry.id === item.id && entry.episodeId === item.episodeId);
+    const mismatched = detail && ((detail.admissionVersion != null && detail.admissionVersion !== item.version)
+      || (item.episodeStatus !== detail.status && detail.status !== 'withdrawn'));
+    if (mismatched || (firstConsultationEnabled && item.id && !detail && item.state !== 'revoked')) return { unavailable: true };
+    return careChecklist(item, detail, professional, firstConsultationEnabled ? 'loaded' : 'disabled');
   });
-  return { ...current, steps, completed: steps.filter(step => step.complete).length, closed: false };
 }

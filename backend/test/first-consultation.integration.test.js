@@ -220,6 +220,21 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
       const persisted = (await client.query('SELECT author_id,audience,provenance_version FROM consultation_notes WHERE appointment_id=$1', [ownAppointment.id])).rows[0];
       assert.deepEqual(persisted, { author_id: e1.psy, audience: 'professional_private', provenance_version: 'fictional-professional-original-v1' });
     });
+    await t.test('professional consultation list returns only scoped operational progress', async () => {
+      const list = await http(e1.psy, '/admissions/consultations');
+      assert.equal(list.status, 200);
+      const current = list.body.data.find(item => item.id === e1.id);
+      assert.deepEqual(Object.keys(current).sort(), [
+        'id', 'episodeId', 'professionalName', 'status', 'admissionVersion', 'documentVersion',
+        'sufficiencyConfirmed', 'consentAccepted', 'consentWithdrawn', 'hasAppointment',
+      ].sort());
+      assert.equal(current.status, 'active');
+      assert.equal(current.consentAccepted, true);
+      assert.equal(current.hasAppointment, true);
+      assert.doesNotMatch(JSON.stringify(list.body), /CONFIDENTIAL_FICTIONAL_CONSULTATION|consentTerms|consentId|"note"/);
+      assert.ok(!list.body.data.some(item => item.id === e2.id));
+    });
+
     await t.test('ordinary admission and consultation lists remain usable', async () => {
       for (const route of ['/admissions', '/admissions/consultations']) {
         const response = await http(e1.pac, route);

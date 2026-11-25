@@ -352,7 +352,7 @@ async function main() {
     assert.equal(await pac.locator('#mobile-invitation-count').count(), 0);
     assert.equal((await json(pac, '/agreements')).data[0].admissionAuthorization, 'not_granted');
     await button(psy, 'Pacientes vinculados').click();
-    await psy.getByRole('rowheader', { name: 'Lucía García' }).waitFor();
+    await heading(psy, 'Lucía García').waitFor();
     await psy.getByRole('searchbox', { name: 'Buscar por nombre' }).fill('garcia');
     const index = psy.getByRole('region', { name: 'Pacientes vinculados' });
     const status = index.getByText('Vinculación completada', { exact: true });
@@ -383,9 +383,10 @@ async function main() {
     const mobile = pac.getByRole('navigation', { name: 'Navegación móvil' });
     const before = (await json(pac, '/notices')).data;
     await button(mobile, 'Inicio').click();
-    await button(psy, 'Ver acuerdo de Lucía García').click();
-    psy.once('dialog', dialog => dialog.accept());
-    await button(psy, 'Terminar acuerdo unilateralmente').click();
+    await button(psy, 'Abrir atención de Lucía García').click();
+    await psy.locator('summary').filter({ hasText: /^Gestionar vinculación$/ }).click();
+    await button(psy, 'Terminar acuerdo').click();
+    await psy.getByRole('dialog', { name: 'Terminar acuerdo' }).getByRole('button', { name: 'Confirmar' }).click();
     await heading(psy, 'Acuerdo terminado').waitFor();
     const [notices] = await Promise.all([
       pac.waitForResponse(response => response.url().endsWith('/notices') && response.request().method() === 'GET'),

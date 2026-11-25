@@ -853,3 +853,11 @@ Ejecutar `FIRST_CONSULTATION_ENABLED=true bash scripts/clinical-episodes.sh admi
 4. Cerrar con el comando de limpieza y el UUID que devolvió el arnés.
 
 [Integración HTTP/PostgreSQL](../backend/test/first-consultation.integration.test.js) y [Chromium CARE](../scripts/care-ui-review.cjs) prueban el delta. Se cuentan clics, casillas y selecciones obligatorias desde la ficha abierta hasta la reserva. Fecha y hora se cuentan por separado. Se excluyen lectura, escritura de respuestas, refrescos y acciones excepcionales. Los objetivos aprobados son 9 en autoadministrada y 10 en dirigida, frente a 18 y 20 en el HEAD original. La aceptación funcional queda pendiente de la prueba manual del propietario. Después corresponde la auditoría independiente del delta de la entrega definitiva.
+
+#### Fichas y tareas tras la revisión visual
+
+El índice de «Mis pacientes» cruza la identidad que autoriza la proyección bilateral con los resúmenes de admisión y primera consulta del mismo acuerdo y episodio. La lista profesional de primera consulta devuelve etapa, versión, consentimiento y un indicador de cita registrada. La proyección descarta el texto clínico, los datos de agenda y los identificadores de consentimiento. «Mi atención» resalta los pendientes del paciente y comunica cuándo falta confirmar un estado.
+
+Las fichas muestran identidad autorizada, siguiente paso y seis etapas a partir de la vinculación. En la entrevista dirigida, el paciente acepta las condiciones antes de que el profesional registre lo conversado. Una corrección reabre la etapa de entrevista y la retirada cierra las acciones que dependían de ella. Las respuestas, versiones y consentimientos se abren en la ficha cuando se necesitan. «Gestionar atención» reúne las acciones sensibles con confirmación y cancelación explícitas. El paciente conserva la retirada de tratamiento desde «Mi atención» aunque la consulta de la ficha clínica esté restringida.
+
+[Chromium CARE](../scripts/care-ui-review.cjs) recorre ambos roles con viewport de escritorio y móvil, comprueba los conteos aprobados y genera ocho capturas con datos ficticios. Los archivos de evidencia excluyen las credenciales.
