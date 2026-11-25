@@ -412,7 +412,7 @@ async function main(){
      const nav=clinician.getByRole('navigation',{name:'Navegación móvil'});
      await button(nav,'Mis pacientes').click();
      const index=clinician.getByRole('region',{name:'Pacientes vinculados'});
-     const linked=index.getByRole('row').filter({has:clinician.getByRole('rowheader',{name:'bq3',exact:true})});
+     const linked=index.getByRole('article').filter({has:clinician.getByRole('heading',{name:'bq3',exact:true})});
      await linked.getByText('Vinculación completada',{exact:true}).waitFor();
      assert.equal(await index.getByText(/Admisión pendiente/i).count(),0);
      await shot('ADM26-pacientes-vinculados',clinician);

@@ -5,6 +5,7 @@ import {
   buildAppointmentSlotKey,
   buildBlockedRanges,
   buildRecurringEndDateOptions,
+  compareWaitlistPriority,
   createDefaultExceptionBlock,
   createEmptyExceptionForm,
   emptyForm,
@@ -143,8 +144,8 @@ const getAppointmentsEmptyStateCopy = ({
 };
 
 export default function AppointmentsScreen({
-  viewContext,
-  currentUser, patients, appointments, waitlistEntries = [], availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onCancelFutureRecurringAppointments, onCreateAppointmentWaitlist, onDeleteAppointmentWaitlist, onReorderAppointmentWaitlist, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
+  viewContext, booking,
+  currentUser, patients = [], appointments, waitlistEntries = [], availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onCancelFutureRecurringAppointments, onCreateAppointmentWaitlist, onDeleteAppointmentWaitlist, onReorderAppointmentWaitlist, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
   isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingWaitlist = false, processingWaitlistId = null, waitlistActionError = '', onDismissWaitlistError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
@@ -406,14 +407,7 @@ export default function AppointmentsScreen({
         return {
           hora24: hour24,
           hora: formatAppointmentDisplayHour(hour24),
-          entries: [...entries].sort((left, right) => {
-            const priorityCompare = Number(left.prioridad || 0) - Number(right.prioridad || 0);
-            if (priorityCompare !== 0) {
-              return priorityCompare;
-            }
-
-            return String(left.creadaEn || '').localeCompare(String(right.creadaEn || ''));
-          }),
+          entries: [...entries].sort(compareWaitlistPriority),
           slotAppointments,
         };
       });
@@ -799,9 +793,18 @@ export default function AppointmentsScreen({
 
     return true;
   };
-  const handleSelectDate = (date) => { setSelectedDate(date); if (!date) return; setCalendarAnchorDate(date); onDismissAppointmentError?.(); };
+  const handleSelectDate = (date) => {
+    setSelectedDate(date);
+    booking?.onDateChange(date);
+    if (!date) return;
+    setCalendarAnchorDate(date);
+    onDismissAppointmentError?.();
+  };
   const handleMoveCalendar = (direction) => setCalendarAnchorDate((currentDate) => calendarView === 'month' ? shiftDateByMonths(currentDate, direction) : shiftDateByDays(currentDate, direction * 7));
-  const handleResetCalendar = () => { setCalendarAnchorDate(todayDate); if (selectedDate) setSelectedDate(isPsychologist ? todayDate : ''); };
+  const handleResetCalendar = () => {
+    setCalendarAnchorDate(todayDate);
+    if (selectedDate) handleSelectDate(isPsychologist ? todayDate : '');
+  };
   const handleClearFilters = () => {
     setSelectedDate('');
     setStatusFilter('todos');
@@ -1009,6 +1012,181 @@ export default function AppointmentsScreen({
   }, [appointmentSessionIds, appointments, todayDate]);
   const showInlineManagementPanels = false;
 
+  const calendar = (
+    <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-gray-800 flex items-center"><Calendar className="mr-2 text-indigo-500" size={20} /> {calendarTitle}</h3>
+            <p className="text-sm text-gray-500 mt-1">{booking ? 'Elige un día para consultar sus horarios disponibles.' : calendarSubtitle}</p>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="inline-flex rounded-lg border border-gray-300 bg-gray-50 p-1">
+              <button type="button" onClick={() => setCalendarView('week')} className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${calendarView === 'week' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>Semanal</button>
+              <button type="button" onClick={() => setCalendarView('month')} className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${calendarView === 'month' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>Mensual</button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="min-w-32 text-center text-sm font-semibold capitalize text-gray-700">{calendarRangeLabel}</span>
+              <button type="button" onClick={() => handleMoveCalendar(-1)} className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white p-2 text-gray-600 hover:bg-gray-50 transition"><ChevronLeft size={18} /></button>
+              <button type="button" onClick={handleResetCalendar} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">{calendarView === 'month' ? 'Este mes' : 'Esta semana'}</button>
+              <button type="button" onClick={() => handleMoveCalendar(1)} className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white p-2 text-gray-600 hover:bg-gray-50 transition"><ChevronRight size={18} /></button>
+            </div>
+          </div>
+        </div>
+
+        {isPsychologist && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+            {availabilityExceptions.length > 0 && <>
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Excepciones</span>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExceptionPillClasses(true)}`}>
+                <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getExceptionDotClasses(true)}`} />
+                Dia bloqueado
+              </span>
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExceptionPillClasses(false)}`}>
+                <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getExceptionDotClasses(false)}`} />
+                Horario especial
+              </span>
+            </>}
+            {!booking && <><span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getSessionBadgeClasses('registered')}`}>
+              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses('registered')}`} />
+              Nota clinica registrada
+            </span>
+            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getSessionBadgeClasses('missing')}`}>
+              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses('missing')}`} />
+              Falta nota clinica
+            </span></>}
+            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getWaitlistBadgeClasses()}`}>
+              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />
+              Lista de espera
+            </span>
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+              <Repeat2 size={12} className="mr-1.5" />
+              Recurrente
+            </span>
+          </div>
+        )}
+
+        {calendarView === 'week' ? (
+          <div className={booking ? 'grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7' : 'grid grid-cols-1 gap-3 md:grid-cols-7'}>
+            {weekDates.map((weekDate) => {
+              const dayAppointments = weeklyAppointments[weekDate.isoDate] || [];
+              const visibleDayAppointments = getVisibleCalendarAppointments(dayAppointments, 3);
+              const visibleDayAppointmentGroups = groupCalendarAppointmentsBySlot(visibleDayAppointments);
+              const dayException = availabilityExceptionsMap.get(weekDate.isoDate);
+              const isActive = selectedDate === weekDate.isoDate;
+              const isHovered = hoveredDate === weekDate.isoDate;
+              const isToday = weekDate.isoDate === todayDate;
+              return (
+                <button key={weekDate.isoDate} type="button" onClick={() => handleSelectDate(weekDate.isoDate)} className={`rounded-2xl border p-3 text-left transition ${isActive ? 'border-indigo-500 bg-indigo-50 shadow-sm ring-2 ring-indigo-100' : dayException ? getExceptionCellAccent(dayException.isUnavailable) : isHovered ? 'border-indigo-300 bg-indigo-50/60' : isToday ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50 hover:bg-white'}`}>
+                  <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-wider text-gray-500">{weekDate.shortWeekday}</span><div className="flex items-center gap-1.5">{dayException && <span className={`inline-flex h-2.5 w-2.5 rounded-full ring-4 ${getExceptionDotClasses(dayException.isUnavailable)}`} />}{isToday && <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Hoy</span>}</div></div>
+                  <p className="mt-2 text-sm font-bold text-gray-900">{weekDate.shortLabel}</p>
+                  {dayException && <div className={`mt-2 inline-flex max-w-full items-center rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'}</div>}
+                  <div className="mt-3 space-y-2">
+                    {visibleDayAppointmentGroups.map((group) => {
+                      const renderChip = (appointment) => {
+                        const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
+                        const displayStatus = getAppointmentDisplayStatus(appointment);
+                        const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
+                        const showSessionIndicator = !booking && (isPsychologist ? sessionState !== 'none' : sessionState === 'registered');
+                        return (
+                          <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
+                            <p className="truncate">{appointment.hora}</p>
+                            <div className="flex items-center gap-1.5">
+                              {appointment.recurrenciaGrupoId && (
+                                <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-500" title="Cita recurrente">
+                                  <Repeat2 size={10} />
+                                </span>
+                              )}
+                              {showWaitlistIndicator && (
+                                <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${getWaitlistBadgeClasses()}`} title={`${appointment.waitlistCount} en lista de espera`}>
+                                  {appointment.waitlistCount}
+                                </span>
+                              )}
+                              {showSessionIndicator && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
+                            </div>
+                          </div>
+                        );
+                      };
+
+                      return (
+                        <div key={`${weekDate.isoDate}-${group[0].hora24}`} className={getCalendarGroupContainerClasses(group.length, 'week')}>
+                          {group.map((appointment) => renderChip(appointment))}
+                        </div>
+                      );
+                    })}
+                    {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-500">{dayException?.isUnavailable ? 'Día bloqueado' : booking ? 'Ver horarios' : 'Libre'}</div>}
+                    {dayAppointments.length > visibleDayAppointments.length && <p className="text-[11px] font-medium text-indigo-600">+{dayAppointments.length - visibleDayAppointments.length} mas</p>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-100/80">{monthWeekdayHeaders.map((weekday) => <div key={weekday} className="px-2 py-3 text-center text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{weekday}</div>)}</div>
+            <div className="grid grid-cols-7">
+              {monthDates.map((monthDate) => {
+                const dayAppointments = monthlyAppointments[monthDate.isoDate] || [];
+                const visibleDayAppointments = getVisibleCalendarAppointments(dayAppointments, 2);
+                const visibleDayAppointmentGroups = groupCalendarAppointmentsBySlot(visibleDayAppointments);
+                const dayException = availabilityExceptionsMap.get(monthDate.isoDate);
+                const isActive = selectedDate === monthDate.isoDate;
+                const isHovered = hoveredDate === monthDate.isoDate;
+                const isToday = monthDate.isoDate === todayDate;
+                return (
+                  <button key={monthDate.isoDate} type="button" onClick={() => handleSelectDate(monthDate.isoDate)} className={`h-24 sm:h-28 border-b border-r p-2 text-left align-top transition ${isActive ? 'bg-indigo-50/80 ring-1 ring-inset ring-indigo-200' : dayException ? (dayException.isUnavailable ? 'bg-red-50/40' : 'bg-amber-50/40') : isHovered ? 'bg-indigo-50/50' : monthDate.isCurrentMonth ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/70 hover:bg-slate-50'}`}>
+                    <div className="flex h-full flex-col">
+                      <div className="flex items-center justify-between"><span className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition ${getDayNumberBadge({ isToday, isActive, isHovered, isCurrentMonth: monthDate.isCurrentMonth })}`}>{monthDate.dayNumber}</span>{dayException && <span className={`inline-flex h-2.5 w-2.5 rounded-full ring-4 ${getExceptionDotClasses(dayException.isUnavailable)}`} title={dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'} />}</div>
+                      {dayException && <div className={`mt-1 inline-flex w-fit rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Bloqueado' : 'Especial'}</div>}
+                      <div className="mt-2 flex-1 space-y-1 overflow-hidden">{visibleDayAppointmentGroups.map((group) => {
+                        const renderChip = (appointment) => {
+                          const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
+                          const displayStatus = getAppointmentDisplayStatus(appointment);
+                          const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
+                          const showSessionIndicator = !booking && (isPsychologist ? sessionState !== 'none' : sessionState === 'registered');
+                          return (
+                            <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
+                              <div className="truncate">{appointment.hora}</div>
+                              <div className="flex items-center gap-1">
+                                {appointment.recurrenciaGrupoId && (
+                                  <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-500" title="Cita recurrente">
+                                    <Repeat2 size={8} />
+                                  </span>
+                                )}
+                                {showWaitlistIndicator && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getWaitlistCountDotClasses()}`} title={`${appointment.waitlistCount} en lista de espera`} />}
+                                {showSessionIndicator && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
+                              </div>
+                            </div>
+                          );
+                        };
+
+                        return (
+                          <div key={`${monthDate.isoDate}-${group[0].hora24}`} className={getCalendarGroupContainerClasses(group.length, 'month')}>
+                            {group.map((appointment) => renderChip(appointment))}
+                          </div>
+                        );
+                      })}</div>
+                      {dayAppointments.length > visibleDayAppointments.length && <p className="mt-1 text-[10px] font-semibold leading-none text-indigo-700">+{dayAppointments.length - visibleDayAppointments.length}</p>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+  );
+
+  if (booking) return <div className="space-y-4">
+    {calendar}
+    <section aria-label="Horario de la primera cita" className="space-y-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm md:p-5">
+      <label className="block text-sm font-semibold text-slate-800">Fecha de la primera cita
+        <input type="date" value={selectedDate} onChange={event => handleSelectDate(event.target.value)}
+          className="mt-1 block rounded-lg border border-gray-300 bg-white px-3 py-2.5 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+      </label>
+      {booking.slotPicker}
+    </section>
+  </div>;
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {waitlistSuccessMessage && (
@@ -1111,168 +1289,7 @@ export default function AppointmentsScreen({
         </section>
       )}
 
-      <section className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
-          <div>
-            <h3 className="text-lg font-bold text-gray-800 flex items-center"><Calendar className="mr-2 text-indigo-500" size={20} /> {calendarTitle}</h3>
-            <p className="text-sm text-gray-500 mt-1">{calendarSubtitle}</p>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="inline-flex rounded-lg border border-gray-300 bg-gray-50 p-1">
-              <button type="button" onClick={() => setCalendarView('week')} className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${calendarView === 'week' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>Semanal</button>
-              <button type="button" onClick={() => setCalendarView('month')} className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${calendarView === 'month' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>Mensual</button>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="min-w-32 text-center text-sm font-semibold capitalize text-gray-700">{calendarRangeLabel}</span>
-              <button type="button" onClick={() => handleMoveCalendar(-1)} className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white p-2 text-gray-600 hover:bg-gray-50 transition"><ChevronLeft size={18} /></button>
-              <button type="button" onClick={handleResetCalendar} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">{calendarView === 'month' ? 'Este mes' : 'Esta semana'}</button>
-              <button type="button" onClick={() => handleMoveCalendar(1)} className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white p-2 text-gray-600 hover:bg-gray-50 transition"><ChevronRight size={18} /></button>
-            </div>
-          </div>
-        </div>
-
-        {isPsychologist && (
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-            {availabilityExceptions.length > 0 && <>
-              <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Excepciones</span>
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExceptionPillClasses(true)}`}>
-                <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getExceptionDotClasses(true)}`} />
-                Dia bloqueado
-              </span>
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExceptionPillClasses(false)}`}>
-                <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getExceptionDotClasses(false)}`} />
-                Horario especial
-              </span>
-            </>}
-            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getSessionBadgeClasses('registered')}`}>
-              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses('registered')}`} />
-              Nota clinica registrada
-            </span>
-            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getSessionBadgeClasses('missing')}`}>
-              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses('missing')}`} />
-              Falta nota clinica
-            </span>
-            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getWaitlistBadgeClasses()}`}>
-              <span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />
-              Lista de espera
-            </span>
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-              <Repeat2 size={12} className="mr-1.5" />
-              Recurrente
-            </span>
-          </div>
-        )}
-
-        {calendarView === 'week' ? (
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
-            {weekDates.map((weekDate) => {
-              const dayAppointments = weeklyAppointments[weekDate.isoDate] || [];
-              const visibleDayAppointments = getVisibleCalendarAppointments(dayAppointments, 3);
-              const visibleDayAppointmentGroups = groupCalendarAppointmentsBySlot(visibleDayAppointments);
-              const dayException = availabilityExceptionsMap.get(weekDate.isoDate);
-              const isActive = selectedDate === weekDate.isoDate;
-              const isHovered = hoveredDate === weekDate.isoDate;
-              const isToday = weekDate.isoDate === todayDate;
-              return (
-                <button key={weekDate.isoDate} type="button" onClick={() => handleSelectDate(weekDate.isoDate)} className={`rounded-2xl border p-3 text-left transition ${isActive ? 'border-indigo-500 bg-indigo-50 shadow-sm ring-2 ring-indigo-100' : dayException ? getExceptionCellAccent(dayException.isUnavailable) : isHovered ? 'border-indigo-300 bg-indigo-50/60' : isToday ? 'border-indigo-200 bg-white' : 'border-gray-200 bg-gray-50 hover:bg-white'}`}>
-                  <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-wider text-gray-500">{weekDate.shortWeekday}</span><div className="flex items-center gap-1.5">{dayException && <span className={`inline-flex h-2.5 w-2.5 rounded-full ring-4 ${getExceptionDotClasses(dayException.isUnavailable)}`} />}{isToday && <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Hoy</span>}</div></div>
-                  <p className="mt-2 text-sm font-bold text-gray-900">{weekDate.shortLabel}</p>
-                  {dayException && <div className={`mt-2 inline-flex max-w-full items-center rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'}</div>}
-                  <div className="mt-3 space-y-2">
-                    {visibleDayAppointmentGroups.map((group) => {
-                      const renderChip = (appointment) => {
-                        const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
-                        const displayStatus = getAppointmentDisplayStatus(appointment);
-                        const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
-                        const showSessionIndicator = isPsychologist ? sessionState !== 'none' : sessionState === 'registered';
-                        return (
-                          <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
-                            <p className="truncate">{appointment.hora}</p>
-                            <div className="flex items-center gap-1.5">
-                              {appointment.recurrenciaGrupoId && (
-                                <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-500" title="Cita recurrente">
-                                  <Repeat2 size={10} />
-                                </span>
-                              )}
-                              {showWaitlistIndicator && (
-                                <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold ${getWaitlistBadgeClasses()}`} title={`${appointment.waitlistCount} en lista de espera`}>
-                                  {appointment.waitlistCount}
-                                </span>
-                              )}
-                              {showSessionIndicator && <span className={`inline-flex h-2 w-2 shrink-0 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
-                            </div>
-                          </div>
-                        );
-                      };
-
-                      return (
-                        <div key={`${weekDate.isoDate}-${group[0].hora24}`} className={getCalendarGroupContainerClasses(group.length, 'week')}>
-                          {group.map((appointment) => renderChip(appointment))}
-                        </div>
-                      );
-                    })}
-                    {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-400">{dayException?.isUnavailable ? 'Dia bloqueado' : 'Libre'}</div>}
-                    {dayAppointments.length > visibleDayAppointments.length && <p className="text-[11px] font-medium text-indigo-600">+{dayAppointments.length - visibleDayAppointments.length} mas</p>}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
-            <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-100/80">{monthWeekdayHeaders.map((weekday) => <div key={weekday} className="px-2 py-3 text-center text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{weekday}</div>)}</div>
-            <div className="grid grid-cols-7">
-              {monthDates.map((monthDate) => {
-                const dayAppointments = monthlyAppointments[monthDate.isoDate] || [];
-                const visibleDayAppointments = getVisibleCalendarAppointments(dayAppointments, 2);
-                const visibleDayAppointmentGroups = groupCalendarAppointmentsBySlot(visibleDayAppointments);
-                const dayException = availabilityExceptionsMap.get(monthDate.isoDate);
-                const isActive = selectedDate === monthDate.isoDate;
-                const isHovered = hoveredDate === monthDate.isoDate;
-                const isToday = monthDate.isoDate === todayDate;
-                return (
-                  <button key={monthDate.isoDate} type="button" onClick={() => handleSelectDate(monthDate.isoDate)} className={`h-24 sm:h-28 border-b border-r p-2 text-left align-top transition ${isActive ? 'bg-indigo-50/80 ring-1 ring-inset ring-indigo-200' : dayException ? (dayException.isUnavailable ? 'bg-red-50/40' : 'bg-amber-50/40') : isHovered ? 'bg-indigo-50/50' : monthDate.isCurrentMonth ? 'bg-white hover:bg-slate-50' : 'bg-slate-50/70 hover:bg-slate-50'}`}>
-                    <div className="flex h-full flex-col">
-                      <div className="flex items-center justify-between"><span className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold transition ${getDayNumberBadge({ isToday, isActive, isHovered, isCurrentMonth: monthDate.isCurrentMonth })}`}>{monthDate.dayNumber}</span>{dayException && <span className={`inline-flex h-2.5 w-2.5 rounded-full ring-4 ${getExceptionDotClasses(dayException.isUnavailable)}`} title={dayException.isUnavailable ? 'Dia bloqueado' : 'Horario especial'} />}</div>
-                      {dayException && <div className={`mt-1 inline-flex w-fit rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${getExceptionPillClasses(dayException.isUnavailable)}`}>{dayException.isUnavailable ? 'Bloqueado' : 'Especial'}</div>}
-                      <div className="mt-2 flex-1 space-y-1 overflow-hidden">{visibleDayAppointmentGroups.map((group) => {
-                        const renderChip = (appointment) => {
-                          const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
-                          const displayStatus = getAppointmentDisplayStatus(appointment);
-                          const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
-                          const showSessionIndicator = isPsychologist ? sessionState !== 'none' : sessionState === 'registered';
-                          return (
-                            <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
-                              <div className="truncate">{appointment.hora}</div>
-                              <div className="flex items-center gap-1">
-                                {appointment.recurrenciaGrupoId && (
-                                  <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-500" title="Cita recurrente">
-                                    <Repeat2 size={8} />
-                                  </span>
-                                )}
-                                {showWaitlistIndicator && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getWaitlistCountDotClasses()}`} title={`${appointment.waitlistCount} en lista de espera`} />}
-                                {showSessionIndicator && <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ring-2 ${getSessionIndicatorClasses(sessionState)}`} title={getAppointmentSessionLabel(sessionState)} />}
-                              </div>
-                            </div>
-                          );
-                        };
-
-                        return (
-                          <div key={`${monthDate.isoDate}-${group[0].hora24}`} className={getCalendarGroupContainerClasses(group.length, 'month')}>
-                            {group.map((appointment) => renderChip(appointment))}
-                          </div>
-                        );
-                      })}</div>
-                      {dayAppointments.length > visibleDayAppointments.length && <p className="mt-1 text-[10px] font-semibold leading-none text-indigo-700">+{dayAppointments.length - visibleDayAppointments.length}</p>}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </section>
-
+      {calendar}
       {isPsychologist && (
         <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

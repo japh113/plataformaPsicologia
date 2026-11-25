@@ -1,6 +1,13 @@
 export const unifiedCareEnabled = import.meta.env?.VITE_UNIFIED_CARE_ENABLED === 'true';
 export const firstConsultationEnabled = import.meta.env?.VITE_FIRST_CONSULTATION_ENABLED === 'true';
 
+export function careActionLabel(progress, professional) {
+  if (!professional) return 'Pendiente de tu respuesta';
+  if (progress.steps?.at(-1)?.current) return 'Primera cita por agendar';
+  if (progress.steps?.[2]?.current || progress.stage === 'Corrección pendiente') return 'Pendiente de revisión';
+  return 'Siguiente paso';
+}
+
 export function episodeTitle(item) {
   const date = new Date(item.preparedAt);
   const timestamp = item.preparedAt && Number.isFinite(date.getTime()) && date.toLocaleString('es-MX', {

@@ -210,7 +210,10 @@ async function consultationCommand(actor, operation, input, id, legacy, professi
             'sufficiencyConfirmed', jsonb_typeof(data->'sufficiencyId')='string',
             'consentAccepted', data->'consentAccepted',
             'consentWithdrawn', jsonb_typeof(data->'consentId')='string' AND data->'consentAccepted'='false'::jsonb,
-            'hasAppointment', jsonb_typeof(data->'appointment')='object') AS data
+            'hasAppointment', jsonb_typeof(data->'appointment')='object',
+            'appointmentSlot', CASE WHEN jsonb_typeof(data->'appointment')='object' THEN jsonb_build_object(
+              'date', data#>'{appointment,date}', 'time', data#>'{appointment,time}', 'status', data#>'{appointment,status}'
+            ) ELSE NULL END) AS data
             FROM public.admission_consultation($1,$2,$3,$4::jsonb) AS data`
         : 'SELECT public.admission_consultation($1,$2,$3,$4::jsonb) AS data',
       [actor.id, actor.sessionVersion, operation, JSON.stringify(data)]

@@ -2,7 +2,7 @@
 
 ## Estado y uso
 
-Corte del **24 de noviembre de 2026**. Base `origin/main` verificada en [`7ac6d76f553aa5784dcf14c27b7ac8f650d86136`](https://github.com/japh113/plataformaPsicologia/commit/7ac6d76f553aa5784dcf14c27b7ac8f650d86136), merge del [diseño #85](https://github.com/japh113/plataformaPsicologia/pull/85) sobre [#84 integrado](https://github.com/japh113/plataformaPsicologia/pull/84). Esta base contiene SQL 001–020.
+Corte del **25 de noviembre de 2026**. Base `origin/main` verificada en [`7ac6d76f553aa5784dcf14c27b7ac8f650d86136`](https://github.com/japh113/plataformaPsicologia/commit/7ac6d76f553aa5784dcf14c27b7ac8f650d86136), merge del [diseño #85](https://github.com/japh113/plataformaPsicologia/pull/85) sobre [#84 integrado](https://github.com/japh113/plataformaPsicologia/pull/84). Esta base contiene SQL 001–020.
 
 **Hitos 1 y 2 integrados.** [#79](https://github.com/japh113/plataformaPsicologia/pull/79) retiró la entrevista global. [#82](https://github.com/japh113/plataformaPsicologia/pull/82) incorporó la [primera consulta individual ficticia](stage2a-identity-directory-intake.md#primera-consulta-individual-ficticia-por-episodio) con suficiencia, consentimiento separado, revocación, primera cita y original profesional privado. [#80](https://github.com/japh113/plataformaPsicologia/issues/80) sigue abierto con riesgo residual de disponibilidad aceptado para desarrollo. [Decisión del propietario](https://github.com/japh113/plataformaPsicologia/pull/79#issuecomment-7031110420)
 
@@ -16,9 +16,11 @@ SQL 021 sigue en Draft. Su hash, evidencia y manifiesto corresponden al correcti
 
 **Correctivo visual de #86 IMPLEMENTADO.** «Mis pacientes» y «Mi atención» muestran tareas de los acuerdos y episodios autorizados. La ficha reúne identidad, siguiente acción y progreso, con documentos bajo demanda y gestión de retiradas. El correctivo limita las seis rutas del recorrido unificado mediante un presupuesto compartido comprobado en HTTP. La descripción del Draft identifica el HEAD, las capturas y las verificaciones del correctivo visual. [Contrato](stage2a-identity-directory-intake.md#fichas-y-tareas-tras-la-revisión-visual) · [Triage de #77–80](security-codeql-triage.md#alertas-7780-del-correctivo-de-ux-del-draft-86)
 
+**Unificación de entradas y Agenda de #86 APROBADA e IMPLEMENTADA.** El psicólogo usa el listado clínico existente y el paciente una sola entrada «Mi seguimiento». SQL 022 incorpora el contexto exacto de la invitación y el expediente autorizado y las etiquetas privadas temporales. La primera cita usa el calendario de Agenda dentro de la ficha. [Contrato y demo](stage2a-identity-directory-intake.md#invitación-aclaraciones-y-disponibilidad-en-la-ficha)
+
 La [rama publicada](https://github.com/japh113/plataformaPsicologia/commits/feat/recorrido-unificado-atencion) y el Draft identifican el HEAD definitivo y el resultado de las verificaciones. La aceptación manual del propietario, la auditoría independiente del delta y la evidencia remota del mismo HEAD se requieren antes de integrar.
 
-**2A sigue parcial.** Producto aprobado, código integrado, capacidad habilitada, ensayo aislado, instalación habitual y despliegue son estados distintos. Los recorridos 013–021 son ficticios y aislados. SQL 021 forma parte de la rama de implementación. Este corte verificó GitHub y código; la ausencia de usuarios reales y el carácter desechable de los datos provienen del propietario y de RN-28/ADR-018.
+**2A sigue parcial.** Producto aprobado, código integrado, capacidad habilitada, ensayo aislado, instalación habitual y despliegue son estados distintos. Los recorridos 013–022 son ficticios y aislados. SQL 021 y 022 forman parte de la rama de implementación. Este corte verificó GitHub y código; la ausencia de usuarios reales y el carácter desechable de los datos provienen del propietario y de RN-28/ADR-018.
 
 ## Capacidades y fronteras actuales
 
@@ -84,7 +86,7 @@ El [recorrido unificado](stage2a-identity-directory-intake.md#diseño-propuesto-
 ## Restricciones críticas
 
 La política clínica ordinaria deniega sin audiencia verificada. La activación para la primera consulta ficticia se limita al flujo aislado de SQL 018, con vigencia comprobada por operación. Tareas, notas, citas y seguimiento legacy mantienen sus contratos y el backoffice conserva su separación. Las credenciales técnicas de admisión y bilateral se reservan a sus conexiones aisladas.
-Conservar SQL 001–021, manifiesto, hashes y ledger. Ensayos solo en destinos nuevos ficticios autorizados. La exposición habitual, proveedores, nuevas vías de vinculación, activación, merge y despliegue requieren sus autorizaciones correspondientes.
+Conservar SQL 001–022, manifiesto, hashes y ledger. Ensayos solo en destinos nuevos ficticios autorizados. La exposición habitual, proveedores, nuevas vías de vinculación, activación, merge y despliegue requieren sus autorizaciones correspondientes.
 
 ## Flujo de desarrollo y actualización
 

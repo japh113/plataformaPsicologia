@@ -3,7 +3,7 @@ import React from 'react';
 import { formatFollowUpDate, getPatientFollowUpGroups } from '../utils/patientFollowUp';
 import { formatAppointmentDisplayHour } from '../mappers/appointments';
 
-export default function PatientFollowUp({ patient, onToggleTask, processingTaskId, onRetryFollowUp }) {
+export default function PatientFollowUp({ patient, onToggleTask, processingTaskId, onRetryFollowUp, title = 'Mi seguimiento' }) {
   const { consultations, unassignedTasks } = getPatientFollowUpGroups(patient);
   const renderTasks = tasks => (
     <div className="mt-4 space-y-2">
@@ -18,9 +18,9 @@ export default function PatientFollowUp({ patient, onToggleTask, processingTaskI
     </div>
   );
   return (
-    <section aria-label="Mi seguimiento" className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 md:p-6">
+    <section aria-label={title} className="space-y-4 rounded-3xl border border-slate-200 bg-white p-4 md:p-6">
       <div>
-        <h2 className="text-lg font-bold text-slate-900">Mi seguimiento</h2>
+        <h2 className="text-lg font-bold text-slate-900">{title}</h2>
         <p className="mt-1 text-sm text-slate-500">Tus consultas realizadas y las tareas asignadas entre consultas.</p>
       </div>
       <PatientFollowUpNotice patient={patient} onRetry={() => onRetryFollowUp(patient.id)} />

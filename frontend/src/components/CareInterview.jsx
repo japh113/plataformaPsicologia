@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { CheckCircle2, ChevronDown, MessageSquareText } from 'lucide-react';
 import { apiRequest } from '../api/client';
 import { SensitiveAction } from './CareDisclosure';
 import AdmissionAssessment from './AdmissionAssessment';
@@ -250,25 +251,47 @@ function ClarificationNotice({ detail, professional, directed }) {
   const question = detail.template.questions.find(q => q.id === request.questionId);
   const changes = after && before ? detail.template.questions.filter(q => before[q.id] !== after[q.id]) : [];
   const resolved = directed ? Boolean(request.resolution) : Boolean(after);
-  const status = resolved ? directed && request.resolution.decision === 'reject' ? 'Rectificación rechazada' : 'Nueva versión recibida'
+  const status = resolved ? directed && request.resolution.decision === 'reject' ? 'Rectificación rechazada' : 'Respuesta actualizada'
     : professional ? 'Aclaración pendiente de respuesta' : 'Aclaración solicitada';
   const title = directed && !resolved && professional ? 'El paciente solicitó una rectificación' : status;
 
-  return <section className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-slate-800" aria-label="Aclaración de entrevista">
-    <h4 className="font-bold text-amber-950">{title}</h4>
-    <p className="font-semibold">{question?.label || 'Entrevista completa'}</p>
-    <p className="whitespace-pre-wrap break-words">{request.message ?? request.reason}</p>
-    {request.resolution?.explanation && <p className="whitespace-pre-wrap break-words">{request.resolution.explanation}</p>}
-    {!resolved && question && before && <p className="whitespace-pre-wrap break-words text-slate-700">Respuesta original · {before[question.id]}</p>}
-    {resolved && after && before && (changes.length ? <details>
-      <summary className="cursor-pointer font-semibold text-indigo-800">Comparar respuestas · {changes.length} {changes.length === 1 ? 'cambio' : 'cambios'}</summary>
-      <dl className="mt-3 space-y-3">
-        {changes.map(q => <div key={q.id} className="rounded-lg bg-white p-3">
-          <dt className="font-semibold">{q.label}</dt>
-          <dd className="mt-1 whitespace-pre-wrap break-words"><span className="font-semibold">Antes</span> · {before[q.id]}</dd>
-          <dd className="mt-1 whitespace-pre-wrap break-words"><span className="font-semibold">Ahora</span> · {after[q.id]}</dd>
+  const Icon = resolved ? CheckCircle2 : MessageSquareText;
+  return <section className={`space-y-3 rounded-xl border bg-white p-4 text-sm text-slate-800 ${resolved ? 'border-slate-200' : 'border-amber-200'}`}
+    aria-label="Aclaración de entrevista">
+    <div className="flex items-start gap-3">
+      <Icon aria-hidden="true" size={18} className={`mt-1 shrink-0 ${resolved ? 'text-teal-700' : 'text-amber-700'}`} />
+      <div className="min-w-0 space-y-2">
+        <p className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${resolved ? 'bg-teal-50 text-teal-900' : 'bg-amber-50 text-amber-950'}`}>{title}</p>
+        <h4 className="break-words font-bold text-slate-950">{question?.label || 'Entrevista completa'}</h4>
+        <p className="font-semibold text-slate-700">{directed ? 'Motivo de la rectificación' : 'Aclaración del profesional'}</p>
+        <p className="whitespace-pre-wrap break-words leading-relaxed">{request.message ?? request.reason}</p>
+      </div>
+    </div>
+    {request.resolution?.explanation && <p className="whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3">{request.resolution.explanation}</p>}
+    {!resolved && question && before && <div className="rounded-lg bg-slate-50 p-3">
+      <p className="text-xs font-semibold text-slate-600">Respuesta original</p>
+      <p className="mt-1 whitespace-pre-wrap break-words">{before[question.id]}</p>
+    </div>}
+    {resolved && after && before && (changes.length ? <details className="group border-t border-slate-100 pt-2">
+      <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-md font-semibold text-indigo-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-700 [&::-webkit-details-marker]:hidden">
+        <ChevronDown aria-hidden="true" size={16} className="shrink-0 group-open:rotate-180" />
+        Ver cambios ({changes.length})
+      </summary>
+      <div className="mt-2 space-y-3">
+        {changes.map(q => <div key={q.id} className="space-y-2 rounded-lg border border-slate-200 p-3">
+          <p className="font-semibold">{q.label}</p>
+          <dl className="grid gap-2 sm:grid-cols-2">
+            <div className="min-w-0 rounded-md bg-slate-50 p-2">
+              <dt className="text-xs font-semibold text-slate-600">Antes</dt>
+              <dd className="mt-1 whitespace-pre-wrap break-words">{before[q.id]}</dd>
+            </div>
+            <div className="min-w-0 rounded-md bg-teal-50 p-2">
+              <dt className="text-xs font-semibold text-teal-900">Ahora</dt>
+              <dd className="mt-1 whitespace-pre-wrap break-words">{after[q.id]}</dd>
+            </div>
+          </dl>
         </div>)}
-      </dl>
+      </div>
     </details> : <p>La nueva versión conserva las mismas respuestas.</p>)}
   </section>;
 }

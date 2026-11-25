@@ -89,7 +89,7 @@ async function openProfessional() {
 }
 
 async function openPatient() {
-  await button(nav(patient), 'Mi atención').click();
+  await button(nav(patient), 'Mi seguimiento').click();
   await button(patient, 'Ver atención').click();
   await heading(patient, 'Profesional ficticio bp2').waitFor();
 }
@@ -124,6 +124,11 @@ function steps() {
       await page.getByLabel(name).selectOption(value);
       acts.push(name);
     },
+    async check(field, name) {
+      await field.evaluate(input => input.closest('label').click());
+      assert.equal(await field.isChecked(), true);
+      acts.push(name);
+    },
     async fill(page, name, value) {
       await page.getByLabel(name).fill(value);
       acts.push(name);
@@ -144,14 +149,30 @@ async function conclude(flow, hour, daysAgo) {
   await patient.getByRole('heading', { name: 'Tratamiento aceptado', exact: true }).waitFor();
   await focus(professional);
   await flow.click(professional, 'Iniciar tratamiento');
-  await professional.getByLabel('Fecha de la primera cita').waitFor();
-  if (current === 'CARE02') await screenshot('06-tratamiento-iniciado', professional);
+  const agenda = professional.getByRole('dialog', { name: 'Agendar primera cita' });
+  await agenda.waitFor();
+  if (current === 'CARE02') {
+    await button(agenda, 'Volver a la ficha').click();
+    await heading(professional, 'Tratamiento iniciado').waitFor();
+    await screenshot('06-tratamiento-iniciado', professional);
+    await button(professional, 'Agendar primera cita').click();
+  }
   const date = new Date(Date.now() - daysAgo * 24 * 3600 * 1000).toISOString().slice(0, 10);
   await flow.fill(professional, 'Fecha de la primera cita', date);
-  const available = professional.getByLabel('Hora de inicio');
-  await available.locator(`option[value="${hour}"]`).waitFor({ state: 'attached' });
-  assert.equal(await available.locator('option[value="04:00"]').count(), 0);
-  await flow.select(professional, 'Hora de inicio', hour);
+  const slot = agenda.locator(`input[type=radio][value="${hour}"]`);
+  await slot.waitFor({ state: 'attached' });
+  assert.equal(await agenda.locator('input[type=radio][value="04:00"]').count(), 0);
+  await flow.check(slot, 'Hora de inicio');
+  if (current === 'CARE02') {
+    await screenshot('09-agenda-desde-la-ficha', professional);
+    await professional.keyboard.press('Escape');
+    await agenda.waitFor({ state: 'hidden' });
+    await professional.waitForFunction(() => document.activeElement?.textContent.includes('Agendar primera cita'));
+    await button(professional, 'Agendar primera cita').click();
+    assert.equal(await label(agenda, 'Fecha de la primera cita').inputValue(), date);
+    await slot.waitFor({ state: 'attached' });
+    assert.equal(await slot.isChecked(), true);
+  }
   await flow.click(professional, 'Reservar primera cita');
   await statusBox(professional).getByText(new RegExp(hour + ' · 60 minutos · Pendiente')).waitFor();
   await focus(patient);
@@ -207,25 +228,34 @@ async function main() {
     await button(professional, 'Ya recibí el código del paciente').press('Enter');
     await professional.getByLabel('Código del paciente', { exact: true }).fill(directed.data.reference);
     await professional.getByLabel('Correo conocido de la persona', { exact: true }).fill('bq2@bilateral.invalid');
+    await label(professional, 'Etiqueta privada (opcional)').fill('Referencia del martes');
     const terms = (await bilateral(professional, '/terms')).data;
     await professional.getByLabel(terms.declarationText, { exact: true }).check();
     await professional.getByLabel(/Propongo expresamente/).check();
     await button(professional, 'Registrar solicitud').click();
     await professional.getByRole('status').filter({ hasText: 'Solicitud registrada' }).waitFor();
-    await button(nav(patient), 'Mi atención').click();
-    for (let attempt = 0; attempt < 8 && !(await button(patient, 'Ver invitación').count()); attempt++) {
-      await button(patient, 'Actualizar bandeja').click();
-      await button(patient, 'Ver invitación').waitFor({ timeout: 1500 }).catch(() => {});
+    await button(nav(patient), 'Mi seguimiento').click();
+    for (let attempt = 0; attempt < 8 && !(await button(patient, 'Revisar invitación').count()); attempt++) {
+      await button(patient, 'Actualizar seguimiento').click();
+      await button(patient, 'Revisar invitación').waitFor({ timeout: 1500 }).catch(() => {});
     }
-    await button(patient, 'Ver invitación').click();
+    await professional.getByRole('heading', { name: 'Referencia del martes', exact: true }).waitFor();
+    assert.equal(await professional.getByRole('heading', { name: 'Mis Pacientes', exact: true }).count(), 1);
+    assert.equal(await professional.getByText('Expedientes existentes', { exact: true }).count(), 0);
+    await nav(patient).getByText('1 acción pendiente', { exact: true }).waitFor({ state: 'attached' });
+    assert.equal(await patient.getByText('Sin tareas pendientes', { exact: true }).count(), 0);
+    assert.equal(await patient.getByText('Referencia del martes', { exact: true }).count(), 0);
+    await patient.getByText('Invitación de vinculación individual', { exact: true }).waitFor();
+    await screenshot('10-invitacion-en-mi-seguimiento', patient);
+    await button(patient, 'Revisar invitación').click();
     await patient.getByLabel(/Acepto expresamente/).check();
     await button(patient, 'Aceptar vinculación').click();
     await patient.getByText('Tu profesional te enviará la entrevista inicial desde esta ficha.', { exact: true }).waitFor();
     assert.equal(await button(patient, 'Continuar a mi atención').count(), 0);
-    await button(patient, 'Volver a Mi atención').click();
+    await button(patient, 'Volver a Mi seguimiento').click();
     await button(patient, 'Ver atención').waitFor();
     assert.equal(await button(patient, 'Ver atención').count(), 1);
-    assert.equal(await button(patient, 'Ver invitación').count(), 0);
+    assert.equal(await button(patient, 'Revisar invitación').count(), 0);
     assert.equal(await button(nav(patient), 'Admisión').count(), 0);
     assert.ok(await nav(patient).evaluate(node => node.scrollWidth <= node.clientWidth));
   });
@@ -234,20 +264,20 @@ async function main() {
     selectedPage = professional;
     const flow = steps();
     await button(nav(professional, true), 'Mis pacientes').click();
-    const linked = professional.getByRole('region', { name: 'Pacientes vinculados' });
+    const linked = professional.getByRole('region', { name: 'Mis Pacientes' });
     await focus(professional);
     await button(linked, 'Actualizar pacientes').click();
-    await linked.getByText('Te toca actuar', { exact: true }).waitFor();
+    await linked.getByText('Siguiente paso', { exact: true }).waitFor();
     const listPath = '**/api/admissions';
     await professional.route(listPath, route => route.fulfill({
       status: 403, headers: { 'access-control-allow-origin': '*' }, json: { message: 'Consulta ficticia no autorizada' },
     }));
     await button(linked, 'Actualizar pacientes').click();
     await linked.getByText('Próxima acción por confirmar.', { exact: true }).waitFor();
-    assert.equal(await linked.getByText('Te toca actuar', { exact: true }).count(), 0);
+    assert.equal(await linked.getByText('Siguiente paso', { exact: true }).count(), 0);
     await professional.unroute(listPath);
     await button(linked, 'Actualizar pacientes').click();
-    await linked.getByText('Te toca actuar', { exact: true }).waitFor();
+    await linked.getByText('Siguiente paso', { exact: true }).waitFor();
     await screenshot('01-mis-pacientes-con-pendientes', professional);
     await nav(professional, true).getByText('1 acción pendiente', { exact: true }).waitFor({ state: 'attached' });
     await button(professional, 'Abrir atención de bq2').click();
@@ -275,7 +305,7 @@ async function main() {
     assert.equal(await button(professional, 'Preparar episodio individual').count(), 0);
     await focus(patient);
     await button(patient, 'Aceptar y empezar').waitFor();
-    await button(patient, 'Volver a Mi atención').click();
+    await button(patient, 'Volver a Mi seguimiento').click();
     const ownCare = patient.getByRole('region', { name: 'Vinculaciones actuales' });
     await ownCare.getByText('1 tarea pendiente', { exact: true }).waitFor();
     await nav(patient).getByText('1 acción pendiente', { exact: true }).waitFor({ state: 'attached' });
@@ -283,11 +313,11 @@ async function main() {
     await patient.route(consultationList, route => route.fulfill({
       status: 503, headers: { 'access-control-allow-origin': '*' }, json: { message: 'Estado ficticio no disponible' },
     }));
-    await button(patient, 'Actualizar bandeja').click();
+    await button(patient, 'Actualizar seguimiento').click();
     await ownCare.getByText('Tareas por confirmar', { exact: true }).waitFor();
     assert.equal(await ownCare.getByText('Sin tareas pendientes', { exact: true }).count(), 0);
     await patient.unroute(consultationList);
-    await button(patient, 'Actualizar bandeja').click();
+    await button(patient, 'Actualizar seguimiento').click();
     await ownCare.getByText('1 tarea pendiente', { exact: true }).waitFor();
     await button(ownCare, 'Ver atención').click();
     await button(patient, 'Aceptar y empezar').waitFor();
@@ -342,7 +372,7 @@ async function main() {
     await professional.getByText('Original ficticio reservado CARE03', { exact: true }).waitFor();
     await button(nav(patient), 'Mis citas').press('Enter');
     assert.equal(await button(nav(patient), 'Mis citas').getAttribute('aria-current'), 'page');
-    assert.equal(await button(nav(patient), 'Mi atención').getAttribute('aria-current'), null);
+    assert.equal(await button(nav(patient), 'Mi seguimiento').getAttribute('aria-current'), null);
     await button(patient, 'Ver detalle de primera cita').click();
     const detail = patient.getByRole('region', { name: 'Detalle de primera cita' });
     await detail.getByText(/10:00 · 60 minutos · Completada/).waitFor();
@@ -361,7 +391,7 @@ async function main() {
       await clinician.getByLabel('Qué necesita aclararse').fill('Describe un ejemplo ficticio');
       await button(clinician, 'Pedir una aclaración').click();
       await clinician.getByRole('heading', { name: 'Corrección pendiente', exact: true }).waitFor();
-      await button(nav(owner), 'Mi atención').click();
+      await button(nav(owner), 'Mi seguimiento').click();
       await button(owner, 'Ver atención').click();
       const clarification = owner.getByRole('region', { name: 'Aclaración de entrevista' });
       await clarification.getByText('Describe un ejemplo ficticio', { exact: true }).waitFor();
@@ -370,11 +400,13 @@ async function main() {
       await owner.getByRole('textbox', { name: focusedLabel, exact: true }).fill('Aclaración ficticia guardada en la atención');
       await button(owner, 'Enviar mis respuestas a Profesional ficticio bp3').click();
       await focus(clinician);
-      await clinician.getByText('Aclaración ficticia guardada en la atención', { exact: true }).waitFor();
-      await summary(clinician, /^Comparar respuestas · 1 cambio$/).click();
+      await clinician.getByText('Respuesta actualizada', { exact: true }).waitFor();
+      await summary(clinician, /^Ver cambios \(1\)$/).click();
       const comparison = clinician.getByRole('region', { name: 'Aclaración de entrevista' });
-      await comparison.getByText(/^Antes · /).waitFor();
-      await comparison.getByText(/^Ahora · Aclaración ficticia guardada en la atención$/).waitFor();
+      await comparison.getByText('Antes', { exact: true }).waitFor();
+      await comparison.getByText('Ahora', { exact: true }).waitFor();
+      await comparison.getByText('Aclaración ficticia guardada en la atención', { exact: true }).waitFor();
+      await screenshot('11-aclaracion-comparada', clinician);
       await summary(clinician, /^Ver versiones anteriores$/).waitFor();
     } finally {
       await clinician.context().close();

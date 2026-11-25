@@ -19,18 +19,22 @@ export function newReference(kind,key) {
   return {id,token,digest:referenceDigest(token,kind,key)};
 }
 export const fingerprint = (value,key) => createHmac('sha256',key).update(JSON.stringify(value,Object.keys(value).sort())).digest('hex');
-export function sealEmail(email,id,key) {
+function seal(value, id, key, purpose) {
   const iv=randomBytes(12), cipher=createCipheriv('aes-256-gcm',key,iv);
-  cipher.setAAD(Buffer.from('bilateral-email-v1:'+id));
-  const data=Buffer.concat([cipher.update(email,'utf8'),cipher.final()]);
+  cipher.setAAD(Buffer.from(purpose + ':' + id));
+  const data=Buffer.concat([cipher.update(value,'utf8'),cipher.final()]);
   return {iv:iv.toString('base64'),tag:cipher.getAuthTag().toString('base64'),data:data.toString('base64')};
 }
-export function openEmail(envelope,id,key) {
+function open(envelope, id, key, purpose) {
   const cipher=createDecipheriv('aes-256-gcm',key,Buffer.from(envelope.iv,'base64'));
-  cipher.setAAD(Buffer.from('bilateral-email-v1:'+id));cipher.setAuthTag(Buffer.from(envelope.tag,'base64'));
+  cipher.setAAD(Buffer.from(purpose + ':' + id));cipher.setAuthTag(Buffer.from(envelope.tag,'base64'));
   return Buffer.concat([cipher.update(Buffer.from(envelope.data,'base64')),cipher.final()]).toString('utf8');
 }
-const lists=['sent','received','agreements','blocks','notices','linked-patients'];
+export const sealEmail = (email, id, key) => seal(email, id, key, 'bilateral-email-v1');
+export const openEmail = (envelope, id, key) => open(envelope, id, key, 'bilateral-email-v1');
+export const sealReceiptLabel = (label, id, key) => seal(label, id, key, 'bilateral-receipt-label-v1');
+export const openReceiptLabel = (envelope, id, key) => open(envelope, id, key, 'bilateral-receipt-label-v1');
+const lists=['sent','received','agreements','blocks','notices','linked-patients','care-context'];
 export function validate(op,p={}) {
   const fields={
     'professional-reference':['operationId'],preflight:['professionalReference'],
@@ -42,7 +46,12 @@ export function validate(op,p={}) {
     unlink:['operationId','expectedVersion','confirmed'],
   };
   if (lists.includes(op)) {if(Object.keys(p).length) throw fail('Entrada no válida.');return;}
-  if (!fields[op] || !p || Array.isArray(p) || Object.keys(p).length!==fields[op].length || Object.keys(p).some(k=>!fields[op].includes(k))) throw fail('Entrada no válida.');
+  const withLabel = op === 'issue' && p && Object.hasOwn(p, 'privateLabel');
+  const allowed = withLabel ? [...fields.issue, 'privateLabel'] : fields[op];
+  if (!allowed || !p || Array.isArray(p) || Object.keys(p).length!==allowed.length || Object.keys(p).some(k=>!allowed.includes(k))) throw fail('Entrada no válida.');
+  if (withLabel && (typeof p.privateLabel !== 'string' || !/^[\p{L}\p{N}][\p{L}\p{N} _-]{0,39}$/u.test(p.privateLabel))) {
+    throw fail('La etiqueta privada admite hasta 40 letras, números, espacios, guiones o guiones bajos.');
+  }
   if (op!=='preflight' && !uuid(p.operationId)) throw fail('Operación no válida.');
   if (fields[op].includes('expectedVersion') && (!Number.isSafeInteger(p.expectedVersion)||p.expectedVersion<1)) throw fail('Versión no válida.');
   for(const field of ['confirmed','declared','proposed']) if(fields[op].includes(field) && p[field]!==true) throw fail('Se requiere una acción expresa.');

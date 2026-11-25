@@ -19,7 +19,7 @@ const action = () => ({ operationId: randomUUID(), confirmed: true });
 const answers = { reason: 'Ensayo ficticio', context: 'Contexto de la prueba' };
 const neutral = { success: false, message: 'El turno solicitado no está disponible.' };
 
-test('018–021: first consultation over real HTTP and PostgreSQL', {
+test('018–022: first consultation over real HTTP and PostgreSQL', {
   skip: process.env.RUN_EPISODE_INTEGRATION !== 'true',
 }, async t => {
   assert.equal(env.nodeEnv, 'test');
@@ -37,7 +37,7 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
     await installBaseline(client);
     const options = await installConsultationSandbox(client, database, { unifiedCare: true });
     const ledger = (await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
-    assert.equal(ledger.length, 21);
+    assert.equal(ledger.length, 22);
     assert.equal((await migrate(client, options)).status, 'already-applied');
     assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows, ledger);
     await bilateralFixture(client);
@@ -55,6 +55,7 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
       ADMISSION_SECRET: 'isolated-consultation-admission-key-at-least-32-bytes',
       ADMISSION_DATABASE_URL: `postgres://${options.admissionClientRole}:disposable_admission_roles@db:5432/${database}`,
       FIRST_CONSULTATION_ENABLED: 'true',
+      UNIFIED_CARE_ENABLED: 'true',
     });
     restricted = new pg.Client({ connectionString: process.env.ADMISSION_DATABASE_URL });
     await restricted.connect();
@@ -83,12 +84,13 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
       const result = await consult(id, assignment, operation, payload);
       assert.deepEqual(result, { status: 200, body: { success: true, data: { saved: true } } }, operation);
     }
-    async function prepare(psy, pac, directed = false) {
+    async function prepare(psy, pac, directed = false, privateLabel) {
       const reference = (await bilateral(actor(psy), 'professional-reference', { operationId: randomUUID() })).reference;
       const recipient = (await bilateral(actor(pac), 'recipient-reference', { ...action(), professionalReference: reference })).reference;
       const receipt = await bilateral(actor(psy), 'issue', {
         operationId: randomUUID(), declared: true, proposed: true, recipientReference: recipient, email: pac + '@bilateral.invalid',
         conditionsVersion, conditionsHash: sha256(conditionsText('Profesional ficticio ' + psy)), declarationVersion,
+        ...(privateLabel ? { privateLabel } : {}),
       });
       await processQueue();
       const invitation = (await bilateral(actor(pac), 'received')).find(item => item.id === receipt.receiptId);
@@ -114,7 +116,7 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
         await perform(pac, 'submit', { expectedRevision: 1 });
         await perform(psy, 'validate', { episodeId, submission: 1 });
       }
-      return { id, episodeId, agreementId, psy, pac, perform };
+      return { id, episodeId, agreementId, receiptId: receipt.receiptId, psy, pac, perform };
     }
     async function declare(assignment) {
       const status = await ownStatus(assignment.psy, assignment);
@@ -131,11 +133,42 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
     }
     const dates = (await client.query(`SELECT ((clock_timestamp() AT TIME ZONE 'America/Los_Angeles')::date-1)::text AS past,
       ((clock_timestamp() AT TIME ZONE 'America/Los_Angeles')::date+1)::text AS future`)).rows[0];
-    const e1 = await prepare('bp1', 'bq1');
+    const e1 = await prepare('bp1', 'bq1', false, 'Referencia del martes');
     const e2 = await prepare('bp2', 'bq1', true);
     const e3 = await prepare('bp3', 'bq2');
     const e4 = await prepare('bp4', 'bq3');
     let ownAppointment;
+
+    await t.test('care context correlates exact records and keeps receipt labels private and time-limited', async () => {
+      const route = '/bilateral-invitations/care-context';
+      const correlation = { agreementId: e1.agreementId, invitationId: e1.receiptId };
+      const owner = () => http(e1.psy, route);
+      assert.deepEqual((await owner()).body.data, {
+        agreements: [correlation], labels: [{ receiptId: e1.receiptId, label: 'Referencia del martes' }],
+      });
+      const patient = await http(e1.pac, route);
+      assert.deepEqual(patient.body.data.agreements.find(item => item.agreementId === e1.agreementId), correlation);
+      assert.deepEqual(patient.body.data.labels, []);
+      const outsider = await http('bp24', route);
+      assert.deepEqual(outsider.body.data, { agreements: [], labels: [] });
+      assert.equal((await http('bil-support', route)).status, 403);
+      assert.doesNotMatch(JSON.stringify((await http(e1.psy, '/bilateral-invitations/sent')).body), /Referencia del martes/);
+      assert.doesNotMatch(JSON.stringify((await http(e1.pac, '/bilateral-invitations/received')).body), /Referencia del martes/);
+      const stored = (await client.query('SELECT proposal FROM bilateral_attempts WHERE id=$1', [e1.receiptId])).rows[0].proposal;
+      assert.equal(typeof stored.privateLabel.data, 'string');
+      assert.doesNotMatch(JSON.stringify(stored), /Referencia del martes/);
+      await assert.rejects(pool.query("SELECT bilateral_care_context('bp1',0,9999999999)"), error => error.code === '42501');
+      await client.query("INSERT INTO psychologist_patient_access(psychologist_user_id,patient_id) VALUES ('bp1','bq1')");
+      try {
+        assert.deepEqual((await owner()).body.data.agreements, [{ ...correlation, legacyPatientId: e1.pac }]);
+      } finally {
+        await client.query("DELETE FROM psychologist_patient_access WHERE psychologist_user_id='bp1' AND patient_id='bq1'");
+      }
+      await client.query("UPDATE bilateral_attempts SET created_at=statement_timestamp()-interval '15 days', expires_at=statement_timestamp()-interval '1 day' WHERE id=$1", [e1.receiptId]);
+      assert.deepEqual((await owner()).body.data.labels, []);
+      await processQueue();
+      assert.equal((await client.query("SELECT proposal ? 'privateLabel' AS present FROM bilateral_attempts WHERE id=$1", [e1.receiptId])).rows[0].present, false);
+    });
 
     await t.test('requires explicit sufficiency, exact document and separate consent; activation is unique under concurrency', async () => {
       const status = await ownStatus(e1.psy, e1);
@@ -226,11 +259,12 @@ test('018–021: first consultation over real HTTP and PostgreSQL', {
       const current = list.body.data.find(item => item.id === e1.id);
       assert.deepEqual(Object.keys(current).sort(), [
         'id', 'episodeId', 'professionalName', 'status', 'admissionVersion', 'documentVersion',
-        'sufficiencyConfirmed', 'consentAccepted', 'consentWithdrawn', 'hasAppointment',
+        'sufficiencyConfirmed', 'consentAccepted', 'consentWithdrawn', 'hasAppointment', 'appointmentSlot',
       ].sort());
       assert.equal(current.status, 'active');
       assert.equal(current.consentAccepted, true);
       assert.equal(current.hasAppointment, true);
+      assert.deepEqual(current.appointmentSlot, { date: ownAppointment.date, time: ownAppointment.time, status: 'completed' });
       assert.doesNotMatch(JSON.stringify(list.body), /CONFIDENTIAL_FICTIONAL_CONSULTATION|consentTerms|consentId|"note"/);
       assert.ok(!list.body.data.some(item => item.id === e2.id));
     });

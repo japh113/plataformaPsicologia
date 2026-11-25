@@ -103,5 +103,10 @@
     "version": "021",
     "file": "021_unified_individual_care.sql",
     "sha256": "8b1f50419e0c164e078d3161b475bfdd45231afde975255c273783522c64e85c"
+  },
+  {
+    "version": "022",
+    "file": "022_bilateral_care_context.sql",
+    "sha256": "564b0c9beff029f9e321b93118b01c3d94b5315072597a0e74c592ab143ee73d"
   }
 ]

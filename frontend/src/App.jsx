@@ -4,6 +4,7 @@ import AdmissionsScreen from './screens/AdmissionsScreen';
 import BilateralInvitationsScreen from './screens/BilateralInvitationsScreen';
 import { preservePatientFollowUp } from './utils/patientFollowUp';
 import IdentityPanel from './components/IdentityPanel';
+import PatientFollowUp from './components/PatientFollowUp';
 import ProfessionalProfileScreen from './screens/ProfessionalProfileScreen';
 import ProfessionalReviewScreen from './screens/ProfessionalReviewScreen';
 import { patientRegistrationError } from './utils/identityFeedback';
@@ -159,6 +160,8 @@ export default function App({onRestrictedSession}) {
   const [availabilityExceptionActionError, setAvailabilityExceptionActionError] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
   const [firstAppointmentView, setFirstAppointmentView] = useState(null);
+  const [notesOrigin, setNotesOrigin] = useState(null);
+  const [returnAgreement, setReturnAgreement] = useState(null);
   const [invitationSession, setInvitationSession] = useState(0);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
@@ -223,6 +226,8 @@ export default function App({onRestrictedSession}) {
     receivedInvitations.clear();
     setInvitationSession(value => value + 1);
     setFirstAppointmentView(null);
+    setNotesOrigin(null);
+    setReturnAgreement(null);
     clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: false };
     patientRevisions.current.clear();
     clinicalRecordSyncRef.current.clear();
@@ -1021,6 +1026,7 @@ export default function App({onRestrictedSession}) {
     const pacienteActualizado = options.preferProvided ? paciente :
       pacientes.find((currentPatient) => currentPatient.id === paciente.id) || paciente;
     setPacienteSeleccionado(pacienteActualizado);
+    setNotesOrigin(options.origin ?? null);
     setSessionDraftAppointmentId(options.appointmentId || null);
     setSessionActionError('');
     setNotasTemp(pacienteActualizado.notas || '');
@@ -1157,20 +1163,21 @@ export default function App({onRestrictedSession}) {
     setPacienteSeleccionado(current => current?.id === currentUser.patientId ? { ...current, nombre } : current);
   };
 
-  const toggleTask = async (taskId) => {
+  const toggleTask = async (taskId, fromPatientId) => {
     const isCurrent = beginClinicalOperation();
     if (!isCurrent()) return false;
-    if (!pacienteSeleccionado || procesandoTareaId) {
+    const patient = fromPatientId ? pacientes.find(item => item.id === fromPatientId) : pacienteSeleccionado;
+    if (!patient || procesandoTareaId) {
       return;
     }
 
-    const task = pacienteSeleccionado.tareas.find((currentTask) => currentTask.id === taskId);
+    const task = patient.tareas.find((currentTask) => currentTask.id === taskId);
 
     if (!task) {
       return;
     }
 
-    const patientId = pacienteSeleccionado.id;
+    const patientId = patient.id;
     advancePatientRevision(patientId);
     setProcesandoTareaId(taskId);
 
@@ -1190,6 +1197,7 @@ export default function App({onRestrictedSession}) {
       if (!isCurrent()) return false;
     } catch (error) {
       if (!isCurrent()) return false;
+      if ([401, 403, 404].includes(error.status)) invalidateClinicalAccess();
       advancePatientRevision(patientId);
       showErrorFeedback(error.message || 'No se pudo actualizar la tarea.');
     } finally {
@@ -1754,6 +1762,20 @@ export default function App({onRestrictedSession}) {
 
   const appointmentScope = JSON.stringify([currentUser?.id, invitationSession]);
   const selectedFirstAppointment = firstAppointmentView?.scope === appointmentScope ? firstAppointmentView.id : null;
+  const navigateFromMenu = view => {
+    setReturnAgreement(null);
+    setVistaActiva(view);
+  };
+  const openFromDirectory = (patient, agreementId) => abrirNotas(patient, { origin: { agreementId, scope: appointmentScope } });
+  const backFromNotes = () => {
+    if (isPsychologist && unifiedScope && notesOrigin?.scope === appointmentScope) {
+      setReturnAgreement(notesOrigin.agreementId ?? null);
+      setVistaActiva('my-patients');
+    } else {
+      navigateFromMenu('dashboard');
+    }
+    setNotesOrigin(null);
+  };
 
   const renderMainContent = () => {
     if(import.meta.env?.VITE_ADMISSION_ENABLED==='true' && vistaActiva==='admissions' && ['patient','psychologist'].includes(currentUser?.role))return <AdmissionsScreen key={currentUser.id} currentUser={currentUser}/>;
@@ -1761,9 +1783,26 @@ export default function App({onRestrictedSession}) {
       (vistaActiva === 'my-patients' && currentUser?.role === 'psychologist') ||
       (vistaActiva === 'my-care' && invitationScope)
     )) {
-      return <BilateralInvitationsScreen key={JSON.stringify([currentUser.id, invitationSession])} currentUser={currentUser}
+      const clinicalUnknown = cargandoDatos || Boolean(errorCarga) || clinicalAccess.current.denied;
+      const authorizedPatients = clinicalUnknown ? [] : pacientes;
+      const ownPatient = patientCare && authorizedPatients.find(patient => patient.id === String(currentUser.patientId));
+      const followUp = ownPatient
+        ? <PatientFollowUp patient={ownPatient} title="Consultas y tareas" onRetryFollowUp={refreshPatientFollowUp}
+            onToggleTask={id => toggleTask(id, ownPatient.id)} processingTaskId={procesandoTareaId} />
+        : clinicalUnknown && <section className="rounded-xl border border-slate-200 bg-white p-4">
+            <h2 className="font-semibold text-slate-900">Consultas y tareas</h2>
+            {cargandoDatos ? <p role="status">Consultando el seguimiento…</p> : <>
+              <p role="alert">{errorCarga || 'No pudimos confirmar el acceso a tus consultas y tareas.'}</p>
+              <button type="button" className="mt-3 font-semibold text-indigo-700" onClick={() => cargarDatos({ recheckAccess: true })}>Reintentar seguimiento</button>
+            </>}
+          </section>;
+      return <BilateralInvitationsScreen key={JSON.stringify([currentUser.id, invitationSession, returnAgreement])} currentUser={currentUser}
         receivedInvitations={patientCare ? receivedInvitations : null}
-        navigate={setVistaActiva} onOpenAgenda={abrirAgenda} careOverview={careOverview} showAdmission={import.meta.env?.VITE_ADMISSION_ENABLED === 'true'} />;
+        navigate={navigateFromMenu} careOverview={careOverview} showAdmission={import.meta.env?.VITE_ADMISSION_ENABLED === 'true'}
+        initialAgreement={returnAgreement} followUp={followUp}
+        clinical={{ patients: authorizedPatients, onOpenPatient: openFromDirectory, onOpenPatientFromAgreement: openFromDirectory,
+          clinicalUnknown, clinicalError: errorCarga || (clinicalAccess.current.denied ? 'No pudimos confirmar el acceso a los expedientes.' : ''),
+          onRefreshClinical: () => cargarDatos({ recheckAccess: true }) }} />;
     }
     if (patientCare && vistaActiva === 'account') return <>
       <IdentityPanel onIdentityUpdated={handleIdentityUpdated} />
@@ -1953,6 +1992,7 @@ export default function App({onRestrictedSession}) {
           todayDate={todayDate}
           prefilledAppointmentId={sessionDraftAppointmentId}
           setVistaActiva={setVistaActiva}
+          onBack={backFromNotes}
           onViewAppointments={abrirAgenda}
           onUpdatePatientProfile={actualizarPerfilPaciente}
           onOpenAppointmentSession={handleOpenSessionFromAppointment}
@@ -2046,8 +2086,8 @@ export default function App({onRestrictedSession}) {
         isSubmitting={guardandoPaciente}
       />
 
-      <Sidebar currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} pendingCount={actionCount} countActions={Boolean(unifiedScope)} />
-      <MobileNav currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} pendingCount={actionCount} countActions={Boolean(unifiedScope)} />
+      <Sidebar currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={navigateFromMenu} pendingCount={actionCount} countActions={Boolean(unifiedScope)} />
+      <MobileNav currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={navigateFromMenu} pendingCount={actionCount} countActions={Boolean(unifiedScope)} />
 
       <main className="flex h-screen w-full min-w-0 flex-1 flex-col overflow-auto bg-slate-50">
         <header className="shrink-0 border-b border-gray-200 bg-white px-4 py-3 md:hidden">

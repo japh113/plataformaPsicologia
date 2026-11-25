@@ -25,6 +25,7 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
   const showLinked = import.meta.env.VITE_BILATERAL_ENABLED === 'true' && isPsychologist;
   const careNav = showCare || showLinked;
   const unifiedCare = import.meta.env.VITE_UNIFIED_CARE_ENABLED === 'true';
+  const patientCareLabel = countActions ? 'Mi seguimiento' : 'Mi atención';
   const primaryNavLabel = isBackoffice ? 'Backoffice' : 'Tablero';
   const appointmentsLabel = isBackoffice ? 'Solicitudes' : isPsychologist ? 'Citas' : 'Mis citas';
   const secondaryNavLabel = isBackoffice ? 'Usuarios' : isPsychologist ? 'Mis Pacientes' : 'Mi Seguimiento';
@@ -54,8 +55,8 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
           <PendingInvitationCount count={pendingCount} actions id="desktop-invitation-count" className="ml-auto" />
         </NavButton>}
         {showCare && <NavButton active={['my-care', 'legacy-patients'].includes(vistaActiva)} onClick={() => setVistaActiva('my-care')}
-          label="Mi atención" describedBy={pendingCount ? 'desktop-invitation-count' : undefined}>
-          <UsersRound className="mr-3 shrink-0" size={20} aria-hidden="true" /> Mi atención
+          label={patientCareLabel} describedBy={pendingCount ? 'desktop-invitation-count' : undefined}>
+          <UsersRound className="mr-3 shrink-0" size={20} aria-hidden="true" /> {patientCareLabel}
           <PendingInvitationCount count={pendingCount} actions={countActions} id="desktop-invitation-count" className="ml-auto" />
         </NavButton>}
         <NavButton active={vistaActiva === 'appointments'} onClick={() => setVistaActiva('appointments')}>

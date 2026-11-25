@@ -381,3 +381,8 @@ export function getOpenHourOptions({ blocks, isUnavailable }, occupied) {
   return options.filter((option, i) => !occupied.has(option.value)
     && options.findIndex(other => other.value === option.value) === i);
 }
+
+export function compareWaitlistPriority(left, right) {
+  return Number(left.prioridad || 0) - Number(right.prioridad || 0)
+    || String(left.creadaEn || '').localeCompare(String(right.creadaEn || ''));
+}

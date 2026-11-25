@@ -14,7 +14,7 @@ export default function MobileNav({ currentUser, onLogout, vistaActiva, setVista
 
   if (showCare) {
     entries.push(
-      { view: 'my-care', label: 'Mi atención', Icon: UsersRound, related: ['legacy-patients'] },
+      { view: 'my-care', label: countActions ? 'Mi seguimiento' : 'Mi atención', Icon: UsersRound, related: ['legacy-patients'] },
       { view: 'appointments', label: 'Mis citas', Icon: CalendarRange },
       { view: 'account', label: 'Cuenta', Icon: User },
     );

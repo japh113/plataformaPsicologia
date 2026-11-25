@@ -53,6 +53,7 @@ services:
       PGUSER: ${EPISODE_DEMO_PGUSER:-integrity_test}
       PGPASSWORD: ${EPISODE_DEMO_PGPASSWORD:-disposable_test_password}
       FIRST_CONSULTATION_ENABLED: ${FIRST_CONSULTATION_ENABLED:-false}
+      UNIFIED_CARE_ENABLED: ${UNIFIED_CARE_ENABLED:-false}
       ADMISSION_ENABLED: ${ADMISSION_ENABLED:-false}
       ADMISSION_SECRET: ${ADMISSION_SECRET:-}
       ADMISSION_DATABASE_URL: postgres://admission_runtime_demo:disposable_admission_roles@db:5432/psicopanel_episode_demo

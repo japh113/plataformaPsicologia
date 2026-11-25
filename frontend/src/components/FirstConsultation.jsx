@@ -33,7 +33,7 @@ function waitingForPatient(detail, professional) {
   return professional && !detail.consentAccepted && !detail.consentId;
 }
 
-export function ConsultationDetail({ assignmentId, professional, onRefresh, revision, onDetail, onUnavailable, contextual = false, managementTarget, treatmentTermsTarget, assignmentVersion, onOpenAgenda }) {
+export function ConsultationDetail({ assignmentId, professional, onRefresh, revision, onDetail, onUnavailable, contextual = false, managementTarget, treatmentTermsTarget, assignmentVersion }) {
   const [read, setRead] = useState(null);
   const detail = read?.revision === revision && (assignmentVersion === undefined || read?.data.admissionVersion === assignmentVersion)
     ? read?.data : null;
@@ -42,6 +42,7 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
   const [confirmation, setConfirmation] = useState(null);
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  const [openBooking, setOpenBooking] = useState(false);
   const [note, setNote] = useState('');
   const generation = useRef(0);
   const path = '/admissions/consultations/' + assignmentId;
@@ -87,10 +88,16 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
       });
       if (current !== generation.current) return;
       setConfirmation(null);
+      if (contextual && operation === 'activate') setOpenBooking(true);
       if (operation === 'note' || operation === 'withdraw' || operation === 'revoke-admission') setNote('');
       await load(current);
       if (current === generation.current) await onRefresh?.();
     } catch (failure) {
+      if (contextual && operation === 'book' && failure.status === 409 && current === generation.current) {
+        setError(failure.message);
+        try { await load(current); } catch (refreshFailure) { report(refreshFailure, current); }
+        return;
+      }
       report(failure, current);
       if (contextual && failure.status === 409 && current === generation.current) {
         try { await load(current); } catch (refreshFailure) { report(refreshFailure, current); }
@@ -138,7 +145,7 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
     description="Al retirar la autorización de entrevista, se cierran las acciones que dependen de ella. Se conserva la documentación."
     disabled={busy} onConfirm={() => void submit('revoke-admission', { assignmentVersion: detail.admissionVersion })} />;
   return <section className="min-w-0 space-y-4" aria-label="Estado de la primera consulta">
-    {error && <p role="alert">{error}</p>}
+    {error && !(contextual && detail?.status === 'active' && !detail.appointment && professional) && <p role="alert">{error}</p>}
     {!detail && !error && <p role="status">Consultando el estado de la atención…</p>}
     {(!contextual || error) && <button type="button" className={field} disabled={busy} onClick={reload}>{contextual ? 'Reintentar consulta de atención' : 'Actualizar episodio'}</button>}
     {detail && <>
@@ -167,7 +174,8 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
       </>}
       {detail.status === 'active' && !detail.appointment && (professional
         ? contextual ? <FirstBooking date={date} time={time} setDate={setDate} setTime={setTime} busy={busy}
-          onBook={payload => void submit('book', payload)} onOpenAgenda={onOpenAgenda} />
+          onBook={payload => void submit('book', payload)} error={error}
+          autoOpen={openBooking} onAutoOpened={() => setOpenBooking(false)} />
         : <form className="space-y-3" onSubmit={event => { event.preventDefault(); void submit('book', { date, time }); }}>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">Fecha de la primera cita <input className={field + ' mt-1 block w-full'} type="date" value={date} required onChange={event => setDate(event.target.value)} /></label>

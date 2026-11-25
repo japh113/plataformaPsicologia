@@ -1,11 +1,13 @@
 import pg from 'pg';
 import { createHmac, randomUUID } from 'node:crypto';
 import env from '../../config/env.js';
+import db from '../../config/db.js';
 import { contactDigest } from '../auth/identity.service.js';
+import { buildPatientAccessScope } from '../auth/auth.permissions.js';
 import { normalizeEmail, normalizePhone, adultBirthDateError } from '../auth/identity.validation.js';
 import { isValidEmail } from '../auth/email.validation.js';
 import { purpose,conditionsText,conditionsVersion,declarationText,declarationVersion,sha256,
-  referenceDigest,referenceBindingDigest,newReference,fingerprint,sealEmail,openEmail,validate,fail,uuid } from './bilateral.policy.js';
+  referenceDigest,referenceBindingDigest,newReference,fingerprint,sealEmail,openEmail,sealReceiptLabel,openReceiptLabel,validate,fail,uuid } from './bilateral.policy.js';
 
 let pool;
 export function configuration() {
@@ -85,6 +87,36 @@ async function execute(client,actor,op,p) {
   return (await client.query('SELECT public.bilateral_command($1,$2,$3,$4::jsonb) AS data',
     [actor?.id??null,actor?.sessionVersion??null,op,JSON.stringify(p)])).rows[0].data;
 }
+async function readCareContext(actor, encryptionKey) {
+  const snapshot = await transaction(async client => {
+    const { rows: [row] } = await client.query(`SELECT current_database() AS name, inet_server_addr()::text AS address,
+      inet_server_port() AS port, public.bilateral_care_context($1,$2,$3) AS data`,
+      [actor.id, actor.sessionVersion, actor.sessionExpiresAt]);
+    return row;
+  });
+  const patientIds = snapshot.data.agreements.flatMap(item => item.patientId ? [item.patientId] : []);
+  let authorized = new Set();
+  if (patientIds.length) {
+    // The ordinary reader independently evaluates legacy access.
+    const scope = buildPatientAccessScope(actor, 'p.id');
+    const { rows: [legacy] } = await db.query(`SELECT current_database() AS name, inet_server_addr()::text AS address,
+      inet_server_port() AS port, coalesce(array_agg(p.id), ARRAY[]::text[]) AS ids FROM public.patients p
+      WHERE ${scope.clause} AND p.id=ANY($2::text[])`, [...scope.params, patientIds]);
+    if (legacy.name !== snapshot.name || legacy.address !== snapshot.address || legacy.port !== snapshot.port) {
+      throw fail('Contexto de expedientes incompatible.', 503);
+    }
+    authorized = new Set(legacy.ids);
+  }
+  return {
+    agreements: snapshot.data.agreements.map(({ agreementId, invitationId, patientId }) => ({
+      agreementId, invitationId, ...(authorized.has(patientId) ? { legacyPatientId: patientId } : {}),
+    })),
+    labels: snapshot.data.labels.map(({ receiptId, envelope }) => ({
+      receiptId, label: openReceiptLabel(envelope, receiptId, encryptionKey),
+    })),
+  };
+}
+
 export async function command(actor,op,input={},id) {
   validate(op,input);
   if(id&&!uuid(id))throw fail('Recurso no disponible.',404);
@@ -97,7 +129,12 @@ export async function command(actor,op,input={},id) {
     });
   }
   const {key,encryptionKey}=configuration();
+  if (op === 'care-context' || Object.hasOwn(input, 'privateLabel')) {
+    if (process.env.UNIFIED_CARE_ENABLED !== 'true') throw fail('Contexto de atención no disponible.', 404);
+    if (op === 'care-context') return readCareContext(actor, encryptionKey);
+  }
   const p={...input,...(id?{id}:{}),fingerprint:fingerprint({op,...input,...(id?{id}:{})},key)};
+  delete p.privateLabel;
   let reference;
   if(['professional-reference','recipient-reference'].includes(op)){
     reference=newReference(op==='professional-reference'?'professional':'recipient',key);
@@ -121,6 +158,7 @@ export async function command(actor,op,input={},id) {
       const text=conditionsText(c.professionalName);
       if(input.conditionsHash!==sha256(text))throw fail('Las condiciones cambiaron. Recarga.',409);
       p.proposal={purpose,conditionsVersion,conditionsText:text,conditionsHash:sha256(text),declarationVersion,declarationText,declared:true,proposed:true};
+      if (input.privateLabel) p.proposal.privateLabel = sealReceiptLabel(input.privateLabel, p.receiptId, encryptionKey);
     }
     return execute(client,actor,op,p);
   });
@@ -139,7 +177,10 @@ export async function processQueue() {
     if(job.contact_envelope)Object.assign(p,binding(c,openEmail(job.contact_envelope,job.receipt_id,encryptionKey)));
     await execute(client,null,job.kind,p);
   });}catch{deferred++;}
-  await transaction(client=>client.query('SELECT public.bilateral_cleanup()'));
+  await transaction(async client => {
+    await client.query('SELECT public.bilateral_cleanup()');
+    if (process.env.UNIFIED_CARE_ENABLED === 'true') await client.query('SELECT public.bilateral_prune_receipt_labels()');
+  });
   return {deferred};
 }
 export function startBilateralProcessor() {

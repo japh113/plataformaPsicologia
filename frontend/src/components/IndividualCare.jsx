@@ -6,7 +6,7 @@ import { useCareAction } from './useCareAction';
 import { useCareRead } from './useCareRead';
 import { useVisibleCareRefresh } from './useVisibleCareRefresh';
 import { ConsultationDetail, TreatmentWithdrawals } from './FirstConsultation';
-import { careChecklist, careProgress, episodeTitle, firstConsultationEnabled } from './individualCareState';
+import { careActionLabel, careChecklist, careProgress, episodeTitle, firstConsultationEnabled } from './individualCareState';
 
 const section = 'space-y-3 rounded-xl border border-slate-200 bg-white p-4 sm:p-5';
 const defaultTemplate = 'fictional-initial-interview-v1';
@@ -50,7 +50,7 @@ function JourneyProgress({ progress }) {
 function NextStep({ progress, professional, children }) {
   const mine = progress.owner === (professional ? 'professional' : 'patient');
   const label = progress.closed ? 'Atención cerrada' : progress.unavailable ? 'Estado pendiente de confirmar'
-    : progress.owner ? mine ? 'Te toca actuar' : professional ? 'En espera del paciente' : 'En espera de tu profesional' : 'Estado de atención';
+    : progress.owner ? mine ? careActionLabel(progress, professional) : professional ? 'En espera del paciente' : 'En espera de tu profesional' : 'Estado de atención';
   return <section aria-label="Siguiente paso" className="min-w-0 rounded-2xl border border-teal-200 bg-teal-50 p-4 sm:p-5">
     <p className="text-sm font-semibold text-teal-900">{label}</p>
     <h3 className="mt-1 text-xl font-bold tracking-tight text-slate-950">{progress.stage}</h3>
@@ -100,7 +100,7 @@ function StartInterview({ preparation, agreementId, catalog, onChange, blocked }
   </section>;
 }
 
-function Episode({ item, professional, onChange, manageAgreement, agreementTerms, onOpenAgenda }) {
+function Episode({ item, professional, onChange, manageAgreement, agreementTerms }) {
   const [admissionRevision, setAdmissionRevision] = useState(0);
   const [consultationState, setConsultationState] = useState(null);
   const [consultationFailed, setConsultationFailed] = useState(false);
@@ -133,7 +133,7 @@ function Episode({ item, professional, onChange, manageAgreement, agreementTerms
             onChange={restoreState} panel="clarification" />}
         {consultation && <ConsultationDetail assignmentId={item.id} professional={professional} onRefresh={onChange}
           revision={admissionRevision} assignmentVersion={item.version} onDetail={onConsultation} onUnavailable={onConsultationError} contextual
-          managementTarget={managementTarget} treatmentTermsTarget={treatmentTermsTarget} onOpenAgenda={onOpenAgenda} />}
+          managementTarget={managementTarget} treatmentTermsTarget={treatmentTermsTarget} />}
       </NextStep>
       <JourneyProgress progress={progress} />
     </div>
@@ -163,7 +163,7 @@ function Episode({ item, professional, onChange, manageAgreement, agreementTerms
   </div>;
 }
 
-export default function IndividualCare({ agreement, professional, manageAgreement, agreementTerms, onOpenAgenda, onChange: onOverviewChange }) {
+export default function IndividualCare({ agreement, professional, manageAgreement, agreementTerms, onChange: onOverviewChange }) {
   const admissions = useCareRead(
     professional && agreement.status !== 'completed' ? null : '/admissions/care-context', agreement.id
   );
@@ -208,7 +208,7 @@ export default function IndividualCare({ agreement, professional, manageAgreemen
       <JourneyProgress progress={unassignedProgress} />
     </div>}
     {selected?.id ? <Episode key={selected.episodeId} item={selected} professional={professional} onChange={onChange}
-      manageAgreement={manageAgreement} agreementTerms={agreementTerms} onOpenAgenda={onOpenAgenda} /> : <div className="grid items-start gap-3 sm:grid-cols-2">
+      manageAgreement={manageAgreement} agreementTerms={agreementTerms} /> : <div className="grid items-start gap-3 sm:grid-cols-2">
       <CareDisclosure label="Invitación y vinculación" icon={UsersRound}>{agreementTerms}</CareDisclosure>
       {manageAgreement && <CareDisclosure label="Gestionar atención" caption="Terminar la vinculación" icon={Settings2}>{manageAgreement}</CareDisclosure>}
     </div>}
