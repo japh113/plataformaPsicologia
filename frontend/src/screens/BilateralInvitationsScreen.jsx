@@ -146,13 +146,12 @@ function CodeCard({ reference, directed = false }) {
   </section>;
 }
 
-function ProposalForm({ onRegistered, unified }) {
+function ProposalForm({ onRegistered }) {
   const [attempt, setAttempt] = useState(0);
   const [terms, setTerms] = useState(null);
   const [termsError, setTermsError] = useState('');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
-  const [privateLabel, setPrivateLabel] = useState('');
   const [declared, setDeclared] = useState(false);
   const [proposed, setProposed] = useState(false);
   const { busy, error, send } = useBilateralAction();
@@ -183,8 +182,7 @@ function ProposalForm({ onRegistered, unified }) {
     event.preventDefault();
     if (!terms || !declared || !proposed || !code.trim()) return;
     const { conditionsVersion, conditionsHash, declarationVersion } = terms;
-    void send('', { email: email.trim(), recipientReference: code.trim(), conditionsVersion, conditionsHash, declarationVersion, declared, proposed,
-      ...(unified && privateLabel.trim() ? { privateLabel: privateLabel.trim() } : {}) },
+    void send('', { email: email.trim(), recipientReference: code.trim(), conditionsVersion, conditionsHash, declarationVersion, declared, proposed },
       onRegistered, failure => { if (failure.status === 409) reloadTerms(); });
   }
 
@@ -198,15 +196,6 @@ function ProposalForm({ onRegistered, unified }) {
       <input value={email} onChange={e => { setEmail(e.target.value); clearConfirmations(); }} type="email" maxLength={254}
         required disabled={busy} className={input} />
     </label>
-    {unified && <div>
-      <label className="block font-semibold">Etiqueta privada (opcional)
-        <input className={input} value={privateLabel} maxLength={40} disabled={busy}
-          aria-describedby="receipt-label-help" onChange={event => setPrivateLabel(event.target.value)} />
-      </label>
-      <span id="receipt-label-help" className="mt-1 block text-sm font-normal text-slate-600">
-        Usa una etiqueta como «Referencia del martes». Solo tú la ves durante la vigencia del acuse. Evita nombres, contactos y datos clínicos.
-      </span>
-    </div>}
     <p className="text-sm text-slate-600">La invitación, si se emite, vence a los 14 días. Un reenvío conserva el vencimiento original.</p>
     {terms ? <>
       <Terms value={terms} />
@@ -223,7 +212,7 @@ function ProposalForm({ onRegistered, unified }) {
   </form>;
 }
 
-function ProfessionalInvite({ onRegistered, unified }) {
+function ProfessionalInvite({ onRegistered }) {
   const [reference, setReference] = useState(null);
   const [registering, setRegistering] = useState(false);
   const { busy, error, send } = useBilateralAction();
@@ -240,7 +229,7 @@ function ProfessionalInvite({ onRegistered, unified }) {
             <UserRoundPlus className="mt-0.5 shrink-0 text-indigo-700" size={26} aria-hidden="true" />
             <div>
               <h2 className={heading}>Comparte tu referencia privada</h2>
-              <p className="mt-1 text-slate-600">La persona la usa para consultarte en «{unified ? 'Mi seguimiento' : 'Mi atención'}». Si ya tiene tu código, puedes regresar cuando recibas el suyo.</p>
+              <p className="mt-1 text-slate-600">La persona la usa para consultarte en «Mi atención». Si ya tiene tu código, puedes regresar cuando recibas el suyo.</p>
             </div>
           </div>
           <ErrorMessage error={error} />
@@ -252,7 +241,7 @@ function ProfessionalInvite({ onRegistered, unified }) {
         {reference && <CodeCard key={reference.reference || reference.expiresAt} reference={reference} />}
       </div>
       {registering ? <div ref={formHeading} tabIndex={-1} className={`rounded-xl ${focus}`}>
-        <ProposalForm onRegistered={onRegistered} unified={unified} />
+        <ProposalForm onRegistered={onRegistered} />
       </div> : <section className={card}>
         <div className="flex items-start gap-4">
           <FilePenLine className="mt-0.5 shrink-0 text-indigo-700" size={26} aria-hidden="true" />
@@ -267,7 +256,7 @@ function ProfessionalInvite({ onRegistered, unified }) {
   </div>;
 }
 
-function PatientReference({ unified }) {
+function PatientReference() {
   const [code, setCode] = useState('');
   const [preflight, setPreflight] = useState(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -285,7 +274,7 @@ function PatientReference({ unified }) {
   return <div className="max-w-2xl space-y-4">
     {reference ? <>
       <CodeCard reference={reference} directed />
-      <p className="text-slate-600">Cuando recibas una invitación, vuelve a «{unified ? 'Mi seguimiento' : 'Mi atención'}» para revisarla.</p>
+      <p className="text-slate-600">Cuando recibas una invitación, vuelve a «Mi atención» para revisarla.</p>
       <button type="button" className={secondary} onClick={() => setReference(null)}>Preparar una nueva referencia</button>
     </> : <>
       <form className={card} autoComplete="off" onSubmit={consult}>
@@ -327,7 +316,7 @@ function pendingFirst(episodes, audience) {
     ?? episodes?.[0];
 }
 
-function PatientCareCard({ name, stage, audience, children, linkStatus = 'Vinculación completada', compact = false }) {
+function PatientCareCard({ name, stage, audience, children, linkStatus = 'Vinculación completada', compact = false, inTreatment = stage?.phase === 'active' }) {
   const waiting = stage?.owner === audience;
   const other = stage?.owner && !waiting;
   return <article className={compact ? 'space-y-2' : `h-full rounded-2xl border p-4 sm:p-5 ${waiting ? 'border-indigo-200 bg-indigo-50/50' : 'border-slate-200 bg-white'}`}>
@@ -336,6 +325,7 @@ function PatientCareCard({ name, stage, audience, children, linkStatus = 'Vincul
       <div className="min-w-0 flex-1">
         <h3 className="break-words text-lg font-bold leading-tight text-slate-950">{name}</h3>
         <p className="mt-1 text-sm font-medium text-slate-700">{stage?.stage ?? linkStatus}</p>
+        {inTreatment && <p className="mt-1 text-xs font-semibold text-teal-800">Tratamiento activo</p>}
         {other && <p className="mt-1 text-xs font-medium text-slate-600">{audience === 'professional' ? 'En espera del paciente' : 'En espera de tu profesional'}</p>}
         {waiting && <p className="mt-2 inline-block rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-950">{careActionLabel(stage, audience === 'professional')}</p>}
       </div>
@@ -440,7 +430,7 @@ function InvitationDetail({ item, status, acceptanceAvailable, action, terminal,
 
 function Invitations({
   professional, receivedInvitations, selectedAgreement, selectedInvitation, onInvitation, onAgreement, registered, showAdmission,
-  overview, directory, followUp, legacyRecords, onOpenLegacy,
+  overview, directory, followUp, upcoming, initialEpisode,
 }) {
   const [data, setData] = useState(null);
   const [hasNotices, setHasNotices] = useState(false);
@@ -531,7 +521,6 @@ function Invitations({
   const pendingIds = new Set(actionable.map(item => item.id));
   const agreementContexts = new Map(careContext.data?.agreements.map(item => [item.agreementId, item]));
   const linkedInvitationIds = new Set(careContext.data?.agreements.map(item => item.invitationId));
-  const receiptLabels = new Map(careContext.data?.labels.map(item => [item.receiptId, item.label]));
   const orderedItems = items && (professional ? items : [...actionable, ...items.filter(item => !pendingIds.has(item.id))]);
   const invitation = items?.find(item => item.id === selectedInvitation);
   const sourceAgreements = patientOverview ? overview?.links.data : data?.agreements;
@@ -546,10 +535,10 @@ function Invitations({
   }).sort((left, right) => Number(right.stage?.owner === 'patient') - Number(left.stage?.owner === 'patient'));
   const taskCount = currentAgreements?.reduce((count, entry) =>
     count + (entry.episodes?.filter(episode => episode.owner === 'patient').length ?? 0), actionable.length) ?? actionable.length;
-  const pendingKnown = Array.isArray(items) && !acceptedAwaitingAgreement && currentAgreements?.every(entry => entry.episodes?.every(episode => !episode.unavailable))
+  const pendingKnown = Array.isArray(items) && !overview?.incomplete && !acceptedAwaitingAgreement && currentAgreements?.every(entry => entry.episodes?.every(episode => !episode.unavailable))
     && Array.isArray(admissions?.data) && (!firstConsultationEnabled || Array.isArray(consultations?.data));
-  const manageLink = agreement => agreement.status === 'completed' && <SensitiveAction label="Terminar acuerdo"
-    description="La vinculación termina de inmediato. Los tratamientos activos o pausados conservan su procedimiento propio."
+  const manageLink = agreement => agreement.status === 'completed' && <SensitiveAction label="Terminar vinculación"
+    description="Termina este acuerdo de vinculación de inmediato e impide seguir con la admisión que dependa de él. Un tratamiento activo o pausado conserva su procedimiento clínico propio."
     disabled={action.busy} onConfirm={() => terminal(agreement, 'unlink')} />;
   const loadError = readError || linked.error || receivedInvitations?.error || careContext.error || sent.error;
   const showOverview = !professional && !selectedAgreement && !selectedInvitation;
@@ -574,27 +563,25 @@ function Invitations({
   if (directory) {
     const links = overview.links.data;
     const stages = (links ?? []).map(item => ({ item, episodes: overview.forAgreement(item.agreementId) }));
-    const pendingUnknown = directory.clinicalUnknown || !Array.isArray(links) || !Array.isArray(items) || !careContext.data
+    const pendingUnknown = overview.incomplete || !Array.isArray(links)
       || !Array.isArray(admissions.data) || (firstConsultationEnabled && !Array.isArray(consultations.data))
       || stages.some(entry => !entry.episodes || entry.episodes.some(stage => stage.unavailable));
     const rows = stages.map(({ item, episodes }) => ({
+      preCare: episodes?.some(stage => stage.phase === 'pre-care'),
+      inTreatment: episodes?.some(stage => stage.phase === 'active'),
       id: 'agreement-' + item.agreementId, name: item.displayName, status: 'agreement',
-      legacyPatientId: agreementContexts.get(item.agreementId)?.legacyPatientId,
       requiresAction: episodes?.some(stage => stage.owner === 'professional'),
-      content: <PatientCareCard name={item.displayName} stage={pendingFirst(episodes, 'professional')} audience="professional" compact>
+      content: <PatientCareCard name={item.displayName} stage={pendingFirst(episodes, 'professional')} audience="professional" compact inTreatment={episodes?.some(stage => stage.phase === 'active')}>
         <button type="button" className={link} aria-label={`Abrir atención de ${item.displayName}`}
           onClick={() => onAgreement({ id: item.agreementId })}>Abrir ficha <ChevronRight size={16} aria-hidden="true" /></button>
       </PatientCareCard>,
     }));
+    const receipts = [];
     for (const receipt of items ?? []) {
       if (receipt.status === 'accepted' && (!careContext.data || linkedInvitationIds.has(receipt.id))) continue;
-      const name = receiptLabels.get(receipt.id) ?? statusLabels[receipt.status];
-      rows.push({
-        id: 'receipt-' + receipt.id, name, status: 'invitation',
-        content: <article className="space-y-2">
-          <h3 className="break-words font-bold text-slate-900">{name}</h3>
-          <p className="text-sm text-slate-700">{receiptLabels.has(receipt.id) && statusLabels[receipt.status] + ' · '}
-            Registrada el {formatDate(receipt.createdAt)} · Vigencia hasta el {formatDate(receipt.expiresAt)}</p>
+      receipts.push(<article key={receipt.id} className="space-y-2 rounded-xl border border-slate-200 p-4">
+          <h3 className="break-words font-bold text-slate-900">{statusLabels[receipt.status]}</h3>
+          <p className="text-sm text-slate-700">Registrada el {formatDate(receipt.createdAt)} · Vigencia hasta el {formatDate(receipt.expiresAt)}</p>
           <details className="space-y-3">
             <summary className={`w-fit cursor-pointer rounded-md font-semibold text-indigo-700 ${focus}`}>Ver acuse de solicitud</summary>
             <p className="text-sm text-slate-700">{neutralReceipt}</p>
@@ -606,18 +593,20 @@ function Invitations({
                 disabled={action.busy} onConfirm={() => terminal(receipt, 'withdraw')} />
             </div>}
           </details>
-        </article>,
-      });
+        </article>);
     }
-    const error = directory.clinicalError || action.error || loadError || overview.links.error || admissions.error || consultations.error;
+    const error = action.error || loadError || overview.links.error || admissions.error || consultations.error;
     return <PatientsScreen currentUser={directory.currentUser} patients={directory.patients} onOpenPatient={directory.onOpenPatient}
       directory={{
         ...directory, rows, pendingUnknown,
+        receipts: receipts.length > 0 && <CareDisclosure label="Solicitudes registradas" keepMounted>
+          <div className="space-y-3">{receipts}</div>
+        </CareDisclosure>,
         refreshAction: <button type="button" className={secondary} onClick={() => { refresh(); directory.onRefreshClinical(); }}>
           <RefreshCw size={17} aria-hidden="true" /> Actualizar pacientes
         </button>,
-        notice: <>{registrationNotice}{actionNotice}<ErrorMessage error={error} />
-          {pendingUnknown && !error && <p role="status" className="text-sm text-slate-600">Actualizando expedientes, vinculaciones y solicitudes…</p>}
+        notice: <>{registrationNotice}{actionNotice}<ErrorMessage error={error} /><ErrorMessage error={directory.clinicalError} />
+          {pendingUnknown && !error && <p role="status" className="text-sm text-slate-600">{overview.incomplete ? 'Hay atenciones y pendientes por confirmar.' : 'Confirmando los estados y pendientes de atención…'}</p>}
         </>,
       }} />;
   }
@@ -658,7 +647,7 @@ function Invitations({
           <h2 className={heading}>{patientOverview ? 'Invitaciones y vinculaciones' : 'Tu atención'}</h2>
           {showAdmission && <span className={`rounded-full px-3 py-1 text-sm font-semibold ${taskCount ? 'bg-amber-100 text-amber-950' : 'bg-slate-100 text-slate-700'}`}>
             {taskCount ? `${taskCount} ${taskCount === 1 ? 'tarea pendiente' : 'tareas pendientes'}${pendingKnown ? '' : taskCount === 1 ? ' confirmada' : ' confirmadas'}`
-              : pendingKnown ? 'Sin tareas pendientes' : 'Tareas por confirmar'}
+              : pendingKnown ? 'No tienes pendientes' : 'No pudimos confirmar tus pendientes'}
           </span>}
         </div>
         {showAdmission && <ErrorMessage error={overview?.links.error || admissions?.error || consultations?.error} />}
@@ -666,8 +655,8 @@ function Invitations({
           <p className={card}>{patientOverview ? 'No tienes invitaciones por responder ni vinculaciones vigentes.' : 'No tienes vinculaciones vigentes.'}</p>}
         <div className="grid gap-3 sm:grid-cols-2">
           {patientOverview && invitedCards}
-          {currentAgreements?.map(({ agreement, stage }) => <PatientCareCard key={agreement.id} name={agreement.professionalName}
-            stage={stage} audience={showAdmission ? 'patient' : null} linkStatus={showAdmission ? 'Vinculación completada' : 'Acuerdo completado'}>
+          {currentAgreements?.map(({ agreement, episodes, stage }) => <PatientCareCard key={agreement.id} name={agreement.professionalName}
+            stage={stage} inTreatment={episodes?.some(stage => stage.phase === 'active')} audience={showAdmission ? 'patient' : null} linkStatus={showAdmission ? 'Vinculación completada' : 'Acuerdo completado'}>
             <button type="button" className={link} onClick={() => onAgreement(agreement)}>Ver atención <ChevronRight size={16} aria-hidden="true" /></button>
           </PatientCareCard>)}
         </div>
@@ -707,8 +696,6 @@ function Invitations({
       {selectedAgreement && (!professional || !linked.loading || linked.data) && agreements?.map(agreement => {
         const name = professional ? linked.data?.find(item => item.agreementId === agreement.id)?.displayName : agreement.professionalName;
         if (showAdmission && professional && !name) return <p key={agreement.id} role="status" className={card}>La ficha ya no está disponible.</p>;
-        const legacy = name && professional && legacyRecords?.find(patient =>
-          patient.id === agreementContexts.get(agreement.id)?.legacyPatientId);
         const manageAgreement = manageLink(agreement);
         const terms = showAdmission
           ? <><p className="text-sm font-medium text-slate-700">Invitación aceptada el {formatDate(agreement.completedAt)}</p><Terms value={agreement} /></>
@@ -719,19 +706,19 @@ function Invitations({
           <header className="flex min-w-0 items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
             {name && <Avatar name={name} />}
             <div className="min-w-0">
-              <p className="text-sm font-medium text-teal-800">{professional ? 'Ficha del paciente' : showAdmission ? 'Mi seguimiento' : 'Mi atención'}</p>
+              <p className="text-sm font-medium text-teal-800">{professional ? 'Ficha del paciente' : 'Mi atención'}</p>
               <h2 className={title}>{name || statusLabels[agreement.status]}</h2>
               <p className="mt-1 text-sm text-slate-600">{agreement.status === 'completed' ? 'Vinculación completada' : 'Vinculación terminada'} · {formatDate(agreement.completedAt)}</p>
             </div>
           </header>
-          {legacy && <button type="button" className={secondary} onClick={() => onOpenLegacy(legacy, agreement.id)}>Consultar expediente</button>}
           {showAdmission ? <IndividualCare key={agreement.id} agreement={agreement} professional={professional}
-            manageAgreement={manageAgreement} agreementTerms={terms} onChange={overview?.refreshIfStale} /> : <>
+            initialEpisode={initialEpisode} consultationSummaries={consultations?.data} manageAgreement={manageAgreement} agreementTerms={terms} onChange={overview?.refreshIfStale} /> : <>
             {terms}
             {manageAgreement && <CareDisclosure label="Gestionar vinculación">{manageAgreement}</CareDisclosure>}
           </>}
         </article>;
       })}
+      {patientOverview && upcoming}
       {patientOverview && followUp}
       {patientOverview && firstConsultationEnabled && <CareDisclosure label="Retirar un consentimiento de tratamiento">
         <TreatmentWithdrawals revision={attempt} onWithdraw={refresh} contextual />
@@ -781,7 +768,7 @@ function Invitations({
 }
 
 export default function BilateralInvitationsScreen({
-  currentUser, navigate, showAdmission, receivedInvitations, careOverview, clinical, followUp, initialAgreement,
+  currentUser, navigate, showAdmission, receivedInvitations, careOverview, clinical, followUp, upcoming, initialAgreement, initialEpisode, onReturnCalendar,
 }) {
   const professional = currentUser.role === 'psychologist';
   const [page, setPage] = useState(initialAgreement ? 'agreement' : professional ? 'linked' : 'invitations');
@@ -809,7 +796,7 @@ export default function BilateralInvitationsScreen({
 
   const subpage = ['invite', 'reference', 'detail', 'agreement'].includes(page);
   const unified = showAdmission && unifiedCareEnabled;
-  const home = professional ? 'Mis pacientes' : unified ? 'Mi seguimiento' : 'Mi atención';
+  const home = professional ? 'Mis pacientes' : 'Mi atención';
   const directory = professional && page === 'linked' && unified;
   const invite = <button type="button" className={primary} onClick={() => open('invite')}>
     <Plus size={20} aria-hidden="true" /> Invitar paciente
@@ -822,8 +809,8 @@ export default function BilateralInvitationsScreen({
   return <section aria-labelledby="bilateral-title" className={`space-y-5 text-slate-700 sm:space-y-6 ${subpage ? 'mx-auto max-w-5xl' : ''}`}>
     {subpage && <div>
       {pageTitle === 'Ficha de atención' && <h1 id="bilateral-title" ref={headingRef} tabIndex={-1} className="sr-only">{pageTitle}</h1>}
-      <button type="button" className={link} onClick={() => open(professional ? 'linked' : 'invitations')}>
-        <ArrowLeft size={18} aria-hidden="true" /> Volver a {home}
+      <button type="button" className={link} onClick={onReturnCalendar ?? (() => open(professional ? 'linked' : 'invitations'))}>
+        <ArrowLeft size={18} aria-hidden="true" /> Volver a {onReturnCalendar ? (professional ? 'Agenda' : 'Mis citas') : home}
       </button>
     </div>}
     {!directory && pageTitle !== 'Ficha de atención' && <header className="flex flex-wrap items-center justify-between gap-3">
@@ -848,15 +835,15 @@ export default function BilateralInvitationsScreen({
       directory={{ ...clinical, currentUser, headingId: 'bilateral-title', headingRef, headerAction: invite }}
       registered={registered} onAgreement={agreement => open('agreement', agreement)} />
       : <LinkedPatients onAgreement={agreement => open('agreement', { id: agreement.agreementId })} onLegacy={() => navigate('legacy-patients')} />)}
-    {page === 'invite' && <ProfessionalInvite unified={unified} onRegistered={result => {
+    {page === 'invite' && <ProfessionalInvite onRegistered={result => {
       open(unified ? 'linked' : 'invitations');
       setRegistered(result.receiptId);
     }} />}
-    {page === 'reference' && <PatientReference unified={unified} />}
+    {page === 'reference' && <PatientReference />}
     {['invitations', 'detail', 'agreement'].includes(page) && <Invitations key={page + ':' + (selection?.id ?? selection ?? '')}
       professional={professional} showAdmission={unified} overview={unified ? careOverview : null}
       receivedInvitations={receivedInvitations} registered={registered && page === 'invitations'}
-      followUp={followUp} legacyRecords={clinical?.patients} onOpenLegacy={clinical?.onOpenPatientFromAgreement}
+      followUp={followUp} upcoming={upcoming} initialEpisode={initialEpisode}
       selectedAgreement={page === 'agreement' ? selection : null} selectedInvitation={page === 'detail' ? selection : null}
       onInvitation={id => open('detail', id)} onAgreement={agreement => open('agreement', agreement)} />}
     <p className="text-sm text-slate-600">Entorno de ensayo con cuentas ficticias y entrega simulada.</p>

@@ -144,21 +144,21 @@ const getAppointmentsEmptyStateCopy = ({
 };
 
 export default function AppointmentsScreen({
-  viewContext, booking,
+  viewContext, booking, firstAppointments, firstAppointmentsUnknown, firstAppointmentsError, onOpenFirstAppointment, legacyCalendarUnknown, legacyCalendarError, onRetryLegacyCalendar,
   currentUser, patients = [], appointments, waitlistEntries = [], availability, availabilityDraft, availabilityExceptions, todayDate, onOpenPatient, onOpenAppointmentSession, onCreateAppointment, onUpdateAppointment, onCancelFutureRecurringAppointments, onCreateAppointmentWaitlist, onDeleteAppointmentWaitlist, onReorderAppointmentWaitlist, onUpdateAvailability, onChangeAvailabilityDraft, onUpsertAvailabilityException, onCreateAvailabilityExceptionRange, onUpdateAvailabilityExceptionRange, onDeleteAvailabilityExceptionRange, onDeleteAvailabilityException,
   isSavingAppointment = false, processingAppointmentId = null, appointmentActionError = '', onDismissAppointmentError, isSavingWaitlist = false, processingWaitlistId = null, waitlistActionError = '', onDismissWaitlistError, isSavingAvailability = false, availabilityActionError = '', onDismissAvailabilityError, isSavingAvailabilityException = false, availabilityExceptionActionError = '', onDismissAvailabilityExceptionError,
 }) {
   const isPsychologist = currentUser?.role === 'psychologist';
-  const initialFocusedDate = viewContext?.date || todayDate;
+  const initialFocusedDate = viewContext?.anchorDate || viewContext?.date || todayDate;
   const initialSelectedDate = typeof viewContext?.date !== 'undefined' ? viewContext.date : (isPsychologist ? todayDate : '');
   const [selectedDate, setSelectedDate] = useState(() => initialSelectedDate);
-  const [statusFilter, setStatusFilter] = useState('todos');
-  const [sessionCoverageFilter, setSessionCoverageFilter] = useState('todos');
-  const [patientTimelineFilter, setPatientTimelineFilter] = useState('todos');
+  const [statusFilter, setStatusFilter] = useState(viewContext?.statusFilter ?? 'todos');
+  const [sessionCoverageFilter, setSessionCoverageFilter] = useState(viewContext?.sessionCoverageFilter ?? 'todos');
+  const [patientTimelineFilter, setPatientTimelineFilter] = useState(viewContext?.patientTimelineFilter ?? 'todos');
   const [editingAppointmentId, setEditingAppointmentId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [calendarAnchorDate, setCalendarAnchorDate] = useState(initialFocusedDate);
-  const [calendarView, setCalendarView] = useState('week');
+  const [calendarView, setCalendarView] = useState(viewContext?.calendarView ?? 'week');
   const [hoveredDate, setHoveredDate] = useState('');
   const [editingExceptionDate, setEditingExceptionDate] = useState('');
   const [exceptionForm, setExceptionForm] = useState(createEmptyExceptionForm());
@@ -194,6 +194,7 @@ export default function AppointmentsScreen({
       return true;
     }
 
+    if (appointment.source === 'episode') return false;
     const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
     return sessionCoverageFilter === sessionState;
   }, [appointmentSessionIds, sessionCoverageFilter]);
@@ -218,9 +219,10 @@ export default function AppointmentsScreen({
 
     return true;
   }, [isPsychologist, patientTimelineFilter]);
+  const displayAppointments = useMemo(() => firstAppointments ? [...appointments, ...firstAppointments] : appointments, [appointments, firstAppointments]);
   const appointmentsForCalendar = useMemo(
     () =>
-      appointments.filter((appointment) => {
+      displayAppointments.filter((appointment) => {
         const matchesStatus = statusFilter === 'todos'
           ? true
           : statusFilter === 'pendiente'
@@ -228,7 +230,7 @@ export default function AppointmentsScreen({
             : appointment.estado === statusFilter;
         return matchesStatus && matchesSessionCoverageFilter(appointment) && matchesPatientTimelineFilter(appointment);
       }),
-    [appointments, matchesPatientTimelineFilter, matchesSessionCoverageFilter, statusFilter],
+    [displayAppointments, matchesPatientTimelineFilter, matchesSessionCoverageFilter, statusFilter],
   );
   const activeSummaryFilter = useMemo(() => {
     if (statusFilter === 'completada' && sessionCoverageFilter === 'missing') {
@@ -352,15 +354,10 @@ export default function AppointmentsScreen({
     return grouped;
   }, [appointmentsForCalendar, monthDates]);
 
-  const filteredAppointments = useMemo(() => appointments.filter((appointment) => {
-    const matchesDate = selectedDate ? appointment.fecha === selectedDate : true;
-    const matchesStatus = statusFilter === 'todos'
-      ? true
-      : statusFilter === 'pendiente'
-        ? ['pendiente', 'por cerrar'].includes(getAppointmentDisplayStatus(appointment))
-        : appointment.estado === statusFilter;
-    return matchesDate && matchesStatus && matchesSessionCoverageFilter(appointment) && matchesPatientTimelineFilter(appointment);
-  }), [appointments, matchesPatientTimelineFilter, matchesSessionCoverageFilter, selectedDate, statusFilter]);
+  const filteredAppointments = appointmentsForCalendar.filter(appointment => !selectedDate || appointment.fecha === selectedDate);
+  const calendarContext = {
+    date: selectedDate, anchorDate: calendarAnchorDate, calendarView, statusFilter, sessionCoverageFilter, patientTimelineFilter,
+  };
   const waitlistEntriesBySlot = useMemo(() => {
     const nextMap = new Map();
 
@@ -427,24 +424,24 @@ export default function AppointmentsScreen({
     return nextMap;
   }, [waitlistEntries]);
   const patientTimelineSummary = useMemo(() => {
-    const upcoming = appointments.filter((appointment) => {
+    const upcoming = displayAppointments.filter((appointment) => {
       const appointmentDateTime = getAppointmentDateTime(appointment);
       return appointmentDateTime >= new Date() && !['cancelada', 'no asistio'].includes(appointment.estado);
     }).length;
 
-    const history = appointments.filter((appointment) => {
+    const history = displayAppointments.filter((appointment) => {
       const appointmentDateTime = getAppointmentDateTime(appointment);
       return appointmentDateTime < new Date() || ['completada', 'cancelada', 'no asistio'].includes(appointment.estado);
     }).length;
 
-    const changed = appointments.filter((appointment) => ['cancelada', 'no asistio'].includes(appointment.estado)).length;
+    const changed = displayAppointments.filter((appointment) => ['cancelada', 'no asistio'].includes(appointment.estado)).length;
 
     return {
       upcoming,
       history,
       changed,
     };
-  }, [appointments]);
+  }, [displayAppointments]);
   const occupiedSlotOptions = useMemo(() => {
     const groupedBySlot = new Map();
 
@@ -1084,12 +1081,12 @@ export default function AppointmentsScreen({
                     {visibleDayAppointmentGroups.map((group) => {
                       const renderChip = (appointment) => {
                         const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
-                        const displayStatus = getAppointmentDisplayStatus(appointment);
+                        const displayStatus = appointment.source === 'episode' ? appointment.estado : getAppointmentDisplayStatus(appointment);
                         const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
-                        const showSessionIndicator = !booking && (isPsychologist ? sessionState !== 'none' : sessionState === 'registered');
+                        const showSessionIndicator = !booking && appointment.source !== 'episode' && (isPsychologist ? sessionState !== 'none' : sessionState === 'registered');
                         return (
-                          <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
-                            <p className="truncate">{appointment.hora}</p>
+                          <div key={(appointment.source ?? 'legacy') + ':' + appointment.id} className={`flex min-w-0 items-center justify-between gap-2 rounded-full border px-2.5 py-1.5 text-[11px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
+                            <p className="truncate">{appointment.hora}{appointment.source === 'episode' && ' · Primera cita'}</p>
                             <div className="flex items-center gap-1.5">
                               {appointment.recurrenciaGrupoId && (
                                 <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-500" title="Cita recurrente">
@@ -1113,7 +1110,7 @@ export default function AppointmentsScreen({
                         </div>
                       );
                     })}
-                    {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-500">{dayException?.isUnavailable ? 'Día bloqueado' : booking ? 'Ver horarios' : 'Libre'}</div>}
+                    {dayAppointments.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-2.5 py-3 text-center text-[11px] text-gray-500">{dayException?.isUnavailable ? 'Día bloqueado' : booking || firstAppointmentsUnknown || legacyCalendarUnknown ? 'Ver horarios' : 'Libre'}</div>}
                     {dayAppointments.length > visibleDayAppointments.length && <p className="text-[11px] font-medium text-indigo-600">+{dayAppointments.length - visibleDayAppointments.length} mas</p>}
                   </div>
                 </button>
@@ -1140,12 +1137,12 @@ export default function AppointmentsScreen({
                       <div className="mt-2 flex-1 space-y-1 overflow-hidden">{visibleDayAppointmentGroups.map((group) => {
                         const renderChip = (appointment) => {
                           const sessionState = getAppointmentSessionState(appointment, appointmentSessionIds.has(appointment.id));
-                          const displayStatus = getAppointmentDisplayStatus(appointment);
+                          const displayStatus = appointment.source === 'episode' ? appointment.estado : getAppointmentDisplayStatus(appointment);
                           const showWaitlistIndicator = appointment.estado === 'pendiente' && appointment.waitlistCount > 0;
-                          const showSessionIndicator = !booking && (isPsychologist ? sessionState !== 'none' : sessionState === 'registered');
+                          const showSessionIndicator = !booking && appointment.source !== 'episode' && (isPsychologist ? sessionState !== 'none' : sessionState === 'registered');
                           return (
-                            <div key={appointment.id} className={`flex min-w-0 items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
-                              <div className="truncate">{appointment.hora}</div>
+                            <div key={(appointment.source ?? 'legacy') + ':' + appointment.id} className={`flex min-w-0 items-center justify-between gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none ${getMiniAppointmentChip(displayStatus)} ${group.length > 1 ? 'max-w-[48%] flex-1' : ''}`}>
+                              <div className="truncate">{appointment.hora}{appointment.source === 'episode' && ' · Primera cita'}</div>
                               <div className="flex items-center gap-1">
                                 {appointment.recurrenciaGrupoId && (
                                   <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-white/70 text-slate-500" title="Cita recurrente">
@@ -1239,7 +1236,7 @@ export default function AppointmentsScreen({
             className={`rounded-2xl border p-4 text-left transition ${patientTimelineFilter === 'proximas' ? 'border-indigo-400 bg-indigo-100 ring-2 ring-indigo-200' : 'border-indigo-200 bg-indigo-50 hover:bg-indigo-100/70'}`}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Proximas</p>
-            <p className="mt-2 text-3xl font-black text-indigo-900">{patientTimelineSummary.upcoming}</p>
+            <p className="mt-2 text-3xl font-black text-indigo-900">{firstAppointmentsUnknown || legacyCalendarUnknown ? '—' : patientTimelineSummary.upcoming}</p>
             <p className="mt-1 text-sm text-indigo-800">Tus citas futuras activas.</p>
           </button>
           <button
@@ -1251,7 +1248,7 @@ export default function AppointmentsScreen({
             className={`rounded-2xl border p-4 text-left transition ${patientTimelineFilter === 'historial' ? 'border-slate-400 bg-slate-100 ring-2 ring-slate-200' : 'border-slate-200 bg-slate-50 hover:bg-slate-100/70'}`}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700">Historial</p>
-            <p className="mt-2 text-3xl font-black text-slate-900">{patientTimelineSummary.history}</p>
+            <p className="mt-2 text-3xl font-black text-slate-900">{firstAppointmentsUnknown || legacyCalendarUnknown ? '—' : patientTimelineSummary.history}</p>
             <p className="mt-1 text-sm text-slate-700">Citas ya transcurridas o cerradas.</p>
           </button>
           <button
@@ -1263,7 +1260,7 @@ export default function AppointmentsScreen({
             className={`rounded-2xl border p-4 text-left transition ${patientTimelineFilter === 'cambios' ? 'border-amber-400 bg-amber-100 ring-2 ring-amber-200' : 'border-amber-200 bg-amber-50 hover:bg-amber-100/70'}`}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Cambios</p>
-            <p className="mt-2 text-3xl font-black text-amber-900">{patientTimelineSummary.changed}</p>
+            <p className="mt-2 text-3xl font-black text-amber-900">{firstAppointmentsUnknown || legacyCalendarUnknown ? '—' : patientTimelineSummary.changed}</p>
             <p className="mt-1 text-sm text-amber-800">Canceladas o marcadas como no asistio.</p>
           </button>
         </section>
@@ -1273,24 +1270,31 @@ export default function AppointmentsScreen({
         <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <button type="button" onClick={() => handleSummaryFilter('missing')} className={`rounded-2xl border p-4 text-left transition ${activeSummaryFilter === 'missing' ? 'border-sky-400 bg-sky-100 ring-2 ring-sky-200' : 'border-sky-200 bg-sky-50 hover:bg-sky-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-700">Pendiente clinico</p>
-            <p className="mt-2 text-3xl font-black text-sky-900">{clinicalSummary.completedWithoutSession}</p>
+            <p className="mt-2 text-3xl font-black text-sky-900">{legacyCalendarUnknown ? '—' : clinicalSummary.completedWithoutSession}</p>
             <p className="mt-1 text-sm text-sky-800">Citas completadas sin nota clinica registrada.</p>
           </button>
           <button type="button" onClick={() => handleSummaryFilter('registered')} className={`rounded-2xl border p-4 text-left transition ${activeSummaryFilter === 'registered' ? 'border-emerald-400 bg-emerald-100 ring-2 ring-emerald-200' : 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">Cierre clinico</p>
-            <p className="mt-2 text-3xl font-black text-emerald-900">{clinicalSummary.completedWithSession}</p>
+            <p className="mt-2 text-3xl font-black text-emerald-900">{legacyCalendarUnknown ? '—' : clinicalSummary.completedWithSession}</p>
             <p className="mt-1 text-sm text-emerald-800">Citas completadas con nota clinica registrada.</p>
           </button>
           <button type="button" onClick={() => handleSummaryFilter('pending')} className={`rounded-2xl border p-4 text-left transition ${activeSummaryFilter === 'pending' ? 'border-indigo-400 bg-indigo-100 ring-2 ring-indigo-200' : 'border-indigo-200 bg-indigo-50 hover:bg-indigo-100/70'}`}>
             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Agenda activa</p>
-            <p className="mt-2 text-3xl font-black text-indigo-900">{clinicalSummary.upcomingPending}</p>
+            <p className="mt-2 text-3xl font-black text-indigo-900">{legacyCalendarUnknown ? '—' : clinicalSummary.upcomingPending}</p>
             <p className="mt-1 text-sm text-indigo-800">Citas pendientes de hoy en adelante.</p>
           </button>
         </section>
       )}
 
+      {firstAppointmentsUnknown && <p role={firstAppointmentsError ? 'alert' : 'status'} className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+        {firstAppointmentsError ? 'No pudimos confirmar las primeras citas. ' + firstAppointmentsError : 'Consultando primeras citas…'}
+      </p>}
+      {legacyCalendarUnknown && <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 text-sm">
+        <p role={legacyCalendarError ? 'alert' : 'status'}>{legacyCalendarError || 'Consultando las citas de Agenda…'}</p>
+        {legacyCalendarError && <button type="button" className="font-semibold text-indigo-700" onClick={onRetryLegacyCalendar}>Reintentar Agenda</button>}
+      </div>}
       {calendar}
-      {isPsychologist && (
+      {isPsychologist && !legacyCalendarUnknown && (
         <section className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -1317,9 +1321,21 @@ export default function AppointmentsScreen({
 
       <div className="grid grid-cols-1 gap-6">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
-          <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-bold text-gray-800 flex items-center"><Calendar className="mr-2 text-indigo-500" size={20} /> Citas registradas</h3><span className="text-xs uppercase tracking-wider text-gray-400 font-semibold">{filteredAppointments.length} resultados</span></div>
+          <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-bold text-gray-800 flex items-center"><Calendar className="mr-2 text-indigo-500" size={20} /> Citas registradas</h3><span className="text-xs uppercase tracking-wider text-gray-400 font-semibold">{filteredAppointments.length} {firstAppointmentsUnknown || legacyCalendarUnknown ? 'confirmados' : 'resultados'}</span></div>
           <div className="space-y-3">
             {filteredAppointments.map((appointment) => {
+              if (appointment.source === 'episode') return (
+                <article key={'episode:' + appointment.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-slate-900">Primera cita{!isPsychologist && appointment.professionalName && ' · ' + appointment.professionalName}</h4>
+                    <p className="text-sm text-slate-700">{appointment.fecha} · {appointment.hora24} · 60 minutos · {appointment.statusLabel}</p>
+                  </div>
+                  {appointment.agreementId
+                    ? <button type="button" className="min-h-10 rounded-lg bg-white px-3 font-semibold text-indigo-800 hover:bg-indigo-100"
+                        onClick={() => onOpenFirstAppointment?.(appointment, calendarContext)}>Abrir ficha de atención</button>
+                    : <p className="text-sm text-slate-600">Ficha por confirmar</p>}
+                </article>
+              );
               const patient = patients.find((currentPatient) => currentPatient.id === appointment.pacienteId);
               const linkedSession = patient?.sesiones?.find((session) => session.citaId === appointment.id) || null;
               const sessionState = getAppointmentSessionState(appointment, Boolean(linkedSession));
@@ -1339,7 +1355,7 @@ export default function AppointmentsScreen({
               const isLinkedToHoveredDate = hoveredDate === appointment.fecha;
               const isLinkedToSelectedDate = selectedDate === appointment.fecha;
               return (
-                <div key={appointment.id} tabIndex={0} onMouseEnter={() => setHoveredDate(appointment.fecha)} onMouseLeave={() => setHoveredDate('')} onFocus={() => setHoveredDate(appointment.fecha)} onBlur={() => setHoveredDate('')} className={`rounded-xl border border-gray-200 border-l-4 p-4 transition outline-none focus-visible:ring-2 focus-visible:ring-indigo-200 ${getAppointmentAccent(displayStatus)} ${isLinkedToSelectedDate ? 'ring-2 ring-indigo-100 shadow-sm' : isLinkedToHoveredDate ? 'ring-2 ring-slate-200' : ''}`}>
+                <div key={'legacy:' + appointment.id} tabIndex={0} onMouseEnter={() => setHoveredDate(appointment.fecha)} onMouseLeave={() => setHoveredDate('')} onFocus={() => setHoveredDate(appointment.fecha)} onBlur={() => setHoveredDate('')} className={`rounded-xl border border-gray-200 border-l-4 p-4 transition outline-none focus-visible:ring-2 focus-visible:ring-indigo-200 ${getAppointmentAccent(displayStatus)} ${isLinkedToSelectedDate ? 'ring-2 ring-indigo-100 shadow-sm' : isLinkedToHoveredDate ? 'ring-2 ring-slate-200' : ''}`}>
                   <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-3 flex-wrap"><h4 className="font-bold text-gray-900 truncate">{isPsychologist ? patient?.nombre || 'Paciente no disponible' : 'Tu cita'}</h4><span className={`px-2.5 py-1 rounded-full text-[10px] md:text-xs font-bold border uppercase ${getStatusBadge(displayStatus)}`}>{displayStatus}</span>{appointment.recurrenciaGrupoId && <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] md:text-xs font-bold text-slate-600"><Repeat2 size={12} className="mr-1.5" />Recurrente</span>}{shouldShowSessionBadge && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getSessionBadgeClasses(sessionState)}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getSessionIndicatorClasses(sessionState)}`} />{sessionLabel}</span>}{showWaitlistIndicator && <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-xs font-bold ${getWaitlistBadgeClasses()}`}><span className={`mr-1.5 h-2 w-2 rounded-full ring-4 ${getWaitlistCountDotClasses()}`} />Espera {appointment.waitlistCount}</span>}</div>
@@ -1409,7 +1425,7 @@ export default function AppointmentsScreen({
                 </div>
               );
             })}
-            {filteredAppointments.length === 0 && (
+            {filteredAppointments.length === 0 && !firstAppointmentsUnknown && !legacyCalendarUnknown && (
               <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-8 text-center">
                 <p className="text-sm font-semibold text-slate-700">{appointmentsEmptyState.title}</p>
                 <p className="mt-2 text-sm text-slate-500">{appointmentsEmptyState.description}</p>

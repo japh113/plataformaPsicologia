@@ -1,3 +1,4 @@
+import { firstAppointmentStatus } from '../mappers/appointments';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import FirstBooking from './FirstBooking';
 import { createPortal } from 'react-dom';
@@ -142,7 +143,7 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
   </form>;
   const revoke = detail?.status === 'active' && <SensitiveAction
     label={professional ? 'Retirar autorización de entrevista' : 'Retirar consentimiento de entrevista'}
-    description="Al retirar la autorización de entrevista, se cierran las acciones que dependen de ella. Se conserva la documentación."
+    description="Retirarás la autorización de esta entrevista. Las acciones que dependan de ella dejan de estar disponibles y su documentación se conserva."
     disabled={busy} onConfirm={() => void submit('revoke-admission', { assignmentVersion: detail.admissionVersion })} />;
   return <section className="min-w-0 space-y-4" aria-label="Estado de la primera consulta">
     {error && !(contextual && detail?.status === 'active' && !detail.appointment && professional) && <p role="alert">{error}</p>}
@@ -188,7 +189,7 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
         </form>
         : !contextual && <p>Todavía no hay una cita reservada.</p>)}
       {detail.appointment && <>
-        <p>Cita del {detail.appointment.date} a las {detail.appointment.time} · {detail.appointment.durationMinutes} minutos · {detail.appointment.status === 'completed' ? 'Completada' : 'Pendiente'}</p>
+        <p>Cita del {detail.appointment.date} a las {detail.appointment.time} · {detail.appointment.durationMinutes} minutos · {firstAppointmentStatus(detail.appointment)}</p>
         {professional && detail.appointment.canComplete && (
           <button type="button" className={button} disabled={busy} onClick={() => submit('complete', { appointmentId: detail.appointment.id })}>Completar cita</button>
         )}

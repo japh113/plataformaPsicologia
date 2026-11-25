@@ -1,4 +1,3 @@
-import { OwnFirstAppointments, OwnFirstAppointmentDetail } from './components/IndividualCare';
 import { firstConsultationEnabled, unifiedCareEnabled } from './components/individualCareState';
 import AdmissionsScreen from './screens/AdmissionsScreen';
 import BilateralInvitationsScreen from './screens/BilateralInvitationsScreen';
@@ -83,6 +82,7 @@ import {
 } from './mappers/patients';
 import {
   filterAppointmentsByDate,
+  getFirstCalendarAppointments,
   getTodayDateString,
   mapBackendAppointmentToUiAppointment,
   mapBackendWaitlistToUiWaitlistEntry,
@@ -159,9 +159,8 @@ export default function App({onRestrictedSession}) {
   const [savingAvailabilityException, setSavingAvailabilityException] = useState(false);
   const [availabilityExceptionActionError, setAvailabilityExceptionActionError] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
-  const [firstAppointmentView, setFirstAppointmentView] = useState(null);
+  const [calendarCare, setCalendarCare] = useState(null);
   const [notesOrigin, setNotesOrigin] = useState(null);
-  const [returnAgreement, setReturnAgreement] = useState(null);
   const [invitationSession, setInvitationSession] = useState(0);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginError, setLoginError] = useState('');
@@ -225,9 +224,8 @@ export default function App({onRestrictedSession}) {
     sessionEpoch.current += 1;
     receivedInvitations.clear();
     setInvitationSession(value => value + 1);
-    setFirstAppointmentView(null);
+    setCalendarCare(null);
     setNotesOrigin(null);
-    setReturnAgreement(null);
     clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: false };
     patientRevisions.current.clear();
     clinicalRecordSyncRef.current.clear();
@@ -461,7 +459,7 @@ export default function App({onRestrictedSession}) {
         }
         clinicalAccess.current = { generation: clinicalAccess.current.generation + 1, denied: false };
         // A clinical retry can finish after the user opens a preclinical screen.
-        setVistaActiva(view => ['admissions', 'my-patients', 'my-care', 'account'].includes(view) ? view : 'dashboard');
+        setVistaActiva(view => ['admissions', 'my-patients', 'my-care', 'account'].includes(view) || (view === 'appointments' && unifiedCareEnabled) ? view : 'dashboard');
         isCurrent = beginClinicalOperation();
       }
       const patientRows = recheckedFollowUp ? backendPatients.map(patient =>
@@ -1035,7 +1033,7 @@ export default function App({onRestrictedSession}) {
 
   const abrirAgenda = (date = '') => {
     setAppointmentsViewContext({ date, nonce: Date.now() });
-    setVistaActiva('appointments');
+    navigateFromMenu('appointments');
   };
 
   const handleInputChange = (e) => {
@@ -1761,15 +1759,26 @@ export default function App({onRestrictedSession}) {
   };
 
   const appointmentScope = JSON.stringify([currentUser?.id, invitationSession]);
-  const selectedFirstAppointment = firstAppointmentView?.scope === appointmentScope ? firstAppointmentView.id : null;
+  const calendarSelection = calendarCare?.scope === appointmentScope ? calendarCare : null;
+  const firstAppointments = unifiedScope && firstConsultationEnabled
+    ? getFirstCalendarAppointments(careOverview.consultations.data, careOverview.admissions.data) : null;
+  const firstAppointmentsUnknown = firstAppointments !== null && (!Array.isArray(careOverview.consultations.data) || careOverview.consultations.incomplete);
   const navigateFromMenu = view => {
-    setReturnAgreement(null);
+    setCalendarCare(null);
+    if (view === 'appointments' && firstAppointments !== null) void careOverview.refreshAppointments();
     setVistaActiva(view);
   };
-  const openFromDirectory = (patient, agreementId) => abrirNotas(patient, { origin: { agreementId, scope: appointmentScope } });
+  const openCareFromCalendar = (appointment, context) => {
+    if (!appointment.agreementId || !firstAppointments?.some(item => item.assignmentId === appointment.assignmentId
+      && item.episodeId === appointment.episodeId && item.agreementId === appointment.agreementId)) return;
+    setAppointmentsViewContext({ ...context, nonce: Date.now() });
+    setCalendarCare({ agreementId: appointment.agreementId, episodeId: appointment.episodeId, scope: appointmentScope });
+    setVistaActiva(isPsychologist ? 'my-patients' : 'my-care');
+  };
+  const backToCalendar = () => navigateFromMenu('appointments');
+  const openFromDirectory = patient => abrirNotas(patient, { origin: { scope: appointmentScope } });
   const backFromNotes = () => {
     if (isPsychologist && unifiedScope && notesOrigin?.scope === appointmentScope) {
-      setReturnAgreement(notesOrigin.agreementId ?? null);
       setVistaActiva('my-patients');
     } else {
       navigateFromMenu('dashboard');
@@ -1796,11 +1805,28 @@ export default function App({onRestrictedSession}) {
               <button type="button" className="mt-3 font-semibold text-indigo-700" onClick={() => cargarDatos({ recheckAccess: true })}>Reintentar seguimiento</button>
             </>}
           </section>;
-      return <BilateralInvitationsScreen key={JSON.stringify([currentUser.id, invitationSession, returnAgreement])} currentUser={currentUser}
+      const future = firstAppointments === null ? [] : [
+        ...firstAppointments,
+        ...(clinicalUnknown ? [] : appointments.map(item => ({ ...item, statusLabel: 'Pendiente' }))),
+      ].filter(item => item.estado === 'pendiente' && item.fecha >= todayDate)
+        .sort((a, b) => (a.fecha + a.hora24).localeCompare(b.fecha + b.hora24));
+      const upcoming = firstAppointments !== null && <section aria-label="Próximas citas" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-bold text-slate-900">Próximas citas</h2>
+          <button type="button" className="font-semibold text-indigo-700" onClick={() => abrirAgenda()}>Ver Mis citas</button>
+        </div>
+        {(firstAppointmentsUnknown || clinicalUnknown) && <p role="status">Hay citas por confirmar.</p>}
+        {future.map(item => <p key={(item.source ?? 'legacy') + ':' + item.id}>
+          {item.source === 'episode' && `Primera cita · ${item.professionalName} · `}{item.fecha} · {item.hora} · {item.statusLabel}
+        </p>)}
+        {!firstAppointmentsUnknown && !clinicalUnknown && !future.length && <p className="text-sm text-slate-600">No tienes citas próximas.</p>}
+      </section>;
+      return <BilateralInvitationsScreen key={JSON.stringify([currentUser.id, invitationSession, calendarSelection?.agreementId, calendarSelection?.episodeId])} currentUser={currentUser}
         receivedInvitations={patientCare ? receivedInvitations : null}
         navigate={navigateFromMenu} careOverview={careOverview} showAdmission={import.meta.env?.VITE_ADMISSION_ENABLED === 'true'}
-        initialAgreement={returnAgreement} followUp={followUp}
-        clinical={{ patients: authorizedPatients, onOpenPatient: openFromDirectory, onOpenPatientFromAgreement: openFromDirectory,
+        initialAgreement={calendarSelection?.agreementId} initialEpisode={calendarSelection?.episodeId}
+        onReturnCalendar={calendarSelection ? backToCalendar : undefined} followUp={followUp} upcoming={upcoming}
+        clinical={{ patients: authorizedPatients, onOpenPatient: openFromDirectory,
           clinicalUnknown, clinicalError: errorCarga || (clinicalAccess.current.denied ? 'No pudimos confirmar el acceso a los expedientes.' : ''),
           onRefreshClinical: () => cargarDatos({ recheckAccess: true }) }} />;
     }
@@ -1812,7 +1838,9 @@ export default function App({onRestrictedSession}) {
     </>;
     if(vistaActiva==='professional-profile' && currentUser?.role==='psychologist')return <ProfessionalProfileScreen/>;
     if(vistaActiva==='professional-reviews' && ['admin','superadmin'].includes(currentUser?.role))return <ProfessionalReviewScreen/>;
-    if (cargandoDatos) {
+    const composedCalendar = vistaActiva === 'appointments' && firstAppointments !== null;
+    const legacyCalendarUnknown = composedCalendar && (cargandoDatos || Boolean(errorCarga) || clinicalAccess.current.denied);
+    if (cargandoDatos && !composedCalendar) {
       return (
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8 text-center">
           <h2 className="text-xl font-bold text-gray-800">Sincronizando tu espacio de trabajo</h2>
@@ -1821,7 +1849,7 @@ export default function App({onRestrictedSession}) {
       );
     }
 
-    if (errorCarga) {
+    if (errorCarga && !composedCalendar) {
       return (
         <div className="bg-white rounded-2xl border border-red-200 shadow-sm p-8 text-center">
           <h2 className="text-xl font-bold text-gray-800">No pudimos sincronizar la informacion</h2>
@@ -1906,13 +1934,17 @@ export default function App({onRestrictedSession}) {
         <AppointmentsScreen
           key={`appointments-${appointmentsViewContext.nonce || 'default'}-${currentUser?.id || 'anonymous'}`}
           viewContext={appointmentsViewContext}
+          firstAppointments={firstAppointments} firstAppointmentsUnknown={firstAppointmentsUnknown}
+          firstAppointmentsError={careOverview.consultations.error || (careOverview.consultations.incomplete ? 'Se alcanzó el límite de consulta.' : '')} onOpenFirstAppointment={openCareFromCalendar}
           currentUser={currentUser}
-          patients={pacientes}
-          appointments={appointments}
-          waitlistEntries={appointmentWaitlist}
-          availability={availability}
-          availabilityDraft={availabilityDraft}
-          availabilityExceptions={availabilityExceptions}
+          legacyCalendarUnknown={legacyCalendarUnknown} legacyCalendarError={errorCarga}
+          onRetryLegacyCalendar={() => cargarDatos({ recheckAccess: true })}
+          patients={legacyCalendarUnknown ? [] : pacientes}
+          appointments={legacyCalendarUnknown ? [] : appointments}
+          waitlistEntries={legacyCalendarUnknown ? [] : appointmentWaitlist}
+          availability={legacyCalendarUnknown ? [] : availability}
+          availabilityDraft={legacyCalendarUnknown ? [] : availabilityDraft}
+          availabilityExceptions={legacyCalendarUnknown ? [] : availabilityExceptions}
           todayDate={todayDate}
           onOpenPatient={abrirNotas}
           onOpenAppointmentSession={handleOpenSessionFromAppointment}
@@ -2115,14 +2147,6 @@ export default function App({onRestrictedSession}) {
                 {pendingCount === 1 ? 'Revisar invitación' : 'Revisar invitaciones'}
               </button>
             </section>
-          )}
-          {vistaActiva === 'appointments' && invitationScope && unifiedCareEnabled && firstConsultationEnabled && (
-            <div className="mb-5 space-y-3" key={appointmentScope}>
-              {selectedFirstAppointment ? <>
-                <button type="button" className="font-semibold text-indigo-700" onClick={() => setFirstAppointmentView(null)}>Volver a primeras citas</button>
-                <OwnFirstAppointmentDetail key={selectedFirstAppointment} assignmentId={selectedFirstAppointment} />
-              </> : <OwnFirstAppointments onOpen={id => setFirstAppointmentView({ id, scope: appointmentScope })} />}
-            </div>
           )}
           {renderMainContent()}
         </div>

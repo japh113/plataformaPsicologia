@@ -12,6 +12,10 @@ try{
   control=await sandboxControl({demo:true});const name='psicopanel_episode_demo';client=await createSandboxDatabase(control,name);await installBaseline(client);
   await installConsultationSandbox(client,name,{runtimeRole:'bilateral_runtime_demo',admissionRole:'admission_runtime_demo',
     legacyRole:'consultation_legacy_demo',unifiedCare:true});await bilateralFixture(client);
+  if (process.env.UNIFIED_CARE_ENABLED === 'true') {
+    // An independent record verifies ordinary access without deriving it from bilateral admission.
+    await client.query("INSERT INTO psychologist_patient_access(psychologist_user_id,patient_id) VALUES ('bp2','bq4')");
+  }
   if(process.env.FIRST_CONSULTATION_ENABLED==='true') {
     await client.query(`INSERT INTO psychologist_availability_blocks(psychologist_user_id,weekday,start_time,end_time)
       SELECT id,weekday,'08:00','18:00' FROM users CROSS JOIN generate_series(0,6) AS weekday

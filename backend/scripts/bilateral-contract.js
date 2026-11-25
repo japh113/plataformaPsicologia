@@ -20,7 +20,7 @@ export async function verifyBilateralContract(client,role,{install=false,linkedP
   if(!owner?.safe)throw new Error('Bilateral NOLOGIN owner boundary invalid');
   const functions = [...commands];
   if (linkedPatients) functions.push('bilateral_linked_patients(text,integer,double precision)');
-  if (careContext) functions.push('bilateral_care_context(text,integer,double precision)', 'bilateral_prune_receipt_labels()');
+  if (careContext) functions.push('bilateral_care_context(text,integer,double precision)');
   for(const name of functions){
     if(install)await client.query(`GRANT EXECUTE ON FUNCTION public.${name} TO "${role}"`);
     const {rows:[fn]}=await client.query(`SELECT p.prosecdef,p.proconfig,p.proowner::regrole::text AS owner,

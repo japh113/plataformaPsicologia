@@ -89,7 +89,7 @@ async function openProfessional() {
 }
 
 async function openPatient() {
-  await button(nav(patient), 'Mi seguimiento').click();
+  await button(nav(patient), 'Mi atención').click();
   await button(patient, 'Ver atención').click();
   await heading(patient, 'Profesional ficticio bp2').waitFor();
 }
@@ -184,7 +184,7 @@ async function conclude(flow, hour, daysAgo) {
     await withdrawal.waitFor();
     const management = patient.locator('details[open]').filter({ has: summary(patient, /^Gestionar atención/) });
     await button(management, 'Retirar consentimiento de entrevista').waitFor();
-    await button(management, 'Terminar acuerdo').waitFor();
+    await button(management, 'Terminar vinculación').waitFor();
     await screenshot('08-acciones-sensibles', patient);
     await withdrawal.click();
     const dialog = patient.getByRole('dialog', { name: 'Retirar consentimiento de tratamiento' });
@@ -228,23 +228,22 @@ async function main() {
     await button(professional, 'Ya recibí el código del paciente').press('Enter');
     await professional.getByLabel('Código del paciente', { exact: true }).fill(directed.data.reference);
     await professional.getByLabel('Correo conocido de la persona', { exact: true }).fill('bq2@bilateral.invalid');
-    await label(professional, 'Etiqueta privada (opcional)').fill('Referencia del martes');
     const terms = (await bilateral(professional, '/terms')).data;
     await professional.getByLabel(terms.declarationText, { exact: true }).check();
     await professional.getByLabel(/Propongo expresamente/).check();
     await button(professional, 'Registrar solicitud').click();
     await professional.getByRole('status').filter({ hasText: 'Solicitud registrada' }).waitFor();
-    await button(nav(patient), 'Mi seguimiento').click();
+    await button(nav(patient), 'Mi atención').click();
     for (let attempt = 0; attempt < 8 && !(await button(patient, 'Revisar invitación').count()); attempt++) {
       await button(patient, 'Actualizar seguimiento').click();
       await button(patient, 'Revisar invitación').waitFor({ timeout: 1500 }).catch(() => {});
     }
-    await professional.getByRole('heading', { name: 'Referencia del martes', exact: true }).waitFor();
+    await summary(professional, /^Solicitudes registradas$/).waitFor();
     assert.equal(await professional.getByRole('heading', { name: 'Mis Pacientes', exact: true }).count(), 1);
     assert.equal(await professional.getByText('Expedientes existentes', { exact: true }).count(), 0);
     await nav(patient).getByText('1 acción pendiente', { exact: true }).waitFor({ state: 'attached' });
-    assert.equal(await patient.getByText('Sin tareas pendientes', { exact: true }).count(), 0);
-    assert.equal(await patient.getByText('Referencia del martes', { exact: true }).count(), 0);
+    assert.equal(await patient.getByText('No tienes pendientes', { exact: true }).count(), 0);
+    assert.equal(await patient.getByText(/Solicitud registrada/).count(), 0);
     await patient.getByText('Invitación de vinculación individual', { exact: true }).waitFor();
     await screenshot('10-invitacion-en-mi-seguimiento', patient);
     await button(patient, 'Revisar invitación').click();
@@ -252,7 +251,7 @@ async function main() {
     await button(patient, 'Aceptar vinculación').click();
     await patient.getByText('Tu profesional te enviará la entrevista inicial desde esta ficha.', { exact: true }).waitFor();
     assert.equal(await button(patient, 'Continuar a mi atención').count(), 0);
-    await button(patient, 'Volver a Mi seguimiento').click();
+    await button(patient, 'Volver a Mi atención').click();
     await button(patient, 'Ver atención').waitFor();
     assert.equal(await button(patient, 'Ver atención').count(), 1);
     assert.equal(await button(patient, 'Revisar invitación').count(), 0);
@@ -268,6 +267,16 @@ async function main() {
     await focus(professional);
     await button(linked, 'Actualizar pacientes').click();
     await linked.getByText('Siguiente paso', { exact: true }).waitFor();
+    const records = linked.getByRole('region', { name: 'Expedientes autorizados' });
+    await records.getByRole('heading', { name: 'bq4', exact: true }).waitFor();
+    await button(records, 'Expediente').click();
+    await heading(professional, 'bq4').waitFor();
+    await button(professional, 'Volver').click();
+    await button(linked, 'Preatención').click();
+    await linked.getByText('Siguiente paso', { exact: true }).waitFor();
+    await button(linked, 'En tratamiento').click();
+    await linked.getByText('No hay atenciones para esta selección.').waitFor();
+    await button(linked, 'Todos').click();
     const listPath = '**/api/admissions';
     await professional.route(listPath, route => route.fulfill({
       status: 403, headers: { 'access-control-allow-origin': '*' }, json: { message: 'Consulta ficticia no autorizada' },
@@ -275,6 +284,7 @@ async function main() {
     await button(linked, 'Actualizar pacientes').click();
     await linked.getByText('Próxima acción por confirmar.', { exact: true }).waitFor();
     assert.equal(await linked.getByText('Siguiente paso', { exact: true }).count(), 0);
+    assert.equal(await records.getByRole('heading', { name: 'bq4', exact: true }).count(), 1);
     await professional.unroute(listPath);
     await button(linked, 'Actualizar pacientes').click();
     await linked.getByText('Siguiente paso', { exact: true }).waitFor();
@@ -305,7 +315,7 @@ async function main() {
     assert.equal(await button(professional, 'Preparar episodio individual').count(), 0);
     await focus(patient);
     await button(patient, 'Aceptar y empezar').waitFor();
-    await button(patient, 'Volver a Mi seguimiento').click();
+    await button(patient, 'Volver a Mi atención').click();
     const ownCare = patient.getByRole('region', { name: 'Vinculaciones actuales' });
     await ownCare.getByText('1 tarea pendiente', { exact: true }).waitFor();
     await nav(patient).getByText('1 acción pendiente', { exact: true }).waitFor({ state: 'attached' });
@@ -314,8 +324,8 @@ async function main() {
       status: 503, headers: { 'access-control-allow-origin': '*' }, json: { message: 'Estado ficticio no disponible' },
     }));
     await button(patient, 'Actualizar seguimiento').click();
-    await ownCare.getByText('Tareas por confirmar', { exact: true }).waitFor();
-    assert.equal(await ownCare.getByText('Sin tareas pendientes', { exact: true }).count(), 0);
+    await ownCare.getByText('No pudimos confirmar tus pendientes', { exact: true }).waitFor();
+    assert.equal(await ownCare.getByText('No tienes pendientes', { exact: true }).count(), 0);
     await patient.unroute(consultationList);
     await button(patient, 'Actualizar seguimiento').click();
     await ownCare.getByText('1 tarea pendiente', { exact: true }).waitFor();
@@ -362,7 +372,7 @@ async function main() {
   }, [403, 503, 429]);
 
   await scenario('CARE03', async () => {
-    selectedPage = patient;
+    selectedPage = professional;
     await summary(professional, /^Ver entrevista inicial$/).click();
     await professional.getByText('Texto exacto confirmado por el paciente', { exact: true }).waitFor();
     await button(professional, 'Completar cita').click();
@@ -370,13 +380,41 @@ async function main() {
     await professional.getByLabel('Nota profesional privada').fill('Original ficticio reservado CARE03');
     await button(professional, 'Registrar nota privada').click();
     await professional.getByText('Original ficticio reservado CARE03', { exact: true }).waitFor();
+    const legacyAppointmentWrites = [];
+    for (const page of [professional, patient]) {
+      page.on('request', request => {
+        if (new URL(request.url()).pathname.startsWith('/api/appointments') &&
+          !['GET', 'OPTIONS'].includes(request.method())) legacyAppointmentWrites.push(request.method());
+      });
+    }
+    const bookedDay = new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    await button(nav(professional, true), 'Agenda').click();
+    await professional.reload();
+    await button(nav(professional, true), 'Agenda').click();
+    await professional.locator('main input[type=date]').first().fill(bookedDay);
+    await professional.getByText(new RegExp(bookedDay + ' · 10:00 · 60 minutos · Completada')).waitFor();
+    await screenshot('12-agenda-psicologo', professional);
+    await button(professional, 'Abrir ficha de atención').click();
+    await statusBox(professional).getByText(/10:00 · 60 minutos · Completada/).waitFor();
+    await button(professional, 'Volver a Agenda').click();
+    assert.equal(await professional.locator('main input[type=date]').first().inputValue(), bookedDay);
+    await openProfessional();
+
+    selectedPage = patient;
+    await patient.reload();
     await button(nav(patient), 'Mis citas').press('Enter');
     assert.equal(await button(nav(patient), 'Mis citas').getAttribute('aria-current'), 'page');
-    assert.equal(await button(nav(patient), 'Mi seguimiento').getAttribute('aria-current'), null);
-    await button(patient, 'Ver detalle de primera cita').click();
-    const detail = patient.getByRole('region', { name: 'Detalle de primera cita' });
+    assert.equal(await button(nav(patient), 'Mi atención').getAttribute('aria-current'), null);
+    await patient.locator('main input[type=date]').first().fill(bookedDay);
+    await patient.getByText(new RegExp(bookedDay + ' · 10:00 · 60 minutos · Completada')).waitFor();
+    await screenshot('13-mis-citas-paciente', patient);
+    await button(patient, 'Abrir ficha de atención').click();
+    const detail = statusBox(patient);
     await detail.getByText(/10:00 · 60 minutos · Completada/).waitFor();
     assert.doesNotMatch(await detail.innerText(), /Original ficticio reservado|Nota profesional privada/i);
+    await button(patient, 'Volver a Mis citas').click();
+    assert.equal(await patient.locator('main input[type=date]').first().inputValue(), bookedDay);
+    assert.deepEqual(legacyAppointmentWrites, []);
 
     const clinician = await login('bp3', 1280);
     const owner = await login('bq3', 320);
@@ -391,7 +429,7 @@ async function main() {
       await clinician.getByLabel('Qué necesita aclararse').fill('Describe un ejemplo ficticio');
       await button(clinician, 'Pedir una aclaración').click();
       await clinician.getByRole('heading', { name: 'Corrección pendiente', exact: true }).waitFor();
-      await button(nav(owner), 'Mi seguimiento').click();
+      await button(nav(owner), 'Mi atención').click();
       await button(owner, 'Ver atención').click();
       const clarification = owner.getByRole('region', { name: 'Aclaración de entrevista' });
       await clarification.getByText('Describe un ejemplo ficticio', { exact: true }).waitFor();
@@ -417,11 +455,11 @@ async function main() {
   await scenario('CARE04', async () => {
     selectedPage = professional;
     const flow = steps();
-    await summary(professional, /^Iniciar otra atención$/).click();
+    await summary(professional, /^Preparar una nueva atención$/).click();
     await flow.select(professional, 'Modalidad', 'directed');
     const started = professional.waitForResponse(response => response.url().endsWith('/admissions/care-start')
       && response.request().method() === 'POST' && response.status() === 200);
-    await flow.click(professional, 'Enviar entrevista inicial');
+    await flow.click(professional, 'Enviar entrevista para otra atención');
     directedInterview = (await (await started).json()).data;
     await selector(professional).selectOption(directedInterview.episodeId);
 
@@ -463,6 +501,13 @@ async function main() {
     await summary(patient, /^Ver entrevista inicial$/).click();
     await patient.getByText('Texto exacto confirmado por el paciente', { exact: true }).waitFor();
     assert.equal(await patient.getByText(/Declaración ficticia CARE04/).count(), 0);
+    await selector(patient).selectOption(directedInterview.episodeId);
+    await summary(patient, /^Gestionar atención/).click();
+    await button(patient, 'Retirar consentimiento de entrevista').click();
+    const revoke = patient.getByRole('dialog', { name: 'Retirar consentimiento de entrevista' });
+    await button(revoke, 'Confirmar').click();
+    await patient.getByText('Historial de atenciones', { exact: true }).waitFor();
+    await screenshot('14-historial-paciente', patient);
   }, [429]);
   assert.equal(events.filter(event => !event.expected).length, 0);
 }

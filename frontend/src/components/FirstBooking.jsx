@@ -4,7 +4,7 @@ import { useCareRead } from './useCareRead';
 import { useVisibleCareRefresh } from './useVisibleCareRefresh';
 import AppointmentsScreen from '../screens/AppointmentsScreen';
 import { compareWaitlistPriority, getDayAvailability, getOpenHourOptions, normalizeDraftEntries, normalizeBlocks } from '../screens/appointmentsScreen.helpers';
-import { mapBackendAppointmentToUiAppointment, mapBackendWaitlistToUiWaitlistEntry } from '../mappers/appointments';
+import { getFirstCalendarAppointments, mapBackendAppointmentToUiAppointment, mapBackendWaitlistToUiWaitlistEntry } from '../mappers/appointments';
 import { primaryButton, secondaryButton } from './CareInterview';
 
 const clinicClock = new Intl.DateTimeFormat('sv-SE', {
@@ -22,8 +22,8 @@ function BookingAgenda({ initialDate, date, setDate, time, setTime, busy, onBook
   const query = date ? '?date=' + encodeURIComponent(date) : '';
   const waitlist = useCareRead(date ? '/appointments/waitlist' + query : null);
   const reads = [weekly, exceptions, agenda, consultations, waitlist];
-  const ready = Boolean(date) && reads.every(read => Array.isArray(read.data) && !read.loading);
-  const readError = reads.some(read => read.error);
+  const ready = Boolean(date) && reads.every(read => Array.isArray(read.data) && !read.loading && !read.incomplete);
+  const readError = reads.some(read => read.error || read.incomplete);
   const refresh = retain => Promise.all(reads.map(read => read.reload(retain)));
   useVisibleCareRefresh(() => {
     if (!reads.some(read => read.loading)) return refresh(true);
@@ -31,9 +31,7 @@ function BookingAgenda({ initialDate, date, setDate, time, setTime, busy, onBook
 
   const appointments = useMemo(() => [
     ...(agenda.data ?? []).map(mapBackendAppointmentToUiAppointment),
-    ...(consultations.data ?? []).filter(item => item.appointmentSlot).map(item => mapBackendAppointmentToUiAppointment({
-      id: 'first-' + item.id, scheduledDate: item.appointmentSlot.date, scheduledTime: item.appointmentSlot.time, status: item.appointmentSlot.status,
-    })),
+    ...getFirstCalendarAppointments(consultations.data),
   ], [agenda.data, consultations.data]);
   const entries = useMemo(() => waitlist.data?.filter(item => item.status === 'active')
     .map(mapBackendWaitlistToUiWaitlistEntry) ?? empty, [waitlist.data]);

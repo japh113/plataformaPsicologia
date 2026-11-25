@@ -12,7 +12,10 @@ export function useCareRead(path, agreementId, audience, immediate = true) {
     const controller = new AbortController();
     request.current = controller;
     const { signal } = controller;
-    setRead(previous => ({ scope, data: retain && previous.scope === scope ? previous.data : null, error: '', loading: true }));
+    setRead(previous => ({
+      scope, data: retain && previous.scope === scope ? previous.data : null,
+      incomplete: retain && previous.scope === scope && previous.incomplete, error: '', loading: true,
+    }));
     const options = agreementId ? { method: 'POST', body: JSON.stringify({ agreementId }), signal } : { signal };
     try {
       const result = await apiRequest(path, options).catch(async failure => {
@@ -23,7 +26,7 @@ export function useCareRead(path, agreementId, audience, immediate = true) {
         signal.throwIfAborted();
         return apiRequest(path, options);
       });
-      if (!signal.aborted) setRead({ scope, data: result.data, error: '', loading: false });
+      if (!signal.aborted) setRead({ scope, data: result.data, incomplete: result.incomplete === true, error: '', loading: false });
     } catch (failure) {
       if (!signal.aborted) setRead({ scope, data: null, error: failure.message, loading: false, status: failure.status });
     }

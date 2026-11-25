@@ -25,7 +25,7 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
   const showLinked = import.meta.env.VITE_BILATERAL_ENABLED === 'true' && isPsychologist;
   const careNav = showCare || showLinked;
   const unifiedCare = import.meta.env.VITE_UNIFIED_CARE_ENABLED === 'true';
-  const patientCareLabel = countActions ? 'Mi seguimiento' : 'Mi atención';
+  const patientCareLabel = 'Mi atención';
   const primaryNavLabel = isBackoffice ? 'Backoffice' : 'Tablero';
   const appointmentsLabel = isBackoffice ? 'Solicitudes' : isPsychologist ? 'Citas' : 'Mis citas';
   const secondaryNavLabel = isBackoffice ? 'Usuarios' : isPsychologist ? 'Mis Pacientes' : 'Mi Seguimiento';

@@ -8,6 +8,8 @@ import { normalizeEmail,normalizePhone } from '../auth/identity.validation.js';
 import { verifyAdmissionContract } from '../../../scripts/admission-contract.js';
 import { validate,validateResponses,uuid,fail,fingerprint,encodeQuestionMessage,readQuestionMessage } from './admission.policy.js';
 let pool;
+// admission_candidates in SQL 014 returns at most this many IDs before role/episode checks.
+const admissionCandidateLimit = 100;
 export function configuration(){
   if(process.env.ADMISSION_ENABLED!=='true')throw fail('Admisión deshabilitada.',404);
   if(!env.localDevelopment||!['test','development'].includes(env.nodeEnv)||env.verificationDelivery!=='simulated'||!uuid(process.env.EPISODE_TEST_RUN_ID)||
@@ -42,6 +44,7 @@ export async function command(actor,op,input={},id){
     const ids=await transaction(async client=>(await client.query('SELECT public.admission_candidates($1,$2,$3) AS data',[actor.id,actor.sessionVersion,actor.sessionExpiresAt])).rows[0].data);
     const rows=[];
     for(const candidate of ids)try{rows.push(await command(actor,'summary',{},candidate));}catch(error){if(error.message!=='admission_missing')throw error;}
+    if (ids.length === admissionCandidateLimit) Object.defineProperty(rows, 'incomplete', { value: true });
     return rows;
   }
   const p={...input,...(id?{id}:{}),sessionExpiresAt:actor.sessionExpiresAt,
@@ -172,6 +175,7 @@ export async function consultation(actor, operation, input = {}, id) {
         if (error.message !== 'admission_missing') throw error;
       }
     }
+    if (ids.length === admissionCandidateLimit) Object.defineProperty(rows, 'incomplete', { value: true });
     return rows;
   }
   if (!uuid(id)) throw fail('Recurso no disponible.', 404);

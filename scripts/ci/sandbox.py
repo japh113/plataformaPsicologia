@@ -77,7 +77,7 @@ class Sandbox:
         if kind in ('ADM','CARE'):self.env.update(FIRST_CONSULTATION_ENABLED='true',EPISODE_DEMO_PGUSER='consultation_legacy_demo',EPISODE_DEMO_PGPASSWORD='disposable_consultation_legacy',BILATERAL_ENABLED='true',BILATERAL_SECRET='fictitious-bilateral-independent-demo-key-32bytes',ADMISSION_ENABLED='true',ADMISSION_SECRET='fictitious-admission-independent-demo-key-32bytes')
         if kind=='CARE':self.env.update(UNIFIED_CARE_ENABLED='true')
         if kind=='VIN':self.env.update(EPISODE_DEMO_PGUSER='consultation_legacy_demo',EPISODE_DEMO_PGPASSWORD='disposable_consultation_legacy',BILATERAL_ENABLED='true',BILATERAL_SECRET='fictitious-bilateral-independent-demo-key-32bytes',D2_ENABLED='true',RESTRICTED_JWT_SECRET='D2-private-demo-fixture-Independent-Key-84930276')
-        self.cmd('run','--rm','-T','-e','NODE_ENV=development',*(['-e','FIRST_CONSULTATION_ENABLED'] if kind in ('ADM','CARE') else []),'backend','node','scripts/create-'+('admission' if kind in ('ADM','CARE') else 'bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'identity')+'-demo.js')
+        self.cmd('run','--rm','-T','-e','NODE_ENV=development',*(['-e','FIRST_CONSULTATION_ENABLED'] if kind in ('ADM','CARE') else []),*(['-e','UNIFIED_CARE_ENABLED'] if kind=='CARE' else []),'backend','node','scripts/create-'+('admission' if kind in ('ADM','CARE') else 'bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'identity')+'-demo.js')
         self.cmd('--profile','demo','up','-d','api','frontend')
         review=str(uuid.uuid4());stem='care' if kind=='CARE' else 'admission' if kind=='ADM' else 'bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'contact' if kind=='C' else 'ui'
         label='io.psicopanel.'+stem+'-review.run'

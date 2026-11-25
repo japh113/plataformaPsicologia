@@ -218,3 +218,25 @@ export const mapBackendWaitlistToUiWaitlistEntry = (entry) => ({
   estado: entry.status || 'active',
   creadaEn: entry.createdAt,
 });
+
+export const firstAppointmentStatus = slot => ({
+  pending: 'Pendiente', completed: 'Completada', cancelled: 'Cancelada', no_show: 'No asistió',
+}[slot.status] ?? 'Por confirmar');
+
+export function getFirstCalendarAppointments(consultations, assignments) {
+  if (!Array.isArray(consultations)) return [];
+  return consultations.flatMap(consultation => {
+    const slot = consultation.appointmentSlot ?? consultation.appointment;
+    if (!slot || !consultation.id || !consultation.episodeId || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(slot.date)
+      || !/^([01][0-9]|2[0-3]):00$/.test(slot.time) || !Object.hasOwn(backendToUiStatusMap, slot.status)) return [];
+    const admission = assignments?.find(item => item.id === consultation.id && item.episodeId === consultation.episodeId
+      && (consultation.admissionVersion == null || item.version === consultation.admissionVersion));
+    return [{
+      id: 'episode:' + consultation.id,
+      assignmentId: consultation.id, episodeId: consultation.episodeId, agreementId: admission?.agreementId,
+      professionalName: consultation.professionalName, source: 'episode',
+      fecha: slot.date, hora24: slot.time, hora: toDisplayHour(slot.time),
+      estado: backendToUiStatusMap[slot.status], statusLabel: firstAppointmentStatus(slot),
+    }];
+  });
+}

@@ -51,7 +51,7 @@ const handle = (operation, submit = command) => {
     if (isList) activeLists++;
     try {
       const data = await submit(req.user, operation, req.method === 'GET' ? {} : req.body, req.params.id);
-      res.json({ success: true, data });
+      res.json({ success: true, data, ...(operation === 'list' && data.incomplete ? { incomplete: true } : {}) });
     } catch (error) {
       const safe = errorFor(error);
       return res.status(safe.status).json({ success: false, message: safe.message });

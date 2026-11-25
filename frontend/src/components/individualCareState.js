@@ -18,19 +18,20 @@ export function episodeTitle(item) {
 
 export function careProgress(item, consultation, professional, consultationRead) {
   const result = (stage, next) => ({ stage, next });
+  if (consultation?.status === 'withdrawn' || item.episodeStatus === 'withdrawn' || consultation?.consentWithdrawn
+    || (consultation?.consentId && !consultation.consentAccepted)) {
+    return result('Consentimiento retirado', 'Consulta la información propia disponible.');
+  }
   if (item.state === 'revoked') return result('Entrevista cerrada', 'Puedes consultar los documentos propios disponibles.');
   if (!item.id) return result('Entrevista por enviar', professional
     ? 'Envía la entrevista inicial para continuar la atención.'
     : 'Tu profesional te enviará la entrevista inicial desde esta ficha.');
-  if (consultation?.status === 'withdrawn' || consultation?.consentWithdrawn
-    || (consultation?.consentId && !consultation.consentAccepted)) {
-    return result('Consentimiento retirado', 'Consulta la información propia disponible.');
-  }
   if (item.reviewState === 'correction_requested') return result('Corrección pendiente', item.mode === 'directed'
     ? 'El psicólogo debe resolver la solicitud.' : 'El paciente debe corregir y enviar una nueva versión.');
-  if (consultation?.hasAppointment) return result('Primera cita registrada', 'Consulta la cita desde la ficha.');
-  if (consultation?.appointment) {
-    return consultation.appointment?.status === 'completed'
+  if (consultation?.hasAppointment && !consultation.appointmentSlot) return result('Primera cita registrada', 'Consulta la cita desde la ficha.');
+  const slot = consultation?.appointment ?? consultation?.appointmentSlot;
+  if (slot) {
+    return slot.status === 'completed'
       ? result('Primera consulta completada', professional ? 'El psicólogo puede consultar o registrar su nota privada.' : 'Puedes consultar tu cita.')
       : result('Primera consulta reservada', 'Consulta la fecha y la hora de la cita.');
   }
@@ -53,7 +54,7 @@ export function careProgress(item, consultation, professional, consultationRead)
 
 export function careChecklist(item, consultation, professional, consultationRead) {
   const { stage, next } = careProgress(item, consultation, professional, consultationRead);
-  const closed = item.state === 'revoked' || consultation?.status === 'withdrawn' || consultation?.consentWithdrawn
+  const closed = item.state === 'revoked' || item.episodeStatus === 'withdrawn' || consultation?.status === 'withdrawn' || consultation?.consentWithdrawn
     || Boolean(consultation?.consentId && !consultation.consentAccepted);
   const correcting = item.reviewState === 'correction_requested';
   const active = !correcting && consultation?.status === 'active';
@@ -78,14 +79,14 @@ export function careChecklist(item, consultation, professional, consultationRead
   const steps = labels.map((label, i) => ({
     label, complete: confirmations[i], current: i === index, owner: i === index ? owner : null,
   }));
-  return { stage, next, steps, completed: steps.filter(step => step.complete).length, closed, unavailable: Boolean(unavailable), owner: owner ?? null };
+  const phase = unavailable ? 'unknown' : closed ? 'history' : active ? 'active' : 'pre-care';
+  return { stage, next, phase, steps, completed: steps.filter(step => step.complete).length, closed, unavailable: Boolean(unavailable), owner: owner ?? null };
 }
 
 export function agreementCare(agreementId, assignments, consultations, professional) {
   if (!Array.isArray(assignments) || (firstConsultationEnabled && !Array.isArray(consultations))) return null;
   const relevant = assignments.filter(item => item.agreementId === agreementId);
-  const open = relevant.filter(item => item.state !== 'revoked');
-  const episodes = open.length ? open : relevant.length ? relevant : [{}];
+  const episodes = relevant.length ? relevant : [{}];
   return episodes.map(item => {
     const detail = consultations?.find(entry => entry.id === item.id && entry.episodeId === item.episodeId);
     const mismatched = detail && ((detail.admissionVersion != null && detail.admissionVersion !== item.version)

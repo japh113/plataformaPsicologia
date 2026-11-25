@@ -20,7 +20,7 @@ function JourneyProgress({ progress }) {
   return <section aria-label="Progreso de atención" className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="text-base font-bold text-slate-950">Progreso de atención</h3>
-      <span className="text-sm font-medium text-slate-600">{progress.closed ? 'Atención cerrada'
+      <span className="text-sm font-medium text-slate-600">{progress.closed ? 'Acciones restringidas'
         : progress.unavailable ? 'Estado por confirmar' : `${progress.completed} de ${progress.steps.length} completados`}</span>
     </div>
     {!progress.closed && !progress.unavailable && <div role="progressbar" aria-label="Etapas completadas"
@@ -49,7 +49,7 @@ function JourneyProgress({ progress }) {
 
 function NextStep({ progress, professional, children }) {
   const mine = progress.owner === (professional ? 'professional' : 'patient');
-  const label = progress.closed ? 'Atención cerrada' : progress.unavailable ? 'Estado pendiente de confirmar'
+  const label = progress.closed ? 'Acciones restringidas' : progress.unavailable ? 'Estado pendiente de confirmar'
     : progress.owner ? mine ? careActionLabel(progress, professional) : professional ? 'En espera del paciente' : 'En espera de tu profesional' : 'Estado de atención';
   return <section aria-label="Siguiente paso" className="min-w-0 rounded-2xl border border-teal-200 bg-teal-50 p-4 sm:p-5">
     <p className="text-sm font-semibold text-teal-900">{label}</p>
@@ -61,7 +61,7 @@ function NextStep({ progress, professional, children }) {
 
 const journey = 'grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(15rem,0.68fr)]';
 
-function StartInterview({ preparation, agreementId, catalog, onChange, blocked }) {
+function StartInterview({ preparation, agreementId, catalog, onChange, blocked, another = false }) {
   const fieldId = useId();
   const [templateId, setTemplateId] = useState(defaultTemplate);
   const [mode, setMode] = useState('self');
@@ -74,6 +74,9 @@ function StartInterview({ preparation, agreementId, catalog, onChange, blocked }
         agreementId, mode, templateId: template.id, ...(preparation && { episodeId: preparation.episodeId }),
       });
     }}>
+      {another && <p className="text-sm text-slate-700">
+        Se preparará una atención con su propia entrevista y su propio consentimiento. La atención anterior conserva su estado, sus documentos y sus permisos.
+      </p>}
       <div>
           <label htmlFor={fieldId + '-mode'} className="mb-1 block text-sm font-semibold">Modalidad</label>
           <select id={fieldId + '-mode'} className={secondary + ' w-full'} value={mode} disabled={busy} onChange={event => setMode(event.target.value)}>
@@ -95,7 +98,7 @@ function StartInterview({ preparation, agreementId, catalog, onChange, blocked }
         </>}
       </details>
       {error && <p role="alert">{error}</p>}
-      <button className={primary} disabled={busy || blocked || !template}>Enviar entrevista inicial</button>
+      <button className={primary} disabled={busy || blocked || !template}>{another ? 'Enviar entrevista para otra atención' : 'Enviar entrevista inicial'}</button>
     </form>
   </section>;
 }
@@ -163,11 +166,11 @@ function Episode({ item, professional, onChange, manageAgreement, agreementTerms
   </div>;
 }
 
-export default function IndividualCare({ agreement, professional, manageAgreement, agreementTerms, onChange: onOverviewChange }) {
+export default function IndividualCare({ agreement, professional, manageAgreement, agreementTerms, initialEpisode, consultationSummaries, onChange: onOverviewChange }) {
   const admissions = useCareRead(
     professional && agreement.status !== 'completed' ? null : '/admissions/care-context', agreement.id
   );
-  const [selection, setSelection] = useState('');
+  const [selection, setSelection] = useState(initialEpisode ?? '');
   const episodeLabel = useId();
   const reload = admissions.reload;
   const onChange = useCallback(async () => {
@@ -179,14 +182,20 @@ export default function IndividualCare({ agreement, professional, manageAgreemen
   const assignedIds = new Set(assigned?.map(item => item.episodeId));
   const unassigned = admissions.data?.preparations?.filter(item => !assignedIds.has(item.episodeId)) ?? [];
   const episodes = [...unassigned, ...(assigned ?? [])].sort((a, b) => Date.parse(b.preparedAt) - Date.parse(a.preparedAt));
-  const current = episodes.filter(item => item.state !== 'revoked');
+  const consultationFor = item => consultationSummaries?.find(summary => summary.id === item.id && summary.episodeId === item.episodeId
+    && (summary.admissionVersion == null || summary.admissionVersion === item.version));
+  const isCurrent = item => item.state !== 'revoked'
+    && (consultationFor(item)?.status ?? item.episodeStatus) !== 'withdrawn'
+    && !consultationFor(item)?.consentWithdrawn;
+  const current = episodes.filter(isCurrent);
+  const history = episodes.filter(item => !isCurrent(item));
   const invalid = !assigned;
   const pending = assigned?.some(item => item.state !== 'revoked' && item.episodeStatus === 'prepared');
-  const selected = !invalid && (episodes.find(item => item.episodeId === selection)
-    ?? (current.length === 1 ? current[0] : episodes.length === 1 ? episodes[0] : undefined));
+  const selected = !invalid && (selection ? episodes.find(item => item.episodeId === selection)
+    : current.length === 1 ? current[0] : episodes.length === 1 ? episodes[0] : undefined);
   const canStart = professional && agreement.status === 'completed' && !pending;
-  const start = preparation => <StartInterview key={preparation?.episodeId ?? agreement.id} preparation={preparation}
-    agreementId={agreement.id} onChange={onChange} catalog={admissions.data.templates} blocked={admissions.loading} />;
+  const start = (preparation, another = false) => <StartInterview key={preparation?.episodeId ?? agreement.id} preparation={preparation}
+    agreementId={agreement.id} onChange={onChange} catalog={admissions.data.templates} blocked={admissions.loading} another={another} />;
 
   const readyToStart = !invalid && agreement.status === 'completed' && (!episodes.length || selected && !selected.id);
   const unassignedProgress = readyToStart && careChecklist({}, null, professional, 'disabled');
@@ -198,11 +207,16 @@ export default function IndividualCare({ agreement, professional, manageAgreemen
       <label htmlFor={episodeLabel} className="block font-semibold">Selecciona la atención que quieres abrir</label>
       <select id={episodeLabel} className={secondary + ' block w-full'} value={selected?.episodeId ?? ''} onChange={event => setSelection(event.target.value)}>
         <option value="">Elige una atención</option>
-        {episodes.map(item => <option key={item.episodeId} value={item.episodeId}>
-          {episodeTitle(item)} · {item.professionalName ? item.professionalName + ' · ' : ''}{careProgress(item, null, professional).stage}
-        </option>)}
+        {[[current, 'Atenciones actuales'], [history, 'Historial de atenciones']].map(([items, label]) => items.length > 0 &&
+          <optgroup key={label} label={label}>
+            {items.map(item => <option key={item.episodeId} value={item.episodeId}>
+              {episodeTitle(item)} · {item.professionalName ? item.professionalName + ' · ' : ''}{careProgress(item, consultationFor(item), professional).stage}
+            </option>)}
+          </optgroup>)}
       </select>
     </div>}
+    {selection && !invalid && !selected && <p role="status">La atención seleccionada ya no está disponible.</p>}
+    {selected && !isCurrent(selected) && <p className="text-sm font-semibold text-slate-700">Historial de atenciones</p>}
     {unassignedProgress && <div className={journey}>
       <NextStep progress={unassignedProgress} professional={professional}>{canStart && start(selected || undefined)}</NextStep>
       <JourneyProgress progress={unassignedProgress} />
@@ -213,31 +227,8 @@ export default function IndividualCare({ agreement, professional, manageAgreemen
       {manageAgreement && <CareDisclosure label="Gestionar atención" caption="Terminar la vinculación" icon={Settings2}>{manageAgreement}</CareDisclosure>}
     </div>}
     {!invalid && selected?.id && canStart && !unassigned.length && <details className={section}>
-      <summary className="cursor-pointer font-semibold">Iniciar otra atención</summary>
-      {start()}
+      <summary className="cursor-pointer font-semibold">Preparar una nueva atención</summary>
+      {start(undefined, true)}
     </details>}
-  </section>;
-}
-
-export function OwnFirstAppointments({ onOpen }) {
-  const consultations = useCareRead('/admissions/consultations');
-  const appointments = consultations.data?.filter(item => item.appointment)
-    .sort((a, b) => (a.appointment.date + a.appointment.time).localeCompare(b.appointment.date + b.appointment.time));
-  return <section className={section} aria-label="Primera consulta">
-    <h2 className="text-lg font-bold">Primera consulta</h2>
-    <ReadMessage read={consultations} loadingText="Consultando primeras citas…" />
-    {consultations.error && <button type="button" className={secondary} onClick={() => consultations.reload()}>Actualizar primeras citas</button>}
-    {appointments?.length === 0 && <p>No tienes primeras citas disponibles.</p>}
-    {appointments?.map(item => <div className="flex flex-wrap items-center justify-between gap-3" key={item.id}>
-      <p>{item.professionalName} · {item.appointment.date} a las {item.appointment.time} · {item.appointment.durationMinutes} min · {item.appointment.status === 'completed' ? 'Completada' : 'Pendiente'}</p>
-      <button className={secondary} type="button" onClick={() => onOpen(item.id)}>Ver detalle de primera cita</button>
-    </div>)}
-  </section>;
-}
-
-export function OwnFirstAppointmentDetail({ assignmentId }) {
-  return <section className={section} aria-label="Detalle de primera cita">
-    <h2 className="text-xl font-bold">Detalle de primera cita</h2>
-    <ConsultationDetail assignmentId={assignmentId} professional={false} contextual />
   </section>;
 }

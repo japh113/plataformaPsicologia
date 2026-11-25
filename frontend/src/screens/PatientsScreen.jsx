@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Search, CalendarDays, FileText, CheckSquare } from 'lucide-react';
+import { Search, CalendarDays, FileText, CheckSquare, SlidersHorizontal } from 'lucide-react';
 import { getRiskColor } from '../utils/risk';
 
 const getPatientStatusClasses = (status) => (
@@ -53,15 +53,8 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient, d
   const [summaryFilter, setSummaryFilter] = useState('todos');
   const isPsychologist = currentUser?.role === 'psychologist';
   const careRows = directory?.rows ?? [];
-  const byPatient = new Map();
-  for (const row of careRows) {
-    if (!row.legacyPatientId) continue;
-    const current = byPatient.get(row.legacyPatientId) ?? [];
-    byPatient.set(row.legacyPatientId, [...current, row]);
-  }
-  const legacyIds = new Set(patients.map(patient => patient.id));
-  const hasPending = patient => (patient.tareas || []).some(task => !task.completada)
-    || byPatient.get(patient.id)?.some(row => row.requiresAction);
+  const [careFilter, setCareFilter] = useState('all');
+  const hasPending = patient => (patient.tareas || []).some(task => !task.completada);
   const patientSummary = useMemo(() => {
     const highRisk = patients.filter((patient) => patient.riesgo === 'alto').length;
     const withoutSessions = patients.filter((patient) => !patient.ultimaSesion || !(patient.sesiones || []).length).length;
@@ -71,8 +64,7 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient, d
       withoutSessions,
     };
   }, [patients]);
-  const pendingTasks = patients.filter(hasPending).length
-    + careRows.filter(row => row.requiresAction && !legacyIds.has(row.legacyPatientId)).length;
+  const pendingTasks = patients.filter(hasPending).length;
   const term = normalizeSearch(query.trim());
   const hasActiveFilters = query.trim() || riskFilter !== 'todos' || statusFilter !== 'todos' || summaryFilter !== 'todos';
   const emptyState = getPatientsEmptyStateCopy({
@@ -85,11 +77,9 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient, d
       const patientName = patient.nombre || '';
       const patientReason = patient.motivo || '';
       const matchesQuery =
-        normalizeSearch(patientName).includes(term) || normalizeSearch(patientReason).includes(term)
-        || byPatient.get(patient.id)?.some(row => normalizeSearch(row.name).includes(term));
+        normalizeSearch(patientName).includes(term) || normalizeSearch(patientReason).includes(term);
       const matchesRisk = riskFilter === 'todos' ? true : patient.riesgo === riskFilter;
-      const matchesStatus = statusFilter === 'todos' || (patient.estado || 'activo') === statusFilter
-        || byPatient.get(patient.id)?.some(row => row.status === statusFilter);
+      const matchesStatus = statusFilter === 'todos' || (patient.estado || 'activo') === statusFilter;
       const matchesSummary =
         summaryFilter === 'todos'
           ? true
@@ -100,10 +90,10 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient, d
               : !patient.ultimaSesion || !(patient.sesiones || []).length;
       return matchesQuery && matchesRisk && matchesStatus && matchesSummary;
   });
-  const filteredCare = careRows.filter(row => !legacyIds.has(row.legacyPatientId)
-    && normalizeSearch(row.name).includes(term) && riskFilter === 'todos'
-    && (statusFilter === 'todos' || row.status === statusFilter)
-    && (summaryFilter === 'todos' || (summaryFilter === 'pending_tasks' && row.requiresAction)));
+  const filteredCare = careRows.filter(row => normalizeSearch(row.name).includes(term) && (
+    careFilter === 'all' || (careFilter === 'action' && row.requiresAction)
+    || (careFilter === 'pre-care' && row.preCare) || (careFilter === 'active' && row.inTreatment)
+  ));
 
   const handleSummaryFilter = (nextFilter) => {
     setSummaryFilter((currentFilter) => (currentFilter === nextFilter ? 'todos' : nextFilter));
@@ -116,54 +106,7 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient, d
     setSummaryFilter('todos');
   };
 
-  return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      <div className={directory ? 'flex flex-wrap items-start justify-between gap-3' : undefined}>
-        <div>
-          <h2 id={directory?.headingId} ref={directory?.headingRef} tabIndex={directory ? -1 : undefined}
-            className="text-xl md:text-2xl font-bold text-gray-800">{isPsychologist ? 'Mis Pacientes' : 'Mi Seguimiento'}</h2>
-          <p className="text-sm md:text-base text-gray-500">
-            {isPsychologist ? 'Busca expedientes, prioriza riesgo y abre acciones rápidas.' : 'Consulta tu perfil, tu motivo de atención y tu progreso actual.'}
-          </p>
-        </div>
-        {directory?.headerAction}
-      </div>
-
-      {isPsychologist && (
-        <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <button type="button" onClick={() => handleSummaryFilter('high_risk')} className={`rounded-2xl border p-4 text-left transition ${summaryFilter === 'high_risk' ? 'border-rose-400 bg-rose-100 ring-2 ring-rose-200' : 'border-rose-200 bg-rose-50 hover:bg-rose-100/70'}`}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-700">Prioridad alta</p>
-            <p className="mt-2 text-3xl font-black text-rose-900">{directory?.clinicalUnknown ? '—' : patientSummary.highRisk}</p>
-            <p className="mt-1 text-sm text-rose-800">Pacientes con nivel de riesgo alto.</p>
-          </button>
-          <button type="button" onClick={() => handleSummaryFilter('pending_tasks')} className={`rounded-2xl border p-4 text-left transition ${summaryFilter === 'pending_tasks' ? 'border-indigo-400 bg-indigo-100 ring-2 ring-indigo-200' : 'border-indigo-200 bg-indigo-50 hover:bg-indigo-100/70'}`}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Seguimiento activo</p>
-            <p className="mt-2 text-3xl font-black text-indigo-900">{directory?.pendingUnknown && !pendingTasks ? '—' : pendingTasks}</p>
-            <p className="mt-1 text-sm text-indigo-800">{directory?.pendingUnknown
-              ? pendingTasks ? 'Pendientes confirmados. Hay datos por actualizar.' : 'Pendientes por confirmar.'
-              : 'Pacientes con tareas pendientes.'}</p>
-          </button>
-          <button type="button" onClick={() => handleSummaryFilter('without_sessions')} className={`rounded-2xl border p-4 text-left transition ${summaryFilter === 'without_sessions' ? 'border-amber-400 bg-amber-100 ring-2 ring-amber-200' : 'border-amber-200 bg-amber-50 hover:bg-amber-100/70'}`}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Por documentar</p>
-            <p className="mt-2 text-3xl font-black text-amber-900">{directory?.clinicalUnknown ? '—' : patientSummary.withoutSessions}</p>
-            <p className="mt-1 text-sm text-amber-800">Pacientes sin notas clinicas registradas.</p>
-          </button>
-        </section>
-      )}
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-5 space-y-4">
-        {isPsychologist && (
-          <div className="flex flex-col md:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                value={query}
-                aria-label={directory ? 'Buscar en Mis pacientes' : undefined}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={directory ? 'Buscar pacientes o solicitudes' : 'Buscar por nombre o motivo de consulta'}
-                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
+  const recordFilters = <>
             <select
               value={riskFilter}
               aria-label="Filtrar por riesgo"
@@ -178,7 +121,7 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient, d
             </select>
             <select
               value={statusFilter}
-              aria-label="Filtrar por estado"
+              aria-label="Filtrar por estado del expediente"
               onChange={(e) => setStatusFilter(e.target.value)}
               className="px-3 py-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
             >
@@ -187,23 +130,90 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient, d
               <option value="en pausa">En pausa</option>
               <option value="de baja">De baja</option>
               <option value="de alta">De alta</option>
-              {directory && <option value="agreement">Vinculaciones vigentes</option>}
-              {directory && <option value="invitation">Solicitudes de vinculación</option>}
             </select>
             {hasActiveFilters && (
               <button type="button" onClick={clearFilters} className="px-3 py-2.5 border border-slate-300 rounded-lg bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
                 Limpiar filtros
               </button>
             )}
+  </>;
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className={directory ? 'flex flex-wrap items-start justify-between gap-3' : undefined}>
+        <div>
+          <h2 id={directory?.headingId} ref={directory?.headingRef} tabIndex={directory ? -1 : undefined}
+            className="text-xl md:text-2xl font-bold text-gray-800">{isPsychologist ? 'Mis Pacientes' : 'Mi Seguimiento'}</h2>
+          <p className="text-sm md:text-base text-gray-500">
+            {isPsychologist ? 'Busca expedientes, prioriza riesgo y abre acciones rápidas.' : 'Consulta tu perfil, tu motivo de atención y tu progreso actual.'}
+          </p>
+        </div>
+        {directory?.headerAction}
+      </div>
+
+      {isPsychologist && !directory && (
+        <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <button type="button" onClick={() => handleSummaryFilter('high_risk')} className={`rounded-2xl border p-4 text-left transition ${summaryFilter === 'high_risk' ? 'border-rose-400 bg-rose-100 ring-2 ring-rose-200' : 'border-rose-200 bg-rose-50 hover:bg-rose-100/70'}`}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-rose-700">Prioridad alta</p>
+            <p className="mt-2 text-3xl font-black text-rose-900">{patientSummary.highRisk}</p>
+            <p className="mt-1 text-sm text-rose-800">Pacientes con nivel de riesgo alto.</p>
+          </button>
+          <button type="button" onClick={() => handleSummaryFilter('pending_tasks')} className={`rounded-2xl border p-4 text-left transition ${summaryFilter === 'pending_tasks' ? 'border-indigo-400 bg-indigo-100 ring-2 ring-indigo-200' : 'border-indigo-200 bg-indigo-50 hover:bg-indigo-100/70'}`}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-700">Seguimiento activo</p>
+            <p className="mt-2 text-3xl font-black text-indigo-900">{pendingTasks}</p>
+            <p className="mt-1 text-sm text-indigo-800">Pacientes con tareas pendientes.</p>
+          </button>
+          <button type="button" onClick={() => handleSummaryFilter('without_sessions')} className={`rounded-2xl border p-4 text-left transition ${summaryFilter === 'without_sessions' ? 'border-amber-400 bg-amber-100 ring-2 ring-amber-200' : 'border-amber-200 bg-amber-50 hover:bg-amber-100/70'}`}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700">Por documentar</p>
+            <p className="mt-2 text-3xl font-black text-amber-900">{patientSummary.withoutSessions}</p>
+            <p className="mt-1 text-sm text-amber-800">Pacientes sin notas clinicas registradas.</p>
+          </button>
+        </section>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-5 space-y-4">
+        {isPsychologist && (
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                value={query}
+                aria-label={directory ? 'Buscar atenciones y expedientes' : undefined}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar por nombre o motivo de consulta"
+                className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            {!directory && <>{recordFilters}</>}
             {directory?.refreshAction}
           </div>
         )}
 
-        <div className="space-y-3">
-          {directory?.notice}
+        {directory?.notice}
+        {directory && <section aria-label="Atenciones por episodio" className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-bold text-slate-900">Atenciones</h3>
+            <div role="group" aria-label="Filtrar atenciones" className="flex flex-wrap gap-2">
+              {[['all', 'Todos'], ['action', 'Requieren mi acción'], ['pre-care', 'Preatención'], ['active', 'En tratamiento']].map(([filter, label]) =>
+                <button key={filter} type="button" aria-pressed={careFilter === filter} onClick={() => setCareFilter(filter)}
+                  className={`min-h-10 rounded-full border px-3 text-sm font-semibold ${careFilter === filter ? 'border-indigo-300 bg-indigo-50 text-indigo-800' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}>{label}</button>)}
+            </div>
+          </div>
           {filteredCare.map(row => <div key={row.id} className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-sm transition">
             {row.content}
           </div>)}
+          {!filteredCare.length && !directory.pendingUnknown && <p className="text-sm text-slate-600">No hay atenciones para esta selección.</p>}
+        </section>}
+        <section aria-label={directory ? 'Expedientes autorizados' : undefined} className="space-y-3">
+          {directory && <div className="border-t border-slate-100 pt-4">
+            <h3 className="font-bold text-slate-900">Expedientes</h3>
+            <details className="mt-2">
+              <summary className="flex min-h-10 w-fit cursor-pointer items-center gap-2 rounded-lg px-2 text-sm font-semibold text-indigo-800">
+                <SlidersHorizontal size={16} aria-hidden="true" /> Más filtros de expediente
+              </summary>
+              <div className="mt-2 flex flex-wrap gap-2">{recordFilters}</div>
+            </details>
+          </div>}
           {filteredPatients.map((patient) => (
             <div key={patient.id} className="rounded-xl border border-gray-200 bg-white p-4 hover:shadow-sm transition">
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
@@ -254,17 +264,17 @@ export default function PatientsScreen({ currentUser, patients, onOpenPatient, d
                   </button>
                 </div>
               </div>
-              {byPatient.get(patient.id)?.map(row => <div key={row.id} className="mt-4 border-t border-slate-100 pt-4">{row.content}</div>)}
             </div>
           ))}
 
-          {filteredPatients.length === 0 && filteredCare.length === 0 && !directory?.pendingUnknown && (
+          {filteredPatients.length === 0 && !directory?.clinicalUnknown && (
             <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
-              <p className="text-sm font-semibold text-slate-700">{emptyState.title}</p>
-              <p className="mt-2 text-sm text-gray-500">{directory && !hasActiveFilters ? 'Tus expedientes, vinculaciones y solicitudes registradas aparecerán aquí.' : emptyState.description}</p>
+              <p className="text-sm font-semibold text-slate-700">{directory ? 'No hay expedientes para esta selección.' : emptyState.title}</p>
+              {!directory && <p className="mt-2 text-sm text-gray-500">{emptyState.description}</p>}
             </div>
           )}
-        </div>
+        </section>
+        {directory?.receipts}
       </div>
     </div>
   );

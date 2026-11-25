@@ -84,13 +84,12 @@ test('018–022: first consultation over real HTTP and PostgreSQL', {
       const result = await consult(id, assignment, operation, payload);
       assert.deepEqual(result, { status: 200, body: { success: true, data: { saved: true } } }, operation);
     }
-    async function prepare(psy, pac, directed = false, privateLabel) {
+    async function prepare(psy, pac, directed = false) {
       const reference = (await bilateral(actor(psy), 'professional-reference', { operationId: randomUUID() })).reference;
       const recipient = (await bilateral(actor(pac), 'recipient-reference', { ...action(), professionalReference: reference })).reference;
       const receipt = await bilateral(actor(psy), 'issue', {
         operationId: randomUUID(), declared: true, proposed: true, recipientReference: recipient, email: pac + '@bilateral.invalid',
         conditionsVersion, conditionsHash: sha256(conditionsText('Profesional ficticio ' + psy)), declarationVersion,
-        ...(privateLabel ? { privateLabel } : {}),
       });
       await processQueue();
       const invitation = (await bilateral(actor(pac), 'received')).find(item => item.id === receipt.receiptId);
@@ -133,41 +132,35 @@ test('018–022: first consultation over real HTTP and PostgreSQL', {
     }
     const dates = (await client.query(`SELECT ((clock_timestamp() AT TIME ZONE 'America/Los_Angeles')::date-1)::text AS past,
       ((clock_timestamp() AT TIME ZONE 'America/Los_Angeles')::date+1)::text AS future`)).rows[0];
-    const e1 = await prepare('bp1', 'bq1', false, 'Referencia del martes');
+    const e1 = await prepare('bp1', 'bq1');
     const e2 = await prepare('bp2', 'bq1', true);
     const e3 = await prepare('bp3', 'bq2');
     const e4 = await prepare('bp4', 'bq3');
     let ownAppointment;
 
-    await t.test('care context correlates exact records and keeps receipt labels private and time-limited', async () => {
+    await t.test('care context exposes exact bilateral references independently of ordinary record access', async () => {
       const route = '/bilateral-invitations/care-context';
       const correlation = { agreementId: e1.agreementId, invitationId: e1.receiptId };
+      const other = { agreementId: e2.agreementId, invitationId: e2.receiptId };
       const owner = () => http(e1.psy, route);
-      assert.deepEqual((await owner()).body.data, {
-        agreements: [correlation], labels: [{ receiptId: e1.receiptId, label: 'Referencia del martes' }],
-      });
+      assert.deepEqual((await owner()).body.data, { agreements: [correlation] });
       const patient = await http(e1.pac, route);
-      assert.deepEqual(patient.body.data.agreements.find(item => item.agreementId === e1.agreementId), correlation);
-      assert.deepEqual(patient.body.data.labels, []);
-      const outsider = await http('bp24', route);
-      assert.deepEqual(outsider.body.data, { agreements: [], labels: [] });
+      assert.deepEqual(patient.body.data.agreements.sort((a,b) => a.agreementId.localeCompare(b.agreementId)),
+        [correlation, other].sort((a,b) => a.agreementId.localeCompare(b.agreementId)));
+      assert.deepEqual((await http('bp24', route)).body.data, { agreements: [] });
       assert.equal((await http('bil-support', route)).status, 403);
-      assert.doesNotMatch(JSON.stringify((await http(e1.psy, '/bilateral-invitations/sent')).body), /Referencia del martes/);
-      assert.doesNotMatch(JSON.stringify((await http(e1.pac, '/bilateral-invitations/received')).body), /Referencia del martes/);
-      const stored = (await client.query('SELECT proposal FROM bilateral_attempts WHERE id=$1', [e1.receiptId])).rows[0].proposal;
-      assert.equal(typeof stored.privateLabel.data, 'string');
-      assert.doesNotMatch(JSON.stringify(stored), /Referencia del martes/);
+      const expiredToken = jwt.sign({ sub: e1.psy, sv: 0 }, env.jwtSecret, { expiresIn: -1 });
+      assert.equal((await http(e1.psy, route, null, 'GET', expiredToken)).status, 401);
       await assert.rejects(pool.query("SELECT bilateral_care_context('bp1',0,9999999999)"), error => error.code === '42501');
       await client.query("INSERT INTO psychologist_patient_access(psychologist_user_id,patient_id) VALUES ('bp1','bq1')");
       try {
-        assert.deepEqual((await owner()).body.data.agreements, [{ ...correlation, legacyPatientId: e1.pac }]);
+        assert.equal((await http(e1.psy, '/patients/bq1')).status, 200);
+        assert.deepEqual((await owner()).body.data, { agreements: [correlation] });
       } finally {
         await client.query("DELETE FROM psychologist_patient_access WHERE psychologist_user_id='bp1' AND patient_id='bq1'");
       }
-      await client.query("UPDATE bilateral_attempts SET created_at=statement_timestamp()-interval '15 days', expires_at=statement_timestamp()-interval '1 day' WHERE id=$1", [e1.receiptId]);
-      assert.deepEqual((await owner()).body.data.labels, []);
-      await processQueue();
-      assert.equal((await client.query("SELECT proposal ? 'privateLabel' AS present FROM bilateral_attempts WHERE id=$1", [e1.receiptId])).rows[0].present, false);
+      assert.ok([403, 404].includes((await http(e1.psy, '/patients/bq1')).status));
+      assert.deepEqual((await owner()).body.data, { agreements: [correlation] });
     });
 
     await t.test('requires explicit sufficiency, exact document and separate consent; activation is unique under concurrency', async () => {
