@@ -9,7 +9,7 @@ import IndividualCare from '../components/IndividualCare';
 import { TreatmentWithdrawals } from '../components/FirstConsultation';
 import { useCareRead } from '../components/useCareRead';
 import { useVisibleCareRefresh } from '../components/useVisibleCareRefresh';
-import { agreementCare, firstConsultationEnabled, unifiedCareEnabled } from '../components/individualCareState';
+import { firstConsultationEnabled, unifiedCareEnabled } from '../components/individualCareState';
 
 const base = '/bilateral-invitations';
 const formatDate = value => new Date(value).toLocaleString('es-MX', {
@@ -315,39 +315,44 @@ function pendingFirst(episodes, audience) {
     ?? episodes?.[0];
 }
 
-function PatientCareCard({ name, stage, audience, children }) {
+function PatientCareCard({ name, stage, audience, children, linkStatus = 'Vinculación completada' }) {
   const waiting = stage?.owner === audience;
-  return <article className="h-full rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+  const other = stage?.owner && !waiting;
+  return <article className={`h-full rounded-2xl border p-4 sm:p-5 ${waiting ? 'border-indigo-200 bg-indigo-50/50' : 'border-slate-200 bg-white'}`}>
     <div className="flex items-start gap-3">
       <Avatar name={name} />
       <div className="min-w-0 flex-1">
         <h3 className="break-words text-lg font-bold leading-tight text-slate-950">{name}</h3>
-        <p className="mt-1 text-sm font-medium text-slate-700">{stage?.stage ?? 'Vinculación completada'}</p>
+        <p className="mt-1 text-sm font-medium text-slate-700">{stage?.stage ?? linkStatus}</p>
+        {other && <p className="mt-1 text-xs font-medium text-slate-600">{audience === 'professional' ? 'En espera del paciente' : 'En espera de tu profesional'}</p>}
         {waiting && <p className="mt-2 inline-block rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-950">Te toca actuar</p>}
       </div>
     </div>
     {audience && <p className="mt-3 text-sm leading-relaxed text-slate-600">
       {!stage || stage.unavailable ? 'Próxima acción por confirmar.' : stage.next}
     </p>}
-    <div className="mt-3">{children}</div>
+    {stage?.steps && !stage.closed && !stage.unavailable && <div className="mt-4 flex items-center gap-3">
+      <div className="flex flex-1 gap-1" aria-hidden="true">
+        {stage.steps.map(step => <span key={step.label} className={`h-1.5 flex-1 rounded-full ${step.complete ? 'bg-teal-700' : step.current ? 'bg-amber-400' : 'bg-slate-200'}`} />)}
+      </div>
+      <span className="whitespace-nowrap text-xs text-slate-600">{stage.completed} de {stage.steps.length} etapas</span>
+    </div>}
+    <div className="mt-3 border-t border-slate-200 pt-2">{children}</div>
   </article>;
 }
 
-function LinkedPatients({ onAgreement, onLegacy, showCare }) {
+function LinkedPatients({ onAgreement, onLegacy, overview }) {
   const [query, setQuery] = useState('');
-  const linked = useCareRead(base + '/linked-patients');
-  const admissions = useCareRead(showCare ? '/admissions' : null);
-  const consultations = useCareRead(showCare && firstConsultationEnabled ? '/admissions/consultations' : null);
-  function refresh(retain = false) {
-    return Promise.all([linked.reload(retain), admissions.reload(retain), consultations.reload(retain)]);
-  }
+  const legacyLinks = useCareRead(overview ? null : base + '/linked-patients');
   useVisibleCareRefresh(() => {
-    if (!linked.loading && !admissions.loading && !consultations.loading) return refresh(true);
-  });
+    if (!legacyLinks.loading) return legacyLinks.reload(true);
+  }, !overview);
+  const { links: linked = legacyLinks, admissions, consultations } = overview ?? {};
+  const refresh = () => overview ? overview.reload(false, true) : legacyLinks.reload();
   const patients = linked.data;
   const visible = (patients ?? []).filter(patient => normalizeName(patient.displayName).includes(normalizeName(query.trim())))
     .map(patient => ({
-      ...patient, stage: showCare && pendingFirst(agreementCare(patient.agreementId, admissions.data, consultations.data, true), 'professional'),
+      ...patient, stage: overview && pendingFirst(overview.forAgreement(patient.agreementId), 'professional'),
     })).sort((left, right) => Number(right.stage?.owner === 'professional') - Number(left.stage?.owner === 'professional'));
   return <section aria-label="Pacientes vinculados" className={content}>
     <div className="flex items-end gap-2 sm:gap-3">
@@ -363,11 +368,11 @@ function LinkedPatients({ onAgreement, onLegacy, showCare }) {
         <RefreshCw size={17} aria-hidden="true" /> <span className="hidden sm:inline">Actualizar pacientes</span>
       </button>
     </div>
-    <ErrorMessage error={linked.error || admissions.error || consultations.error} />
+    <ErrorMessage error={linked.error || admissions?.error || consultations?.error} />
     {linked.loading && !patients && <p role="status">Consultando pacientes vinculados…</p>}
     {patients && (visible.length ? <ul className="grid gap-3 sm:grid-cols-2">
       {visible.map(patient => <li key={patient.agreementId}>
-        <PatientCareCard name={patient.displayName} stage={patient.stage} audience={showCare ? 'professional' : null}>
+        <PatientCareCard name={patient.displayName} stage={patient.stage} audience={overview ? 'professional' : null}>
           <button type="button" className={link} aria-label={`Abrir atención de ${patient.displayName}`}
             onClick={() => onAgreement(patient)}>Abrir ficha <ChevronRight size={16} aria-hidden="true" /></button>
         </PatientCareCard>
@@ -423,6 +428,7 @@ function InvitationDetail({ item, status, acceptanceAvailable, action, terminal,
 
 function Invitations({
   professional, receivedInvitations, selectedAgreement, selectedInvitation, onInvitation, onAgreement, registered, showAdmission,
+  overview, receiptsOnly = false, onOpenAgenda,
 }) {
   const [data, setData] = useState(null);
   const [hasNotices, setHasNotices] = useState(false);
@@ -431,15 +437,9 @@ function Invitations({
   const [attempt, setAttempt] = useState(0);
   const action = useBilateralAction();
   const patientOverview = !professional && !selectedAgreement && !selectedInvitation && showAdmission;
-  const admissions = useCareRead(patientOverview ? '/admissions' : null);
-  const consultations = useCareRead(patientOverview && firstConsultationEnabled ? '/admissions/consultations' : null);
+  const { admissions, consultations } = overview ?? {};
   const linked = useCareRead(professional && selectedAgreement ? base + '/linked-patients' : null);
   useVisibleCareRefresh(() => { if (!linked.loading) return linked.reload(true); }, Boolean(professional && selectedAgreement));
-
-  useVisibleCareRefresh(() => {
-    if (!admissions.loading) void admissions.reload(true);
-    if (!consultations.loading) void consultations.reload(true);
-  }, patientOverview);
 
   function refreshLists() {
     setData(null);
@@ -451,8 +451,7 @@ function Invitations({
   function refresh() {
     refreshLists();
     receivedInvitations?.refresh();
-    void admissions.reload();
-    void consultations.reload();
+    if (overview) void overview.reload(false, true);
     void linked.reload();
   }
 
@@ -463,12 +462,13 @@ function Invitations({
 
   useEffect(() => {
     const controller = new AbortController();
-    const names = professional ? ['sent', 'agreements'] : ['agreements', 'blocks'];
+    const names = professional ? receiptsOnly ? ['sent'] : ['sent', 'agreements']
+      : patientOverview ? ['blocks'] : ['agreements', 'blocks'];
     Promise.all(names.map(name => apiRequest(base + '/' + name, { signal: controller.signal }))).then(
       ([first, second]) => {
         if (!controller.signal.aborted) setData(professional
-          ? { items: first.data, agreements: second.data }
-          : { agreements: first.data, blocks: second.data });
+          ? { items: first.data, agreements: second?.data ?? [] }
+          : patientOverview ? { blocks: first.data } : { agreements: first.data, blocks: second.data });
       },
     ).catch(failure => {
       if (!controller.signal.aborted) setReadError(failure.message);
@@ -481,7 +481,7 @@ function Invitations({
       });
     }
     return () => controller.abort();
-  }, [professional, attempt, selectedAgreement]);
+  }, [professional, attempt, selectedAgreement, receiptsOnly, patientOverview]);
 
   function terminal(item, verb) {
     const version = ['withdraw', 'decline', 'unlink'].includes(verb) ? { expectedVersion: item.version } : {};
@@ -511,14 +511,15 @@ function Invitations({
   const pendingIds = new Set(actionable.map(item => item.id));
   const orderedItems = items && (professional ? items : [...actionable, ...items.filter(item => !pendingIds.has(item.id))]);
   const invitation = items?.find(item => item.id === selectedInvitation);
-  const agreements = data?.agreements.filter(item => !selectedAgreement || item.id === selectedAgreement.id);
+  const sourceAgreements = patientOverview ? overview?.links.data : data?.agreements;
+  const agreements = sourceAgreements?.filter(item => !selectedAgreement || item.id === selectedAgreement.id);
   const currentAgreements = agreements?.filter(agreement => agreement.status === 'completed').map(agreement => {
-    const episodes = showAdmission ? agreementCare(agreement.id, admissions.data, consultations.data, false) : null;
+    const episodes = overview?.forAgreement(agreement.id) ?? null;
     return { agreement, episodes, stage: pendingFirst(episodes, 'patient') };
   }).sort((left, right) => Number(right.stage?.owner === 'patient') - Number(left.stage?.owner === 'patient'));
   const taskCount = currentAgreements?.reduce((count, entry) =>
     count + (entry.episodes?.filter(episode => episode.owner === 'patient').length ?? 0), 0);
-  const pendingKnown = showAdmission && Array.isArray(admissions.data) && (!firstConsultationEnabled || Array.isArray(consultations.data))
+  const pendingKnown = showAdmission && Array.isArray(admissions?.data) && (!firstConsultationEnabled || Array.isArray(consultations?.data))
     && currentAgreements?.every(entry => entry.episodes?.every(episode => !episode.unavailable));
   const manageLink = agreement => agreement.status === 'completed' && <SensitiveAction label="Terminar acuerdo"
     description="La vinculación termina de inmediato. Los tratamientos activos o pausados conservan su procedimiento propio."
@@ -549,6 +550,7 @@ function Invitations({
       key={JSON.stringify([invitation.id, invitation.version, invitation.conditionsVersion, invitation.conditionsHash, pendingIds.has(invitation.id)])}
       item={invitation} status={receivedInvitations.displayStatus(invitation)} acceptanceAvailable={pendingIds.has(invitation.id)} action={action} terminal={terminal} onConflict={revalidateDecision} onAccepted={result => {
         receivedInvitations.afterAction(invitation.id, 'accepted');
+        if (overview) void overview.reload(true, true);
         if (showAdmission && result.status === 'completed' && result.agreementId) {
           onAgreement({ id: result.agreementId });
           return;
@@ -564,11 +566,11 @@ function Invitations({
               : pendingKnown ? 'Sin tareas pendientes' : 'Tareas por confirmar'}
           </span>}
         </div>
-        {showAdmission && <ErrorMessage error={admissions.error || consultations.error} />}
+        {showAdmission && <ErrorMessage error={admissions?.error || consultations?.error} />}
         {!currentAgreements.length && <p className={card}>No tienes vinculaciones vigentes.</p>}
         <div className="grid gap-3 sm:grid-cols-2">
           {currentAgreements.map(({ agreement, stage }) => <PatientCareCard key={agreement.id} name={agreement.professionalName}
-            stage={stage} audience={showAdmission ? 'patient' : null}>
+            stage={stage} audience={showAdmission ? 'patient' : null} linkStatus={showAdmission ? 'Vinculación completada' : 'Acuerdo completado'}>
             <button type="button" className={link} onClick={() => onAgreement(agreement)}>Ver atención <ChevronRight size={16} aria-hidden="true" /></button>
           </PatientCareCard>)}
         </div>
@@ -602,15 +604,17 @@ function Invitations({
           </article>)}
         </div>)}
       </section>}
-      {showOverview && history?.some(item => item.status === 'accepted') && !data?.agreements.length && !readError &&
+      {showOverview && history?.some(item => item.status === 'accepted') && !agreements?.length && !readError &&
         <p role="status">Actualizando los acuerdos de las invitaciones aceptadas…</p>}
       {selectedAgreement && agreements && !agreements.length && <p role="status">El acuerdo ya no está disponible.</p>}
       {selectedAgreement && (!professional || !linked.loading || linked.data) && agreements?.map(agreement => {
         const name = professional ? linked.data?.find(item => item.agreementId === agreement.id)?.displayName : agreement.professionalName;
         const manageAgreement = manageLink(agreement);
-        const terms = <details><summary className={`cursor-pointer font-semibold text-indigo-700 ${focus}`}>Consultar las condiciones acordadas</summary>
-          <div className="mt-3"><Terms value={agreement} /></div>
-        </details>;
+        const terms = showAdmission
+          ? <><p className="text-sm font-medium text-slate-700">Invitación aceptada el {formatDate(agreement.completedAt)}</p><Terms value={agreement} /></>
+          : <details><summary className={`cursor-pointer font-semibold text-indigo-700 ${focus}`}>Consultar las condiciones acordadas</summary>
+            <div className="mt-3"><Terms value={agreement} /></div>
+          </details>;
         return <article key={agreement.id} className="space-y-5">
           <header className="flex min-w-0 items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
             {name && <Avatar name={name} />}
@@ -621,7 +625,7 @@ function Invitations({
             </div>
           </header>
           {showAdmission ? <IndividualCare key={agreement.id} agreement={agreement} professional={professional}
-            manageAgreement={manageAgreement} agreementTerms={terms} /> : <>
+            manageAgreement={manageAgreement} agreementTerms={terms} onOpenAgenda={onOpenAgenda} onChange={overview?.refreshIfStale} /> : <>
             {terms}
             {manageAgreement && <CareDisclosure label="Gestionar vinculación">{manageAgreement}</CareDisclosure>}
           </>}
@@ -644,7 +648,7 @@ function Invitations({
             </li>)}
           </ul>}
         </details>}
-      {professional && !selectedAgreement && agreements && <>
+      {professional && !selectedAgreement && !receiptsOnly && agreements && <>
       <h2 className={heading}>{selectedAgreement ? 'Acuerdo de vinculación' : 'Acuerdos de vinculación'}</h2>
       {!agreements.length && <p className={card}>No hay acuerdos para mostrar.</p>}
       {agreements.map(agreement => <article key={agreement.id} className={card}>
@@ -674,7 +678,7 @@ function Invitations({
   </div>;
 }
 
-export default function BilateralInvitationsScreen({ currentUser, navigate, showAdmission, receivedInvitations }) {
+export default function BilateralInvitationsScreen({ currentUser, navigate, showAdmission, receivedInvitations, careOverview, onOpenAgenda }) {
   const professional = currentUser.role === 'psychologist';
   const [page, setPage] = useState(professional ? 'linked' : 'invitations');
   const [selection, setSelection] = useState(null);
@@ -700,6 +704,7 @@ export default function BilateralInvitationsScreen({ currentUser, navigate, show
 
   const subpage = ['invite', 'reference', 'detail', 'agreement'].includes(page);
   const home = professional ? 'Mis pacientes' : 'Mi atención';
+  const unified = showAdmission && unifiedCareEnabled;
   const pageTitle = {
     invite: 'Invitar paciente', reference: 'Generar mi referencia',
     detail: 'Invitación de vinculación', agreement: showAdmission && unifiedCareEnabled ? 'Ficha de atención' : 'Acuerdo de vinculación',
@@ -718,7 +723,7 @@ export default function BilateralInvitationsScreen({ currentUser, navigate, show
         ? <button type="button" className={primary} onClick={() => { setRegistered(false); open('invite'); }}><Plus size={20} aria-hidden="true" /> Invitar paciente</button>
         : <button type="button" className={primary} onClick={() => open('reference')}><UserRoundPlus size={20} aria-hidden="true" /> Generar mi referencia</button>)}
     </header>}
-    {professional && !subpage && <nav aria-label="Secciones de Mis pacientes" className="flex flex-wrap gap-2 border-b border-slate-300">
+    {professional && !subpage && !unified && <nav aria-label="Secciones de Mis pacientes" className="flex flex-wrap gap-2 border-b border-slate-300">
       {[['linked', 'Pacientes vinculados'], ['invitations', 'Invitaciones']].map(([target, label]) =>
         <button key={target} type="button" aria-current={page === target ? 'page' : undefined}
           className={`min-h-11 rounded-t-md border-b-2 px-3 font-semibold ${focus} ${page === target ? 'border-indigo-700 text-indigo-700' : 'border-transparent text-slate-600 hover:text-indigo-700'}`}
@@ -730,11 +735,17 @@ export default function BilateralInvitationsScreen({ currentUser, navigate, show
       </button>}
       <button type="button" className={secondary} onClick={() => navigate('legacy-patients')}><UserRound size={18} aria-hidden="true" /> Mi seguimiento</button>
     </div>}
-    {page === 'linked' && <LinkedPatients showCare={showAdmission && unifiedCareEnabled} onAgreement={agreement => open('agreement', { id: agreement.agreementId })} onLegacy={() => navigate('legacy-patients')} />}
-    {page === 'invite' && <ProfessionalInvite onRegistered={() => { setRegistered(true); open('invitations'); }} />}
+    {page === 'linked' && <>
+      <LinkedPatients overview={unified ? careOverview : null} onAgreement={agreement => open('agreement', { id: agreement.agreementId })} onLegacy={() => navigate('legacy-patients')} />
+      {unified && <details open={registered} className={card}>
+        <summary className={`cursor-pointer font-semibold ${focus}`}>Solicitudes y acuses de invitación</summary>
+        <Invitations professional showAdmission={false} receiptsOnly registered={registered} />
+      </details>}
+    </>}
+    {page === 'invite' && <ProfessionalInvite onRegistered={() => { setRegistered(true); open(unified ? 'linked' : 'invitations'); }} />}
     {page === 'reference' && <PatientReference />}
     {['invitations', 'detail', 'agreement'].includes(page) && <Invitations key={page + ':' + (selection?.id ?? selection ?? '')}
-      professional={professional} showAdmission={showAdmission && unifiedCareEnabled} receivedInvitations={receivedInvitations} registered={registered && page === 'invitations'}
+      professional={professional} showAdmission={unified} overview={unified ? careOverview : null} onOpenAgenda={onOpenAgenda} receivedInvitations={receivedInvitations} registered={registered && page === 'invitations'}
       selectedAgreement={page === 'agreement' ? selection : null} selectedInvitation={page === 'detail' ? selection : null}
       onInvitation={id => open('detail', id)} onAgreement={agreement => open('agreement', agreement)} />}
     <p className="text-sm text-slate-600">Entorno de ensayo con cuentas ficticias y entrega simulada.</p>

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import FirstBooking from './FirstBooking';
 import { createPortal } from 'react-dom';
 import { CareDisclosure, SensitiveAction } from './CareDisclosure';
 import { apiRequest } from '../api/client';
+import { useCareRead } from './useCareRead';
 import { useVisibleCareRefresh } from './useVisibleCareRefresh';
 import { episodeTitle } from './individualCareState';
 
@@ -31,7 +33,7 @@ function waitingForPatient(detail, professional) {
   return professional && !detail.consentAccepted && !detail.consentId;
 }
 
-export function ConsultationDetail({ assignmentId, professional, onRefresh, revision, onDetail, onUnavailable, contextual = false, managementTarget, treatmentTermsTarget, assignmentVersion }) {
+export function ConsultationDetail({ assignmentId, professional, onRefresh, revision, onDetail, onUnavailable, contextual = false, managementTarget, treatmentTermsTarget, assignmentVersion, onOpenAgenda }) {
   const [read, setRead] = useState(null);
   const detail = read?.revision === revision && (assignmentVersion === undefined || read?.data.admissionVersion === assignmentVersion)
     ? read?.data : null;
@@ -119,7 +121,7 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
     }
   };
 
-  useVisibleCareRefresh(() => { if (!busy) return reload(); }, contextual);
+  useVisibleCareRefresh(() => { if (!busy) return reload(); }, contextual, 8000);
 
   if (contextual && detail?.status === 'prepared' && (!detail.sufficiencyId
     || waitingForPatient(detail, professional))) return null;
@@ -164,14 +166,15 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
           : !contextual && <p>El profesional puede activar el episodio.</p>)}
       </>}
       {detail.status === 'active' && !detail.appointment && (professional
-        ? <form className="space-y-3" onSubmit={event => { event.preventDefault(); void submit('book', { date, time }); }}>
-          {contextual && <p>Elige una fecha y una hora cerrada. La consulta dura 60 minutos.</p>}
+        ? contextual ? <FirstBooking date={date} time={time} setDate={setDate} setTime={setTime} busy={busy}
+          onBook={payload => void submit('book', payload)} onOpenAgenda={onOpenAgenda} />
+        : <form className="space-y-3" onSubmit={event => { event.preventDefault(); void submit('book', { date, time }); }}>
           <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block">Fecha de la primera cita <input className={field + ' mt-1 block w-full'} type="date" value={date} required onChange={event => setDate(event.target.value)} /></label>
-          <label className="block">Hora de inicio <select className={field + ' mt-1 block w-full'} value={time} required onChange={event => setTime(event.target.value)}>
-            <option value="">Seleccionar hora</option>
-            {hours.map(hour => <option key={hour}>{hour}</option>)}
-          </select></label>
+            <label className="block">Fecha de la primera cita <input className={field + ' mt-1 block w-full'} type="date" value={date} required onChange={event => setDate(event.target.value)} /></label>
+            <label className="block">Hora de inicio <select className={field + ' mt-1 block w-full'} value={time} required onChange={event => setTime(event.target.value)}>
+              <option value="">Seleccionar hora</option>
+              {hours.map(hour => <option key={hour}>{hour}</option>)}
+            </select></label>
           </div>
           <button className={button} disabled={busy || !date || !time}>{contextual ? 'Reservar primera cita' : 'Reservar cita de 60 minutos'}</button>
         </form>
@@ -208,39 +211,28 @@ export function ConsultationDetail({ assignmentId, professional, onRefresh, revi
 }
 
 export function TreatmentWithdrawals({ revision, onWithdraw, assignment, contextual = false }) {
-  const [references, setReferences] = useState(null);
+  const read = useCareRead('/admissions/consultations/withdrawals', null, revision);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(null);
   const generation = useRef(0);
-  const invalidate = useCallback(() => { generation.current++; }, []);
-
-  useEffect(() => {
-    const current = ++generation.current;
-    apiRequest('/admissions/consultations/withdrawals').then(response => {
-      if (current !== generation.current) return;
-      setReferences(response.data);
-      setError('');
-    }).catch(failure => {
-      if (current !== generation.current) return;
-      setReferences([]);
-      setError(failure.message);
-    });
-    return invalidate;
-  }, [revision, invalidate]);
+  useEffect(() => () => { generation.current++; }, [revision]);
 
   const withdraw = async reference => {
     if (busy) return;
     const current = generation.current;
     setBusy(reference.consentId);
+    setError('');
     try {
       await apiRequest('/admissions/consultations/' + reference.assignmentId + '/withdraw', {
         method: 'POST',
         body: JSON.stringify({ confirmed: true, consentId: reference.consentId }),
       });
       if (current !== generation.current) return;
-      setReferences(values => values.filter(value => value.consentId !== reference.consentId));
-      setBusy(null);
-      await onWithdraw();
+      await read.reload();
+      if (current === generation.current) {
+        setBusy(null);
+        await onWithdraw();
+      }
     } catch (failure) {
       if (current === generation.current) setError(failure.message);
     } finally {
@@ -248,12 +240,15 @@ export function TreatmentWithdrawals({ revision, onWithdraw, assignment, context
     }
   };
 
-  const visible = (references ?? []).filter(reference => !assignment || reference.assignmentId === assignment.id);
-  if (references === null) return contextual ? <p role="status">Consultando consentimientos vigentes…</p> : null;
-  if (!visible.length && !error) return contextual ? <p>No hay consentimientos disponibles para retirar.</p> : null;
+  const visible = (read.data ?? []).filter(reference => !assignment || reference.assignmentId === assignment.id);
+  if (!read.data && read.loading) return contextual ? <p role="status">Consultando consentimientos vigentes…</p> : null;
+  if (!visible.length && !error && !read.error) return contextual ? <p>No hay consentimientos disponibles para retirar.</p> : null;
   return <section className="space-y-2" aria-label="Consentimientos de tratamiento">
     <h3 className="font-bold">Consentimientos de tratamiento</h3>
     {error && <p role="alert">{error}</p>}
+    {read.error && <div role="alert"><p>{read.error}</p>
+      <button type="button" className={field} onClick={() => void read.reload()}>Reintentar consulta de consentimientos</button>
+    </div>}
     {visible.map(reference => contextual || assignment
       ? <SensitiveAction key={reference.consentId} label={assignment ? 'Retirar consentimiento de tratamiento'
         : 'Retirar consentimiento · ' + reference.professionalName + ' · ' + episodeTitle(reference)}

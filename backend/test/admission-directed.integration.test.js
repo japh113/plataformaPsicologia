@@ -143,7 +143,17 @@ test('017: directed interviews, correction decisions, private assessment and rac
     });
     await t.test('017 accept correction appends linked immutable version and resets sufficiency and risk without mutating previous values',async()=>{
       const a=await ready();await assess(a,'PREVIOUS_PRIVATE');await validateDirected(a);
-      const req=await request(a);const pending=await record(a);assert.equal(pending.current.context,'PREVIOUS_PRIVATE');assert.equal(pending.canAssess,false);
+      const before = await detail(a);
+      const reason = 'Solicito rectificar esta declaración ficticia';
+      const path = '/admissions/' + a.id + '/directed/request';
+      const proposal = { ...act(), expectedVersion: before.version, documentRevision: 1, reason };
+      assert.equal((await http(a.pac, path, { ...proposal, questionId: 'unknown' })).status, 400);
+      const req = await write(a, 'directed-request', { documentRevision: 1, reason, questionId: 'reason' }, a.pac);
+      assert.equal((await detail(a)).requests[0].questionId, 'reason');
+      const own = await http(a.pac, '/admissions/' + a.id);
+      assert.equal(own.body.data.requests[0].reason, reason);
+      assert.equal(own.body.data.requests[0].questionId, 'reason');
+      const pending=await record(a);assert.equal(pending.current.context,'PREVIOUS_PRIVATE');assert.equal(pending.canAssess,false);
       await assert.rejects(validateDirected(a),/admission_conflict/);
       await resolve(a,req.requestId);const d=await detail(a);assert.equal(d.latestDocument,2);assert.equal(d.documents.length,2);assert.equal(d.documents[0].declarations.reason,answers.reason);
       assert.equal(d.requests[0].resolution.decision,'accept');assert.equal(d.requests[0].resolution.documentRevision,2);assert.equal(d.reviewState,'documented');

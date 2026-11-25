@@ -7,6 +7,7 @@ import IdentityPanel from './components/IdentityPanel';
 import ProfessionalProfileScreen from './screens/ProfessionalProfileScreen';
 import ProfessionalReviewScreen from './screens/ProfessionalReviewScreen';
 import { patientRegistrationError } from './utils/identityFeedback';
+import { useCareOverview } from './utils/useCareOverview';
 import { useReceivedInvitations } from './utils/receivedInvitations';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
@@ -185,6 +186,11 @@ export default function App({onRestrictedSession}) {
     : null;
   const receivedInvitations = useReceivedInvitations(invitationScope, apiRequest);
   const pendingCount = receivedInvitations.actionable.length;
+  const unifiedScope = bilateralEnabled && unifiedCareEnabled && import.meta.env?.VITE_ADMISSION_ENABLED === 'true'
+    && (isPsychologist || patientCare) && !authLoading && getAuthToken()
+    ? JSON.stringify([currentUser.id, currentUser.role, invitationSession]) : null;
+  const careOverview = useCareOverview(unifiedScope, isPsychologist);
+  const actionCount = pendingCount + careOverview.count;
   const todayDate = getTodayDateString();
   const todayAppointments = useMemo(() => filterAppointmentsByDate(appointments, todayDate), [appointments, todayDate]);
 
@@ -1757,7 +1763,7 @@ export default function App({onRestrictedSession}) {
     )) {
       return <BilateralInvitationsScreen key={JSON.stringify([currentUser.id, invitationSession])} currentUser={currentUser}
         receivedInvitations={patientCare ? receivedInvitations : null}
-        navigate={setVistaActiva} showAdmission={import.meta.env?.VITE_ADMISSION_ENABLED === 'true'} />;
+        navigate={setVistaActiva} onOpenAgenda={abrirAgenda} careOverview={careOverview} showAdmission={import.meta.env?.VITE_ADMISSION_ENABLED === 'true'} />;
     }
     if (patientCare && vistaActiva === 'account') return <>
       <IdentityPanel onIdentityUpdated={handleIdentityUpdated} />
@@ -2040,8 +2046,8 @@ export default function App({onRestrictedSession}) {
         isSubmitting={guardandoPaciente}
       />
 
-      <Sidebar currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} pendingCount={pendingCount} />
-      <MobileNav currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} pendingCount={pendingCount} />
+      <Sidebar currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} pendingCount={actionCount} countActions={Boolean(unifiedScope)} />
+      <MobileNav currentUser={currentUser} onLogout={handleLogout} vistaActiva={vistaActiva} setVistaActiva={setVistaActiva} pendingCount={actionCount} countActions={Boolean(unifiedScope)} />
 
       <main className="flex h-screen w-full min-w-0 flex-1 flex-col overflow-auto bg-slate-50">
         <header className="shrink-0 border-b border-gray-200 bg-white px-4 py-3 md:hidden">
@@ -2049,6 +2055,13 @@ export default function App({onRestrictedSession}) {
         </header>
         <div className="p-4 pb-24 md:p-8">
           {currentUser?.role === 'patient' && !patientCare && <IdentityPanel onIdentityUpdated={handleIdentityUpdated} />}
+          {unifiedScope && vistaActiva === 'dashboard' && careOverview.count > 0 && (
+            <section className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
+              <h2 className="font-semibold text-slate-900">{careOverview.count} {careOverview.count === 1 ? 'tarea de atención pendiente' : 'tareas de atención pendientes'}</h2>
+              <button type="button" onClick={() => setVistaActiva(isPsychologist ? 'my-patients' : 'my-care')}
+                className="rounded-lg bg-indigo-700 px-4 py-2 font-semibold text-white">Ver pendientes</button>
+            </section>
+          )}
           {patientCare && vistaActiva === 'dashboard' && pendingCount > 0 && (
             <section aria-labelledby="pending-invitations-title" className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 sm:p-5">
               <div className="space-y-1">

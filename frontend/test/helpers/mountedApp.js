@@ -27,7 +27,10 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (context.parentURL === appUrl && specifier === './components/individualCareState') return { url: careFlagsUrl, shortCircuit: true };
     if (context.parentURL === appUrl && specifier === './components/IndividualCare') return { url: appointmentComponentsUrl, shortCircuit: true };
-    if (context.parentURL === appUrl && specifier.startsWith('./api/')) return { url: apiUrl, shortCircuit: true };
+    if ((context.parentURL === appUrl && specifier.startsWith('./api/'))
+      || (context.parentURL?.endsWith('/components/useCareRead.js') && specifier === '../api/client')) {
+      return { url: apiUrl, shortCircuit: true };
+    }
     if (context.parentURL === appUrl && (/\.css$/.test(specifier))) return { url: emptyUrl, shortCircuit: true };
     if (context.parentURL === appUrl && /^(\.\/components\/|\.\/screens\/|\.\/modals\/)/.test(specifier)) {
       const url = child + '#' + specifier;

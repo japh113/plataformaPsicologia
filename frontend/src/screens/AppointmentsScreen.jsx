@@ -17,6 +17,8 @@ import {
   getAppointmentDisplayStatus,
   getAppointmentErrorMeta,
   getAppointmentHourOptions,
+  getDayAvailability,
+  getOpenHourOptions,
   getAppointmentSessionLabel,
   getAppointmentSessionState,
   getAvailabilityErrorMeta,
@@ -279,27 +281,11 @@ export default function AppointmentsScreen({
     [availabilityExceptionActionError],
   );
 
-  const selectedDayAvailability = useMemo(() => {
-    const exception = availabilityExceptionsMap.get(selectedFormDate);
-
-    if (exception) {
-      return {
-        source: 'exception',
-        isUnavailable: Boolean(exception.isUnavailable),
-        blocks: exception.blocks || [],
-      };
-    }
-
-    const weekday = getWeekdayFromDateString(selectedFormDate);
-
-    return {
-      source: 'weekly',
-      isUnavailable: false,
-      blocks: availabilityMap.get(weekday) || [],
-    };
-  }, [availabilityExceptionsMap, availabilityMap, selectedFormDate]);
-  const selectedFormWeekday = getWeekdayFromDateString(selectedFormDate);
+  const selectedDayAvailability = useMemo(() =>
+    getDayAvailability(selectedFormDate, availabilityMap, availabilityExceptionsMap),
+    [availabilityExceptionsMap, availabilityMap, selectedFormDate]);
   const selectedDayBlocks = selectedDayAvailability.blocks;
+  const selectedFormWeekday = getWeekdayFromDateString(selectedFormDate);
   const requiresActiveSlotChecks = ['pendiente', 'completada'].includes(form.estado);
   const sameDayPatientAppointment = useMemo(
     () =>
@@ -337,16 +323,14 @@ export default function AppointmentsScreen({
     }
 
     const currentHour = form.hora24;
-    const blockOptions = selectedDayBlocks
-      .flatMap((block) => getAppointmentHourOptions(Number(block.startTime.slice(0, 2)), Number(block.endTime.slice(0, 2)) - 1))
-      .filter((option) => !occupiedHourValues.has(option.value));
+    const blockOptions = getOpenHourOptions(selectedDayAvailability, occupiedHourValues);
 
     if (!currentHour || blockOptions.some((option) => option.value === currentHour)) {
       return blockOptions;
     }
 
     return [{ value: currentHour, label: `${formatAppointmentDisplayHour(currentHour)} (actual)` }, ...blockOptions];
-  }, [form.hora24, hasSameDayPatientConflict, occupiedHourValues, selectedDayBlocks]);
+  }, [form.hora24, hasSameDayPatientConflict, occupiedHourValues, selectedDayAvailability]);
   const normalizedHourValue = hourOptions.some((option) => option.value === form.hora24) ? form.hora24 : '';
 
   const weeklyAppointments = useMemo(() => {

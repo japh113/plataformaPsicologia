@@ -861,3 +861,11 @@ El índice de «Mis pacientes» cruza la identidad que autoriza la proyección b
 Las fichas muestran identidad autorizada, siguiente paso y seis etapas a partir de la vinculación. En la entrevista dirigida, el paciente acepta las condiciones antes de que el profesional registre lo conversado. Una corrección reabre la etapa de entrevista y la retirada cierra las acciones que dependían de ella. Las respuestas, versiones y consentimientos se abren en la ficha cuando se necesitan. «Gestionar atención» reúne las acciones sensibles con confirmación y cancelación explícitas. El paciente conserva la retirada de tratamiento desde «Mi atención» aunque la consulta de la ficha clínica esté restringida.
 
 [Chromium CARE](../scripts/care-ui-review.cjs) recorre ambos roles con viewport de escritorio y móvil, comprueba los conteos aprobados y genera ocho capturas con datos ficticios. Los archivos de evidencia excluyen las credenciales.
+
+#### Invitación, aclaraciones y disponibilidad en la ficha
+
+«Mis pacientes» reúne las vinculaciones y los acuses de invitación en la misma vista. La ficha muestra la invitación aceptada y las condiciones del acuerdo. Mientras una solicitud carece de acuerdo, su acuse conserva la información neutral que permite el contrato bilateral. Los contadores de navegación reflejan acciones confirmadas del rol, incluidas las invitaciones que el paciente puede responder.
+
+Una aclaración puede señalar una pregunta de la plantilla o referirse a la entrevista completa. El servidor comprueba la pregunta dentro de la plantilla autorizada y conserva la referencia a la versión original. La ficha marca el campo pendiente y compara las respuestas realmente modificadas cuando se recibe una nueva versión. Los mensajes históricos sin pregunta siguen disponibles como aclaraciones generales.
+
+La primera cita utiliza el mismo cálculo de horas cerradas que Agenda, con bloques semanales, excepciones y horas ocupadas que muestra la agenda autorizada del profesional. El selector indica la espera de la hora elegida y permite consultar su prioridad en Agenda. La prioridad sigue siendo una sugerencia para la decisión profesional. La reserva sigue atribuida al episodio y PostgreSQL vuelve a comprobar cobertura y colisiones en el momento de guardarla.

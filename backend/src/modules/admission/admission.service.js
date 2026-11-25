@@ -6,7 +6,7 @@ import db from '../../config/db.js';
 import { contactDigest } from '../auth/identity.service.js';
 import { normalizeEmail,normalizePhone } from '../auth/identity.validation.js';
 import { verifyAdmissionContract } from '../../../scripts/admission-contract.js';
-import { validate,validateResponses,uuid,fail,fingerprint } from './admission.policy.js';
+import { validate,validateResponses,uuid,fail,fingerprint,encodeQuestionMessage,readQuestionMessage } from './admission.policy.js';
 let pool;
 export function configuration(){
   if(process.env.ADMISSION_ENABLED!=='true')throw fail('Admisión deshabilitada.',404);
@@ -64,7 +64,20 @@ export async function command(actor,op,input={},id){
       const assigned = await execute('summary');
       validateResponses(input.answers ?? input.declarations, op !== 'save', assigned.templateId);
     }
-    return execute(op);
+    if (input.questionId) {
+      const detail = await execute('detail');
+      const field = op === 'correct' ? 'message' : 'reason';
+      p[field] = encodeQuestionMessage(input.questionId, input[field], detail.template);
+      delete p.questionId;
+    }
+    const result = await execute(op);
+    if (op === 'detail' && result.corrections) {
+      result.corrections = result.corrections.map(entry => readQuestionMessage(entry, 'message', result.template));
+    }
+    if (op === 'detail' && result.requests) {
+      result.requests = result.requests.map(entry => readQuestionMessage(entry, 'reason', result.template));
+    }
+    return result;
   });
 }
 

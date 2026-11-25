@@ -1,6 +1,6 @@
 import { useCallback, useId, useState } from 'react';
 import CareInterview, { ActiveDocument, primaryButton as primary, secondaryButton as secondary } from './CareInterview';
-import { ClipboardList, FileCheck2, Settings2 } from 'lucide-react';
+import { ClipboardList, FileCheck2, Settings2, UsersRound } from 'lucide-react';
 import { CareDisclosure } from './CareDisclosure';
 import { useCareAction } from './useCareAction';
 import { useCareRead } from './useCareRead';
@@ -100,7 +100,7 @@ function StartInterview({ preparation, agreementId, catalog, onChange, blocked }
   </section>;
 }
 
-function Episode({ item, professional, onChange, manageAgreement, agreementTerms }) {
+function Episode({ item, professional, onChange, manageAgreement, agreementTerms, onOpenAgenda }) {
   const [admissionRevision, setAdmissionRevision] = useState(0);
   const [consultationState, setConsultationState] = useState(null);
   const [consultationFailed, setConsultationFailed] = useState(false);
@@ -128,9 +128,12 @@ function Episode({ item, professional, onChange, manageAgreement, agreementTerms
       <NextStep progress={progress} professional={professional}>
         {interviewAction && <CareInterview item={item} professional={professional} completed={completed}
           consultation={status} onChange={restoreState} panel="action" />}
+        {!interviewAction && !completed && item.state === 'accepted' && (item.reviewState === 'correction_requested' || (!professional && item.latestSubmission > 1))
+          && <CareInterview item={item} professional={professional} completed={completed} consultation={status}
+            onChange={restoreState} panel="clarification" />}
         {consultation && <ConsultationDetail assignmentId={item.id} professional={professional} onRefresh={onChange}
           revision={admissionRevision} assignmentVersion={item.version} onDetail={onConsultation} onUnavailable={onConsultationError} contextual
-          managementTarget={managementTarget} treatmentTermsTarget={treatmentTermsTarget} />}
+          managementTarget={managementTarget} treatmentTermsTarget={treatmentTermsTarget} onOpenAgenda={onOpenAgenda} />}
       </NextStep>
       <JourneyProgress progress={progress} />
     </div>
@@ -141,8 +144,8 @@ function Episode({ item, professional, onChange, manageAgreement, agreementTerms
           {professional && active ? <ActiveDocument id={item.id} /> : <CareInterview item={item}
             professional={professional} completed={completed} consultation={status} onChange={restoreState} panel="documents" />}
         </CareDisclosure>}
+        <CareDisclosure label="Invitación y vinculación" icon={UsersRound}>{agreementTerms}</CareDisclosure>
         <CareDisclosure label="Consultar consentimientos" icon={FileCheck2}>
-          {agreementTerms}
           {(!professional || !completed) && <CareInterview item={item} professional={professional} completed={completed}
             consultation={status} onChange={restoreState} panel="terms" />}
           <div ref={setTreatmentTermsTarget} className="space-y-2" />
@@ -160,15 +163,18 @@ function Episode({ item, professional, onChange, manageAgreement, agreementTerms
   </div>;
 }
 
-export default function IndividualCare({ agreement, professional, manageAgreement, agreementTerms }) {
+export default function IndividualCare({ agreement, professional, manageAgreement, agreementTerms, onOpenAgenda, onChange: onOverviewChange }) {
   const admissions = useCareRead(
     professional && agreement.status !== 'completed' ? null : '/admissions/care-context', agreement.id
   );
   const [selection, setSelection] = useState('');
   const episodeLabel = useId();
   const reload = admissions.reload;
-  const onChange = useCallback(() => reload(true), [reload]);
-  useVisibleCareRefresh(() => { if (!admissions.loading) return onChange(); });
+  const onChange = useCallback(async () => {
+    await reload(true);
+    void onOverviewChange?.();
+  }, [reload, onOverviewChange]);
+  useVisibleCareRefresh(() => { if (!admissions.loading) return reload(true); });
   const assigned = admissions.data?.assignments;
   const assignedIds = new Set(assigned?.map(item => item.episodeId));
   const unassigned = admissions.data?.preparations?.filter(item => !assignedIds.has(item.episodeId)) ?? [];
@@ -202,8 +208,8 @@ export default function IndividualCare({ agreement, professional, manageAgreemen
       <JourneyProgress progress={unassignedProgress} />
     </div>}
     {selected?.id ? <Episode key={selected.episodeId} item={selected} professional={professional} onChange={onChange}
-      manageAgreement={manageAgreement} agreementTerms={agreementTerms} /> : <div className="grid items-start gap-3 sm:grid-cols-2">
-      <CareDisclosure label="Consultar consentimientos" icon={FileCheck2}>{agreementTerms}</CareDisclosure>
+      manageAgreement={manageAgreement} agreementTerms={agreementTerms} onOpenAgenda={onOpenAgenda} /> : <div className="grid items-start gap-3 sm:grid-cols-2">
+      <CareDisclosure label="Invitación y vinculación" icon={UsersRound}>{agreementTerms}</CareDisclosure>
       {manageAgreement && <CareDisclosure label="Gestionar atención" caption="Terminar la vinculación" icon={Settings2}>{manageAgreement}</CareDisclosure>}
     </div>}
     {!invalid && selected?.id && canStart && !unassigned.length && <details className={section}>

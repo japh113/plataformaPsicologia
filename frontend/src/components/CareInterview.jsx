@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { apiRequest } from '../api/client';
 import { SensitiveAction } from './CareDisclosure';
 import AdmissionAssessment from './AdmissionAssessment';
@@ -37,12 +37,19 @@ function InterviewTerms({ text }) {
   </div>;
 }
 
-function Answers({ template, values, onChange, disabled }) {
-  return template.questions.map(q => <label className="block space-y-1" key={q.id}>
-    <span>{q.label}</span>
-    <textarea className={area} maxLength={q.maxLength} value={values[q.id] ?? ''}
-      disabled={disabled} onChange={event => onChange({ ...values, [q.id]: event.target.value })} />
-  </label>);
+function Answers({ template, values, onChange, disabled, clarification }) {
+  const inputId = useId();
+  return template.questions.map(question => {
+    const id = inputId + '-' + question.id;
+    const highlighted = clarification?.questionId === question.id;
+    return <div className={`space-y-1 ${highlighted ? 'rounded-xl bg-amber-50 p-3 ring-1 ring-amber-200' : ''}`} key={question.id}>
+      <label className="block" htmlFor={id}>{question.label}</label>
+      {highlighted && <p id={id + '-hint'} className="text-xs font-semibold text-amber-950">Pregunta señalada en la aclaración</p>}
+      <textarea className={area} id={id} aria-describedby={highlighted ? id + '-hint' : undefined}
+        maxLength={question.maxLength} value={values[question.id] ?? ''} disabled={disabled}
+        onChange={event => onChange({ ...values, [question.id]: event.target.value })} />
+    </div>;
+  });
 }
 
 function DocumentAnswers({ template, answers }) {
@@ -52,7 +59,7 @@ function DocumentAnswers({ template, answers }) {
   </div>)}</dl>;
 }
 
-function SelfDraft({ detail, draft, onChange, onDenied }) {
+function SelfDraft({ detail, draft, onChange, onDenied, clarification }) {
   const [answers, setAnswers] = useState(draft.answers);
   const [snapshot, setSnapshot] = useState(draft);
   const [saving, setSaving] = useState(false);
@@ -179,7 +186,7 @@ function SelfDraft({ detail, draft, onChange, onDenied }) {
   const stage = saving ? 'saving' : unsaved ? 'dirty' : 'clean';
   return <form className="space-y-3" autoComplete="off" onSubmit={event => { event.preventDefault(); void send(); }}>
     <p>Tu borrador es privado. El profesional solo verá las respuestas que envíes.</p>
-    <Answers template={detail.template} values={answers} onChange={setAnswers} disabled={sending || Boolean(serverCopy)} />
+    <Answers template={detail.template} values={answers} onChange={setAnswers} disabled={sending || Boolean(serverCopy)} clarification={clarification} />
     {!error && <p role="status">{sending ? 'Enviando tus respuestas…' : draftMessage[stage]}</p>}
     {error && <p role="alert">{error}</p>}
     {error && !serverCopy && <button type="button" className={secondaryButton} disabled={saving || sending} onClick={reloadDraft}>Revisar borrador guardado</button>}
@@ -197,11 +204,11 @@ function SelfDraft({ detail, draft, onChange, onDenied }) {
   </form>;
 }
 
-function DraftEditor({ detail, onChange, onDenied }) {
+function DraftEditor({ detail, onChange, onDenied, clarification }) {
   const draft = useCareRead('/admissions/' + detail.id + '/draft');
   if (draft.loading && !draft.data) return <p role="status">Recuperando tu borrador…</p>;
   return draft.data
-    ? <SelfDraft detail={detail} draft={draft.data} onChange={onChange} onDenied={onDenied} />
+    ? <SelfDraft detail={detail} draft={draft.data} onChange={onChange} onDenied={onDenied} clarification={clarification} />
     : <><p role="alert">{draft.error}</p><button type="button" className={secondaryButton} onClick={() => draft.reload()}>Reintentar lectura del borrador</button></>;
 }
 
@@ -230,9 +237,46 @@ function InterviewHistory({ document, history, template, professionalName, direc
     </details>}</>;
 }
 
+function ClarificationNotice({ detail, professional, directed }) {
+  const request = directed ? detail.requests?.at(-1) : detail.corrections?.at(-1);
+  if (!request) return null;
+  const history = directed ? detail.documents : detail.submissions;
+  const original = directed ? request.documentRevision : request.submission;
+  const revised = directed ? request.resolution?.documentRevision : original + 1;
+  const number = item => directed ? item.revision : item.number;
+  const values = item => directed ? item?.declarations : item?.answers;
+  const before = values(history.find(item => number(item) === original));
+  const after = values(history.find(item => number(item) === revised));
+  const question = detail.template.questions.find(q => q.id === request.questionId);
+  const changes = after && before ? detail.template.questions.filter(q => before[q.id] !== after[q.id]) : [];
+  const resolved = directed ? Boolean(request.resolution) : Boolean(after);
+  const status = resolved ? directed && request.resolution.decision === 'reject' ? 'Rectificación rechazada' : 'Nueva versión recibida'
+    : professional ? 'Aclaración pendiente de respuesta' : 'Aclaración solicitada';
+  const title = directed && !resolved && professional ? 'El paciente solicitó una rectificación' : status;
+
+  return <section className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-slate-800" aria-label="Aclaración de entrevista">
+    <h4 className="font-bold text-amber-950">{title}</h4>
+    <p className="font-semibold">{question?.label || 'Entrevista completa'}</p>
+    <p className="whitespace-pre-wrap break-words">{request.message ?? request.reason}</p>
+    {request.resolution?.explanation && <p className="whitespace-pre-wrap break-words">{request.resolution.explanation}</p>}
+    {!resolved && question && before && <p className="whitespace-pre-wrap break-words text-slate-700">Respuesta original · {before[question.id]}</p>}
+    {resolved && after && before && (changes.length ? <details>
+      <summary className="cursor-pointer font-semibold text-indigo-800">Comparar respuestas · {changes.length} {changes.length === 1 ? 'cambio' : 'cambios'}</summary>
+      <dl className="mt-3 space-y-3">
+        {changes.map(q => <div key={q.id} className="rounded-lg bg-white p-3">
+          <dt className="font-semibold">{q.label}</dt>
+          <dd className="mt-1 whitespace-pre-wrap break-words"><span className="font-semibold">Antes</span> · {before[q.id]}</dd>
+          <dd className="mt-1 whitespace-pre-wrap break-words"><span className="font-semibold">Ahora</span> · {after[q.id]}</dd>
+        </div>)}
+      </dl>
+    </details> : <p>La nueva versión conserva las mismas respuestas.</p>)}
+  </section>;
+}
+
 function Corrections({ detail, professional, document, directed, act, busy }) {
   const [message, setMessage] = useState('');
-  const [changes, setChanges] = useState({});
+  const [changes, setChanges] = useState(document.declarations ?? {});
+  const [questionId, setQuestionId] = useState('');
   const [target, setTarget] = useState('');
   const itemId = document.revision ?? document.number;
   const pending = detail.requests?.find(item => !item.resolution);
@@ -240,31 +284,39 @@ function Corrections({ detail, professional, document, directed, act, busy }) {
   const write = (operation, input) => act(path + '/' + operation, { ...input, expectedVersion: detail.version });
   if (!directed && !professional) return null;
   if (!directed && !['submitted', 'validated'].includes(detail.reviewState)) return null;
+  const question = detail.template.questions.find(question => question.id === questionId);
+  const referencedDocument = directed && target ? detail.documents.find(entry => entry.revision === Number(target)) : document;
   if (directed && ((professional && !pending) || (!professional && pending))) return null;
   const label = directed ? professional ? 'Responder a la rectificación' : 'Solicitar rectificación' : 'Pedir una aclaración';
 
   return <details className="space-y-2" open={professional && Boolean(pending)}>
     <summary className="cursor-pointer font-semibold">{label}</summary>
-    {pending && <p className="whitespace-pre-wrap">Solicitud del paciente · {pending.reason}</p>}
     {directed && !professional && detail.documents.length > 1 && <label className="block">Documento que quieres corregir
       <select className={secondaryButton} value={target || itemId} onChange={event => setTarget(event.target.value)}>
         {detail.documents.map(entry => <option key={entry.revision} value={entry.revision}>{new Date(entry.recordedAt).toLocaleString('es-MX')}</option>)}
       </select>
     </label>}
+    {!pending && <label className="block">Pregunta que necesita aclaración
+      <select className={secondaryButton + ' mt-1 block w-full'} value={questionId} onChange={event => setQuestionId(event.target.value)}>
+        <option value="">Entrevista completa</option>
+        {detail.template.questions.map(q => <option key={q.id} value={q.id}>{q.label}</option>)}
+      </select>
+    </label>}
+    {question && referencedDocument && <p className="whitespace-pre-wrap break-words text-sm">Respuesta original · {(directed ? referencedDocument.declarations : referencedDocument.answers)[question.id]}</p>}
     <label className="block">{professional && pending ? 'Explicación para el paciente' : 'Qué necesita aclararse'}
-      <textarea className={area} maxLength={1000} value={message} onChange={event => setMessage(event.target.value)} />
+      <textarea className={area} maxLength={questionId ? 900 : 1000} value={message} onChange={event => setMessage(event.target.value)} />
     </label>
     {professional && pending ? <>
       <details className="space-y-2"><summary className="cursor-pointer">Incorporar las declaraciones corregidas</summary>
-        <Answers template={detail.template} values={changes} onChange={setChanges} disabled={busy} />
+        <Answers template={detail.template} values={changes} onChange={setChanges} disabled={busy} clarification={pending} />
         <button className={secondaryButton} disabled={busy || !message.trim() || !complete(detail.template, changes)}
           onClick={() => write('directed/resolve', { expectedDocumentRevision: itemId, requestId: pending.id, decision: 'accept', explanation: message, declarations: changes })}>Aceptar e incorporar la corrección</button>
       </details>
       <button className={secondaryButton} disabled={busy || !message.trim()}
         onClick={() => write('directed/resolve', { expectedDocumentRevision: itemId, requestId: pending.id, decision: 'reject', explanation: message })}>Rechazar la rectificación con explicación</button>
     </> : <button className={secondaryButton} disabled={busy || !message.trim()} onClick={() => directed
-      ? write('directed/request', { documentRevision: Number(target || itemId), reason: message })
-      : write('correct', { submission: itemId, episodeId: detail.episodeId, message })}>{label}</button>}
+      ? write('directed/request', { documentRevision: Number(target || itemId), reason: message, ...(questionId && { questionId }) })
+      : write('correct', { submission: itemId, episodeId: detail.episodeId, message, ...(questionId && { questionId }) })}>{label}</button>}
   </details>;
 }
 
@@ -305,7 +357,7 @@ export default function CareInterview({ item, professional, completed, onChange,
   const documentsPanel = panel === 'documents';
   const management = panel === 'management';
   return <section className="min-w-0 space-y-3" aria-label="Entrevista inicial">
-    {!management && <h3 className="text-base font-semibold">{detail.template.title}</h3>}
+    {!management && panel !== 'clarification' && <h3 className="text-base font-semibold">{detail.template.title}</h3>}
     {feedback && <p role="alert">{feedback}</p>}
     {action && !professional && allowed && detail.state === 'proposed' && <>
       <InterviewTerms text={detail.consentText} />
@@ -318,7 +370,9 @@ export default function CareInterview({ item, professional, completed, onChange,
       <summary className="cursor-pointer font-semibold">Ver borrador privado guardado</summary>
       {showSavedDraft && <SavedDraft detail={detail} />}
     </details>}
-    {action && editing && <DraftEditor key={detail.version} detail={detail} onChange={refresh} onDenied={onDenied} />}
+    {(action || documentsPanel || panel === 'clarification') && <ClarificationNotice detail={detail} professional={professional} directed={directed} />}
+    {action && editing && <DraftEditor key={detail.version} detail={detail} onChange={refresh} onDenied={onDenied}
+      clarification={detail.reviewState === 'correction_requested' ? detail.corrections.at(-1) : null} />}
     {action && recording && <form className="space-y-3" onSubmit={event => {
       event.preventDefault();
       void write('care-register', { declarations });
@@ -338,7 +392,6 @@ export default function CareInterview({ item, professional, completed, onChange,
           criteriaVersion: 'fictional-sufficiency-v1',
         })}>Confirmar entrevista para iniciar la atención</button>
     </>}
-    {(action || documentsPanel) && detail.corrections?.length > 0 && <p className="whitespace-pre-wrap">Aclaración solicitada · {detail.corrections.at(-1).message}</p>}
     {documentsPanel && detail.requests?.length > 0 && <details className="space-y-2">
       <summary className="cursor-pointer font-semibold">Consultar rectificaciones</summary>
       {detail.requests.map(request => <div key={request.id}>

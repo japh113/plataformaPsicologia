@@ -13,7 +13,7 @@ const authenticatedBudget = createPublicAuthLimiter({ limit: 180, windowMs: 60_0
 const listBudget = createPublicAuthLimiter({ limit: 40, windowMs: 60_000, clientKey: authenticatedAccount });
 // Extra shared budget for the unified workflow across both routers. The
 // original socket-peer guard runs before JSON/auth and bounds the key space.
-const careBudget = rateLimit({
+const peerBudgetOptions = {
   windowMs: 60_000,
   limit: 300,
   keyGenerator: publicAuthClientKey,
@@ -22,7 +22,10 @@ const careBudget = rateLimit({
   legacyHeaders: false,
   standardHeaders: 'draft-7',
   message: { success: false, message: 'Demasiadas solicitudes. Intenta más tarde.' },
-});
+};
+const careBudget = rateLimit(peerBudgetOptions);
+const admissionAuthBudget = rateLimit(peerBudgetOptions);
+const consultationAuthBudget = rateLimit(peerBudgetOptions);
 let active = 0;
 let activeLists = 0;
 
@@ -68,7 +71,7 @@ router.use('/consultations',consultations);
 protect(consultations);
 consultations.get('/:id/interview', careBudget, authenticateAdmission, handle('interview', consultation));
 consultations.post('/:id/care-review', careBudget, authenticateAdmission, handle('care-review', consultation));
-consultations.use(authenticateAdmission);
+consultations.use(consultationAuthBudget, authenticateAdmission);
 consultations.get('/',handle('list',consultation));
 consultations.get('/withdrawals',handle('withdrawals',consultation));
 consultations.get('/:id',handle('status',consultation));
@@ -81,7 +84,7 @@ router.post('/care-context', careBudget, authenticateAdmission, handle('care-con
 router.post('/care-start', careBudget, authenticateAdmission, handle('care-start'));
 router.post('/:id/care-send', careBudget, authenticateAdmission, handle('care-send'));
 router.post('/:id/care-register', careBudget, authenticateAdmission, handle('care-register'));
-router.use(authenticateAdmission);
+router.use(admissionAuthBudget, authenticateAdmission);
 router.get('/',handle('list'));
 router.post('/assign-directed',handle('assign-directed'));
 router.get('/:id/directed/record',handle('directed-record'));

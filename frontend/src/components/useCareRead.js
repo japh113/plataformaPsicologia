@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../api/client';
 
-export function useCareRead(path, agreementId) {
-  const scope = JSON.stringify([path, agreementId]);
+export function useCareRead(path, agreementId, audience, immediate = true) {
+  const scope = JSON.stringify([path, agreementId, audience]);
   const [read, setRead] = useState({ scope, data: null, error: '', loading: Boolean(path) });
   const request = useRef(null);
   const lifetime = useRef(null);
@@ -32,13 +32,13 @@ export function useCareRead(path, agreementId) {
   useEffect(() => {
     const owner = { scope };
     lifetime.current = owner;
-    queueMicrotask(() => { if (lifetime.current === owner) void reload(); });
+    if (immediate) queueMicrotask(() => { if (lifetime.current === owner) void reload(); });
     return () => {
       if (lifetime.current !== owner) return;
       lifetime.current = null;
       request.current?.abort();
     };
-  }, [reload, scope]);
+  }, [immediate, reload, scope]);
 
   return { ...(read.scope === scope ? read : { data: null, error: '', loading: Boolean(path) }), reload };
 }

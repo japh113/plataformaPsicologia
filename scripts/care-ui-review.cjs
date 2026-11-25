@@ -84,7 +84,6 @@ async function bilateral(page, path, data) {
 
 async function openProfessional() {
   await button(nav(professional, true), 'Mis pacientes').click();
-  await button(professional, 'Pacientes vinculados').click();
   await button(professional, 'Abrir atención de bq2').click();
   await heading(professional, 'bq2').waitFor();
 }
@@ -106,7 +105,10 @@ async function confirmed(page, path, data) {
   }, { path, data });
 }
 
-const focus = page => page.evaluate(() => window.dispatchEvent(new Event('focus')));
+const focus = async page => {
+  await page.bringToFront();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+};
 const label = (page, text) => page.getByLabel(text, { exact: true });
 const statusBox = page => page.getByRole('region', { name: 'Estado de la primera consulta' });
 const selector = page => label(page, 'Selecciona la atención que quieres abrir');
@@ -146,11 +148,14 @@ async function conclude(flow, hour, daysAgo) {
   if (current === 'CARE02') await screenshot('06-tratamiento-iniciado', professional);
   const date = new Date(Date.now() - daysAgo * 24 * 3600 * 1000).toISOString().slice(0, 10);
   await flow.fill(professional, 'Fecha de la primera cita', date);
+  const available = professional.getByLabel('Hora de inicio');
+  await available.locator(`option[value="${hour}"]`).waitFor({ state: 'attached' });
+  assert.equal(await available.locator('option[value="04:00"]').count(), 0);
   await flow.select(professional, 'Hora de inicio', hour);
   await flow.click(professional, 'Reservar primera cita');
   await statusBox(professional).getByText(new RegExp(hour + ' · 60 minutos · Pendiente')).waitFor();
   await focus(patient);
-  await statusBox(patient).getByText(new RegExp(hour + ' · 60 minutos · Pendiente')).waitFor();
+  await statusBox(patient).getByText(new RegExp(hour + ' · 60 minutos · Pendiente')).waitFor({ timeout: 24000 });
   if (current === 'CARE02') {
     await screenshot('07-primera-cita', patient);
     await summary(patient, /^Gestionar atención/).click();
@@ -229,8 +234,9 @@ async function main() {
     selectedPage = professional;
     const flow = steps();
     await button(nav(professional, true), 'Mis pacientes').click();
-    await button(professional, 'Pacientes vinculados').click();
     const linked = professional.getByRole('region', { name: 'Pacientes vinculados' });
+    await focus(professional);
+    await button(linked, 'Actualizar pacientes').click();
     await linked.getByText('Te toca actuar', { exact: true }).waitFor();
     const listPath = '**/api/admissions';
     await professional.route(listPath, route => route.fulfill({
@@ -243,7 +249,11 @@ async function main() {
     await button(linked, 'Actualizar pacientes').click();
     await linked.getByText('Te toca actuar', { exact: true }).waitFor();
     await screenshot('01-mis-pacientes-con-pendientes', professional);
+    await nav(professional, true).getByText('1 acción pendiente', { exact: true }).waitFor({ state: 'attached' });
     await button(professional, 'Abrir atención de bq2').click();
+    await summary(professional, /^Invitación y vinculación$/).click();
+    await professional.getByText(/^Invitación aceptada el/).waitFor();
+    await summary(professional, /^Invitación y vinculación$/).click();
     await button(professional, 'Enviar entrevista inicial').waitFor();
     await professional.getByText('1 de 6 completados', { exact: true }).waitFor();
     await screenshot('02-ficha-recien-vinculada', professional);
@@ -268,6 +278,7 @@ async function main() {
     await button(patient, 'Volver a Mi atención').click();
     const ownCare = patient.getByRole('region', { name: 'Vinculaciones actuales' });
     await ownCare.getByText('1 tarea pendiente', { exact: true }).waitFor();
+    await nav(patient).getByText('1 acción pendiente', { exact: true }).waitFor({ state: 'attached' });
     const consultationList = '**/api/admissions/consultations';
     await patient.route(consultationList, route => route.fulfill({
       status: 503, headers: { 'access-control-allow-origin': '*' }, json: { message: 'Estado ficticio no disponible' },
@@ -343,16 +354,27 @@ async function main() {
       await button(nav(clinician, true), 'Mis pacientes').click();
       await button(clinician, 'Abrir atención de bq3').click();
       await summary(clinician, /^Pedir una aclaración$/).click();
+      const question = clinician.getByLabel('Pregunta que necesita aclaración');
+      const focusedLabel = await question.locator('option').nth(2).textContent();
+      await question.selectOption({ index: 2 });
+      await clinician.getByText(/^Respuesta original · /).waitFor();
       await clinician.getByLabel('Qué necesita aclararse').fill('Describe un ejemplo ficticio');
       await button(clinician, 'Pedir una aclaración').click();
       await clinician.getByRole('heading', { name: 'Corrección pendiente', exact: true }).waitFor();
       await button(nav(owner), 'Mi atención').click();
       await button(owner, 'Ver atención').click();
-      await owner.getByText('Aclaración solicitada · Describe un ejemplo ficticio', { exact: true }).waitFor();
-      await owner.locator('textarea').first().fill('Aclaración ficticia guardada en la atención');
+      const clarification = owner.getByRole('region', { name: 'Aclaración de entrevista' });
+      await clarification.getByText('Describe un ejemplo ficticio', { exact: true }).waitFor();
+      await clarification.getByText(focusedLabel, { exact: true }).waitFor();
+      await owner.getByText('Pregunta señalada en la aclaración', { exact: true }).waitFor();
+      await owner.getByRole('textbox', { name: focusedLabel, exact: true }).fill('Aclaración ficticia guardada en la atención');
       await button(owner, 'Enviar mis respuestas a Profesional ficticio bp3').click();
       await focus(clinician);
       await clinician.getByText('Aclaración ficticia guardada en la atención', { exact: true }).waitFor();
+      await summary(clinician, /^Comparar respuestas · 1 cambio$/).click();
+      const comparison = clinician.getByRole('region', { name: 'Aclaración de entrevista' });
+      await comparison.getByText(/^Antes · /).waitFor();
+      await comparison.getByText(/^Ahora · Aclaración ficticia guardada en la atención$/).waitFor();
       await summary(clinician, /^Ver versiones anteriores$/).waitFor();
     } finally {
       await clinician.context().close();

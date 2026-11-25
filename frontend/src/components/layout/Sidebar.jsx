@@ -18,7 +18,7 @@ function NavButton({ active, onClick, children, disabled = false, label, describ
   );
 }
 
-export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaActiva, pendingCount = 0 }) {
+export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaActiva, pendingCount = 0, countActions = false }) {
   const isPsychologist = currentUser?.role === 'psychologist';
   const isBackoffice = ['admin', 'support', 'superadmin'].includes(currentUser?.role || '');
   const showCare = import.meta.env.VITE_BILATERAL_ENABLED === 'true' && currentUser?.role === 'patient';
@@ -48,13 +48,15 @@ export default function Sidebar({ currentUser, onLogout, vistaActiva, setVistaAc
         <NavButton active={vistaActiva === 'dashboard'} onClick={() => setVistaActiva('dashboard')}>
           {careNav ? <House className="mr-3 shrink-0" size={20} aria-hidden="true" /> : <Calendar className="mr-3" size={20} />} {careNav ? 'Inicio' : primaryNavLabel}
         </NavButton>
-        {showLinked && <NavButton active={['my-patients', 'legacy-patients'].includes(vistaActiva)} onClick={() => setVistaActiva('my-patients')}>
+        {showLinked && <NavButton active={['my-patients', 'legacy-patients'].includes(vistaActiva)} onClick={() => setVistaActiva('my-patients')}
+          label="Mis pacientes" describedBy={pendingCount ? 'desktop-invitation-count' : undefined}>
           <UsersRound className="mr-3 shrink-0" size={20} aria-hidden="true" /> Mis pacientes
+          <PendingInvitationCount count={pendingCount} actions id="desktop-invitation-count" className="ml-auto" />
         </NavButton>}
         {showCare && <NavButton active={['my-care', 'legacy-patients'].includes(vistaActiva)} onClick={() => setVistaActiva('my-care')}
           label="Mi atención" describedBy={pendingCount ? 'desktop-invitation-count' : undefined}>
           <UsersRound className="mr-3 shrink-0" size={20} aria-hidden="true" /> Mi atención
-          <PendingInvitationCount count={pendingCount} id="desktop-invitation-count" className="ml-auto" />
+          <PendingInvitationCount count={pendingCount} actions={countActions} id="desktop-invitation-count" className="ml-auto" />
         </NavButton>}
         <NavButton active={vistaActiva === 'appointments'} onClick={() => setVistaActiva('appointments')}>
           <CalendarRange className="mr-3" size={20} aria-hidden="true" /> {showLinked ? 'Agenda' : appointmentsLabel}

@@ -1,12 +1,16 @@
-import { useEffect, useEffectEvent } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 
-export function useVisibleCareRefresh(refresh, enabled = true) {
+export function useVisibleCareRefresh(refresh, enabled = true, interval = 12000) {
+  const lastTrigger = useRef(0);
   const refreshVisible = useEffectEvent(() => {
-    if (document.visibilityState === 'visible') void refresh();
+    const now = Date.now();
+    if (document.visibilityState !== 'visible' || now - lastTrigger.current < 250) return;
+    lastTrigger.current = now;
+    void refresh();
   });
   useEffect(() => {
     if (!enabled) return;
-    const timer = window.setInterval(refreshVisible, 12000);
+    const timer = window.setInterval(refreshVisible, interval);
     window.addEventListener('focus', refreshVisible);
     document.addEventListener('visibilitychange', refreshVisible);
     return () => {
@@ -14,5 +18,5 @@ export function useVisibleCareRefresh(refresh, enabled = true) {
       window.removeEventListener('focus', refreshVisible);
       document.removeEventListener('visibilitychange', refreshVisible);
     };
-  }, [enabled]);
+  }, [enabled, interval]);
 }
