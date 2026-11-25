@@ -14,7 +14,7 @@ const summary = (page, title) => page.locator('summary').filter({ hasText: title
 
 async function screenshot(id, page) {
   const file = 'screenshots/' + id + '.png';
-  const showcase = /^0[1-8]-/.test(id);
+  const showcase = /^(?:0[1-8]|1[2-4])-/.test(id);
   const viewport = page.viewportSize();
   const main = page.getByRole('main');
   const scroll = await main.evaluate(node => ({ top: node.scrollTop, height: node.scrollHeight, width: node.scrollWidth, client: node.clientWidth }));
@@ -364,7 +364,9 @@ async function main() {
     }
     await patient.getByRole('heading', { name: 'Entrevista en revisión', exact: true }).waitFor();
     await focus(professional);
-    await professional.getByText('Texto exacto confirmado por el paciente', { exact: true }).waitFor();
+    // A focus refresh can coalesce with an in-flight read. Allow the next
+    // foreground polling interval to observe the committed submission.
+    await professional.getByText('Texto exacto confirmado por el paciente', { exact: true }).waitFor({ timeout: 24000 });
     await conclude(flow, '10:00', 2);
     flow.assertCount(9);
     assert.equal(await professional.locator('input[type=checkbox]').count(), 0);

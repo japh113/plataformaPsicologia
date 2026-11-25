@@ -1021,8 +1021,8 @@ export default function AppointmentsScreen({
               <button type="button" onClick={() => setCalendarView('week')} className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${calendarView === 'week' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>Semanal</button>
               <button type="button" onClick={() => setCalendarView('month')} className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${calendarView === 'month' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}>Mensual</button>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="min-w-32 text-center text-sm font-semibold capitalize text-gray-700">{calendarRangeLabel}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="basis-full text-sm font-semibold capitalize text-gray-700 sm:min-w-32 sm:basis-auto sm:text-center">{calendarRangeLabel}</span>
               <button type="button" onClick={() => handleMoveCalendar(-1)} className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white p-2 text-gray-600 hover:bg-gray-50 transition"><ChevronLeft size={18} /></button>
               <button type="button" onClick={handleResetCalendar} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition">{calendarView === 'month' ? 'Este mes' : 'Esta semana'}</button>
               <button type="button" onClick={() => handleMoveCalendar(1)} className="inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white p-2 text-gray-600 hover:bg-gray-50 transition"><ChevronRight size={18} /></button>
