@@ -102,11 +102,11 @@
   {
     "version": "021",
     "file": "021_unified_individual_care.sql",
-    "sha256": "8b1f50419e0c164e078d3161b475bfdd45231afde975255c273783522c64e85c"
+    "sha256": "55b8f6615c3c5dd6a1adcecfee4f776a8854cccf1a92f080211da6e69069fe2d"
   },
   {
     "version": "022",
     "file": "022_bilateral_care_context.sql",
-    "sha256": "d0042e8b91ab8a37a8a75cdf44a97683727ba5a91afe5f6d8429e1230ac55f04"
+    "sha256": "a72063e2b9c5b9ebb57684f57f0df52877abb8f8c6db955615e208db889689a8"
   }
 ]

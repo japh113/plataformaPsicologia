@@ -36,6 +36,9 @@ BEGIN
   ELSE
     RAISE EXCEPTION 'bilateral_forbidden' USING ERRCODE='P0001';
   END IF;
+  IF expires<=extract(epoch FROM clock_timestamp()) THEN
+    RAISE EXCEPTION 'bilateral_session' USING ERRCODE='P0001';
+  END IF;
   RETURN jsonb_build_object('agreements',matches);
 END $$;
 

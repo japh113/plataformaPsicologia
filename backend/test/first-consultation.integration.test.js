@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import jwt from 'jsonwebtoken';
 import pg from 'pg';
 import app from '../src/app.js';
@@ -84,7 +85,7 @@ test('018–022: first consultation over real HTTP and PostgreSQL', {
       const result = await consult(id, assignment, operation, payload);
       assert.deepEqual(result, { status: 200, body: { success: true, data: { saved: true } } }, operation);
     }
-    async function prepare(psy, pac, directed = false) {
+    async function link(psy, pac) {
       const reference = (await bilateral(actor(psy), 'professional-reference', { operationId: randomUUID() })).reference;
       const recipient = (await bilateral(actor(pac), 'recipient-reference', { ...action(), professionalReference: reference })).reference;
       const receipt = await bilateral(actor(psy), 'issue', {
@@ -96,6 +97,10 @@ test('018–022: first consultation over real HTTP and PostgreSQL', {
       const { agreementId } = await bilateral(actor(pac), 'accept', {
         ...action(), expectedVersion: invitation.version, conditionsVersion, conditionsHash: invitation.conditionsHash,
       }, invitation.id);
+      return { agreementId, receiptId: receipt.receiptId };
+    }
+    async function prepare(psy, pac, directed = false) {
+      const { agreementId, receiptId } = await link(psy, pac);
       const { episodeId } = await admission(actor(psy), 'prepare', { ...action(), agreementId });
       const { id } = await admission(actor(psy), directed ? 'assign-directed' : 'assign', {
         ...action(), agreementId, episodeId, templateId: 'fictional-adult-v1',
@@ -115,7 +120,7 @@ test('018–022: first consultation over real HTTP and PostgreSQL', {
         await perform(pac, 'submit', { expectedRevision: 1 });
         await perform(psy, 'validate', { episodeId, submission: 1 });
       }
-      return { id, episodeId, agreementId, receiptId: receipt.receiptId, psy, pac, perform };
+      return { id, episodeId, agreementId, receiptId, psy, pac, perform };
     }
     async function declare(assignment) {
       const status = await ownStatus(assignment.psy, assignment);
@@ -161,6 +166,85 @@ test('018–022: first consultation over real HTTP and PostgreSQL', {
       }
       assert.ok([403, 404].includes((await http(e1.psy, '/patients/bq1')).status));
       assert.deepEqual((await owner()).body.data, { agreements: [correlation] });
+    });
+
+    await t.test('022 denies patient care context when the session expires during a PostgreSQL lock wait', async () => {
+      const route = '/bilateral-invitations/care-context';
+      const positive = await http(e1.pac, route);
+      assert.equal(positive.status, 200);
+      assert.ok(positive.body.data.agreements.some(row => row.agreementId === e1.agreementId && row.invitationId === e1.receiptId));
+      const observe = async () => (await client.query(`SELECT extract(epoch FROM clock_timestamp())::float8 AS now,
+        EXISTS (SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid
+          WHERE l.locktype='advisory' AND l.classid=73013 AND l.objid=1 AND l.objsubid=2 AND NOT l.granted
+          AND a.datname=current_database() AND a.query LIKE 'SELECT public.bilateral_care_context(%'
+          AND pg_backend_pid()=ANY(pg_blocking_pids(l.pid))) AS blocked`)).rows[0];
+      await client.query('BEGIN');
+      let pending;
+      try {
+        await client.query('SELECT pg_advisory_xact_lock(73013,1)');
+        const { rows: [{ exp }] } = await client.query('SELECT (floor(extract(epoch FROM clock_timestamp()))+3)::int AS exp');
+        const token = jwt.sign({ sub: e1.pac, sv: 0, exp }, env.jwtSecret);
+        pending = http(e1.pac, route, null, 'GET', token);
+        let lock = await observe();
+        while (!lock.blocked && lock.now < exp) {
+          await delay(10);
+          // PostgreSQL caches its activity snapshot inside the lock-holder transaction.
+          await client.query('SELECT pg_stat_clear_snapshot()');
+          lock = await observe();
+        }
+        assert.ok(lock.blocked && lock.now < exp, 'The SQL reader must be blocked while its token is still valid');
+        await client.query('SELECT pg_sleep_until(to_timestamp($1))', [exp]);
+        const expired = await observe();
+        assert.ok(expired.blocked && expired.now >= exp, 'The same lock must still block the reader at expiration');
+      } finally {
+        await client.query('ROLLBACK');
+        if (pending) await pending;
+      }
+      assert.deepEqual(await pending, {
+        status: 401, body: { success: false, message: 'Sesión no válida. Inicia sesión nuevamente.' },
+      });
+    });
+
+    await t.test('021 binds admission consent to the exact episode for direct and composed assignment', async t => {
+      const templateId = 'fictional-initial-interview-v1';
+      async function verify(psy, pac, mode, operation) {
+        const { agreementId } = await link(psy, pac);
+        async function assign(route) {
+          const prepared = await http(psy, '/admissions/prepare', { ...action(), agreementId });
+          assert.equal(prepared.status, 200);
+          const { episodeId } = prepared.body.data;
+          const assigned = await http(psy, '/admissions/' + route, {
+            ...action(), agreementId, episodeId, templateId, ...(route === 'care-start' && { mode }),
+          });
+          assert.equal(assigned.status, 200, JSON.stringify(assigned.body));
+          const { id } = assigned.body.data;
+          const detail = await http(pac, '/admissions/' + id);
+          assert.equal(detail.status, 200);
+          const { consentText, consentHash, consentVersion, version, episodeId: presentedEpisode } = detail.body.data;
+          assert.equal(presentedEpisode, episodeId);
+          const { rows: [stored] } = await client.query(`SELECT episode_id::text AS "episodeId", consent_text AS "consentText",
+            consent_hash AS "consentHash" FROM admission_assignments WHERE id=$1`, [id]);
+          assert.deepEqual(stored, { episodeId, consentText, consentHash });
+          assert.equal(consentHash, sha256(consentText));
+          return { id, episodeId, consentText, consentHash, consentVersion, version };
+        }
+        const first = await assign('care-start');
+        const second = await assign(operation);
+        assert.notEqual(first.episodeId, second.episodeId);
+        assert.notEqual(first.consentHash, second.consentHash);
+        assert.ok(first.consentText.includes('Episodio ' + first.episodeId + '.'));
+        assert.ok(second.consentText.includes('Episodio ' + second.episodeId + '.'));
+        assert.equal(first.consentVersion, second.consentVersion);
+        const acceptExact = (target, terms) => http(pac, '/admissions/' + target.id + '/accept', {
+          ...action(), expectedVersion: target.version, consentVersion: terms.consentVersion, consentHash: terms.consentHash,
+        });
+        assert.equal((await acceptExact(first, second)).status, 409);
+        assert.equal((await acceptExact(second, first)).status, 409);
+        assert.equal((await acceptExact(first, first)).status, 200);
+        assert.equal((await acceptExact(second, second)).status, 200);
+      }
+      await t.test('self-administered interview consent is specific to the episode', () => verify('bp6', 'bq6', 'self', 'assign'));
+      await t.test('directed interview consent is specific to the episode', () => verify('bp7', 'bq7', 'directed', 'assign-directed'));
     });
 
     await t.test('requires explicit sufficiency, exact document and separate consent; activation is unique under concurrency', async () => {

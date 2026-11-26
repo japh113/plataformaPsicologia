@@ -105,6 +105,18 @@ async function confirmed(page, path, data) {
   }, { path, data });
 }
 
+async function assertAdmissionConsent(page, assignment) {
+  const detail = await confirmed(page, '/' + assignment.id);
+  assert.equal(detail.status, 200);
+  const terms = detail.body.data.consentText;
+  const reference = 'Episodio ' + assignment.episodeId + '.';
+  assert.ok(terms.includes(reference));
+  const paragraph = page.getByRole('region', { name: 'Entrevista inicial', exact: true }).getByText(reference);
+  await paragraph.waitFor();
+  const displayed = await paragraph.locator('..').getByRole('paragraph').allTextContents();
+  assert.equal(displayed.join(' '), terms);
+}
+
 const focus = async page => {
   await page.bringToFront();
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -331,6 +343,7 @@ async function main() {
     await ownCare.getByText('1 tarea pendiente', { exact: true }).waitFor();
     await button(ownCare, 'Ver atención').click();
     await button(patient, 'Aceptar y empezar').waitFor();
+    await assertAdmissionConsent(patient, selfInterview);
     await screenshot('03-entrevista-pendiente', patient);
     await flow.click(patient, 'Aceptar y empezar');
     const answers = patient.locator('textarea');
@@ -522,6 +535,7 @@ async function main() {
 
     await openPatient();
     await selector(patient).selectOption(directedInterview.episodeId);
+    await assertAdmissionConsent(patient, directedInterview);
     await flow.click(patient, 'Aceptar entrevista con mi profesional');
     await focus(professional);
     await professional.locator('textarea').first().waitFor();
