@@ -2,7 +2,7 @@
 
 ## Estado y uso
 
-Corte del **25 de noviembre de 2026**. Base `origin/main` verificada en [`7ac6d76f553aa5784dcf14c27b7ac8f650d86136`](https://github.com/japh113/plataformaPsicologia/commit/7ac6d76f553aa5784dcf14c27b7ac8f650d86136), merge del [diseño #85](https://github.com/japh113/plataformaPsicologia/pull/85) sobre [#84 integrado](https://github.com/japh113/plataformaPsicologia/pull/84). Esta base contiene SQL 001–020.
+Corte del **26 de noviembre de 2026**. Base `origin/main` verificada en [`7ac6d76f553aa5784dcf14c27b7ac8f650d86136`](https://github.com/japh113/plataformaPsicologia/commit/7ac6d76f553aa5784dcf14c27b7ac8f650d86136), merge del [diseño #85](https://github.com/japh113/plataformaPsicologia/pull/85) sobre [#84 integrado](https://github.com/japh113/plataformaPsicologia/pull/84). Esta base contiene SQL 001–020.
 
 **Hitos 1 y 2 integrados.** [#79](https://github.com/japh113/plataformaPsicologia/pull/79) retiró la entrevista global. [#82](https://github.com/japh113/plataformaPsicologia/pull/82) incorporó la [primera consulta individual ficticia](stage2a-identity-directory-intake.md#primera-consulta-individual-ficticia-por-episodio) con suficiencia, consentimiento separado, revocación, primera cita y original profesional privado. [#80](https://github.com/japh113/plataformaPsicologia/issues/80) sigue abierto con riesgo residual de disponibilidad aceptado para desarrollo. [Decisión del propietario](https://github.com/japh113/plataformaPsicologia/pull/79#issuecomment-7031110420)
 
@@ -18,7 +18,9 @@ SQL 021 sigue en Draft. Su hash, evidencia y manifiesto corresponden al correcti
 
 **Cierre de alcance y experiencia de #86 APROBADO.** «Mis pacientes» conserva los accesos independientes a expedientes y atenciones. «Mi atención» vuelve a ser la única entrada del paciente. Agenda y Mis citas muestran las primeras citas del episodio junto con las citas ordinarias en la presentación. SQL 022 conserva la correlación exacta de invitación y acuerdo. Se retiraron el cruce del lector bilateral con expedientes legacy y las etiquetas privadas de acuses. [Contrato y demo](stage2a-identity-directory-intake.md#invitación-aclaraciones-y-disponibilidad-en-la-ficha)
 
-La [rama publicada](https://github.com/japh113/plataformaPsicologia/commits/feat/recorrido-unificado-atencion) y el Draft identifican el HEAD definitivo y el resultado de las verificaciones. La aceptación manual del propietario, la auditoría independiente del delta y la evidencia remota del mismo HEAD se requieren antes de integrar.
+**Ajuste focal de aclaraciones en #86.** Para una pregunta señalada de la entrevista autoadministrada, el paciente ve la pregunta, su respuesta enviada, el mensaje del profesional y el campo de corrección juntos. Las otras respuestas se consultan bajo demanda y conservan una edición secundaria explícita. El borrador privado, el envío deliberado y la comparación de versiones mantienen sus contratos. La [CI de referencia `f99d470`](https://github.com/japh113/plataformaPsicologia/actions/runs/45892511085) y sus [análisis CodeQL](https://github.com/japh113/plataformaPsicologia/actions/runs/45892505637) corresponden al corte anterior a este ajuste.
+
+La [rama publicada](https://github.com/japh113/plataformaPsicologia/commits/feat/recorrido-unificado-atencion) y el Draft identifican el HEAD vigente. Antes de integrar siguen pendientes la aceptación manual de primera consulta, nota privada y escenarios de retiro, la auditoría independiente de seguridad del PR completo y la verificación remota del HEAD definitivo. Las observaciones sobre citas, ciclo clínico y futura retirada selectiva de expedientes legacy se recogieron en el [roadmap](product/roadmap.md#observaciones-pendientes-de-continuidad-clínica) para evaluación posterior.
 
 **2A sigue parcial.** Producto aprobado, código integrado, capacidad habilitada, ensayo aislado, instalación habitual y despliegue son estados distintos. Los recorridos 013–022 son ficticios y aislados. SQL 021 y 022 forman parte de la rama de implementación. Este corte verificó GitHub y código; la ausencia de usuarios reales y el carácter desechable de los datos provienen del propietario y de RN-28/ADR-018.
 
@@ -100,7 +102,7 @@ Conservar SQL 001–022, manifiesto, hashes y ledger. Ensayos solo en destinos n
 ## Cómo retomar el trabajo en otra conversación
 
 1. Leer [AGENTS](../AGENTS.md), este checkpoint, la [planificación vigente](product/roadmap.md#planificación-vigente-por-hitos-funcionales) y las [decisiones aprobadas](product/decisions.md). Revalidar `main` y cualquier rama, Draft o evidencia del nuevo encargo.
-2. Leer el [diseño propuesto](stage2a-identity-directory-intake.md#diseño-propuesto-del-recorrido-unificado-de-atención) y su decisión de alcance. Base verificada: #84 integrado, merge `ccb8c5faeb44e115ba09aed3eb51cee99189fab2`. Estado: primera consulta ficticia y navegación bilateral integradas; recorrido y tres plantillas propuestos.
-3. Próxima acción autorizable: el propietario decide si aprueba el incremento vertical completo o difiere el catálogo y su cambio de suficiencia. Tras autorización explícita, Codex implementa el paquete elegido en un Draft con CI y auditoría proporcional al riesgo. Hasta entonces, el trabajo de este encargo es documental.
+2. Leer el [alcance aprobado del Draft #86](stage2a-identity-directory-intake.md#correctivo-funcional-aprobado-en-el-draft-86) y sus requisitos de cierre arriba. La primera consulta ficticia y la navegación bilateral están integradas en la base. La ficha progresiva y las tres plantillas corresponden al Draft.
+3. Retomar el Draft vigente para las verificaciones pendientes que solicite el propietario. Cualquier incremento posterior requiere su propio encargo.
 
 Verificación documental: contrastar enlaces, fragmentos, decisiones, código/GitHub y diff. Para implementación, aplicar [desarrollo](development.md) y el [flujo de entrega](#flujo-de-desarrollo-y-actualización).

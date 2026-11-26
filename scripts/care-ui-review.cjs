@@ -14,7 +14,7 @@ const summary = (page, title) => page.locator('summary').filter({ hasText: title
 
 async function screenshot(id, page) {
   const file = 'screenshots/' + id + '.png';
-  const showcase = /^(?:0[1-8]|1[2-4])-/.test(id);
+  const showcase = /^(?:0[1-8]|1[1-6])-/.test(id);
   const viewport = page.viewportSize();
   const main = page.getByRole('main');
   const scroll = await main.evaluate(node => ({ top: node.scrollTop, height: node.scrollHeight, width: node.scrollWidth, client: node.clientWidth }));
@@ -421,31 +421,86 @@ async function main() {
     const clinician = await login('bp3', 1280);
     const owner = await login('bq3', 320);
     try {
+      const previous = { reason: 'Motivo ficticio', context: 'Contexto ficticio' };
+      const message = '¿Puedes describir un ejemplo concreto?';
+      const updated = 'Me cuesta organizarme cuando cambian mis horarios.';
       await button(nav(clinician, true), 'Mis pacientes').click();
       await button(clinician, 'Abrir atención de bq3').click();
       await summary(clinician, /^Pedir una aclaración$/).click();
       const question = clinician.getByLabel('Pregunta que necesita aclaración');
-      const focusedLabel = await question.locator('option').nth(2).textContent();
-      await question.selectOption({ index: 2 });
+      const focusedLabel = await question.locator('option[value="context"]').textContent();
+      await question.selectOption('context');
       await clinician.getByText(/^Respuesta original · /).waitFor();
-      await clinician.getByLabel('Qué necesita aclararse').fill('Describe un ejemplo ficticio');
+      await clinician.getByLabel('Qué necesita aclararse').fill(message);
       await button(clinician, 'Pedir una aclaración').click();
       await clinician.getByRole('heading', { name: 'Corrección pendiente', exact: true }).waitFor();
-      await button(nav(owner), 'Mi atención').click();
-      await button(owner, 'Ver atención').click();
-      const clarification = owner.getByRole('region', { name: 'Aclaración de entrevista' });
-      await clarification.getByText('Describe un ejemplo ficticio', { exact: true }).waitFor();
+      const openOwner = async () => {
+        await button(nav(owner), 'Mi atención').click();
+        await button(owner, 'Ver atención').click();
+      };
+      const clarificationIn = page => page.getByRole('region', { name: 'Aclaración de entrevista', exact: true });
+      const clarification = clarificationIn(owner);
+      const responseField = clarification.getByRole('textbox', { name: 'Tu respuesta aclarada', exact: true });
+      const originalAnswer = clarification.getByText(previous.context, { exact: true }).and(clarification.getByRole('paragraph'));
+      const otherAnswers = summary(owner, /^Consultar otras respuestas$/);
+      await openOwner();
+      await clarification.getByText(message, { exact: true }).waitFor();
       await clarification.getByText(focusedLabel, { exact: true }).waitFor();
-      await owner.getByText('Pregunta señalada en la aclaración', { exact: true }).waitFor();
-      await owner.getByRole('textbox', { name: focusedLabel, exact: true }).fill('Aclaración ficticia guardada en la atención');
-      await button(owner, 'Enviar mis respuestas a Profesional ficticio bp3').click();
+      await originalAnswer.waitFor();
+      assert.equal(await responseField.inputValue(), previous.context);
+      assert.equal(await owner.getByRole('textbox').count(), 1);
+      assert.equal(await owner.getByText(previous.reason, { exact: true }).isVisible(), false);
+      await otherAnswers.click();
+      await owner.getByText(previous.reason, { exact: true }).waitFor();
+      assert.equal(await owner.getByRole('textbox').count(), 1);
+      await button(owner, 'Editar otras respuestas').click();
+      assert.equal(await owner.getByRole('textbox').count(), 2);
+      await otherAnswers.click();
+      await owner.setViewportSize({ width: 1280, height: 800 });
+      assert.equal(await responseField.isVisible(), true);
+      assert.equal(await owner.getByRole('textbox').count(), 1);
+      await owner.setViewportSize({ width: 320, height: 800 });
+      await screenshot('15-aclaracion-paciente-antes', owner);
+
+      const saved = owner.waitForResponse(response => response.url().endsWith('/save') && response.request().method() === 'POST');
+      await responseField.fill(updated);
+      const autosave = await saved;
+      assert.equal(autosave.status(), 200);
+      const answers = { ...previous, context: updated };
+      assert.deepEqual(autosave.request().postDataJSON().answers, answers);
+      const assignment = new URL(autosave.url()).pathname.match(/^\/api\/admissions(\/.+)\/save$/)[1];
+      const professionalBefore = await confirmed(clinician, assignment);
+      assert.equal(professionalBefore.status, 200);
+      assert.deepEqual(professionalBefore.body.data.submissions.map(item => item.answers), [previous]);
+      assert.equal(JSON.stringify(professionalBefore.body.data).includes(updated), false);
+      await owner.getByRole('status').filter({ hasText: 'Borrador guardado en privado.' }).waitFor();
+      await owner.reload();
+      await openOwner();
+      assert.equal(await responseField.inputValue(), updated);
+      await originalAnswer.waitFor();
+      const sent = owner.waitForResponse(response => response.url().endsWith('/care-send') && response.request().method() === 'POST');
+      await button(owner, 'Enviar aclaración').click();
+      const submission = await sent;
+      assert.equal(submission.status(), 200);
+      assert.deepEqual(submission.request().postDataJSON().answers, answers);
+
+      async function checkComparison(page) {
+        const comparison = clarificationIn(page);
+        await comparison.getByText('Respuesta actualizada', { exact: true }).waitFor();
+        await comparison.getByText(focusedLabel, { exact: true }).first().waitFor();
+        await comparison.getByText(message, { exact: true }).waitFor();
+        await summary(comparison, /^Ver cambios \(1\)$/).click();
+        const pair = comparison.locator('dl');
+        assert.deepEqual(await pair.locator('dt').allTextContents(), ['Antes', 'Ahora']);
+        assert.deepEqual(await pair.locator('dd').allTextContents(), [previous.context, updated]);
+        const detail = await confirmed(page, assignment);
+        assert.equal(detail.status, 200);
+        assert.deepEqual(detail.body.data.submissions.map(item => item.answers), [previous, answers]);
+      }
+      await checkComparison(owner);
+      await screenshot('16-aclaracion-paciente-despues', owner);
       await focus(clinician);
-      await clinician.getByText('Respuesta actualizada', { exact: true }).waitFor();
-      await summary(clinician, /^Ver cambios \(1\)$/).click();
-      const comparison = clinician.getByRole('region', { name: 'Aclaración de entrevista' });
-      await comparison.getByText('Antes', { exact: true }).waitFor();
-      await comparison.getByText('Ahora', { exact: true }).waitFor();
-      await comparison.getByText('Aclaración ficticia guardada en la atención', { exact: true }).waitFor();
+      await checkComparison(clinician);
       await screenshot('11-aclaracion-comparada', clinician);
       await summary(clinician, /^Ver versiones anteriores$/).waitFor();
     } finally {

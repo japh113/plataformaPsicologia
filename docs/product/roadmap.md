@@ -18,6 +18,15 @@ Estado canónico en el [checkpoint](../project-checkpoint.md). Corte del **24 de
 
 **Propuesta posterior.** [#81](https://github.com/japh113/plataformaPsicologia/issues/81) plantea confirmar asistencia a una cita ya reservada. El plazo y sus efectos quedan pendientes de diseño y autorización. La reserva directa del hito 2 conserva su contrato.
 
+### Observaciones pendientes de continuidad clínica
+
+La revisión manual del Draft #86 dejó propuestas para precisar los pendientes del hito 4. Su evaluación requiere un encargo propio y conserva la secuencia vigente.
+
+- **Citas por episodio.** Precisar cancelación, reprogramación, inasistencias y sesiones posteriores con los contratos de agenda de 2B/2D. Definir indicadores para citas por episodio y cuándo puede mostrarse la identidad del paciente en Agenda con autorización.
+- **Ciclo y acciones sensibles.** Evaluar cuándo procede preparar una nueva atención con un episodio activo y favorecer la continuidad del episodio existente. Precisar cuándo ofrecer cada acción y explicar su objeto y consecuencias. Considerar recorridos guiados y confirmaciones contextuales para distinguir revocación de entrevista, retirada de consentimiento de tratamiento, pausa, cierre clínico y terminación de vinculación. El retiro legítimo de consentimiento del paciente se mantiene independiente de la aprobación profesional.
+- **Ficha de atención como expediente por episodio.** Ampliar progresivamente la ficha con historial de sesiones, notas, objetivos terapéuticos, tareas, seguimiento, pausa, reanudación y cierre. El acceso a cada parte del historial queda sujeto a las autorizaciones del episodio. El expediente legacy conserva su alcance vigente mientras se desarrolla la continuidad por episodio.
+- **Retirada selectiva de expedientes legacy.** Evaluar en un encargo separado la retirada de su sección y ficha, con inventario y revisión de consumidores, rutas, servicios y dependencias. La retirada queda fuera del Draft #86.
+
 ### Desarrollo aislado frente a habilitación
 
 El hito 2 opera con cuentas ficticias, entrega simulada y configuración aislada 018. La preparación precede a la activación del sandbox y la política clínica ordinaria permanece denegadora. El [contrato del hito 2](../stage2a-identity-directory-intake.md#primera-consulta-individual-ficticia-por-episodio) exige consentimiento de tratamiento separado y permite citas no solapadas el mismo día para episodios y responsables distintos. El registro, la identidad y los contactos conservan sus propios controles.

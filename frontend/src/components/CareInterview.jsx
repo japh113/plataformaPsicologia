@@ -38,19 +38,20 @@ function InterviewTerms({ text }) {
   </div>;
 }
 
+function AnswerField({ question, values, onChange, disabled, highlighted, label = question.label }) {
+  const id = useId();
+  return <div className={`space-y-1 ${highlighted ? 'rounded-xl bg-amber-50 p-3 ring-1 ring-amber-200' : ''}`}>
+    <label className="block" htmlFor={id}>{label}</label>
+    {highlighted && <p id={id + '-hint'} className="text-xs font-semibold text-amber-950">Pregunta señalada en la aclaración</p>}
+    <textarea className={area} id={id} aria-describedby={highlighted ? id + '-hint' : undefined}
+      maxLength={question.maxLength} value={values[question.id] ?? ''} disabled={disabled}
+      onChange={event => onChange({ ...values, [question.id]: event.target.value })} />
+  </div>;
+}
+
 function Answers({ template, values, onChange, disabled, clarification }) {
-  const inputId = useId();
-  return template.questions.map(question => {
-    const id = inputId + '-' + question.id;
-    const highlighted = clarification?.questionId === question.id;
-    return <div className={`space-y-1 ${highlighted ? 'rounded-xl bg-amber-50 p-3 ring-1 ring-amber-200' : ''}`} key={question.id}>
-      <label className="block" htmlFor={id}>{question.label}</label>
-      {highlighted && <p id={id + '-hint'} className="text-xs font-semibold text-amber-950">Pregunta señalada en la aclaración</p>}
-      <textarea className={area} id={id} aria-describedby={highlighted ? id + '-hint' : undefined}
-        maxLength={question.maxLength} value={values[question.id] ?? ''} disabled={disabled}
-        onChange={event => onChange({ ...values, [question.id]: event.target.value })} />
-    </div>;
-  });
+  return template.questions.map(question => <AnswerField key={question.id} question={question} values={values}
+    onChange={onChange} disabled={disabled} highlighted={clarification?.questionId === question.id} />);
 }
 
 function DocumentAnswers({ template, answers }) {
@@ -60,13 +61,15 @@ function DocumentAnswers({ template, answers }) {
   </div>)}</dl>;
 }
 
-function SelfDraft({ detail, draft, onChange, onDenied, clarification }) {
+function SelfDraft({ detail, draft, onChange, onDenied }) {
   const [answers, setAnswers] = useState(draft.answers);
   const [snapshot, setSnapshot] = useState(draft);
+  const [editingOther, setEditingOther] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [serverCopy, setServerCopy] = useState(null);
+  const otherFieldsId = useId();
   const lifecycle = useRef(null);
   const write = useRef(null);
   const submitLock = useRef(false);
@@ -185,9 +188,29 @@ function SelfDraft({ detail, draft, onChange, onDenied, clarification }) {
   }, [unsaved]);
 
   const stage = saving ? 'saving' : unsaved ? 'dirty' : 'clean';
+  const correcting = detail.reviewState === 'correction_requested';
+  const questionId = correcting ? detail.corrections.at(-1)?.questionId : null;
+  const focusedQuestion = detail.template.questions.find(question => question.id === questionId);
+  const remainingQuestions = focusedQuestion && detail.template.questions.filter(question => question.id !== questionId);
+  const fields = { values: answers, onChange: setAnswers, disabled: sending || Boolean(serverCopy) };
   return <form className="space-y-3" autoComplete="off" onSubmit={event => { event.preventDefault(); void send(); }}>
     <p>Tu borrador es privado. El profesional solo verá las respuestas que envíes.</p>
-    <Answers template={detail.template} values={answers} onChange={setAnswers} disabled={sending || Boolean(serverCopy)} clarification={clarification} />
+    {correcting && <ClarificationNotice detail={detail}>
+      {focusedQuestion && <AnswerField question={focusedQuestion} label="Tu respuesta aclarada" {...fields} />}
+    </ClarificationNotice>}
+    {focusedQuestion ? remainingQuestions.length > 0 && <details className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+      <summary className="cursor-pointer rounded-sm font-semibold text-indigo-800">Consultar otras respuestas</summary>
+      <div className="mt-3 space-y-3">
+        {!editingOther && <DocumentAnswers template={{ questions: remainingQuestions }} answers={answers} />}
+        <button type="button" className={secondaryButton} disabled={fields.disabled} aria-expanded={editingOther}
+          aria-controls={otherFieldsId} onClick={() => setEditingOther(value => !value)}>
+          {editingOther ? 'Cerrar edición de otras respuestas' : 'Editar otras respuestas'}
+        </button>
+        <div className="space-y-3" id={otherFieldsId} hidden={!editingOther}>
+          {editingOther && <Answers template={{ questions: remainingQuestions }} {...fields} />}
+        </div>
+      </div>
+    </details> : <Answers template={detail.template} {...fields} />}
     {!error && <p role="status">{sending ? 'Enviando tus respuestas…' : draftMessage[stage]}</p>}
     {error && <p role="alert">{error}</p>}
     {error && !serverCopy && <button type="button" className={secondaryButton} disabled={saving || sending} onClick={reloadDraft}>Revisar borrador guardado</button>}
@@ -200,16 +223,16 @@ function SelfDraft({ detail, draft, onChange, onDenied, clarification }) {
       </div>
     </section>}
     <button className={primaryButton} disabled={sending || Boolean(error) || !complete(detail.template, answers)}>
-      Enviar mis respuestas a {detail.professionalName}
+      {correcting ? 'Enviar aclaración' : `Enviar mis respuestas a ${detail.professionalName}`}
     </button>
   </form>;
 }
 
-function DraftEditor({ detail, onChange, onDenied, clarification }) {
+function DraftEditor({ detail, onChange, onDenied }) {
   const draft = useCareRead('/admissions/' + detail.id + '/draft');
   if (draft.loading && !draft.data) return <p role="status">Recuperando tu borrador…</p>;
   return draft.data
-    ? <SelfDraft detail={detail} draft={draft.data} onChange={onChange} onDenied={onDenied} clarification={clarification} />
+    ? <SelfDraft detail={detail} draft={draft.data} onChange={onChange} onDenied={onDenied} />
     : <><p role="alert">{draft.error}</p><button type="button" className={secondaryButton} onClick={() => draft.reload()}>Reintentar lectura del borrador</button></>;
 }
 
@@ -238,7 +261,7 @@ function InterviewHistory({ document, history, template, professionalName, direc
     </details>}</>;
 }
 
-function ClarificationNotice({ detail, professional, directed }) {
+function ClarificationNotice({ detail, professional, directed, children }) {
   const request = directed ? detail.requests?.at(-1) : detail.corrections?.at(-1);
   if (!request) return null;
   const history = directed ? detail.documents : detail.submissions;
@@ -272,6 +295,7 @@ function ClarificationNotice({ detail, professional, directed }) {
       <p className="text-xs font-semibold text-slate-600">Respuesta original</p>
       <p className="mt-1 whitespace-pre-wrap break-words">{before[question.id]}</p>
     </div>}
+    {children}
     {resolved && after && before && (changes.length ? <details className="group border-t border-slate-100 pt-2">
       <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-md font-semibold text-indigo-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-700 [&::-webkit-details-marker]:hidden">
         <ChevronDown aria-hidden="true" size={16} className="shrink-0 group-open:rotate-180" />
@@ -393,9 +417,8 @@ export default function CareInterview({ item, professional, completed, onChange,
       <summary className="cursor-pointer font-semibold">Ver borrador privado guardado</summary>
       {showSavedDraft && <SavedDraft detail={detail} />}
     </details>}
-    {(action || documentsPanel || panel === 'clarification') && <ClarificationNotice detail={detail} professional={professional} directed={directed} />}
-    {action && editing && <DraftEditor key={detail.version} detail={detail} onChange={refresh} onDenied={onDenied}
-      clarification={detail.reviewState === 'correction_requested' ? detail.corrections.at(-1) : null} />}
+    {((action && !editing) || documentsPanel || panel === 'clarification') && <ClarificationNotice detail={detail} professional={professional} directed={directed} />}
+    {action && editing && <DraftEditor key={detail.version} detail={detail} onChange={refresh} onDenied={onDenied} />}
     {action && recording && <form className="space-y-3" onSubmit={event => {
       event.preventDefault();
       void write('care-register', { declarations });
