@@ -385,8 +385,8 @@ async function main() {
     await button(mobile, 'Inicio').click();
     await button(psy, 'Abrir atención de Lucía García').click();
     await psy.locator('summary').filter({ hasText: /^Gestionar vinculación$/ }).click();
-    await button(psy, 'Terminar acuerdo').click();
-    await psy.getByRole('dialog', { name: 'Terminar acuerdo' }).getByRole('button', { name: 'Confirmar' }).click();
+    await button(psy, 'Terminar vinculación').click();
+    await psy.getByRole('dialog', { name: 'Terminar vinculación', exact: true }).getByRole('button', { name: 'Confirmar' }).click();
     await heading(psy, 'Acuerdo terminado').waitFor();
     const [notices] = await Promise.all([
       pac.waitForResponse(response => response.url().endsWith('/notices') && response.request().method() === 'GET'),
