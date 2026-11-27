@@ -96,6 +96,14 @@ export async function command(actor,op,input={},id) {
       return row.data;
     });
   }
+  if (op === 'care-context') {
+    if (process.env.UNIFIED_CARE_ENABLED !== 'true') throw fail('Contexto de atención no disponible.', 404);
+    return transaction(async client => {
+      const { rows: [row] } = await client.query('SELECT public.bilateral_care_context($1,$2,$3) AS data',
+        [actor.id, actor.sessionVersion, actor.sessionExpiresAt]);
+      return row.data;
+    });
+  }
   const {key,encryptionKey}=configuration();
   const p={...input,...(id?{id}:{}),fingerprint:fingerprint({op,...input,...(id?{id}:{})},key)};
   let reference;

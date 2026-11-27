@@ -25,6 +25,7 @@
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "express": "^4.22.3",
+    "express-rate-limit": "8.7.5",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0",
     "sharp": "0.35.5"

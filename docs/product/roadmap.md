@@ -1,6 +1,6 @@
 # Roadmap de producto y arquitectura
 
-Estado canónico en el [checkpoint](../project-checkpoint.md). Corte del **24 de noviembre de 2026**, `main` en [`ccb8c5faeb44e115ba09aed3eb51cee99189fab2`](https://github.com/japh113/plataformaPsicologia/commit/ccb8c5faeb44e115ba09aed3eb51cee99189fab2) con [#84 integrado](https://github.com/japh113/plataformaPsicologia/pull/84). SQL 001–020 integrado y 2A parcial. Se mantienen las etapas 0–6 y 2A–2E como referencias de requisitos.
+Estado canónico en el [checkpoint](../project-checkpoint.md). Corte del **24 de noviembre de 2026**, `main` en [`7ac6d76f553aa5784dcf14c27b7ac8f650d86136`](https://github.com/japh113/plataformaPsicologia/commit/7ac6d76f553aa5784dcf14c27b7ac8f650d86136) con [#85 integrado](https://github.com/japh113/plataformaPsicologia/pull/85). SQL 001–020 integrado y 2A parcial. Se mantienen las etapas 0–6 y 2A–2E como referencias de requisitos.
 
 ## Planificación vigente por hitos funcionales
 
@@ -14,9 +14,18 @@ Estado canónico en el [checkpoint](../project-checkpoint.md). Corte del **24 de
 | 4. Continuidad clínica, expediente y pareja | **Pendiente de encargo.** Ordenar por capacidad la continuidad, expediente completo, notas finales/adendas, seguimiento, tareas, objetivos RN-72, pareja y ciclo de tratamiento. | 2A–2E, ADR-030–032 y #30/#32/#34/#35/#39/#41. Validar concurrencia donde aplique, permisos/documentación por episodio y participante, pausa/cierre/derivación e intercambio consentido de 2B/2C, agenda concurrente 2D y zonas horarias 2E. La pareja exige entrevista y consentimiento propios por integrante. |
 | 5. Piloto y producción | **Pendiente.** Ensayos y aprobaciones por entorno y superficie. | 3–5, #36/#37 y requisitos clínicos, jurídicos, operativos y de seguridad aplicables: integridad y concurrencia, transporte verificado, proveedores, privacidad, recuperación y restauración, incidentes y evidencia de despliegue. La etapa 6 conserva la visión posterior de red. |
 
-**Candidato PROPUESTO posterior a #84.** [Recorrido unificado de atención](../stage2a-identity-directory-intake.md#diseño-propuesto-del-recorrido-unificado-de-atención) en sandbox: seleccionar acuerdo y episodio desde «Mis pacientes» o «Mi atención», continuar admisión y primera consulta con acciones por rol, restaurar «Mis citas» y ofrecer tres plantillas ficticias. Requiere correlación autorizada y recuperación de preparaciones, además de verificación de plantilla y versión antes de activar. Pendiente de aprobación del alcance por el propietario. La secuencia de hitos aprobada conserva su orden.
+**Recorrido unificado APROBADO e IMPLEMENTADO en rama.** [Atención individual ficticia](../stage2a-identity-directory-intake.md#diseño-propuesto-del-recorrido-unificado-de-atención) conecta la vinculación, la admisión y la primera consulta de los hitos 1 y 2. SQL 021 incorpora la ficha progresiva, operaciones compuestas, tres plantillas y la lectura acotada de la entrevista después del inicio. La prueba manual del propietario, la auditoría independiente y la evidencia del Draft rigen su integración. La secuencia de hitos conserva su orden.
 
 **Propuesta posterior.** [#81](https://github.com/japh113/plataformaPsicologia/issues/81) plantea confirmar asistencia a una cita ya reservada. El plazo y sus efectos quedan pendientes de diseño y autorización. La reserva directa del hito 2 conserva su contrato.
+
+### Observaciones pendientes de continuidad clínica
+
+La revisión manual del Draft #86 dejó propuestas para precisar los pendientes del hito 4. Su evaluación requiere un encargo propio y conserva la secuencia vigente.
+
+- **Citas por episodio.** Precisar cancelación, reprogramación, inasistencias y sesiones posteriores con los contratos de agenda de 2B/2D. Definir indicadores para citas por episodio y cuándo puede mostrarse la identidad del paciente en Agenda con autorización.
+- **Ciclo y acciones sensibles.** Evaluar cuándo procede preparar una nueva atención con un episodio activo y favorecer la continuidad del episodio existente. Precisar cuándo ofrecer cada acción y explicar su objeto y consecuencias. Considerar recorridos guiados y confirmaciones contextuales para distinguir revocación de entrevista, retirada de consentimiento de tratamiento, pausa, cierre clínico y terminación de vinculación. El retiro legítimo de consentimiento del paciente se mantiene independiente de la aprobación profesional.
+- **Ficha de atención como expediente por episodio.** Ampliar progresivamente la ficha con historial de sesiones, notas, objetivos terapéuticos, tareas, seguimiento, pausa, reanudación y cierre. El acceso a cada parte del historial queda sujeto a las autorizaciones del episodio. El expediente legacy conserva su alcance vigente mientras se desarrolla la continuidad por episodio.
+- **Retirada selectiva de expedientes legacy.** Evaluar en un encargo separado la retirada de su sección y ficha, con inventario y revisión de consumidores, rutas, servicios y dependencias. La retirada queda fuera del Draft #86.
 
 ### Desarrollo aislado frente a habilitación
 

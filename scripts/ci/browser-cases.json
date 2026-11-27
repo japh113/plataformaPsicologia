@@ -124,5 +124,11 @@
     "ADM24",
     "ADM25",
     "ADM26"
+  ],
+  "CARE": [
+    "CARE01",
+    "CARE02",
+    "CARE03",
+    "CARE04"
   ]
 }

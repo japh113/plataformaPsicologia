@@ -164,6 +164,7 @@ export default function NotesScreen({
   todayDate,
   prefilledAppointmentId,
   setVistaActiva,
+  onBack,
   onViewAppointments,
   onUpdatePatientProfile,
   onOpenAppointmentSession,
@@ -1033,7 +1034,7 @@ export default function NotesScreen({
             <div className="min-w-0">
               <button
                 type="button"
-                onClick={() => setVistaActiva('dashboard')}
+                onClick={onBack ?? (() => setVistaActiva('dashboard'))}
                 className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-white hover:text-slate-900"
               >
                 <ArrowLeft size={14} className="mr-2" /> Volver

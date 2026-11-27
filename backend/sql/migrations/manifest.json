@@ -98,5 +98,15 @@
     "version": "020",
     "file": "020_bilateral_linked_patients.sql",
     "sha256": "1cd5db8a00cb08c8f4aebc8dd2b52171a879a59ab2179f53661e05f2a0b6c4dd"
+  },
+  {
+    "version": "021",
+    "file": "021_unified_individual_care.sql",
+    "sha256": "55b8f6615c3c5dd6a1adcecfee4f776a8854cccf1a92f080211da6e69069fe2d"
+  },
+  {
+    "version": "022",
+    "file": "022_bilateral_care_context.sql",
+    "sha256": "a72063e2b9c5b9ebb57684f57f0df52877abb8f8c6db955615e208db889689a8"
   }
 ]

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import jwt from 'jsonwebtoken';
 import pg from 'pg';
 import app from '../src/app.js';
@@ -19,7 +20,7 @@ const action = () => ({ operationId: randomUUID(), confirmed: true });
 const answers = { reason: 'Ensayo ficticio', context: 'Contexto de la prueba' };
 const neutral = { success: false, message: 'El turno solicitado no está disponible.' };
 
-test('018–019: first consultation over real HTTP and PostgreSQL', {
+test('018–022: first consultation over real HTTP and PostgreSQL', {
   skip: process.env.RUN_EPISODE_INTEGRATION !== 'true',
 }, async t => {
   assert.equal(env.nodeEnv, 'test');
@@ -35,9 +36,9 @@ test('018–019: first consultation over real HTTP and PostgreSQL', {
   try {
     client = await createSandboxDatabase(control, database);
     await installBaseline(client);
-    const options = await installConsultationSandbox(client, database);
+    const options = await installConsultationSandbox(client, database, { unifiedCare: true });
     const ledger = (await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows;
-    assert.equal(ledger.length, 19);
+    assert.equal(ledger.length, 22);
     assert.equal((await migrate(client, options)).status, 'already-applied');
     assert.deepEqual((await client.query('SELECT * FROM psicopanel_schema_migrations ORDER BY version')).rows, ledger);
     await bilateralFixture(client);
@@ -55,6 +56,7 @@ test('018–019: first consultation over real HTTP and PostgreSQL', {
       ADMISSION_SECRET: 'isolated-consultation-admission-key-at-least-32-bytes',
       ADMISSION_DATABASE_URL: `postgres://${options.admissionClientRole}:disposable_admission_roles@db:5432/${database}`,
       FIRST_CONSULTATION_ENABLED: 'true',
+      UNIFIED_CARE_ENABLED: 'true',
     });
     restricted = new pg.Client({ connectionString: process.env.ADMISSION_DATABASE_URL });
     await restricted.connect();
@@ -83,7 +85,7 @@ test('018–019: first consultation over real HTTP and PostgreSQL', {
       const result = await consult(id, assignment, operation, payload);
       assert.deepEqual(result, { status: 200, body: { success: true, data: { saved: true } } }, operation);
     }
-    async function prepare(psy, pac, directed = false) {
+    async function link(psy, pac) {
       const reference = (await bilateral(actor(psy), 'professional-reference', { operationId: randomUUID() })).reference;
       const recipient = (await bilateral(actor(pac), 'recipient-reference', { ...action(), professionalReference: reference })).reference;
       const receipt = await bilateral(actor(psy), 'issue', {
@@ -95,6 +97,10 @@ test('018–019: first consultation over real HTTP and PostgreSQL', {
       const { agreementId } = await bilateral(actor(pac), 'accept', {
         ...action(), expectedVersion: invitation.version, conditionsVersion, conditionsHash: invitation.conditionsHash,
       }, invitation.id);
+      return { agreementId, receiptId: receipt.receiptId };
+    }
+    async function prepare(psy, pac, directed = false) {
+      const { agreementId, receiptId } = await link(psy, pac);
       const { episodeId } = await admission(actor(psy), 'prepare', { ...action(), agreementId });
       const { id } = await admission(actor(psy), directed ? 'assign-directed' : 'assign', {
         ...action(), agreementId, episodeId, templateId: 'fictional-adult-v1',
@@ -114,7 +120,7 @@ test('018–019: first consultation over real HTTP and PostgreSQL', {
         await perform(pac, 'submit', { expectedRevision: 1 });
         await perform(psy, 'validate', { episodeId, submission: 1 });
       }
-      return { id, episodeId, agreementId, psy, pac, perform };
+      return { id, episodeId, agreementId, receiptId, psy, pac, perform };
     }
     async function declare(assignment) {
       const status = await ownStatus(assignment.psy, assignment);
@@ -136,6 +142,110 @@ test('018–019: first consultation over real HTTP and PostgreSQL', {
     const e3 = await prepare('bp3', 'bq2');
     const e4 = await prepare('bp4', 'bq3');
     let ownAppointment;
+
+    await t.test('care context exposes exact bilateral references independently of ordinary record access', async () => {
+      const route = '/bilateral-invitations/care-context';
+      const correlation = { agreementId: e1.agreementId, invitationId: e1.receiptId };
+      const other = { agreementId: e2.agreementId, invitationId: e2.receiptId };
+      const owner = () => http(e1.psy, route);
+      assert.deepEqual((await owner()).body.data, { agreements: [correlation] });
+      const patient = await http(e1.pac, route);
+      assert.deepEqual(patient.body.data.agreements.sort((a,b) => a.agreementId.localeCompare(b.agreementId)),
+        [correlation, other].sort((a,b) => a.agreementId.localeCompare(b.agreementId)));
+      assert.deepEqual((await http('bp24', route)).body.data, { agreements: [] });
+      assert.equal((await http('bil-support', route)).status, 403);
+      const expiredToken = jwt.sign({ sub: e1.psy, sv: 0 }, env.jwtSecret, { expiresIn: -1 });
+      assert.equal((await http(e1.psy, route, null, 'GET', expiredToken)).status, 401);
+      await assert.rejects(pool.query("SELECT bilateral_care_context('bp1',0,9999999999)"), error => error.code === '42501');
+      await client.query("INSERT INTO psychologist_patient_access(psychologist_user_id,patient_id) VALUES ('bp1','bq1')");
+      try {
+        assert.equal((await http(e1.psy, '/patients/bq1')).status, 200);
+        assert.deepEqual((await owner()).body.data, { agreements: [correlation] });
+      } finally {
+        await client.query("DELETE FROM psychologist_patient_access WHERE psychologist_user_id='bp1' AND patient_id='bq1'");
+      }
+      assert.ok([403, 404].includes((await http(e1.psy, '/patients/bq1')).status));
+      assert.deepEqual((await owner()).body.data, { agreements: [correlation] });
+    });
+
+    await t.test('022 denies patient care context when the session expires during a PostgreSQL lock wait', async () => {
+      const route = '/bilateral-invitations/care-context';
+      const positive = await http(e1.pac, route);
+      assert.equal(positive.status, 200);
+      assert.ok(positive.body.data.agreements.some(row => row.agreementId === e1.agreementId && row.invitationId === e1.receiptId));
+      const observe = async () => (await client.query(`SELECT extract(epoch FROM clock_timestamp())::float8 AS now,
+        EXISTS (SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid
+          WHERE l.locktype='advisory' AND l.classid=73013 AND l.objid=1 AND l.objsubid=2 AND NOT l.granted
+          AND a.datname=current_database() AND a.query LIKE 'SELECT public.bilateral_care_context(%'
+          AND pg_backend_pid()=ANY(pg_blocking_pids(l.pid))) AS blocked`)).rows[0];
+      await client.query('BEGIN');
+      let pending;
+      try {
+        await client.query('SELECT pg_advisory_xact_lock(73013,1)');
+        const { rows: [{ exp }] } = await client.query('SELECT (floor(extract(epoch FROM clock_timestamp()))+3)::int AS exp');
+        const token = jwt.sign({ sub: e1.pac, sv: 0, exp }, env.jwtSecret);
+        pending = http(e1.pac, route, null, 'GET', token);
+        let lock = await observe();
+        while (!lock.blocked && lock.now < exp) {
+          await delay(10);
+          // PostgreSQL caches its activity snapshot inside the lock-holder transaction.
+          await client.query('SELECT pg_stat_clear_snapshot()');
+          lock = await observe();
+        }
+        assert.ok(lock.blocked && lock.now < exp, 'The SQL reader must be blocked while its token is still valid');
+        await client.query('SELECT pg_sleep_until(to_timestamp($1))', [exp]);
+        const expired = await observe();
+        assert.ok(expired.blocked && expired.now >= exp, 'The same lock must still block the reader at expiration');
+      } finally {
+        await client.query('ROLLBACK');
+        if (pending) await pending;
+      }
+      assert.deepEqual(await pending, {
+        status: 401, body: { success: false, message: 'Sesión no válida. Inicia sesión nuevamente.' },
+      });
+    });
+
+    await t.test('021 binds admission consent to the exact episode for direct and composed assignment', async t => {
+      const templateId = 'fictional-initial-interview-v1';
+      async function verify(psy, pac, mode, operation) {
+        const { agreementId } = await link(psy, pac);
+        async function assign(route) {
+          const prepared = await http(psy, '/admissions/prepare', { ...action(), agreementId });
+          assert.equal(prepared.status, 200);
+          const { episodeId } = prepared.body.data;
+          const assigned = await http(psy, '/admissions/' + route, {
+            ...action(), agreementId, episodeId, templateId, ...(route === 'care-start' && { mode }),
+          });
+          assert.equal(assigned.status, 200, JSON.stringify(assigned.body));
+          const { id } = assigned.body.data;
+          const detail = await http(pac, '/admissions/' + id);
+          assert.equal(detail.status, 200);
+          const { consentText, consentHash, consentVersion, version, episodeId: presentedEpisode } = detail.body.data;
+          assert.equal(presentedEpisode, episodeId);
+          const { rows: [stored] } = await client.query(`SELECT episode_id::text AS "episodeId", consent_text AS "consentText",
+            consent_hash AS "consentHash" FROM admission_assignments WHERE id=$1`, [id]);
+          assert.deepEqual(stored, { episodeId, consentText, consentHash });
+          assert.equal(consentHash, sha256(consentText));
+          return { id, episodeId, consentText, consentHash, consentVersion, version };
+        }
+        const first = await assign('care-start');
+        const second = await assign(operation);
+        assert.notEqual(first.episodeId, second.episodeId);
+        assert.notEqual(first.consentHash, second.consentHash);
+        assert.ok(first.consentText.includes('Episodio ' + first.episodeId + '.'));
+        assert.ok(second.consentText.includes('Episodio ' + second.episodeId + '.'));
+        assert.equal(first.consentVersion, second.consentVersion);
+        const acceptExact = (target, terms) => http(pac, '/admissions/' + target.id + '/accept', {
+          ...action(), expectedVersion: target.version, consentVersion: terms.consentVersion, consentHash: terms.consentHash,
+        });
+        assert.equal((await acceptExact(first, second)).status, 409);
+        assert.equal((await acceptExact(second, first)).status, 409);
+        assert.equal((await acceptExact(first, first)).status, 200);
+        assert.equal((await acceptExact(second, second)).status, 200);
+      }
+      await t.test('self-administered interview consent is specific to the episode', () => verify('bp6', 'bq6', 'self', 'assign'));
+      await t.test('directed interview consent is specific to the episode', () => verify('bp7', 'bq7', 'directed', 'assign-directed'));
+    });
 
     await t.test('requires explicit sufficiency, exact document and separate consent; activation is unique under concurrency', async () => {
       const status = await ownStatus(e1.psy, e1);
@@ -196,6 +306,10 @@ test('018–019: first consultation over real HTTP and PostgreSQL', {
       await expectOk(e1.psy, e1, 'note', { appointmentId: ownAppointment.id, content: secret });
       assert.equal((await ownStatus(e1.psy, e1)).note.content, secret);
       const pac = await ownStatus(e1.pac, e1);
+      const list = await http(e1.pac, '/admissions/consultations');
+      const match = list.body.data.find(item => item.id === e1.id);
+      assert.deepEqual(match.appointment, { date: pac.appointment.date, time: pac.appointment.time, status: 'completed', durationMinutes: 60 });
+      assert.doesNotMatch(JSON.stringify(list.body), new RegExp(secret + '|note|' + ownAppointment.id));
       assert.equal(pac.appointment.id, ownAppointment.id);
       assert.equal(Object.hasOwn(pac, 'note'), false);
       for (const outsider of ['bp2', 'bq2', 'bil-support', 'bil-admin', 'bil-superadmin']) {
@@ -216,6 +330,22 @@ test('018–019: first consultation over real HTTP and PostgreSQL', {
       const persisted = (await client.query('SELECT author_id,audience,provenance_version FROM consultation_notes WHERE appointment_id=$1', [ownAppointment.id])).rows[0];
       assert.deepEqual(persisted, { author_id: e1.psy, audience: 'professional_private', provenance_version: 'fictional-professional-original-v1' });
     });
+    await t.test('professional consultation list returns only scoped operational progress', async () => {
+      const list = await http(e1.psy, '/admissions/consultations');
+      assert.equal(list.status, 200);
+      const current = list.body.data.find(item => item.id === e1.id);
+      assert.deepEqual(Object.keys(current).sort(), [
+        'id', 'episodeId', 'professionalName', 'status', 'admissionVersion', 'documentVersion',
+        'sufficiencyConfirmed', 'consentAccepted', 'consentWithdrawn', 'hasAppointment', 'appointmentSlot',
+      ].sort());
+      assert.equal(current.status, 'active');
+      assert.equal(current.consentAccepted, true);
+      assert.equal(current.hasAppointment, true);
+      assert.deepEqual(current.appointmentSlot, { date: ownAppointment.date, time: ownAppointment.time, status: 'completed' });
+      assert.doesNotMatch(JSON.stringify(list.body), /CONFIDENTIAL_FICTIONAL_CONSULTATION|consentTerms|consentId|"note"/);
+      assert.ok(!list.body.data.some(item => item.id === e2.id));
+    });
+
     await t.test('ordinary admission and consultation lists remain usable', async () => {
       for (const route of ['/admissions', '/admissions/consultations']) {
         const response = await http(e1.pac, route);
@@ -232,11 +362,13 @@ test('018–019: first consultation over real HTTP and PostgreSQL', {
       assert.equal(withdrawn.appointment, null);
       assert.equal(withdrawn.note, null);
       assert.equal((await consult(e1.psy, e1, 'complete', { appointmentId: ownAppointment.id })).status, 404);
+      assert.equal((await http(e1.psy, '/admissions/consultations/' + e1.id + '/interview')).status, 404);
       const e2Status = await ownStatus(e2.pac, e2);
       await expectOk(e2.pac, e2, 'revoke-admission', { assignmentVersion: e2Status.admissionVersion });
       assert.equal((await ownStatus(e2.pac, e2)).status, 'withdrawn');
       await client.query("UPDATE bilateral_agreements SET state='unlinked',unlinked_at=clock_timestamp(),version=version+1 WHERE id=$1", [e3.agreementId]);
       assert.equal((await consult(e3.psy, e3)).status, 404);
+      assert.equal((await http(e3.psy, '/admissions/consultations/' + e3.id + '/interview')).status, 404);
       assert.equal((await client.query('SELECT count(*)::int AS n FROM consultation_notes')).rows[0].n, 1);
       assert.equal((await client.query('SELECT count(*)::int AS n FROM psychologist_patient_access')).rows[0].n, 2);
     });
@@ -261,7 +393,12 @@ test('018–019: first consultation over real HTTP and PostgreSQL', {
       )).rows[0];
       const expected = { assignmentId: e4.id, episodeId: e4.episodeId, ...reference };
       const result = await fresh(path + '/withdrawals');
-      assert.deepEqual(result, { status: 200, body: { success: true, data: [expected] } });
+      assert.equal(result.status, 200);
+      assert.equal(result.body.data.length, 1);
+      const { preparedAt, professionalName, ...exact } = result.body.data[0];
+      assert.ok(Date.parse(preparedAt));
+      assert.ok(professionalName);
+      assert.deepEqual(exact, expected);
       assert.equal((await http('bp3', path + '/withdrawals')).status, 404);
       const other = await http(e2.pac, path + '/withdrawals');
       assert.equal(other.status, 200);
@@ -282,12 +419,223 @@ test('018–019: first consultation over real HTTP and PostgreSQL', {
       const accepted = await accept(prepared, await declare(prepared));
       await client.query("UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id='bp5'");
       const references = await http(prepared.pac, '/admissions/consultations/withdrawals');
-      assert.deepEqual(references, { status: 200, body: { success: true, data: [
-        { assignmentId: prepared.id, episodeId: prepared.episodeId, consentId: accepted.consentId },
-      ] } });
+      assert.equal(references.status, 200);
+      assert.equal(references.body.data.length, 1);
+      const { preparedAt, professionalName, ...exact } = references.body.data[0];
+      assert.ok(Date.parse(preparedAt));
+      assert.ok(professionalName);
+      assert.deepEqual(exact, { assignmentId: prepared.id, episodeId: prepared.episodeId, consentId: accepted.consentId });
       await expectOk(prepared.pac, prepared, 'withdraw', { consentId: accepted.consentId });
       assert.deepEqual((await http(prepared.pac, '/admissions/consultations/withdrawals')).body.data, []);
       assert.equal((await client.query('SELECT status FROM clinical_episodes WHERE id=$1', [prepared.episodeId])).rows[0].status, 'prepared');
+    });
+    await t.test('021 composes enrollment, interview and sufficiency for all three templates in both modes', async () => {
+      const path = '/admissions';
+      const { psy, pac, agreementId } = e2;
+      const context = who => http(who, path + '/care-context', { agreementId });
+      const catalogResponse = await context(psy);
+      assert.equal(catalogResponse.status, 200);
+      const patientContext = await context(pac);
+      assert.deepEqual(Object.keys(patientContext.body.data), ['assignments']);
+      const catalog = catalogResponse.body.data.templates;
+      assert.deepEqual(catalog.map(template => template.id), [
+        'fictional-initial-interview-v1', 'fictional-daily-wellbeing-v1', 'fictional-personal-changes-v1',
+      ]);
+      const keys = [
+        ['reason', 'personalContext', 'expectations', 'initialGoals'],
+        ['stressors', 'dailyHabits', 'rest', 'supports'],
+        ['recentChanges', 'difficulties', 'supportNetwork', 'currentNeeds'],
+      ];
+      assert.deepEqual(catalog.map(template => template.questions.map(question => question.id)), keys);
+      assert.ok(catalog.every(template => template.version === 1 && template.questions.every(q => q.required && q.maxLength === 1000)));
+
+      const readPreparations = async () => (await context(psy)).body.data.preparations;
+      assert.equal((await context(e1.psy)).status, 404);
+      assert.equal((await http(psy, path + '/care-context', { agreementId: e1.agreementId })).status, 404);
+      assert.deepEqual(await readPreparations(), []);
+      const prepared = (await http(psy, path + '/prepare', { ...action(), agreementId })).body.data;
+      const recovery = await readPreparations();
+      assert.equal(recovery.length, 1);
+      assert.equal(recovery[0].episodeId, prepared.episodeId);
+      assert.equal(recovery[0].agreementId, agreementId);
+      assert.ok(Date.parse(recovery[0].preparedAt));
+      assert.ok((await context(pac)).body.data.assignments.every(item => item.episodeId !== prepared.episodeId));
+      const checkAssignment = (mode, episodeId, templateId) =>
+        http(psy, path + '/' + mode, { ...action(), agreementId, episodeId, templateId });
+      for (const wrong of ['fictional-personal-changes-v2', 'unknown']) {
+        assert.equal((await checkAssignment('assign', prepared.episodeId, wrong)).status, 400);
+      }
+      assert.equal((await checkAssignment('assign', e1.episodeId, catalog[0].id)).status, 404);
+      const second = (await http(psy, path + '/prepare', { ...action(), agreementId })).body.data;
+      const firstTemplate = catalog[0].id;
+      const ambiguous = { ...action(), agreementId, templateId: firstTemplate, mode: 'self' };
+      assert.equal((await http(psy, path + '/care-start', ambiguous)).status, 409);
+      assert.equal((await readPreparations()).length, 2);
+      assert.equal((await http(psy, path + '/care-start', { ...ambiguous, episodeId: e1.episodeId })).status, 404);
+      assert.equal((await http(pac, path + '/care-start', ambiguous)).status, 404);
+      assert.deepEqual((await context(e3.pac)).body.data, { assignments: [] });
+      const suspendSamples = [];
+      for (const [index, template] of catalog.entries()) {
+        const responses = Object.fromEntries(keys[index].map(key => [key, 'Texto ficticio para ' + key]));
+        const foreign = Object.fromEntries(keys[(index + 1) % keys.length].map(key => [key, 'Ajeno']));
+        for (const mode of ['self', 'directed']) {
+          const directed = mode === 'directed';
+          const start = { ...action(), agreementId, templateId: template.id, mode,
+            ...(index === 0 && !directed && { episodeId: prepared.episodeId }) };
+          if (index === 1 && !directed) {
+            const countPreparations = async () => (await client.query(
+              'SELECT count(*)::int AS n FROM admission_preparations WHERE agreement_id=$1', [agreementId]
+            )).rows[0].n;
+            const before = await countPreparations();
+            await client.query(`CREATE FUNCTION test_assignment_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+              BEGIN RAISE EXCEPTION 'admission_conflict'; END $$;
+              CREATE TRIGGER test_assignment_failure BEFORE INSERT ON admission_assignments
+              FOR EACH ROW EXECUTE FUNCTION test_assignment_failure()`);
+            assert.equal((await http(psy, path + '/care-start', start)).status, 409);
+            await client.query('DROP TRIGGER test_assignment_failure ON admission_assignments; DROP FUNCTION test_assignment_failure()');
+            assert.equal(await countPreparations(), before);
+          }
+          const attempts = [start, { ...start, ...action() }];
+          const race = await Promise.all(attempts.map(input => http(psy, path + '/care-start', input)));
+          assert.deepEqual(race.map(entry => entry.status).sort(), [200, 409], JSON.stringify(race));
+          const winner = race.findIndex(entry => entry.status === 200);
+          const assignment = race[winner];
+          assert.deepEqual(await http(psy, path + '/care-start', attempts[winner]), assignment);
+          const { episodeId } = assignment.body.data;
+          const preparations = await readPreparations();
+          assert.equal(preparations.length, index === 0 && !directed ? 1 : 0);
+          if (index === 0) assert.equal(episodeId, directed ? second.episodeId : prepared.episodeId);
+          const { id } = assignment.body.data;
+          const detail = async who => (await http(who, path + '/' + id)).body.data;
+          const summary = async who => (await context(who)).body.data?.assignments.find(item => item.id === id);
+          for (const who of [psy, pac]) {
+            const row = await summary(who);
+            assert.equal(row.episodeId, episodeId);
+            assert.equal(row.agreementId, agreementId);
+            assert.equal(row.templateId, template.id);
+          }
+          assert.equal(await summary(e1.psy), undefined);
+          assert.equal(await summary(e3.pac), undefined);
+          const terms = await detail(pac);
+          assert.deepEqual(terms.template, template);
+          assert.ok(terms.consentText.includes(template.title));
+          assert.match(terms.consentText, /versión 1/);
+          assert.match(terms.consentText, directed ? /dirigida/ : /autoadministrada/);
+          const write = async (who, operation, input = {}) => http(who, path + '/' + id + '/' + operation, {
+            ...action(), expectedVersion: (await detail(pac)).version, ...input,
+          });
+          const ok = async (who, operation, input) => {
+            const result = await write(who, operation, input);
+            assert.equal(result.status, 200, JSON.stringify(result.body));
+            return result.body.data;
+          };
+          assert.equal((await write(pac, 'accept', { consentVersion: terms.consentVersion, consentHash: 'f'.repeat(64) })).status, 409);
+          await ok(pac, 'accept', { consentVersion: terms.consentVersion, consentHash: terms.consentHash });
+          if (directed) {
+            assert.equal((await write(psy, 'care-register', { declarations: foreign })).status, 400);
+            const recordPath = path + '/' + id + '/care-register';
+            const record = { ...action(), expectedVersion: (await detail(pac)).version, declarations: responses };
+            if (index === 0) {
+              await client.query(`CREATE FUNCTION test_interview_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN RAISE EXCEPTION 'admission_conflict'; END $$;
+                CREATE TRIGGER test_interview_failure BEFORE INSERT ON admission_directed_versions
+                FOR EACH ROW EXECUTE FUNCTION test_interview_failure()`);
+              assert.equal((await http(psy, recordPath, record)).status, 409);
+              await client.query('DROP TRIGGER test_interview_failure ON admission_directed_versions; DROP FUNCTION test_interview_failure()');
+              const rolledBack = await detail(pac);
+              assert.equal(rolledBack.attestation, null);
+              assert.equal(rolledBack.documents.length, 0);
+              assert.equal(rolledBack.version, record.expectedVersion);
+            }
+            const recorded = await http(psy, recordPath, record);
+            assert.equal(recorded.status, 200, JSON.stringify(recorded));
+            assert.deepEqual(await http(psy, recordPath, record), recorded);
+            assert.equal((await detail(pac)).documents[0].authorId, psy);
+            assert.equal((await detail(pac)).documents.length, 1);
+          } else {
+            assert.equal((await write(pac, 'save', { expectedRevision: 0, answers: foreign })).status, 400);
+            assert.equal((await write(pac, 'save', { expectedRevision: 0, answers: { ...responses, extra: 'ajeno' } })).status, 400);
+            await assert.rejects(client.query(
+              'INSERT INTO admission_drafts VALUES($1,1,$2::jsonb)', [id, JSON.stringify(foreign)]
+            ), /admission_conflict/);
+            await ok(pac, 'save', { expectedRevision: 0, answers: {} });
+            assert.equal((await write(pac, 'submit', { expectedRevision: 1 })).status, 409);
+            await ok(pac, 'save', { expectedRevision: 1, answers: responses });
+            const exact = { ...responses, [keys[index][0]]: 'Texto confirmado mientras se guardaba' };
+            const sendPath = path + '/' + id + '/care-send';
+            const send = { ...action(), expectedVersion: (await detail(pac)).version, expectedRevision: 2, answers: exact };
+            assert.equal((await http(pac, sendPath, { ...send, expectedRevision: 1 })).status, 409);
+            const sent = await http(pac, sendPath, send);
+            assert.equal(sent.status, 200, JSON.stringify(sent));
+            assert.deepEqual(await http(pac, sendPath, send), sent);
+            assert.deepEqual((await detail(psy)).submissions[0].answers, exact);
+            assert.equal((await detail(psy)).submissions.length, 1);
+          }
+          const episode = { id, episodeId, psy, pac };
+          const status = await ownStatus(psy, episode);
+          const review = { ...action(), assignmentVersion: status.admissionVersion, documentVersion: 1, criteriaVersion: status.criteriaVersion };
+          assert.equal((await consult(pac, episode, 'care-review', review)).status, 404);
+          assert.equal((await consult(psy, episode, 'care-review', { ...review, documentVersion: 2 })).status, 409);
+          if (!index && !directed) {
+            await client.query(`CREATE FUNCTION test_review_failure() RETURNS trigger LANGUAGE plpgsql AS $$
+              BEGIN RAISE EXCEPTION 'admission_conflict'; END $$;
+              CREATE TRIGGER test_review_failure BEFORE INSERT ON consultation_sufficiency
+              FOR EACH ROW EXECUTE FUNCTION test_review_failure()`);
+            assert.equal((await consult(psy, episode, 'care-review', review)).status, 409);
+            await client.query('DROP TRIGGER test_review_failure ON consultation_sufficiency; DROP FUNCTION test_review_failure()');
+            assert.equal((await detail(pac)).reviewState, 'submitted');
+            assert.equal((await detail(pac)).version, review.assignmentVersion);
+          }
+          await expectOk(psy, episode, 'care-review', review);
+          await expectOk(psy, episode, 'care-review', review);
+          let proof = await ownStatus(pac, episode);
+          const evidence = (await client.query(
+            'SELECT template_id,template_version FROM consultation_sufficiency WHERE id=$1', [proof.sufficiencyId]
+          )).rows[0];
+          assert.deepEqual(evidence, { template_id: template.id, template_version: 1 });
+          let accepted = await accept(episode, proof);
+          if (!index && directed) {
+            const request = await ok(pac, 'directed/request', { documentRevision: 1, reason: 'Aclaración del paciente' });
+            await ok(psy, 'directed/resolve', { expectedDocumentRevision: 1, requestId: request.requestId,
+              decision: 'reject', explanation: 'Respuesta profesional' });
+            const current = await ownStatus(psy, episode);
+            await expectOk(psy, episode, 'care-review', { ...review, ...action(), assignmentVersion: current.admissionVersion });
+            assert.equal((await consult(psy, episode, 'activate', { consentId: accepted.consentId })).status, 409);
+            const previousProof = proof.sufficiencyId;
+            proof = await ownStatus(pac, episode);
+            assert.notEqual(proof.sufficiencyId, previousProof);
+            assert.equal(proof.consentAccepted, false);
+            accepted = await accept(episode, proof);
+          }
+          const interviewPath = path + '/consultations/' + id + '/interview';
+          assert.equal((await http(psy, interviewPath)).status, 404);
+          await expectOk(psy, episode, 'activate', { consentId: accepted.consentId });
+          assert.equal((await ownStatus(pac, episode)).status, 'active');
+          const read = await http(psy, interviewPath);
+          assert.equal(read.status, 200, JSON.stringify(read));
+          assert.deepEqual(Object.keys(read.body.data).sort(), ['answers', 'authorName', 'recordedAt', 'template']);
+          assert.deepEqual(read.body.data.template, template);
+          assert.ok(Date.parse(read.body.data.recordedAt));
+          assert.equal(read.body.data.answers[keys[index][0]], directed ? responses[keys[index][0]] : 'Texto confirmado mientras se guardaba');
+          for (const who of [pac, e1.psy, 'bil-support']) assert.equal((await http(who, interviewPath)).status, 404);
+          assert.equal((await write(psy, directed ? 'care-register' : 'correct', directed ? { declarations: responses }
+            : { episodeId, submission: 1, message: 'Cambio posterior' })).status, 404);
+          assert.doesNotMatch(JSON.stringify(await detail(pac)), /professional_context|riskLevel|note/);
+          suspendSamples.push(interviewPath);
+        }
+      }
+      await client.query("UPDATE psychologist_profiles SET approval_status='suspended' WHERE user_id=$1", [psy]);
+      for (const interviewPath of [suspendSamples[0], suspendSamples.at(-1)]) {
+        const denied = await http(psy, interviewPath);
+        assert.ok([401, 403, 404].includes(denied.status));
+        assert.equal(denied.body.success, false);
+        assert.equal(Object.hasOwn(denied.body, 'data'), false);
+      }
+      const retained = await http(pac, path + '/care-context', { agreementId });
+      assert.equal(retained.body.data.assignments.length, 7);
+      assert.ok(retained.body.data.assignments.every(item => item.readOnly));
+      await assert.rejects(restricted.query("SELECT admission_care_command('bp2',0,'care-start','{}')"),
+        error => error.code === '42501');
     });
   } finally {
     Object.assign(db, original);

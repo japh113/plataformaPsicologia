@@ -1,7 +1,7 @@
 """Bilateral Chromium only in the fresh owned sandbox registered by Sandbox.review."""
 import json,os,re,subprocess,sys
 from pathlib import Path
-stem=os.environ.get('PSICOPANEL_REVIEW_KIND','bilateral');assert stem in ['bilateral','admission']
+stem=os.environ.get('PSICOPANEL_REVIEW_KIND','bilateral');assert stem in ['bilateral','admission','care']
 root=Path.cwd().resolve();file=Path(sys.argv[1]).resolve();assert file.is_relative_to(root/'tmp')
 c=json.loads(file.read_text());work=Path(c['work']).resolve();out=Path(c['out']).resolve()
 assert work.is_relative_to(root/'tmp') and out.is_relative_to(root/'tmp')

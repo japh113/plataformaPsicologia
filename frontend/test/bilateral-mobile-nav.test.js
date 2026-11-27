@@ -61,7 +61,8 @@ test('Mis pacientes and Mi atención open their own views and keep related navig
   const flags = { VITE_BILATERAL_ENABLED: 'true', VITE_D2_ENABLED: 'true', VITE_ADMISSION_ENABLED: 'true' };
   for (const [role, related, target, columns] of [
     ['psychologist', 'legacy-patients', 'my-patients', 6],
-    ['patient', 'admissions', 'my-care', 3],
+    ['patient', 'legacy-patients', 'my-care', 4],
+    ['patient', 'appointments', 'appointments', 4],
   ]) {
     const { element, actions, html } = await navigation(flags, role, related);
     const entry = element.props.children.find(child => child.props['aria-current'] === 'page');

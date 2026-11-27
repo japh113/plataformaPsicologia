@@ -10,7 +10,7 @@ import {
   isAppointmentOverdue,
   shiftDateByDays,
   shiftDateByMonths,
-} from '../mappers/appointments';
+} from '../mappers/appointments.js';
 
 export {
   formatAppointmentDisplayHour,
@@ -367,3 +367,22 @@ export const getAvailabilityExceptionErrorMeta = (rawMessage = '') => {
     hint: 'Verifica la fecha, los bloques y que el cambio no choque con vacaciones, bloqueos o citas futuras.',
   };
 };
+
+export function getDayAvailability(date, weekly, exceptions) {
+  const exception = exceptions.get(date);
+  if (exception) return { source: 'exception', isUnavailable: Boolean(exception.isUnavailable), blocks: exception.blocks || [] };
+  return { source: 'weekly', isUnavailable: false, blocks: weekly.get(getWeekdayFromDateString(date)) || [] };
+}
+
+export function getOpenHourOptions({ blocks, isUnavailable }, occupied) {
+  if (isUnavailable) return [];
+  const options = blocks.flatMap(block =>
+    getAppointmentHourOptions(Number(block.startTime.slice(0, 2)), Number(block.endTime.slice(0, 2)) - 1));
+  return options.filter((option, i) => !occupied.has(option.value)
+    && options.findIndex(other => other.value === option.value) === i);
+}
+
+export function compareWaitlistPriority(left, right) {
+  return Number(left.prioridad || 0) - Number(right.prioridad || 0)
+    || String(left.creadaEn || '').localeCompare(String(right.creadaEn || ''));
+}

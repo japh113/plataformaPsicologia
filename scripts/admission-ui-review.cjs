@@ -267,8 +267,17 @@ async function main(){
  const openDirected=async p=>{const d=(await json(p,'/'+selected)).body.data;await button(p,'Actualizar admisiones').click();await p.locator('li button').filter({hasText:'Episodio '+d.episodeId+' ·'}).click();await p.getByRole('heading',{name:'Entrevista individual dirigida ficticia',exact:true}).waitFor();await button(p,'Actualizar entrevista y conservar texto').waitFor();await p.waitForLoadState('networkidle');};
  await scenario('ADM15',async()=>{
    await psy.getByLabel('Acuerdo bilateral vigente',{exact:true}).selectOption('');await psy.getByLabel('Modalidad de entrevista',{exact:true}).selectOption('directed');await psy.getByLabel('Acuerdo bilateral vigente',{exact:true}).selectOption({index:1});
-   await psy.getByLabel(/Preparar explícitamente un episodio/).check();await button(psy,'Preparar episodio').click();await psy.getByLabel(/Asignar esta plantilla a este episodio/).check();await button(psy,'Asignar plantilla').click();await psy.waitForLoadState('networkidle');
-   selected=(await json(psy)).body.data.find(x=>x.mode==='directed').id;await openDirected(pac);assert.ok(await button(pac,'Aceptar entrevista dirigida').isDisabled());await confirmDirected(pac);await button(pac,'Aceptar entrevista dirigida').click();await pac.getByText(/Estado: Aceptada/).waitFor();
+   await psy.getByLabel(/Preparar explícitamente un episodio/).check();await button(psy,'Preparar episodio').click();await psy.getByLabel(/Asignar esta plantilla a este episodio/).check();
+   const [assignment]=await Promise.all([
+     psy.waitForResponse(response=>response.url().endsWith('/admissions/assign-directed')&&response.request().method()==='POST'),
+     button(psy,'Asignar plantilla').click(),
+   ]);
+   assert.equal(assignment.status(),200);
+   selected=(await assignment.json()).data.id;
+   const admissions=await json(psy);
+   assert.equal(admissions.status,200);
+   assert.ok(admissions.body.data.some(row=>row.id===selected&&row.mode==='directed'));
+   await openDirected(pac);assert.ok(await button(pac,'Aceptar entrevista dirigida').isDisabled());await confirmDirected(pac);await button(pac,'Aceptar entrevista dirigida').click();await pac.getByText(/Estado: Aceptada/).waitFor();
    await openDirected(psy);await confirmDirected(psy);await button(psy,'Declaro que realicé la entrevista').click();await psy.getByRole('heading',{name:'Declaraciones para incorporar',exact:true}).waitFor();
    await psy.getByLabel('Motivo ficticio para este ensayo',{exact:true}).fill('DECLARACION_DIRIGIDA_FICTICIA');await psy.getByLabel('Contexto ficticio adicional',{exact:true}).fill('CONTEXTO_DECLARADO_FICTICIO');
    const before=(await json(pac,'/'+selected)).body.data;assert.equal(before.documents.length,0);assert.doesNotMatch(JSON.stringify(before),/DECLARACION_DIRIGIDA_FICTICIA/);
@@ -412,7 +421,7 @@ async function main(){
      const nav=clinician.getByRole('navigation',{name:'Navegación móvil'});
      await button(nav,'Mis pacientes').click();
      const index=clinician.getByRole('region',{name:'Pacientes vinculados'});
-     const linked=index.getByRole('row').filter({has:clinician.getByRole('rowheader',{name:'bq3',exact:true})});
+     const linked=index.getByRole('article').filter({has:clinician.getByRole('heading',{name:'bq3',exact:true})});
      await linked.getByText('Vinculación completada',{exact:true}).waitFor();
      assert.equal(await index.getByText(/Admisión pendiente/i).count(),0);
      await shot('ADM26-pacientes-vinculados',clinician);

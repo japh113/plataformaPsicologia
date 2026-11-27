@@ -1,4 +1,5 @@
 """Run one required component; retain only sanitized, integrity-bound evidence."""
+from browser_contract import KINDS
 import json,os,shutil,signal,subprocess,sys,time,traceback
 from pathlib import Path
 from common import OUT,PRIVATE,command,identity,write,seal,export_tap,inventory,SuiteFailure
@@ -38,7 +39,7 @@ def main(job):
             box=Sandbox();boxes.append(box);box.start()
             report['suites'].extend(box.postgres())
         elif job=='browser':
-            for kind in ['B','C','D2','VIN','ADM']:
+            for kind in KINDS:
                 box=Sandbox();boxes.append(box);box.start()
                 review,source=box.review(kind);report['suites'].append(review)
                 shots=target/kind/'screenshots';shots.mkdir(parents=True)

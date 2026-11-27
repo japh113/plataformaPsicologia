@@ -6,8 +6,10 @@ import db from '../../config/db.js';
 import { contactDigest } from '../auth/identity.service.js';
 import { normalizeEmail,normalizePhone } from '../auth/identity.validation.js';
 import { verifyAdmissionContract } from '../../../scripts/admission-contract.js';
-import { validate,uuid,fail,fingerprint } from './admission.policy.js';
+import { validate,validateResponses,uuid,fail,fingerprint,encodeQuestionMessage,readQuestionMessage } from './admission.policy.js';
 let pool;
+// admission_candidates in SQL 014 returns at most this many IDs before role/episode checks.
+const admissionCandidateLimit = 100;
 export function configuration(){
   if(process.env.ADMISSION_ENABLED!=='true')throw fail('Admisión deshabilitada.',404);
   if(!env.localDevelopment||!['test','development'].includes(env.nodeEnv)||env.verificationDelivery!=='simulated'||!uuid(process.env.EPISODE_TEST_RUN_ID)||
@@ -42,18 +44,43 @@ export async function command(actor,op,input={},id){
     const ids=await transaction(async client=>(await client.query('SELECT public.admission_candidates($1,$2,$3) AS data',[actor.id,actor.sessionVersion,actor.sessionExpiresAt])).rows[0].data);
     const rows=[];
     for(const candidate of ids)try{rows.push(await command(actor,'summary',{},candidate));}catch(error){if(error.message!=='admission_missing')throw error;}
+    if (ids.length === admissionCandidateLimit) Object.defineProperty(rows, 'incomplete', { value: true });
     return rows;
   }
   const p={...input,...(id?{id}:{}),sessionExpiresAt:actor.sessionExpiresAt,
     fingerprint:fingerprint({op,input,id:id??null},key),newId:randomUUID()};
   return transaction(async client=>{
     if(['record','assess','directed-record','directed-assess'].includes(op))await verifyEpisodeRecordContract(client);
-    const c=(await client.query('SELECT public.admission_context($1,$2,$3,$4::jsonb) AS data',[actor.id,actor.sessionVersion,op==='assign-directed'?'assign':op,JSON.stringify(p)])).rows[0].data;
+    const execute = async (operation) => (await client.query(
+      'SELECT public.admission_command($1,$2,$3,$4::jsonb) AS data',
+      [actor.id, actor.sessionVersion, operation, JSON.stringify(p)]
+    )).rows[0].data;
+    if (op === 'care-context' && actor.role !== 'psychologist') return execute(op);
+    const contextOperation = { 'assign-directed':'assign', 'care-start':'assign', 'care-context':'assign',
+      'care-send':'submit', 'care-register':'validate' }[op] ?? op;
+    const c=(await client.query('SELECT public.admission_context($1,$2,$3,$4::jsonb) AS data',[actor.id,actor.sessionVersion,contextOperation,JSON.stringify(p)])).rows[0].data;
     if(!c.ownRead){
       const phone=normalizePhone(c.phone);
       p.emailDigest=contactDigest('email',normalizeEmail(c.email));p.phoneDigest=phone?contactDigest('sms',phone):null;
     }
-    return (await client.query('SELECT public.admission_command($1,$2,$3,$4::jsonb) AS data',[actor.id,actor.sessionVersion,op,JSON.stringify(p)])).rows[0].data;
+    if (op === 'save' || op === 'care-send' || Object.hasOwn(input, 'declarations')) {
+      const assigned = await execute('summary');
+      validateResponses(input.answers ?? input.declarations, op !== 'save', assigned.templateId);
+    }
+    if (input.questionId) {
+      const detail = await execute('detail');
+      const field = op === 'correct' ? 'message' : 'reason';
+      p[field] = encodeQuestionMessage(input.questionId, input[field], detail.template);
+      delete p.questionId;
+    }
+    const result = await execute(op);
+    if (op === 'detail' && result.corrections) {
+      result.corrections = result.corrections.map(entry => readQuestionMessage(entry, 'message', result.template));
+    }
+    if (op === 'detail' && result.requests) {
+      result.requests = result.requests.map(entry => readQuestionMessage(entry, 'reason', result.template));
+    }
+    return result;
   });
 }
 
@@ -61,6 +88,8 @@ const agendaDestination = `SELECT current_database() AS name, inet_server_addr()
   inet_server_port() AS port`;
 const consultationFields = {
   status: [],
+  interview: [],
+  'care-review': ['assignmentVersion', 'documentVersion', 'criteriaVersion', 'operationId'],
   sufficiency: ['assignmentVersion', 'documentVersion', 'criteriaVersion'],
   consent: ['sufficiencyId', 'consentVersion', 'consentHash'],
   withdraw: ['consentId'],
@@ -73,19 +102,20 @@ const consultationFields = {
 
 function validateConsultation(operation, input) {
   const fields = Object.hasOwn(consultationFields, operation) && consultationFields[operation];
-  const keys = fields && (operation === 'status' ? fields : ['confirmed', ...fields]);
+  const read = ['status', 'interview'].includes(operation);
+  const keys = fields && (read ? fields : ['confirmed', ...fields]);
   if (!keys || typeof input !== 'object' || !input || Array.isArray(input)
     || Object.keys(input).length !== keys.length || !keys.every(key => Object.hasOwn(input, key))
-    || (operation !== 'status' && input.confirmed !== true)) throw fail('Entrada no válida.');
+    || (!read && input.confirmed !== true)) throw fail('Entrada no válida.');
   for (const key of ['assignmentVersion', 'documentVersion']) {
     if (keys.includes(key) && (!Number.isInteger(input[key]) || input[key] < 1 || input[key] > 2147483646)) {
       throw fail('Versión no válida.');
     }
   }
-  for (const key of ['sufficiencyId', 'consentId', 'appointmentId']) {
+  for (const key of ['sufficiencyId', 'consentId', 'appointmentId', 'operationId']) {
     if (keys.includes(key) && !uuid(input[key])) throw fail('Entrada no válida.');
   }
-  if (operation === 'sufficiency' && input.criteriaVersion !== 'fictional-sufficiency-v1') throw fail('Versión no válida.');
+  if (['sufficiency','care-review'].includes(operation) && input.criteriaVersion !== 'fictional-sufficiency-v1') throw fail('Versión no válida.');
   if (operation === 'consent' && (input.consentVersion !== 'fictional-first-consultation-v1'
     || typeof input.consentHash !== 'string' || !/^[a-f0-9]{64}$/.test(input.consentHash))) throw fail('Consentimiento no válido.');
   if (operation === 'book') {
@@ -139,11 +169,13 @@ export async function consultation(actor, operation, input = {}, id) {
     const rows = [];
     for (const candidate of ids) {
       try {
-        rows.push(await consultationCommand(actor, 'summary', {}, candidate, legacy));
+        const professional = actor.role === 'psychologist';
+        rows.push(await consultationCommand(actor, professional ? 'status' : 'summary', {}, candidate, legacy, professional));
       } catch (error) {
         if (error.message !== 'admission_missing') throw error;
       }
     }
+    if (ids.length === admissionCandidateLimit) Object.defineProperty(rows, 'incomplete', { value: true });
     return rows;
   }
   if (!uuid(id)) throw fail('Recurso no disponible.', 404);
@@ -158,8 +190,9 @@ async function ensureConsultationDestination(client, legacy) {
   }
 }
 
-async function consultationCommand(actor, operation, input, id, legacy) {
+async function consultationCommand(actor, operation, input, id, legacy, professionalList = false) {
   const data = { ...input, id, sessionExpiresAt: actor.sessionExpiresAt };
+  if (operation === 'care-review') data.fingerprint = fingerprint({ operation, input, id }, configuration().key);
   return transaction(async client => {
     await ensureConsultationDestination(client, legacy);
     const contextOperation = operation === 'withdraw' ? 'detail' : 'consultation';
@@ -173,7 +206,20 @@ async function consultationCommand(actor, operation, input, id, legacy) {
       data.phoneDigest = phone ? contactDigest('sms', phone) : null;
     }
     const { rows: [result] } = await client.query(
-      'SELECT public.admission_consultation($1,$2,$3,$4::jsonb) AS data',
+      // Project only operational fields before returning anything from PostgreSQL.
+      professionalList
+        ? `SELECT jsonb_build_object('id', data->'id', 'episodeId', data->'episodeId',
+            'professionalName', data->'professionalName', 'status', data->'status',
+            'admissionVersion', data->'admissionVersion', 'documentVersion', data->'documentVersion',
+            'sufficiencyConfirmed', jsonb_typeof(data->'sufficiencyId')='string',
+            'consentAccepted', data->'consentAccepted',
+            'consentWithdrawn', jsonb_typeof(data->'consentId')='string' AND data->'consentAccepted'='false'::jsonb,
+            'hasAppointment', jsonb_typeof(data->'appointment')='object',
+            'appointmentSlot', CASE WHEN jsonb_typeof(data->'appointment')='object' THEN jsonb_build_object(
+              'date', data#>'{appointment,date}', 'time', data#>'{appointment,time}', 'status', data#>'{appointment,status}'
+            ) ELSE NULL END) AS data
+            FROM public.admission_consultation($1,$2,$3,$4::jsonb) AS data`
+        : 'SELECT public.admission_consultation($1,$2,$3,$4::jsonb) AS data',
       [actor.id, actor.sessionVersion, operation, JSON.stringify(data)]
     );
     return result.data;

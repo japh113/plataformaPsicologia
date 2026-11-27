@@ -24,6 +24,6 @@ const handle=op=>async(req,res)=>{
 router.get('/terms',(req,res)=>{const text=conditionsText(req.user.fullName||[req.user.firstName,req.user.lastName].filter(Boolean).join(' '));res.json({success:true,data:{conditionsVersion,conditionsText:text,conditionsHash:sha256(text),declarationVersion,declarationText,fictional:true}});});
 for(const op of ['professional-reference','preflight','recipient-reference'])router.post('/'+op,handle(op));
 router.post('/',handle('issue'));
-for(const op of ['sent','received','agreements','blocks','notices','linked-patients'])router.get('/'+op,handle(op));
+for(const op of ['sent','received','agreements','blocks','notices','linked-patients','care-context'])router.get('/'+op,handle(op));
 for(const op of ['accept','decline','withdraw','resend','block','unblock','unlink'])router.post('/:id/'+op,handle(op));
 export default router;

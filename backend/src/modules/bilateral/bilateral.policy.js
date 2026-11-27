@@ -30,7 +30,7 @@ export function openEmail(envelope,id,key) {
   cipher.setAAD(Buffer.from('bilateral-email-v1:'+id));cipher.setAuthTag(Buffer.from(envelope.tag,'base64'));
   return Buffer.concat([cipher.update(Buffer.from(envelope.data,'base64')),cipher.final()]).toString('utf8');
 }
-const lists=['sent','received','agreements','blocks','notices','linked-patients'];
+const lists=['sent','received','agreements','blocks','notices','linked-patients','care-context'];
 export function validate(op,p={}) {
   const fields={
     'professional-reference':['operationId'],preflight:['professionalReference'],
