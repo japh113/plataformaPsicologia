@@ -29,8 +29,8 @@ router.use(expressBudget,authenticateRestricted,(_req,res,next)=>{
   next();
 });
 router.get('/me',safeHandler(async(req)=>{
-  return transaction(async client=>{
-    const {id,payload}=req.restrictedSession;
+  const {id,payload}=req.restrictedSession;
+  const status = await transaction(async client=>{
     const row=(await client.query('SELECT id,role,is_active,session_version FROM users WHERE id=$1 FOR NO KEY UPDATE',[id])).rows[0];
     const profile=(await client.query(`SELECT approval_status
       ${env.manualAccreditationEnabled ? ', manual_accreditation_required, manual_onboarded_at' : ''}
@@ -43,6 +43,8 @@ router.get('/me',safeHandler(async(req)=>{
       manualOnboarding:Boolean(profile.manual_accreditation_required && !profile.manual_onboarded_at && profile.approval_status==='pending_review'),
       messages};
   });
+  validateRestrictedSessionExpiry(payload);
+  return status;
 }));
 router.get('/me/accreditation',safeHandler(req=>getManualAccreditation(req.restrictedSession,{onboarding:true})));
 router.post('/me/accreditation',safeHandler(req=>submitManualAccreditation(req.restrictedSession,req.body,{onboarding:true})));
