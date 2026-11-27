@@ -108,6 +108,7 @@ test('023 manual accreditation in an isolated ordinary API, HTTP and PostgreSQL'
       assert.equal(status.manualOnboarding,true);
       assert.equal((await account(first)).status,409);
       await assert.rejects(pool.query("UPDATE psychologist_profiles SET approval_status='active' WHERE user_id=$1",[first.id]),{code:'23514'});
+      await assert.rejects(pool.query("DELETE FROM psychologist_profiles WHERE user_id=$1",[first.id]),{code:'23514'});
       await expect(401,'/patients',first.restrictedToken);
       await expect(401,'/availability/me',first.restrictedToken);
       await expect(401,'/appointments',first.restrictedToken);
@@ -116,6 +117,10 @@ test('023 manual accreditation in an isolated ordinary API, HTTP and PostgreSQL'
       await expect(401,restricted,token(reviewer));
       await expect(400,restricted,first.restrictedToken,{...proposed,rowVersion:'0',certifications:['No autorizada']});
       firstVersion=(await submit(first)).version;
+      await assert.rejects(pool.query(`
+        INSERT INTO professional_credential_decisions(owner_user_id,credential_version,outcome,reviewer_user_id,reviewer_role,owner_message)
+        VALUES($1,$2,'rejected',$3,'admin','Resolución sin evidencia')
+      `,[first.id,firstVersion,reviewer]),{code:'23514'});
       await expect(409,restricted,first.restrictedToken,{...proposed,rowVersion:'0'});
       await expect(403,'/professional-reviews/pending',token(support));
       await expect(403,'/professional-reviews/pending',token(first.id));

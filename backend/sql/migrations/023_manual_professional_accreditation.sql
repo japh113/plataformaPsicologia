@@ -108,9 +108,41 @@ CREATE TRIGGER require_manual_professional_snapshot
   BEFORE INSERT ON professional_credential_versions
   FOR EACH ROW EXECUTE FUNCTION guard_manual_professional_snapshot();
 
+CREATE FUNCTION guard_manual_professional_decision() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM professional_credential_versions v WHERE
+      (v.owner_user_id,v.version) = (NEW.owner_user_id,NEW.credential_version)
+      AND v.educational_institution IS NOT NULL
+  ) AND NOT EXISTS (
+    SELECT 1 FROM professional_manual_reviews r WHERE
+      (r.owner_user_id,r.credential_version,r.reviewer_user_id,r.reviewer_role,r.owner_message) =
+      (NEW.owner_user_id,NEW.credential_version,NEW.reviewer_user_id,NEW.reviewer_role,NEW.owner_message)
+      AND (
+        (NEW.outcome = 'approved' AND r.outcome = 'approved' AND NEW.evidence_reference = r.id::text
+          AND NEW.valid_from = r.checked_on AND NEW.valid_until = (r.checked_on + interval '12 months')::date)
+        OR (NEW.outcome = 'rejected' AND r.outcome IN ('returned','rejected'))
+      )
+  ) THEN
+    RAISE EXCEPTION 'Structured review required for this credential version' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER require_manual_professional_decision
+  BEFORE INSERT ON professional_credential_decisions
+  FOR EACH ROW EXECUTE FUNCTION guard_manual_professional_decision();
+
 CREATE FUNCTION guard_manual_professional_activation()
 RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 BEGIN
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.manual_accreditation_required THEN
+      RAISE EXCEPTION 'Manual accreditation enrollment is preserved' USING ERRCODE = '23514';
+    END IF;
+    RETURN OLD;
+  END IF;
   IF TG_OP = 'INSERT' THEN
     IF NEW.manual_onboarded_at IS NOT NULL
        OR (NEW.manual_accreditation_required AND NEW.approval_status <> 'pending_review') THEN
@@ -119,7 +151,8 @@ BEGIN
     RETURN NEW;
   END IF;
   IF NEW.manual_accreditation_required IS DISTINCT FROM OLD.manual_accreditation_required
-     OR NEW.manual_onboarded_at IS DISTINCT FROM OLD.manual_onboarded_at THEN
+     OR NEW.manual_onboarded_at IS DISTINCT FROM OLD.manual_onboarded_at
+     OR (OLD.manual_accreditation_required AND NEW.user_id IS DISTINCT FROM OLD.user_id) THEN
     RAISE EXCEPTION 'Manual accreditation state is managed by the database' USING ERRCODE = '23514';
   END IF;
   IF NEW.manual_accreditation_required AND NEW.manual_onboarded_at IS NULL AND NEW.approval_status = 'active' THEN
@@ -133,12 +166,13 @@ END;
 $$;
 
 CREATE TRIGGER require_manual_professional_accreditation
-  BEFORE INSERT OR UPDATE ON psychologist_profiles
+  BEFORE INSERT OR UPDATE OR DELETE ON psychologist_profiles
   FOR EACH ROW EXECUTE FUNCTION guard_manual_professional_activation();
 
 REVOKE ALL ON professional_manual_reviews, professional_manual_license_claims FROM PUBLIC;
 REVOKE ALL ON FUNCTION has_current_manual_accreditation(TEXT), guard_manual_professional_activation() FROM PUBLIC;
 REVOKE ALL ON FUNCTION guard_manual_professional_snapshot() FROM PUBLIC;
+REVOKE ALL ON FUNCTION guard_manual_professional_decision() FROM PUBLIC;
 
 -- The ordinary sandbox API remains separate from both attributed clients.
 DO $$
