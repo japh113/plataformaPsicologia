@@ -13,7 +13,7 @@ export const transaction=async operation=>{
   catch(error){await client.query('ROLLBACK');throw error;}
   finally{client.release();}
 };
-export const lockProfessional=async(client,actor,owner=actor.id,{review=false}={})=>{
+export const lockProfessionalContext=async(client,actor,owner=actor.id,{review=false,onboarding=false}={})=>{
   const accounts=(await client.query(`SELECT id,role,is_active,session_version FROM users
     WHERE id=ANY($1::text[]) ORDER BY id FOR NO KEY UPDATE`,[[...new Set([actor.id,owner])].sort()])).rows;
   const current=accounts.find(row=>row.id===actor.id),target=accounts.find(row=>row.id===owner);
@@ -22,10 +22,20 @@ export const lockProfessional=async(client,actor,owner=actor.id,{review=false}={
   if(review ? !['admin','superadmin'].includes(current.role) || owner===actor.id : current.role!=='psychologist' || owner!==actor.id)
     throw fail('Operación no autorizada.',403);
   if(!target || target.role!=='psychologist' || !target.is_active) throw fail('Profesional no disponible.',409);
-  const legacy=(await client.query('SELECT approval_status FROM psychologist_profiles WHERE user_id=$1 FOR UPDATE',[owner])).rows[0];
-  ensureAccountCanAuthenticate({id:owner,isActive:target.is_active,role:target.role,psychologistStatus:legacy?.approval_status},env);
-  return (await client.query('SELECT * FROM professional_publication_profiles WHERE owner_user_id=$1 FOR UPDATE',[owner])).rows[0] || null;
+  const legacy=(await client.query(`
+    SELECT approval_status, professional_title, license_number
+      ${env.manualAccreditationEnabled ? ', manual_accreditation_required, manual_onboarded_at' : ''}
+    FROM psychologist_profiles WHERE user_id=$1 FOR UPDATE
+  `,[owner])).rows[0];
+  const pendingOnboarding = legacy?.manual_accreditation_required &&
+    !legacy.manual_onboarded_at && legacy.approval_status === 'pending_review';
+  if (onboarding && !pendingOnboarding) throw fail('La incorporación ya no está disponible. Vuelve a iniciar sesión.', 401);
+  ensureAccountCanAuthenticate({id:owner,isActive:target.is_active,role:target.role,
+    psychologistStatus:(review || onboarding) && pendingOnboarding ? 'active' : legacy?.approval_status},env);
+  const profile = (await client.query('SELECT * FROM professional_publication_profiles WHERE owner_user_id=$1 FOR UPDATE',[owner])).rows[0] || null;
+  return { profile, legacy, pendingOnboarding };
 };
+export const lockProfessional=async(...args)=>(await lockProfessionalContext(...args)).profile;
 export const expectVersion=(profile,expected)=>{
   if(!profile) throw fail('Perfil no encontrado.',404);
   if(String(profile.row_version)!==expected) throw fail('El perfil cambió. Recarga antes de guardar.',409);

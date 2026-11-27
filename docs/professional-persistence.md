@@ -1,6 +1,6 @@
 # D1 — Persistencia profesional privada
 
-D1 integrado en main por #17 (`2fe0799ee683273df2dbed872840bbfd2ef03f6d`), sin despliegue habitual acreditado. Este documento conserva el contrato D1/006 histórico e inmutable. D2 evoluciona mediante [sucesora 007 y servicios privados](private-professional-management.md), con [evidencia propia](private-professional-validation.md), en rama nueva y sin merge. D3 sigue pendiente.
+D1 integrado en main por #17 (`2fe0799ee683273df2dbed872840bbfd2ef03f6d`), sin despliegue habitual acreditado. Este documento conserva el contrato D1/006 histórico e inmutable. D2 evoluciona mediante [sucesora 007 y servicios privados](private-professional-management.md), con [evidencia propia](private-professional-validation.md), en rama nueva y sin merge. D3 sigue pendiente. La evolución autorizada en #28 para el nuevo registro restringido y la evidencia manual se documenta en el [contrato vigente de D2](private-professional-management.md#acreditación-manual-e-incorporación-restringida).
 
 ## Producto aprobado y límites
 

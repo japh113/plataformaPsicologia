@@ -23,4 +23,14 @@ export const verifyRestrictedToken = token => {
     !Number.isInteger(payload.exp) || !Number.isInteger(payload.iat) || payload.exp-payload.iat>600 || typeof payload.jti!=='string') throw new Error('Invalid restricted context');
   return payload;
 };
-export const validateRestrictedSession = (user,payload) => {assertRestrictedAccount(user);ensureSessionIsCurrent(user,payload);};
+export const validateRestrictedSession = (user,payload) => {
+  assertRestrictedAccount(user);
+  ensureSessionIsCurrent(user,payload);
+  validateRestrictedSessionExpiry(payload);
+};
+
+export const validateRestrictedSessionExpiry = payload => {
+  if (payload.exp <= Date.now() / 1000) {
+    throw Object.assign(new Error('La sesión terminó. Vuelve a iniciar sesión.'),{status:401});
+  }
+};

@@ -605,7 +605,9 @@ export default function App({onRestrictedSession}) {
 
     try {
       await registerPsychologist(payload);
-      setRegistrationSuccess('Tu cuenta profesional fue creada y quedo pendiente de revision. Te avisaremos cuando sea aprobada para iniciar sesion.');
+      setRegistrationSuccess(import.meta.env.VITE_MANUAL_ACCREDITATION_ENABLED==='true'
+        ? 'Si tus datos permiten el registro, inicia sesión para presentar tus credenciales y consultar el estado de tu acreditación.'
+        : 'Tu cuenta profesional fue creada y quedo pendiente de revision. Te avisaremos cuando sea aprobada para iniciar sesion.');
       return true;
     } catch (error) {
       setRegistrationError(error.message || 'No se pudo crear la cuenta de psicologo.');

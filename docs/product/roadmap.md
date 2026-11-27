@@ -1,6 +1,6 @@
 # Roadmap de producto y arquitectura
 
-Estado canónico en el [checkpoint](../project-checkpoint.md). Corte del **24 de noviembre de 2026**, `main` en [`7ac6d76f553aa5784dcf14c27b7ac8f650d86136`](https://github.com/japh113/plataformaPsicologia/commit/7ac6d76f553aa5784dcf14c27b7ac8f650d86136) con [#85 integrado](https://github.com/japh113/plataformaPsicologia/pull/85). SQL 001–020 integrado y 2A parcial. Se mantienen las etapas 0–6 y 2A–2E como referencias de requisitos.
+Estado canónico en el [checkpoint](../project-checkpoint.md). Corte del **26 de noviembre de 2026**, `main` en [`2be4ba8ce2bd81adca7c25588cfbc1da7fdc87ee`](https://github.com/japh113/plataformaPsicologia/commit/2be4ba8ce2bd81adca7c25588cfbc1da7fdc87ee), con SQL 001–022 integrado y 2A parcial.
 
 ## Planificación vigente por hitos funcionales
 
@@ -10,13 +10,20 @@ Estado canónico en el [checkpoint](../project-checkpoint.md). Corte del **24 de
 | --- | --- | --- |
 | 1. Admisión individual por episodio como recorrido único | **Integrado en #79, con CI y CodeQL posteriores al merge verificados.** Se retiran el formulario global de entrevista y sus indicadores. Paciente y psicólogo acceden por navegación a acuerdos y admisiones ficticias. El profesional prepara el episodio y asigna una de las dos modalidades. | Reutiliza 013–017, ADR-029/031 y RN-59–61. Verificar consentimiento y revocación por actor, borrador privado, versiones, valoración privada, validación exacta, aislamiento E1/E2 y cuenta autónoma. #30/#31/#39/#41 siguen abiertos. |
 | 2. Primera consulta individual ficticia y segura por episodio | **Integrado en #82 como ensayo aislado.** Admisión validada, suficiencia expresa, consentimiento de tratamiento, activación, cita directa de 60 minutos y nota profesional privada. | 013–019, permisos por episodio y barreras de agenda pertinentes. La precondición de activación rige en backend/DB. Lectores y escritores legacy conservan sus contratos. #30/#31/#35/#39/#41 permanecen abiertos. |
-| 3. Acreditación, directorio optativo y solicitudes públicas | **Pendiente de encargo.** Conectar el descubrimiento y las solicitudes al recorrido de atención. D1/D2 privados están integrados. | #28 fija elegibilidad para la publicación de #29. Directorio con opt-in y proyección mínima, disponibilidad para recibir solicitudes controlada por separado y confirmaciones de ADR-020–022/#31. Los criterios de acreditación pueden definirse de forma independiente con autorización propia. |
+| 3. Acreditación, directorio optativo y solicitudes públicas | **#28 autorizado.** Acreditación manual e incorporación privada sobre D1/D2. Directorio y solicitudes públicas pendientes de encargo. | #28 fija elegibilidad para la publicación de #29. Directorio con opt-in y proyección mínima, disponibilidad para recibir solicitudes controlada por separado y confirmaciones de ADR-020–022/#31. Validación profesional y jurídica requerida antes de operar con datos reales. |
 | 4. Continuidad clínica, expediente y pareja | **Pendiente de encargo.** Ordenar por capacidad la continuidad, expediente completo, notas finales/adendas, seguimiento, tareas, objetivos RN-72, pareja y ciclo de tratamiento. | 2A–2E, ADR-030–032 y #30/#32/#34/#35/#39/#41. Validar concurrencia donde aplique, permisos/documentación por episodio y participante, pausa/cierre/derivación e intercambio consentido de 2B/2C, agenda concurrente 2D y zonas horarias 2E. La pareja exige entrevista y consentimiento propios por integrante. |
 | 5. Piloto y producción | **Pendiente.** Ensayos y aprobaciones por entorno y superficie. | 3–5, #36/#37 y requisitos clínicos, jurídicos, operativos y de seguridad aplicables: integridad y concurrencia, transporte verificado, proveedores, privacidad, recuperación y restauración, incidentes y evidencia de despliegue. La etapa 6 conserva la visión posterior de red. |
 
-**Recorrido unificado APROBADO e IMPLEMENTADO en rama.** [Atención individual ficticia](../stage2a-identity-directory-intake.md#diseño-propuesto-del-recorrido-unificado-de-atención) conecta la vinculación, la admisión y la primera consulta de los hitos 1 y 2. SQL 021 incorpora la ficha progresiva, operaciones compuestas, tres plantillas y la lectura acotada de la entrevista después del inicio. La prueba manual del propietario, la auditoría independiente y la evidencia del Draft rigen su integración. La secuencia de hitos conserva su orden.
+**Recorrido unificado integrado en #86.** [Atención individual ficticia](../stage2a-identity-directory-intake.md#diseño-propuesto-del-recorrido-unificado-de-atención) conecta la vinculación, la admisión y la primera consulta en los hitos 1 y 2. SQL 021–022 incorpora la ficha progresiva, la lectura acotada y la correlación bilateral.
 
 **Propuesta posterior.** [#81](https://github.com/japh113/plataformaPsicologia/issues/81) plantea confirmar asistencia a una cita ya reservada. El plazo y sus efectos quedan pendientes de diseño y autorización. La reserva directa del hito 2 conserva su contrato.
+
+### Mejoras pendientes de los perfiles
+
+- **Perfil del psicólogo.** Evaluar su mejora integral junto con el directorio del hito 3 para aprovechar los componentes y las necesidades compartidas. Mantener diferenciados los datos privados y los que el profesional elija publicar. El alcance concreto se definirá en el encargo correspondiente.
+- **Perfil del paciente.** Evaluar su mejora integral como pendiente transversal de experiencia de usuario. Mantener separadas la información personal, la configuración de cuenta y la información clínica. El alcance concreto se definirá en el encargo correspondiente.
+
+Ambas mejoras deberán aplicar la [política de calidad visual, usabilidad y accesibilidad de PsicoPanel](../../AGENTS.md#calidad-visual-usabilidad-y-experiencia-de-usuario) y conservar la consistencia con la aplicación.
 
 ### Observaciones pendientes de continuidad clínica
 
@@ -39,7 +46,7 @@ Consulta GitHub del 19 de noviembre sobre la base indicada. Las acciones de la �
 
 | Issue y objetivo | Avances integrados | Pendiente real | Dependencia y hito | Siguiente acción y contexto a actualizar |
 | --- | --- | --- | --- | --- |
-| [#28](https://github.com/japh113/plataformaPsicologia/issues/28) Acreditación | D1/D2, evidencia y rechazo/versiones | Criterios/fuentes/vigencia/catálogo | Criterio profesional para hito 3 | Acordar matriz; contexto sigue válido, no cerrar por D2. |
+| [#28](https://github.com/japh113/plataformaPsicologia/issues/28) Acreditación | D1/D2, evidencia y rechazo/versiones | Criterios/fuentes/vigencia/catálogo | Criterio profesional para hito 3 | Implementar y verificar #28 en sandbox. La validación para operación real sigue pendiente. |
 | [#29](https://github.com/japh113/plataformaPsicologia/issues/29) D3 | IDs y gestión privada | Lector público/opt-in/elegibilidad | #28, hito 3 | Diseñar entrega mínima después de criterios; sin publicidad automática. |
 | [#30](https://github.com/japh113/plataformaPsicologia/issues/30) Episodios/aislamiento | 008 participantes; #47/#48 evaluador/recursos; 009–011; 013–017 acuerdo y admisión ficticia en dos modalidades | Permisos/activación/todos los dominios/fallback | #39/#31/#41/#35, hitos 1, 2 y 4 | Actualizar diagnóstico «sin esquema de participantes» e índice global: 008 ya los sucede. Dividir pendientes por capacidad; épico sigue abierto. |
 | [#31](https://github.com/japh113/plataformaPsicologia/issues/31) Vinculación | B/C, AB-23, D-VIN y 013 integrado: referencia, condiciones, revocadores, cuotas y transacciones ficticias | Otras vías, operación real y activación; no reimplementar el primer acuerdo | Contratos #30/#39/#41, hitos 1–3 | Conservar el primer acuerdo 013 y delimitar por encargo las vías restantes; no clínica ni D3 derivados del acuerdo. |

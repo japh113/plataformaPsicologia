@@ -1,13 +1,18 @@
-import {transaction,lockProfessional,expectVersion,fail} from './professional.core.js';
+import {transaction,lockProfessional,lockProfessionalContext,expectVersion,fail} from './professional.core.js';
 import {directPayload,proposalPayload,decisionPayload,decimal} from './professional.validators.js';
 import {logAuditEvent} from '../../utils/audit.js';
 import env from '../../config/env.js';
+import {manualReviewDetails} from './manual-accreditation.service.js';
 const projection=row=>row?{publicId:row.public_id,rowVersion:String(row.row_version),description:row.description,modality:row.modality,
   city:row.city,state:row.state,isPublic:row.is_public,acceptsNewPatients:row.accepts_new_patients,
   approvedCredentialVersion:row.approved_credential_version,pendingCredentialVersion:row.pending_credential_version,currentPhotoId:row.current_photo_id}:null;
 const catalog=async client=>(await client.query('SELECT code,label FROM professional_general_approaches ORDER BY code')).rows;
 const profileDTO=async(client,row)=>({profile:projection(row),approaches:row?(await client.query('SELECT approach_code FROM professional_profile_approaches WHERE owner_user_id=$1 ORDER BY approach_code',[row.owner_user_id])).rows.map(r=>r.approach_code):[],catalog:await catalog(client),capabilities:{publish:false,approveCredentials:false,descriptionPubliclyCleared:false,photographsConfigured:Boolean(env.professionalMediaRoot)}});
-export const getProfile=actor=>transaction(async client=>profileDTO(client,await lockProfessional(client,actor)));
+export const getProfile=actor=>transaction(async client=>{
+  const {profile,legacy}=await lockProfessionalContext(client,actor);
+  const result=await profileDTO(client,profile);
+  return {...result, manualAccreditation:Boolean(legacy.manual_accreditation_required)};
+});
 export const createProfile=actor=>transaction(async client=>{
   let profile=await lockProfessional(client,actor);
   if(!profile)profile=(await client.query('INSERT INTO professional_publication_profiles(owner_user_id) VALUES($1) RETURNING *',[actor.id])).rows[0];
@@ -54,14 +59,45 @@ export const listReviews=actor=>{
     const reviewer=(await client.query('SELECT role,is_active,session_version FROM users WHERE id=$1 FOR NO KEY UPDATE',[actor.id])).rows[0];
     if(!reviewer?.is_active || reviewer.role!==actor.role || reviewer.session_version!==actor.sessionVersion)throw fail('Sesión no válida.',401);
     return (await client.query(`SELECT p.owner_user_id AS "ownerId",p.pending_credential_version::text AS version,v.professional_name AS "professionalName"
+      ${env.manualAccreditationEnabled ? ', pp.manual_accreditation_required AS manual' : ''}
       FROM professional_publication_profiles p JOIN professional_credential_versions v ON (v.owner_user_id,v.version)=(p.owner_user_id,p.pending_credential_version)
       JOIN users u ON u.id=p.owner_user_id JOIN psychologist_profiles pp ON pp.user_id=u.id
-      WHERE u.is_active AND pp.approval_status='active' ORDER BY v.created_at,p.owner_user_id LIMIT 100`)).rows;
+      WHERE u.is_active AND (pp.approval_status='active'
+        ${env.manualAccreditationEnabled ? "OR (pp.manual_accreditation_required AND pp.manual_onboarded_at IS NULL AND pp.approval_status='pending_review')" : ''})
+      ORDER BY v.created_at,p.owner_user_id LIMIT 100`)).rows;
   });
 };
-export const getReview=(actor,owner,version)=>{
+export const listRevalidations=actor=>{
+  ensureReviewer(actor);
+  if (!env.manualAccreditationEnabled) throw fail('Acreditación manual no disponible.',404);
+  return transaction(async client=>{
+    const reviewer=(await client.query('SELECT role,is_active,session_version FROM users WHERE id=$1 FOR NO KEY UPDATE',[actor.id])).rows[0];
+    if(!reviewer?.is_active || reviewer.role!==actor.role || reviewer.session_version!==actor.sessionVersion)throw fail('Sesión no válida.',401);
+    return (await client.query(`
+      SELECT p.owner_user_id AS "ownerId",v.version::text,v.professional_name AS "professionalName",
+        a.valid_until::text AS "validUntil",a.status='requires_review' AS "requiresReview",
+        p.manual_onboarded_at IS NULL AND has_current_manual_accreditation(p.owner_user_id) AS "accountApprovalNeeded"
+      FROM (
+        SELECT profile.*,pp.manual_onboarded_at FROM professional_publication_profiles profile
+        JOIN psychologist_profiles pp ON pp.user_id=profile.owner_user_id
+        JOIN users u ON u.id=pp.user_id AND u.is_active
+        WHERE pp.manual_accreditation_required AND (
+          pp.approval_status='active' OR (pp.approval_status='pending_review' AND pp.manual_onboarded_at IS NULL)
+        )
+      ) p
+      JOIN professional_credential_versions v ON (v.owner_user_id,v.version)=(p.owner_user_id,p.approved_credential_version)
+      JOIN professional_credential_validity a ON (a.owner_user_id,a.credential_version)=(v.owner_user_id,v.version)
+      ORDER BY a.valid_until NULLS FIRST,v.created_at,p.owner_user_id LIMIT 100
+    `)).rows;
+  });
+};
+export const getReview=(actor,owner,version,mode='proposal')=>{
   ensureReviewer(actor);decimal(version);return transaction(async client=>{
-    const profile=await lockProfessional(client,actor,owner,{review:true});if(!profile || profile.pending_credential_version!==version)throw fail('Propuesta no vigente.',409);
+    const {profile,legacy}=await lockProfessionalContext(client,actor,owner,{review:true});
+    const expected=mode==='revalidation' ? profile?.approved_credential_version : profile?.pending_credential_version;
+    if(expected!==version)throw fail('La versión ya no está disponible para revisión.',409);
+    if(legacy.manual_accreditation_required)return manualReviewDetails(client,owner,version,profile,legacy,mode);
+    if(mode==='revalidation')throw fail('Acreditación manual no disponible.',404);
     return {ownerId:owner,rowVersion:String(profile.row_version),approved:await snapshot(client,owner,profile.approved_credential_version),pending:await snapshot(client,owner,version),approvalEnabled:false,
       internalNotes:(await client.query('SELECT body,created_at AS "createdAt" FROM professional_review_internal_notes WHERE owner_user_id=$1 AND credential_version=$2 ORDER BY created_at',[owner,version])).rows};
   });
@@ -72,7 +108,8 @@ const noApprovedCriteria=()=>false;
 export const decideCredential=(actor,owner,version,body,{approvalPolicy=noApprovedCriteria}={})=>{
   ensureReviewer(actor);decimal(version);decisionPayload(body);
   return transaction(async client=>{
-    const profile=await lockProfessional(client,actor,owner,{review:true});expectVersion(profile,body.rowVersion);
+    const {profile,legacy}=await lockProfessionalContext(client,actor,owner,{review:true});expectVersion(profile,body.rowVersion);
+    if(legacy.manual_accreditation_required)throw fail('Esta propuesta requiere una revisión estructurada.',409);
     if(profile.pending_credential_version!==version)throw fail('Propuesta no vigente.',409);
     const proposed=await snapshot(client,owner,version);
     if(body.outcome==='approved' && !await approvalPolicy({owner,proposed,evidenceReference:body.evidenceReference}))throw fail('Aprobación deshabilitada: faltan criterios de evidencia autorizados.',503);

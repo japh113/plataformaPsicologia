@@ -50,7 +50,7 @@ export const validatePasswordResetConfirmPayload = (payload = {}) => {
 
 export const validatePatientRegistrationPayload = registrationErrors;
 
-export const validatePsychologistRegistrationPayload = (payload = {}) => {
+export const validatePsychologistRegistrationPayload = (payload = {}, {deferCredentials=false} = {}) => {
   const errors = [];
   const firstName = normalizeString(payload.firstName);
   const email = normalizeString(payload.email);
@@ -73,7 +73,7 @@ export const validatePsychologistRegistrationPayload = (payload = {}) => {
     errors.push('password must be at least 8 characters');
   }
 
-  if (!professionalTitle) {
+  if (!deferCredentials && !professionalTitle) {
     errors.push('professionalTitle is required');
   }
 

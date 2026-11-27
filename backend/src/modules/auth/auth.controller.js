@@ -1,4 +1,5 @@
 import { errorResponse, successResponse } from '../../utils/response.js';
+import env from '../../config/env.js';
 import { ensureBackofficeManager, ensureBackofficeViewer } from './auth.permissions.js';
 import {
   acceptCareRelationshipInvite,
@@ -115,7 +116,7 @@ export const registerPatientHandler = async (req, res, next) => {
 
 export const registerPsychologistHandler = async (req, res, next) => {
   try {
-    const errors = validatePsychologistRegistrationPayload(req.body);
+    const errors = validatePsychologistRegistrationPayload(req.body,{deferCredentials:env.manualAccreditationEnabled});
 
     if (errors.length > 0) {
       return errorResponse(res, 'Validation error', 400, errors);
@@ -125,7 +126,9 @@ export const registerPsychologistHandler = async (req, res, next) => {
     return successResponse(
       res,
       psychologistUser,
-      'Si los datos permiten el registro, la solicitud profesional queda pendiente de revisión. Si tienes cuenta, utiliza tu acceso habitual.',
+      env.manualAccreditationEnabled
+        ? 'Si los datos permiten el registro, inicia sesión para presentar tus credenciales. Si ya tienes cuenta, utiliza tu acceso habitual.'
+        : 'Si los datos permiten el registro, la solicitud profesional queda pendiente de revisión. Si tienes cuenta, utiliza tu acceso habitual.',
       202,
     );
   } catch (error) {

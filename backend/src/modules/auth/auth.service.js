@@ -608,7 +608,7 @@ export const registerPsychologistUser = async ({
   lastName = '',
   email,
   password,
-  professionalTitle,
+  professionalTitle = '',
   licenseNumber = '',
 }) => {
   email = normalizeEmail(email);
@@ -650,9 +650,9 @@ export const registerPsychologistUser = async ({
           user_id,
           professional_title,
           license_number,
-          approval_status
+          approval_status${env.manualAccreditationEnabled ? ', manual_accreditation_required' : ''}
         )
-        VALUES ($1, $2, $3, 'pending_review')
+        VALUES ($1, $2, $3, 'pending_review'${env.manualAccreditationEnabled ? ', TRUE' : ''})
         RETURNING
           $1::text AS id,
           $4::text AS first_name,
@@ -665,7 +665,8 @@ export const registerPsychologistUser = async ({
           approval_status AS psychologist_approval_status,
           review_notes
       `,
-      [userId, professionalTitle.trim(), licenseNumber.trim(), normalizedFirstName, normalizedLastName, email.trim()],
+      [userId, env.manualAccreditationEnabled ? '' : professionalTitle.trim(),
+        env.manualAccreditationEnabled ? '' : licenseNumber.trim(), normalizedFirstName, normalizedLastName, email.trim()],
     );
 
     await client.query('COMMIT');
@@ -856,6 +857,17 @@ export const reviewPsychologistUser = async ({
     if(reviewerSessionVersion!==undefined && reviewer?.session_version!==reviewerSessionVersion)throw createAuthError('Session has been revoked; sign in again',401);
     if(!reviewer?.is_active || !['admin','superadmin'].includes(reviewer.role) || reviewer.role!==reviewerRole || reviewerUserId===psychologistUserId)
       throw createAuthError('Forbidden',403);
+
+    if (approvalStatus === 'active' && env.manualAccreditationEnabled) {
+      const profile = (await client.query(`
+        SELECT manual_accreditation_required AND manual_onboarded_at IS NULL
+          AND NOT has_current_manual_accreditation(user_id) AS blocked
+        FROM psychologist_profiles WHERE user_id=$1 FOR UPDATE
+      `, [psychologistUserId])).rows[0];
+      if (profile?.blocked) {
+        throw createAuthError('Primero resuelve la acreditación vigente en Revisión de credenciales.', 409);
+      }
+    }
 
     const result = await client.query(
       `

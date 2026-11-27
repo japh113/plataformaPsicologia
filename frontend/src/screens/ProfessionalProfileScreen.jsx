@@ -1,5 +1,6 @@
 import {useEffect,useState} from 'react';
 import * as api from '../api/professional';
+import ProfessionalAccreditation from './ProfessionalAccreditation';
 const fields=[['professionalName','Nombre profesional'],['professionalTitle','Título profesional'],['licenseNumber','Cédula profesional'],['academicTraining','Formación académica'],['formalSpecialties','Especialidades formales'],['certifications','Certificaciones'],['credentialedApproaches','Enfoques acreditativos']];
 const empty=Object.fromEntries(fields.map(([key])=>[key,'']));
 const button='rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-40';
@@ -17,13 +18,19 @@ export default function ProfessionalProfileScreen(){
     <h1 className="text-2xl font-bold">Mi perfil profesional privado</h1><p>Estos datos permanecen privados. Publicación y recepción de nuevos pacientes están deshabilitadas en esta entrega.</p>
     {error&&<p role="alert" className="text-red-700">{error}</p>}{notice&&<p role="status">{notice}</p>}
     {!data?<p>Cargando perfil…</p>:!profile?<button className={button} disabled={busy} onClick={()=>run(api.createProfile,'Perfil privado creado.')}>Crear perfil privado</button>:<>
-      <form className="space-y-3" onSubmit={event=>{event.preventDefault();const form=new FormData(event.currentTarget);run(()=>api.updateProfile({rowVersion:profile.rowVersion,description:form.get('description'),modality:form.get('modality')||null,city:form.get('city'),state:form.get('state'),approachCodes:[]}), 'Información privada guardada.');}} key={profile.rowVersion}>
+      <form className="space-y-3" onSubmit={event=>{event.preventDefault();const form=new FormData(event.currentTarget);run(()=>api.updateProfile({rowVersion:profile.rowVersion,description:form.get('description'),modality:form.get('modality')||null,city:form.get('city'),state:form.get('state'),approachCodes:form.getAll('approachCodes')}), 'Información privada guardada.');}} key={profile.rowVersion}>
         <label className="block">Descripción profesional<textarea className="block w-full rounded border p-2" name="description" maxLength={2000} defaultValue={profile.description}/></label>
         <p>Texto privado. Su contenido no constituye una credencial aprobada ni una autorización de publicación futura.</p>
         <label className="block">Modalidad<select name="modality" defaultValue={profile.modality||''} className="ml-3 rounded border p-2"><option value="">Sin especificar</option><option value="in_person">Presencial</option><option value="online">En línea</option><option value="both">Ambas</option></select></label>
         <label className="block">Ciudad<input className="ml-3 rounded border p-2" name="city" maxLength={100} defaultValue={profile.city}/></label>
         <label className="block">Estado<input className="ml-3 rounded border p-2" name="state" maxLength={100} defaultValue={profile.state}/></label>
-        <label className="block">Enfoques generales<select disabled className="ml-3 rounded border p-2"><option>Catálogo pendiente de aprobación</option></select></label>
+        {data.manualAccreditation&&data.catalog.length>0?<fieldset className="space-y-2 rounded-xl border border-slate-200 p-3">
+          <legend className="px-1 text-sm font-semibold">Enfoques declarados (opcional)</legend>
+          <p className="text-sm text-slate-700">Opciones candidatas para este ensayo. Tu selección es una declaración personal. Las acreditaciones se revisan por separado.</p>
+          {data.catalog.map(({code,label})=><label key={code} className="flex min-h-9 items-center gap-2 text-sm">
+            <input type="checkbox" name="approachCodes" value={code} defaultChecked={data.approaches.includes(code)}/>{label}
+          </label>)}
+        </fieldset>:<label className="block">Enfoques generales<select disabled className="ml-3 rounded border p-2"><option>Catálogo pendiente de aprobación</option></select></label>}
         <button className={button} disabled={busy}>Guardar información privada</button>
       </form>
       <section aria-label="Fotografía privada"><h2 className="text-xl font-semibold">Fotografía privada opcional</h2>{photo&&<img src={photo} alt="Tu fotografía profesional privada" className="my-3 h-40 w-40 rounded-xl object-cover"/>}
@@ -33,12 +40,14 @@ export default function ProfessionalProfileScreen(){
         <button className="ml-3 rounded border p-2" disabled={busy} onClick={()=>run(()=>api.recoverUploads(profile.rowVersion),'Cargas incompletas retiradas. Archivos y metadatos conservados.')}>Descartar cargas incompletas</button>
         {photoId&&<button className="ml-3 rounded border p-2" disabled={busy} onClick={()=>run(()=>api.retirePhoto(profile.rowVersion),'Fotografía retirada del perfil; historial conservado.')}>Retirar fotografía</button>}
       </section>
+      {data.manualAccreditation?<ProfessionalAccreditation/>:<>
       <section><h2 className="text-xl font-semibold">Última versión aprobada</h2><Credential value={credentials?.approved}/></section>
       <section><h2 className="text-xl font-semibold">Propuesta pendiente</h2>{credentials?.pending?<><p>Versión {credentials.pending.version}. La propuesta permanece separada de lo aprobado.</p><Credential value={credentials.pending}/></>:<form className="space-y-3" onSubmit={event=>{event.preventDefault();const payload={rowVersion:profile.rowVersion,...draft};for(const [key]of fields.slice(3))payload[key]=draft[key].split('\n').map(v=>v.trim()).filter(Boolean);run(()=>api.submitProposal(payload),'Propuesta presentada para revisión.');}}>
         {fields.map(([key,label],index)=><label key={key} className="block">{label}{index>=3?' (una entrada por línea)':''}<textarea className="block w-full rounded border p-2" aria-label={label} required={key==='professionalName'} maxLength={index>=3?4000:200} value={draft[key]} onChange={event=>setDraft({...draft,[key]:event.target.value})}/></label>)}
         <p>La aprobación permanece deshabilitada hasta contar con criterios de evidencia autorizados. Se pueden presentar y revisar propuestas privadas.</p><button className={button} disabled={busy}>Presentar credenciales</button>
       </form>}</section>
       <section><h2 className="text-xl font-semibold">Decisiones comunicadas</h2>{credentials?.decisions.map(item=><p key={item.version} className="my-2 whitespace-pre-wrap">Versión {item.version}: {item.outcome==='approved'?'Aprobada':'Rechazada'}. {item.ownerMessage}</p>)}</section>
+      </>}
     </>}
   </section>;
 }
