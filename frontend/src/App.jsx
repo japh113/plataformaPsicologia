@@ -5,6 +5,8 @@ import { preservePatientFollowUp } from './utils/patientFollowUp';
 import IdentityPanel from './components/IdentityPanel';
 import PatientFollowUp from './components/PatientFollowUp';
 import ProfessionalProfileScreen from './screens/ProfessionalProfileScreen';
+import ProfessionalDirectorySettings from './screens/ProfessionalDirectorySettings';
+import {directoryEnabled} from './api/directory';
 import ProfessionalReviewScreen from './screens/ProfessionalReviewScreen';
 import { patientRegistrationError } from './utils/identityFeedback';
 import { useCareOverview } from './utils/useCareOverview';
@@ -1838,7 +1840,8 @@ export default function App({onRestrictedSession}) {
         Cerrar sesión
       </button>
     </>;
-    if(vistaActiva==='professional-profile' && currentUser?.role==='psychologist')return <ProfessionalProfileScreen/>;
+    if(vistaActiva==='professional-profile' && currentUser?.role==='psychologist')return directoryEnabled
+      ? <ProfessionalDirectorySettings name={currentUser.fullName}/> : <ProfessionalProfileScreen/>;
     if(vistaActiva==='professional-reviews' && ['admin','superadmin'].includes(currentUser?.role))return <ProfessionalReviewScreen/>;
     const composedCalendar = vistaActiva === 'appointments' && firstAppointments !== null;
     const legacyCalendarUnknown = composedCalendar && (cargandoDatos || Boolean(errorCarga) || clinicalAccess.current.denied);

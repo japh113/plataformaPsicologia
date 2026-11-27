@@ -210,6 +210,16 @@ export const decideManualAccreditation = (actor, owner, version, body, mode) => 
     if (review.checkedOn > today || impact?.review.checkedOn > today || (review.grantsValidity && validUntil <= today)) {
       throw fail('La fecha de comprobación debe ser actual y permitir una acreditación vigente.');
     }
+    // A newly approved version can replace the public snapshot only while the previous
+    // accreditation is still current. Expiry alone doesn't run a database trigger.
+    let priorValidUntil = null;
+    if (mode === 'proposal' && review.grantsValidity && (profile.is_public || profile.accepts_new_patients)) {
+      const prior = (await client.query(`
+        SELECT valid_until::text FROM professional_credential_validity
+        WHERE owner_user_id=$1 AND credential_version=$2 AND has_current_manual_accreditation($1)
+      `, [owner, profile.approved_credential_version])).rows[0];
+      priorValidUntil = prior?.valid_until ?? null;
+    }
     if (review.grantsValidity && mode === 'proposal') await claimLicense(client, owner, version);
     const id = await recordReview(client, actor, owner, version, review, validUntil);
     if (impact) {
@@ -227,12 +237,17 @@ export const decideManualAccreditation = (actor, owner, version, body, mode) => 
       review.grantsValidity ? validUntil : null]);
 
     await client.query(`
+      WITH preference AS (
+        SELECT $3 AND ($5::date IS NULL OR $5<=(clock_timestamp() AT TIME ZONE 'UTC')::date) AS reset
+      )
       UPDATE professional_publication_profiles SET
         pending_credential_version=CASE WHEN $2 THEN NULL ELSE pending_credential_version END,
         approved_credential_version=CASE WHEN $3 THEN $4::bigint ELSE approved_credential_version END,
+        is_public=CASE WHEN preference.reset THEN false ELSE is_public END,
+        accepts_new_patients=CASE WHEN preference.reset THEN false ELSE accepts_new_patients END,
         row_version=row_version+1
-      WHERE owner_user_id=$1
-    `, [owner, terminal, review.outcome === 'approved', version]);
+      FROM preference WHERE owner_user_id=$1
+    `, [owner, terminal, review.outcome === 'approved', version, priorValidUntil]);
     await audit(client, actor, owner, version, 'professional_credential_decided', {outcome: review.outcome});
     return {outcome: review.outcome, accountApprovalNeeded: review.grantsValidity && legacy.approval_status === 'pending_review'};
   });

@@ -1,9 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { LockKeyhole, Sparkles, UserPlus2, UserRoundCheck } from 'lucide-react';
 import InlineNotice from '../components/shared/InlineNotice';
+import {directoryEnabled} from '../api/directory';
 
 const accreditationDemo = import.meta.env.DEV && import.meta.env.VITE_MANUAL_ACCREDITATION_ENABLED === 'true';
-const demoAccounts = accreditationDemo ? [
+const demoAccounts = directoryEnabled ? [
+  { role: 'Perfil privado', email: 'clara@directory.invalid', password: 'Episode-Demo-Only-284!' },
+  { role: 'Revisión ficticia', email: 'reviewer@accreditation.invalid', password: 'Episode-Demo-Only-284!' },
+] : accreditationDemo ? [
   { role: 'Revisión ficticia', email: 'reviewer@accreditation.invalid', password: 'Episode-Demo-Only-284!' },
 ] : import.meta.env.DEV && import.meta.env.VITE_IDENTITY_DEMO === 'true' ? [
   { role: 'Paciente sin vínculo', email: 'r@episodes.invalid', password: 'Episode-Demo-Only-284!' },
@@ -596,6 +600,9 @@ export default function LoginScreen({
             {activeTab === 'patient' ? renderPatientRegistrationForm() : null}
             {activeTab === 'psychologist' ? renderPsychologistRegistrationForm() : null}
             {activeTab === 'reset' ? renderPasswordResetForm() : null}
+            {directoryEnabled && <a href="/directorio" className="mt-6 inline-flex min-h-11 items-center text-sm font-semibold text-indigo-800 underline underline-offset-4 focus-visible:outline-indigo-700">
+              Explorar el directorio profesional
+            </a>}
           </div>
         </section>
       </div>

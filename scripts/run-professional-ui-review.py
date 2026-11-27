@@ -3,7 +3,7 @@ import json,os,re,subprocess,sys
 from pathlib import Path
 root=Path.cwd().resolve();file=Path(sys.argv[1]).resolve();assert file.is_relative_to(root/'tmp')
 c=json.loads(file.read_text());kind=sys.argv[2] if len(sys.argv)>2 else 'professional'
-assert kind in ('professional','accreditation')
+assert kind in ('professional','accreditation','directory')
 label='io.psicopanel.'+kind+'-review.run'
 work=Path(c['work']).resolve();out=Path(c['out']).resolve()
 assert work.is_relative_to(root/'tmp') and out.is_relative_to(root/'tmp')

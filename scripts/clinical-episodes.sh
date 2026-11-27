@@ -4,11 +4,11 @@ cd "$(dirname "$0")/.."
 mode="${1:-test}"
 if [[ "$mode" == cleanup && "$#" == 2 ]]; then
   export EPISODE_TEST_RUN_ID="$2"
-elif [[ ( "$mode" == test || "$mode" == demo || "$mode" == admission-demo || "$mode" == bilateral-demo || "$mode" == participants-demo || "$mode" == patient-follow-up-demo || "$mode" == patient-projection-demo || "$mode" == accreditation-demo || "$mode" == identity-demo || "$mode" == contact-demo || "$mode" == contact-review ) && "$#" -le 1 ]]; then
+elif [[ ( "$mode" == test || "$mode" == demo || "$mode" == admission-demo || "$mode" == bilateral-demo || "$mode" == participants-demo || "$mode" == patient-follow-up-demo || "$mode" == patient-projection-demo || "$mode" == accreditation-demo || "$mode" == directory-demo || "$mode" == identity-demo || "$mode" == contact-demo || "$mode" == contact-review ) && "$#" -le 1 ]]; then
   export EPISODE_TEST_RUN_ID
   EPISODE_TEST_RUN_ID="$(cat /proc/sys/kernel/random/uuid)"
 else
-  echo "Usage: bash scripts/clinical-episodes.sh [test|demo|admission-demo|bilateral-demo|participants-demo|patient-follow-up-demo|patient-projection-demo|accreditation-demo|identity-demo|contact-demo|contact-review|cleanup RUN_UUID]" >&2
+  echo "Usage: bash scripts/clinical-episodes.sh [test|demo|admission-demo|bilateral-demo|participants-demo|patient-follow-up-demo|patient-projection-demo|accreditation-demo|directory-demo|identity-demo|contact-demo|contact-review|cleanup RUN_UUID]" >&2
   exit 1
 fi
 [[ "$EPISODE_TEST_RUN_ID" =~ ^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$ ]]
@@ -62,11 +62,12 @@ elif [[ "$mode" == participants-demo ]]; then
 else
   if [[ "$mode" == identity-demo || "$mode" == contact-demo || "$mode" == contact-review ]]; then
     "${compose[@]}" run --rm -e NODE_ENV=development backend node scripts/create-identity-demo.js
-  elif [[ "$mode" == accreditation-demo ]]; then
-    export D2_ENABLED=true MANUAL_ACCREDITATION_ENABLED=true
+  elif [[ "$mode" == accreditation-demo || "$mode" == directory-demo ]]; then
+    export D2_ENABLED=true MANUAL_ACCREDITATION_ENABLED=true D3_ENABLED=false
     export RESTRICTED_JWT_SECRET=accreditation-disposable-restricted-key-284391
     export EPISODE_DEMO_PGUSER=consultation_legacy_demo EPISODE_DEMO_PGPASSWORD=disposable_consultation_legacy
-    "${compose[@]}" run --rm -e NODE_ENV=development backend node scripts/create-accreditation-demo.js
+    if [[ "$mode" == directory-demo ]]; then export D3_ENABLED=true; fi
+    "${compose[@]}" run --rm -e NODE_ENV=development -e D2_ENABLED -e MANUAL_ACCREDITATION_ENABLED -e D3_ENABLED -e RESTRICTED_JWT_SECRET backend node scripts/create-accreditation-demo.js
   elif [[ "$mode" == admission-demo ]]; then
     export BILATERAL_ENABLED=true BILATERAL_SECRET=fictitious-bilateral-independent-demo-key-32bytes
     export UNIFIED_CARE_ENABLED=true
@@ -98,7 +99,10 @@ else
     echo "Demo UI: http://$("${compose[@]}" port frontend 5173)"
   fi
   echo "API: $EPISODE_DEMO_API_URL"
-  if [[ "$mode" == accreditation-demo ]]; then
+  if [[ "$mode" == directory-demo ]]; then
+    echo "Directory: http://$("${compose[@]}" port frontend 5173)/directorio"
+    echo "Professional: clara@directory.invalid. Reviewer: reviewer@accreditation.invalid."
+  elif [[ "$mode" == accreditation-demo ]]; then
     echo "Reviewer: reviewer@accreditation.invalid. Register a new fictional professional."
   else
     echo "Accounts: a@episodes.invalid, b@episodes.invalid, p@episodes.invalid, q@episodes.invalid"

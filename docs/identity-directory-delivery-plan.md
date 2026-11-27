@@ -1,6 +1,6 @@
 # Identidad y directorio — plan de entregas A/B/C/D
 
-Estado al 29 de octubre de 2026: `main` `a1720245083008399a3543ca4b794ec4d1289d5a` (merge #27). A/B/C/D1/D2 y #25–#27 integrados. D2 se integró por [#18](https://github.com/japh113/plataformaPsicologia/pull/18), merge `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, corte histórico distinto de la base de esta revisión. [Estado operativo y backlog](operational-status.md). Integración y CI no acreditan instalación de 007 ni despliegue habitual. [Contrato D2](private-professional-management.md) y [evidencia D2](private-professional-validation.md) conservan su contexto histórico. D3, nuevas vinculaciones y autorización/activación por episodio siguen pendientes.
+[Estado de D3 y demo](#implementación-d3-y-demo-del-directorio). Corte histórico del 29 de octubre de 2026: `main` `a1720245083008399a3543ca4b794ec4d1289d5a` (merge #27). A/B/C/D1/D2 y #25–#27 integrados. D2 se integró por [#18](https://github.com/japh113/plataformaPsicologia/pull/18), merge `fcabf5245d889f700804ec6d1b9f48043fd30fc0`, corte histórico distinto de la base de esta revisión. [Estado operativo y backlog](operational-status.md). Integración y CI no acreditan instalación de 007 ni despliegue habitual. [Contrato D2](private-professional-management.md) y [evidencia D2](private-professional-validation.md) conservan su contexto histórico. D3, nuevas vinculaciones y autorización/activación por episodio siguen pendientes.
 
 | Entrega | Integración comprobada | Estado |
 | --- | --- | --- |
@@ -9,7 +9,7 @@ Estado al 29 de octubre de 2026: `main` `a1720245083008399a3543ca4b794ec4d1289d5
 | C | #12, `543442ea634e5977bc887ace1db5457eee2ebf8c` | Contactos y 005 integrados; HEAD revisado `c7f622608af4b7bc27a7c4e9dde49be23221b0ae` |
 | D1 | #17, `2fe0799ee683273df2dbed872840bbfd2ef03f6d` | Persistencia privada y 006 integradas; [contrato](professional-persistence.md), [evidencia histórica](professional-persistence-validation.md) |
 | D2 | #18, `fcabf5245d889f700804ec6d1b9f48043fd30fc0` | Gestión profesional privada y 007 integradas en Git; sin instalación, activación ni despliegue habitual acreditados |
-| D3 | Sin integración | Directorio público, preferencias optativas y lectores anónimos pendientes; su implementación requiere alcance y autorización propios |
+| D3 | #29 en rama | [Directorio y publicación optativa para ensayo ficticio](#implementación-d3-y-demo-del-directorio) |
 
 GitHub Actions ya está [implementado](ci-implementation.md): el [workflow vigente](../.github/workflows/ci.yml) ejecuta también para PR documentales los siete checks `ci/docs`, `ci/backend-unit`, `ci/frontend`, `ci/postgres`, `ci/browser`, `ci/evidence` y `ci/required`, con artifacts técnicos de 14 días. La [protección Protect main](https://github.com/japh113/plataformaPsicologia/rules/25440100) está activa, exige los siete checks con política estricta y no tiene bypass. El [plan CI](ci-plan.md) y las [evidencias anteriores](ci-validation.md) conservan su trazabilidad y corte histórico; no sustituyen este estado actual ni la ejecución propia de cada nuevo HEAD. Esta corrección no modifica CI ni configuración GitHub.
 
@@ -74,3 +74,48 @@ Documentación puede revertirse independientemente. Separar B de C limita el imp
 La estrategia técnica recomendada es revertir aplicación/funcionalidad conservando estructuras y evidencia, mediante corrección aditiva cuando proceda; no borrar datos ni bajar `session_version`. Revertir C no debe hacer válidos JWT revocados, y volver a una aplicación antigua no debe restablecer bypass legacy. Compatibilidad entre versiones, fallos de entrega, bloqueos DDL y recuperación se ensayan antes de cada implementación/despliegue. Ningún ensayo autoriza despliegue en la base habitual.
 
 Las futuras entregas se proponen mediante PR hacia `main`, sin merge ni auto-merge por el agente salvo autorización expresa posterior. El encargo histórico #19 se entregó como Draft sin merge por el agente y fue integrado después; #24 también fue documental. Antecedente de preparación del PR #42 para el Issue #40: su alcance fue exclusivamente documental y reservó la revisión y autorización de merge para una decisión posterior; esas restricciones no definen el alcance de otros encargos. Los asuntos abiertos se resuelven por alcance, no por integrar una propuesta documental.
+
+## Implementación D3 y demo del directorio
+
+[#29](https://github.com/japh113/plataformaPsicologia/issues/29) implementa en rama la [publicación optativa aprobada](product/decisions.md#directorio-optativo-y-perfil-profesional). Reutiliza los IDs UUID v4 de D1, la gestión y medios privados de D2 y la acreditación exacta de SQL 023 integrada en [#87](https://github.com/japh113/plataformaPsicologia/pull/87). Conserva SQL 001–023, manifiesto y hashes. La API exige desarrollo local explícito, `D2_ENABLED=true`, `MANUAL_ACCREDITATION_ENABLED=true` y `D3_ENABLED=true`. La interfaz exige Vite en desarrollo con `VITE_D3_ENABLED=true`.
+
+| Operación | Contrato |
+| --- | --- |
+| `GET /api/directory` | Anónimo. Filtros opcionales `name`, `city`, `state`, `modality` (`in_person`, `online`, `both`), `accepting` (`true`, `false`) y `page` (1–100). «Presencial» y «En línea» incluyen perfiles que ofrecen ambas. Hasta 12 resultados por página, ordenados por nombre y UUID, sin total acumulado. Una edición concurrente puede cambiar el contenido de una página. |
+| `GET /api/directory/filters` | Catálogo acotado de ciudades y entidades mexicanas para el ensayo. La opción de una ciudad se valida junto con su estado. |
+| `GET /api/directory/:publicId` | Devuelve solo `publicId`, `professionalName`, `photoUrl`, `professionalTitle`, `educationalInstitution`, `licenseNumber`, `modality`, `city`, `state`, `description`, `approaches` y `acceptsNewPatients`. |
+| `GET /api/directory/:publicId/photo/:photoId` | Devuelve únicamente el WebP procesado, actual y del titular. Comprueba la elegibilidad vigente, los dos UUID, el estado de la fotografía, la raíz privada y el tamaño. Una foto privada, reemplazada o retirada responde 404. |
+| `GET /api/professional-profile/me/publication` | Vista previa para el titular autenticado, con proyección compartida, disponibilidad para publicar y versión de edición. El navegador usa la imagen privada actual en esta vista. |
+| `PATCH /api/professional-profile/me/publication` | Titular autenticado con `rowVersion` exacta y al menos una preferencia booleana explícita (`isPublic`, `acceptsNewPatients`). Activar exige acreditación manual vigente y cuenta aprobada. Publicar exige también modalidad y una ubicación del catálogo. Retirar conserva la preferencia de recepción. Subir una foto nueva deja el perfil privado para confirmar la publicación de la nueva imagen. |
+
+El directorio revalida la cuenta activa, aprobación, opt-in y acreditación vigente sobre la versión exacta mediante `has_current_manual_accreditation`. Las lecturas de contenido adquieren bloqueos compartidos en el orden cuenta, aprobación y perfil, y vuelven a evaluar elegibilidad tras adquirirlos. La lectura de la imagen comprueba vigencia después de la lectura del archivo. Para un perfil privado, desconocido o inelegible, el lector individual responde con el mismo 404. La caducidad impide consultas aunque los flags sigan activos. Si una propuesta nueva se aprueba tras caducar la anterior, se limpian ambas preferencias. Los revocadores de D2 conservan su acción en estados de cuenta y revalidación.
+
+La descripción pública usa modalidad y lugar mediante una plantilla fija. La única ubicación publicada proviene de pares del catálogo. Los enfoques generales provienen de los tres códigos candidatos cargados en el ensayo. La formación y el nombre proceden de la acreditación manual aprobada. El texto libre privado, contacto, vínculos, datos clínicos y evidencia de revisión quedan en sus canales autorizados.
+
+Las rutas públicas limitan peticiones por par de red (120/minuto) y por proceso (600/minuto). La IP se toma de la conexión, con IPv6 agrupada por /64 y capacidad acotada de claves. Se limitan URL, entradas, tamaño de página y tiempos SQL. Las respuestas llevan `Cache-Control: no-store` y `X-Robots-Tag: noindex, nofollow`. La retirada se aplica a lecturas nuevas. Una imagen o ficha entregada antes del retiro puede permanecer en copias o capturas descargadas. Los límites por proceso y el catálogo parcial corresponden al ensayo aislado.
+
+### Reproducción del ensayo D3
+
+```bash
+bash scripts/clinical-episodes.sh directory-demo
+```
+
+Abrir la URL `/directorio` que imprime el script. Todas las cuentas son ficticias y usan `Episode-Demo-Only-284!`.
+
+| Cuenta | Estado inicial |
+| --- | --- |
+| `elena@directory.invalid` | Pública y recibe nuevos pacientes. |
+| `bruno@directory.invalid` | Pública en línea en Guadalajara, recepción desactivada. |
+| `clara@directory.invalid` | Privada y acreditada. Permite editar, previsualizar, publicar y retirar. |
+| `diana@directory.invalid` | Suspendida. |
+| `emilio@directory.invalid` | Vigencia vencida con preferencias anteriores, ausente del directorio. |
+| `nadia@directory.invalid` | Pública con una versión aprobada vigente y una propuesta posterior reservada. |
+| `reviewer@accreditation.invalid` | Revisor. En **Credenciales profesionales** puede abrir la versión posterior de Nadia. |
+
+1. Como visitante, abrir el directorio, filtrar por Jalisco y Guadalajara y consultar el perfil público de Bruno. Restablecer los filtros y consultar la última versión aprobada de Nadia.
+2. Como Clara, abrir **Mi perfil profesional**, revisar la configuración, opcionalmente cargar una imagen ficticia y abrir **Ver vista previa**. Confirmar **Publicar perfil** con la recepción apagada. Comprobar el indicador en otra sesión de navegador.
+3. Cambiar recepción de forma independiente. Retirar el perfil y volver a abrir su URL desde la sesión anónima. El lector de la foto anterior responde 404.
+4. Como revisor, abrir la propuesta posterior de Nadia. Comparar con el perfil anónimo, que conserva la última versión aprobada mientras siga vigente.
+5. Limpiar exclusivamente el proyecto nuevo con el comando `bash scripts/clinical-episodes.sh cleanup RUN_UUID` que imprime el wrapper.
+
+La [suite Chromium D301–D306](../scripts/directory-ui-review.cjs) conserva capturas ficticias de escritorio y móvil con el artifact de evidencia `ci-browser`; la [integración de PostgreSQL](../backend/test/directory.integration.test.js) verifica proyecciones, permisos, condiciones de elegibilidad, bloqueos, fotografías, filtros y límites. La revisión independiente de Work y la aceptación del propietario preceden a integrar.

@@ -2,6 +2,8 @@ import {apiRequest,API_BASE_URL,beginSessionRequest,clearAuthToken} from './clie
 export const getProfile=async()=> (await apiRequest('/professional-profile/me')).data;
 export const createProfile=async()=> (await apiRequest('/professional-profile/me',{method:'POST',body:'{}'})).data;
 export const updateProfile=async body=>(await apiRequest('/professional-profile/me',{method:'PATCH',body:JSON.stringify(body)})).data;
+export const getPublication=async()=>(await apiRequest('/professional-profile/me/publication')).data;
+export const updatePublication=async body=>(await apiRequest('/professional-profile/me/publication',{method:'PATCH',body:JSON.stringify(body)})).data;
 export const getCredentials=async()=>(await apiRequest('/professional-profile/me/credentials')).data;
 export const submitProposal=async body=>(await apiRequest('/professional-profile/me/credential-proposals',{method:'POST',body:JSON.stringify(body)})).data;
 export const listReviews=async()=>(await apiRequest('/professional-reviews/pending')).data;
@@ -23,7 +25,7 @@ const media=async(read,options={})=>{
   return body;
 };
 export const uploadPhoto=async(file,version)=>(await media(response=>response.json(),{method:'POST',headers:{'Content-Type':file.type,'If-Match':version},body:file})).data;
-export const loadPhoto=async()=> media(response=>response.blob());
+export const loadPhoto=async(id)=> media(response=>response.blob(),id?{headers:{'If-Match':id}}:{});
 export const retirePhoto=async rowVersion=>(await apiRequest('/professional-profile/me/photo',{method:'DELETE',body:JSON.stringify({rowVersion})})).data;
 export const recoverUploads=async rowVersion=>(await apiRequest('/professional-profile/me/photo/recover',{method:'POST',body:JSON.stringify({rowVersion})})).data;
 // Restricted endpoints never read or write the ordinary session store.

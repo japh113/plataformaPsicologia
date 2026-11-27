@@ -60,7 +60,8 @@ export const uploadPhoto=async req=>{
       const profile=await lockProfessional(client,req.user);expectVersion(profile,expected);
       const ready=await client.query("UPDATE professional_photographs SET status='ready' WHERE id=$1 AND owner_user_id=$2 AND status='staged' RETURNING id",[photo.id,req.user.id]);
       if(!ready.rowCount)throw fail('Carga no vigente.',409);
-      await client.query('UPDATE professional_publication_profiles SET current_photo_id=$2,row_version=row_version+1 WHERE owner_user_id=$1',[req.user.id,photo.id]);
+      // A replacement is private until the owner has previewed and published it.
+      await client.query('UPDATE professional_publication_profiles SET current_photo_id=$2,is_public=false,row_version=row_version+1 WHERE owner_user_id=$1',[req.user.id,photo.id]);
       if(profile.current_photo_id)await client.query("UPDATE professional_photographs SET status='retired' WHERE id=$1",[profile.current_photo_id]);
       return {id:photo.id,rowVersion:String(BigInt(profile.row_version)+1n)};
     });
@@ -70,13 +71,28 @@ export const uploadPhoto=async req=>{
     throw error;
   }finally{clearTimeout(intakeDeadline);processing=false;}
 };
+export const readProcessedPhoto=async photo=>{
+  const file=await fs.open(photoPath(await privateRoot(),photo.storage_key),constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
+  try{
+    const stat=await file.stat(), size=Number(photo.byte_size);
+    if(!stat.isFile()||stat.size!==size||size<1||size>MiB)throw fail('Fotografía no disponible.',404);
+    const buffer=Buffer.alloc(size);
+    let offset=0;
+    while(offset<size){
+      const {bytesRead}=await file.read(buffer,offset,size-offset,offset);
+      if(!bytesRead)throw fail('Fotografía no disponible.',404);
+      offset+=bytesRead;
+    }
+    return buffer;
+  }finally{await file.close();}
+};
 export const getPhoto=async(req,res)=>{
   const buffer=await transaction(async client=>{
     const profile=await lockProfessional(client,req.user);if(!profile?.current_photo_id)throw fail('Fotografía no disponible.',404);
+    if(req.headers['if-match'] && req.headers['if-match']!==profile.current_photo_id)throw fail('La fotografía cambió. Actualiza el perfil.',409);
     const photo=(await client.query("SELECT * FROM professional_photographs WHERE id=$1 AND owner_user_id=$2 AND status='ready'",[profile.current_photo_id,req.user.id])).rows[0];
     if(!photo)throw fail('Fotografía no disponible.',404);
-    const file=await fs.open(photoPath(await privateRoot(),photo.storage_key),constants.O_RDONLY|constants.O_NOFOLLOW);
-    try{const stat=await file.stat();if(!stat.isFile()||stat.size!==Number(photo.byte_size)||stat.size>MiB)throw fail('Fotografía no disponible.',404);return await file.readFile();}finally{await file.close();}
+    return readProcessedPhoto(photo);
   });
   res.set({'Content-Type':'image/webp','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}).send(buffer);
 };

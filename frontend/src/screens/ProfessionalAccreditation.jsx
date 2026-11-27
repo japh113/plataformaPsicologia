@@ -26,7 +26,7 @@ function describeStatus(data) {
   return ['Prepara tu solicitud','Ten a mano tu cédula y los datos de tu licenciatura. El equipo cotejará tu identidad fuera de la plataforma.'];
 }
 
-export default function ProfessionalAccreditation({token}) {
+export default function ProfessionalAccreditation({token,onChange}) {
   const [data,setData]=useState(null),[draft,setDraft]=useState(null),[confirm,setConfirm]=useState(false);
   const [error,setError]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
   const [load,setLoad]=useState(0);
@@ -52,6 +52,7 @@ export default function ProfessionalAccreditation({token}) {
     setBusy(true);setError('');
     try{
       await submitAccreditation(token,{rowVersion:data.rowVersion,...draft});
+      onChange?.();
       setNotice('Solicitud enviada para revisión.');setDraft(null);setConfirm(false);
       focusAfterLoad.current=true;
       reload();

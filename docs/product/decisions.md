@@ -532,13 +532,23 @@ Pareja y tratamientos paralelos (ADR-030): principios aprobados y mecanismos pen
 
 ## Acreditación manual e incorporación profesional
 
-**APROBADO para #28.** La revisión humana es la vía principal del MVP. La vía estándar exige licenciatura en Psicología, cédula comprobada, título e institución correspondientes y cotejo humano de la identidad y titularidad. Las fuentes confiables, fechas, revisor, resultados por comprobación, referencias disponibles y motivo forman evidencia de la versión exacta. Casos ambiguos, equivalencias y titulaciones extranjeras que excedan la vía estándar esperan confirmación competente. Son criterios internos de producto.
+**APROBADO para #28 e integrado en #87 para ensayos ficticios.** La revisión humana es la vía principal del MVP. La vía estándar exige licenciatura en Psicología, cédula comprobada, título e institución correspondientes y cotejo humano de la identidad y titularidad. Las fuentes confiables, fechas, revisor, resultados por comprobación, referencias disponibles y motivo forman evidencia de la versión exacta. Casos ambiguos, equivalencias y titulaciones extranjeras que excedan la vía estándar esperan confirmación competente. Son criterios internos de producto.
 
 - El registro profesional nuevo permite una incorporación privada y restringida mientras la cuenta está pendiente. El titular puede presentar, consultar y corregir información propia. La primera activación exige acreditación vigente y aprobación de cuenta. Al cumplir ambas, la cuenta obtiene las funciones ordinarias actualmente autorizadas, incluida la disponibilidad y el inicio de los recorridos habilitados. Siguen aplicando AB-23, consentimientos, autorizaciones por episodio y precondiciones de activación.
 - Una revisión puede aprobar, quedar inconclusa, devolver para corrección o rechazar con motivo comunicable. La devolución cierra esa propuesta. Un resultado inconcluso conserva su revisión pendiente. La resolución corresponde a la versión exacta. Una propuesta posterior rechazada conserva la acreditación anterior vigente salvo evidencia fundada que afecte su validez.
 - La vigencia interna es de 12 meses desde la comprobación sustentada. Puede pedirse revalidación anticipada con motivo fundado. Revalidar datos sin cambios conserva la versión aprobada y agrega evidencia. Un cambio requiere otra propuesta. El vencimiento se evalúa con el reloj del servidor y conserva los controles de elegibilidad y retiro de preferencias. Los efectos clínicos adicionales requieren decisión propia.
 - El cotejo de identidad se hace fuera de la aplicación. Se conserva el registro estructurado de método y resultado, sin copias de documentos, CURP, fotografías de identificación, grabaciones ni e.firma.
 - Los enfoques terapéuticos son opcionales y declarativos. Cognitivo-conductual, sistémico y humanista son opciones candidatas sujetas a validación profesional. Se difieren especialidades, certificaciones, formación adicional y automatización. Antes de uso real se requiere validar criterios, procedimiento de identidad, privacidad, conservación, eliminación y autorización operativa.
+
+## Directorio optativo y perfil profesional
+
+**APROBADO para #29.** [ADR-020](#adr-020--perfil-público-opcional-y-directorio-básico-en-2a), [ADR-026](#adr-026--campos-públicos-y-revisión-selectiva-profesional) y [ADR-027](#adr-027--retiro-público-y-rehabilitación-profesional) conservan el consentimiento expreso, la recepción independiente y la elegibilidad vigente. Estas precisiones delimitan el primer directorio ficticio.
+
+- La descripción pública se genera con información profesional autorizada mediante una plantilla fija. El texto de presentación privado queda en el perfil del titular. La información académica corresponde a la versión aprobada exacta. Las comprobaciones se presentan como simuladas.
+- Cognitivo-conductual, sistémico y humanista se muestran como enfoques generales declarados y opcionales. El catálogo sigue siendo candidato para ensayos. Especialidades formales, certificaciones y formación adicional conservan su alcance posterior.
+- El directorio incluye nombre profesional, ciudad, estado, modalidad y recepción como criterios básicos de búsqueda. Las consultas son anónimas y la publicación es voluntaria. El acceso para solicitar atención se decide en [#31](https://github.com/japh113/plataformaPsicologia/issues/31).
+
+La presentación previa confirma la información que compartirá el titular. La pérdida de elegibilidad retira las nuevas lecturas, y recuperarla exige una nueva elección. [Contrato de D3](../identity-directory-delivery-plan.md#implementación-d3-y-demo-del-directorio).
 
 ## Acciones y supuestos no aprobados
 

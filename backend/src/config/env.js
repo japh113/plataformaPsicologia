@@ -61,6 +61,8 @@ const env = {
   d2Enabled: process.env.D2_ENABLED === 'true',
   manualAccreditationEnabled: isLocalDevelopment(process.env) &&
     process.env.D2_ENABLED === 'true' && process.env.MANUAL_ACCREDITATION_ENABLED === 'true',
+  directoryEnabled: isLocalDevelopment(process.env) && process.env.D2_ENABLED === 'true' &&
+    process.env.MANUAL_ACCREDITATION_ENABLED === 'true' && process.env.D3_ENABLED === 'true',
   restrictedJwtSecret: resolveRestrictedSecret(process.env,resolveJwtSecret(process.env)),
   professionalMediaRoot: process.env.PROFESSIONAL_MEDIA_ROOT || '',
   passwordResetTokenTtlMinutes: parsePort(process.env.PASSWORD_RESET_TOKEN_TTL_MINUTES, 30),

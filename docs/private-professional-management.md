@@ -4,7 +4,7 @@ Base: main `2fe0799ee683273df2dbed872840bbfd2ef03f6d`, merge de [D1 #17](https:/
 
 ## Acreditación manual e incorporación restringida
 
-La sucesora [023](../backend/sql/migrations/023_manual_professional_accreditation.sql) incorpora el alcance de [#28](https://github.com/japh113/plataformaPsicologia/issues/28) para nuevas altas ficticias. El backend requiere desarrollo local explícito, `D2_ENABLED=true` y `MANUAL_ACCREDITATION_ENABLED=true`. Las reglas y la evidencia de D2/007 descritas debajo corresponden al flujo previo.
+Integrado en [#87](https://github.com/japh113/plataformaPsicologia/pull/87). La sucesora [023](../backend/sql/migrations/023_manual_professional_accreditation.sql) incorpora el alcance de [#28](https://github.com/japh113/plataformaPsicologia/issues/28) para nuevas altas ficticias. El backend requiere desarrollo local explícito, `D2_ENABLED=true` y `MANUAL_ACCREDITATION_ENABLED=true`. Las reglas y la evidencia de D2/007 descritas debajo corresponden al flujo previo.
 
 - El registro marca las altas de incorporación. La sesión restringida vigente puede consultar su solicitud y presentar versiones exactas en `/api/professional-status/me/accreditation` solo mientras la cuenta sigue pendiente de primera activación. Cuenta inactiva, suspendida o rechazada conserva su restricción. Las cuentas activas del incremento usan el perfil privado ordinario para consultar y presentar cambios.
 - Se comprueban nombre profesional, cédula, título e institución. El revisor coteja estos datos con la cuenta, el registro y la identidad por fuera de la aplicación. En el sandbox la fuente y el método se almacenan explícitamente como simulaciones. La ficha enlaza a la [consulta institucional de cédulas](https://apiaccess.gob.mx/informacion/consultar-cedula-profesional), sin incorporar ningún dato de la solicitud a la URL. El catálogo de enfoques operativos espera validación profesional.
@@ -12,11 +12,17 @@ La sucesora [023](../backend/sql/migrations/023_manual_professional_accreditatio
 - Una transacción serializa perfil y revisores, registra la evidencia y arbitra la cédula mediante una clave única normalizada. La vigencia interna utiliza fecha UTC y 12 meses calendario desde la comprobación. La revalidación agrega evidencia sin reemplazar la versión aprobada. La reserva de cédula conserva el reclamo durante revalidación o vencimiento y cambia al aprobar otra cédula del mismo titular.
 - La aprobación de cuenta sigue siendo una decisión explícita de backoffice. PostgreSQL exige, antes de la primera transición a activo, una decisión sustentada y vigente para la versión aprobada exacta. El cambio invalida la sesión restringida y el profesional inicia sesión de nuevo. La autorización clínica conserva sus restricciones por episodio, consentimiento, AB-23 y los controles ordinarios. La revalidación y el vencimiento no alteran el ciclo clínico.
 
+### Publicación optativa y estado restringido
+
+La publicación del titular se configura desde el perfil profesional rediseñado de [#29](https://github.com/japh113/plataformaPsicologia/issues/29). La vista previa usa la proyección pública con la sesión del titular y la fotografía se obtiene mediante el lector privado ligado a su versión actual. [Contrato, rutas y demo D3](identity-directory-delivery-plan.md#implementación-d3-y-demo-del-directorio).
+
+[#88](https://github.com/japh113/plataformaPsicologia/issues/88) añade en esta rama una comprobación final de expiración en `GET /api/professional-status/me` después de esperar COMMIT y antes de entregar datos al mecanismo HTTP. Se mantienen las comprobaciones de sesión, el presupuesto de peticiones y la prueba de expiración durante una espera de locks. La [regresión HTTP/PostgreSQL](../backend/test/manual-accreditation.integration.test.js) controla el reloj durante COMMIT y verifica el 401 sin estado ni mensajes protegidos, con control positivo de sesión vigente.
+
 ### Demostración ficticia
 
 Ejecutar `bash scripts/clinical-episodes.sh accreditation-demo`. El wrapper crea y verifica un entorno nuevo y aislado y muestra las URL de la aplicación y la API, la cuenta ficticia de revisión y el comando de limpieza del UUID propio. Registrar un profesional de prueba con dominio `accreditation.invalid`, elegir un nombre ficticio, una cédula numérica inventada y datos de una licenciatura e institución de prueba. En **Credenciales**, el revisor `reviewer@accreditation.invalid` con contraseña ficticia `Episode-Demo-Only-284!` completa el cotejo simulado. Confirmar el resultado, aprobar por separado la cuenta en el backoffice y volver a iniciar sesión como profesional.
 
-Antes de operación real se requieren validación jurídica y profesional de criterios, procedimiento de identidad, privacidad, conservación, eliminación y autorización operativa. D3 y las solicitudes públicas requieren sus propios incrementos.
+Antes de operación real se requieren validación jurídica y profesional de criterios, procedimiento de identidad, privacidad, conservación, eliminación y autorización operativa. La demo de D3 se reproduce por separado. Las solicitudes públicas corresponden al alcance de #31.
 
 ## Sesiones y configuración
 

@@ -8,6 +8,7 @@ import * as service from './professional.service.js';
 import {getPhoto,uploadPhoto,retirePhoto,recoverUploads} from './professional.photos.js';
 import {createPublicAuthLimiter,publicAuthClientKey} from '../auth/public-auth-limiter.js';
 import {getManualAccreditation,submitManualAccreditation,decideManualAccreditation} from './manual-accreditation.service.js';
+import {getPublicationPreview,requireDirectory,setPublicationPreferences} from './directory.service.js';
 export const profileRoutes=Router(),reviewRoutes=Router();
 const enabled=(req,res,next)=>env.d2Enabled?next():res.status(404).json({success:false,message:'Not found'});
 const privateBudget=createPublicAuthLimiter({limit:240,windowMs:60_000});
@@ -24,6 +25,8 @@ reviewRoutes.use(enabled,privateBudget,expressBudget,authenticate,privateRespons
 profileRoutes.get('/me',safeHandler(req=>service.getProfile(req.user)));
 profileRoutes.post('/me',safeHandler(req=>{exact(req.body||{},[]);return service.createProfile(req.user);}));
 profileRoutes.patch('/me',safeHandler(req=>service.updateProfile(req.user,req.body)));
+profileRoutes.get('/me/publication',safeHandler(req=>{requireDirectory();return getPublicationPreview(req.user);}));
+profileRoutes.patch('/me/publication',safeHandler(req=>{requireDirectory();return setPublicationPreferences(req.user,req.body);}));
 profileRoutes.get('/me/credentials',safeHandler(req=>service.getCredentials(req.user)));
 profileRoutes.post('/me/credential-proposals',safeHandler(req=>service.submitProposal(req.user,req.body)));
 profileRoutes.get('/me/accreditation',safeHandler(req=>getManualAccreditation(req.user)));
