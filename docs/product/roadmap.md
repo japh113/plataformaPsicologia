@@ -18,6 +18,13 @@ Estado canónico en el [checkpoint](../project-checkpoint.md). Corte del **26 de
 
 **Propuesta posterior.** [#81](https://github.com/japh113/plataformaPsicologia/issues/81) plantea confirmar asistencia a una cita ya reservada. El plazo y sus efectos quedan pendientes de diseño y autorización. La reserva directa del hito 2 conserva su contrato.
 
+### Mejoras pendientes de los perfiles
+
+- **Perfil del psicólogo.** Evaluar su mejora integral junto con el directorio del hito 3 para aprovechar los componentes y las necesidades compartidas. Mantener diferenciados los datos privados y los que el profesional elija publicar. El alcance concreto se definirá en el encargo correspondiente.
+- **Perfil del paciente.** Evaluar su mejora integral como pendiente transversal de experiencia de usuario. Mantener separadas la información personal, la configuración de cuenta y la información clínica. El alcance concreto se definirá en el encargo correspondiente.
+
+Ambas mejoras deberán aplicar la [política de calidad visual, usabilidad y accesibilidad de PsicoPanel](../../AGENTS.md#calidad-visual-usabilidad-y-experiencia-de-usuario) y conservar la consistencia con la aplicación.
+
 ### Observaciones pendientes de continuidad clínica
 
 La revisión manual del Draft #86 dejó propuestas para precisar los pendientes del hito 4. Su evaluación requiere un encargo propio y conserva la secuencia vigente.

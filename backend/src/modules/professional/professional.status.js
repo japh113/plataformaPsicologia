@@ -1,9 +1,10 @@
 import {Router} from 'express';
+import {rateLimit} from 'express-rate-limit';
 import env from '../../config/env.js';
 import {getUserById} from '../auth/auth.service.js';
 import {verifyRestrictedToken,validateRestrictedSession} from '../auth/restricted-session.js';
 import {transaction,safeHandler,fail} from './professional.core.js';
-import {createPublicAuthLimiter} from '../auth/public-auth-limiter.js';
+import {createPublicAuthLimiter,publicAuthClientKey} from '../auth/public-auth-limiter.js';
 import {getManualAccreditation,submitManualAccreditation} from './manual-accreditation.service.js';
 const router=Router();
 export const authenticateRestricted=async(req,res,next)=>{
@@ -15,7 +16,15 @@ export const authenticateRestricted=async(req,res,next)=>{
     req.restrictedSession={id:user.id,payload,role:user.role,sessionVersion:payload.sv,fullName:user.fullName};next();
   }catch(error){res.status(error.status||503).json({success:false,message:error.status?error.message:'Estado temporalmente no disponible.'});}
 };
-router.use(createPublicAuthLimiter({limit:120,windowMs:60_000}),authenticateRestricted,(req,res,next)=>{
+// The bounded socket-peer guard runs before the Express limiter and token verification.
+router.use(createPublicAuthLimiter({limit:120,windowMs:60_000}));
+const expressBudget=rateLimit({
+  windowMs:60_000, limit:120, keyGenerator:publicAuthClientKey,
+  validate:{keyGeneratorIpFallback:false}, legacyHeaders:false, standardHeaders:'draft-7',
+  handler:(_req,res)=>res.set('Cache-Control','no-store').status(429)
+    .json({success:false,message:'Demasiadas solicitudes. Intenta más tarde.'}),
+});
+router.use(expressBudget,authenticateRestricted,(_req,res,next)=>{
   res.set('Cache-Control','private, no-store');
   next();
 });
