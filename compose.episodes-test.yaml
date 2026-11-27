@@ -61,6 +61,7 @@ services:
       BILATERAL_SECRET: ${BILATERAL_SECRET:-}
       BILATERAL_DATABASE_URL: postgres://bilateral_runtime_demo:disposable_bilateral_roles@db:5432/psicopanel_episode_demo
       D2_ENABLED: ${D2_ENABLED:-false}
+      MANUAL_ACCREDITATION_ENABLED: ${MANUAL_ACCREDITATION_ENABLED:-false}
       RESTRICTED_JWT_SECRET: ${RESTRICTED_JWT_SECRET:-}
       PROFESSIONAL_MEDIA_ROOT: /var/lib/psicopanel-professional-media
     mem_limit: 512m
@@ -88,6 +89,7 @@ services:
       VITE_ADMISSION_ENABLED: ${ADMISSION_ENABLED:-false}
       VITE_BILATERAL_ENABLED: ${BILATERAL_ENABLED:-false}
       VITE_D2_ENABLED: ${D2_ENABLED:-false}
+      VITE_MANUAL_ACCREDITATION_ENABLED: ${MANUAL_ACCREDITATION_ENABLED:-false}
       VITE_API_URL: ${EPISODE_DEMO_API_URL:-http://localhost:5000/api}
     networks: [app]
 networks:

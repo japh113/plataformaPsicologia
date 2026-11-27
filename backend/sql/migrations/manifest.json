@@ -108,5 +108,10 @@
     "version": "022",
     "file": "022_bilateral_care_context.sql",
     "sha256": "a72063e2b9c5b9ebb57684f57f0df52877abb8f8c6db955615e208db889689a8"
+  },
+  {
+    "version": "023",
+    "file": "023_manual_professional_accreditation.sql",
+    "sha256": "32444045340b0d1731d4771a6b75ca087ef36cc768742e0c731dd7295d1890cb"
   }
 ]

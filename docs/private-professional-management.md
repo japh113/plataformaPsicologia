@@ -2,6 +2,22 @@
 
 Base: main `2fe0799ee683273df2dbed872840bbfd2ef03f6d`, merge de [D1 #17](https://github.com/japh113/plataformaPsicologia/pull/17). D1 está integrado en Git; no se acredita instalación habitual de 006. D2 se implementa en rama nueva con PR Draft, sin merge ni despliegue. [Validación propia](private-professional-validation.md). D3 y nuevas vinculaciones siguen deshabilitados.
 
+## Acreditación manual e incorporación restringida
+
+La sucesora [023](../backend/sql/migrations/023_manual_professional_accreditation.sql) incorpora el alcance de [#28](https://github.com/japh113/plataformaPsicologia/issues/28) para nuevas altas ficticias. El backend requiere desarrollo local explícito, `D2_ENABLED=true` y `MANUAL_ACCREDITATION_ENABLED=true`. Las reglas y la evidencia de D2/007 descritas debajo corresponden al flujo previo.
+
+- El registro marca las altas de incorporación. La sesión restringida vigente puede consultar su solicitud y presentar versiones exactas en `/api/professional-status/me/accreditation` solo mientras la cuenta sigue pendiente de primera activación. Cuenta inactiva, suspendida o rechazada conserva su restricción. Las cuentas activas del incremento usan el perfil privado ordinario para consultar y presentar cambios.
+- Se comprueban nombre profesional, cédula, título e institución. El revisor coteja estos datos con la cuenta, el registro y la identidad por fuera de la aplicación. En el sandbox la fuente y el método se almacenan explícitamente como simulaciones. La ficha enlaza a la [consulta institucional de cédulas](https://apiaccess.gob.mx/informacion/consultar-cedula-profesional), sin incorporar ningún dato de la solicitud a la URL. El catálogo de enfoques operativos espera validación profesional.
+- La revisión exige admin/superadmin, cuenta y sesión vigentes, titular distinto y versión actual. Resultados, fecha, método y referencia permanecen reservados. El DTO del titular solo expone sus credenciales, vigencia y mensajes dirigidos a él. Auditoría registra actor, objetivo, versión y resultado con proyección mínima. Los intentos inconclusos, devoluciones y resoluciones conservan el historial por versión.
+- Una transacción serializa perfil y revisores, registra la evidencia y arbitra la cédula mediante una clave única normalizada. La vigencia interna utiliza fecha UTC y 12 meses calendario desde la comprobación. La revalidación agrega evidencia sin reemplazar la versión aprobada. La reserva de cédula conserva el reclamo durante revalidación o vencimiento y cambia al aprobar otra cédula del mismo titular.
+- La aprobación de cuenta sigue siendo una decisión explícita de backoffice. PostgreSQL exige, antes de la primera transición a activo, una decisión sustentada y vigente para la versión aprobada exacta. El cambio invalida la sesión restringida y el profesional inicia sesión de nuevo. La autorización clínica conserva sus restricciones por episodio, consentimiento, AB-23 y los controles ordinarios. La revalidación y el vencimiento no alteran el ciclo clínico.
+
+### Demostración ficticia
+
+Ejecutar `bash scripts/clinical-episodes.sh accreditation-demo`. El wrapper crea y verifica un entorno nuevo y aislado y muestra las URL de la aplicación y la API, la cuenta ficticia de revisión y el comando de limpieza del UUID propio. Registrar un profesional de prueba con dominio `accreditation.invalid`, elegir un nombre ficticio, una cédula numérica inventada y datos de una licenciatura e institución de prueba. En **Credenciales**, el revisor `reviewer@accreditation.invalid` con contraseña ficticia `Episode-Demo-Only-284!` completa el cotejo simulado. Confirmar el resultado, aprobar por separado la cuenta en el backoffice y volver a iniciar sesión como profesional.
+
+Antes de operación real se requieren validación jurídica y profesional de criterios, procedimiento de identidad, privacidad, conservación, eliminación y autorización operativa. D3 y las solicitudes públicas requieren sus propios incrementos.
+
 ## Sesiones y configuración
 
 D2 requiere `D2_ENABLED=true` y `RESTRICTED_JWT_SECRET` explícito, independiente de `JWT_SECRET`, sin fallback. Fuera de desarrollo local aplica también la validación de secretos fuertes. No se genera una clave al arrancar. La misma configuración debe suministrarse a cada proceso. Rotar la clave restringida invalida todas sus sesiones, sin rotar la ordinaria. No hay refresh, intercambio de tokens ni revocación individual al cerrar navegador: logout borra la credencial; expiración/versión invalidan tokens sustraídos.

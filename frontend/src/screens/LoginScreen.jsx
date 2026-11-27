@@ -2,7 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { LockKeyhole, Sparkles, UserPlus2, UserRoundCheck } from 'lucide-react';
 import InlineNotice from '../components/shared/InlineNotice';
 
-const demoAccounts = import.meta.env.DEV && import.meta.env.VITE_IDENTITY_DEMO === 'true' ? [
+const accreditationDemo = import.meta.env.DEV && import.meta.env.VITE_MANUAL_ACCREDITATION_ENABLED === 'true';
+const demoAccounts = accreditationDemo ? [
+  { role: 'Revisión ficticia', email: 'reviewer@accreditation.invalid', password: 'Episode-Demo-Only-284!' },
+] : import.meta.env.DEV && import.meta.env.VITE_IDENTITY_DEMO === 'true' ? [
   { role: 'Paciente sin vínculo', email: 'r@episodes.invalid', password: 'Episode-Demo-Only-284!' },
   { role: 'Paciente histórico', email: 'p@episodes.invalid', password: 'Episode-Demo-Only-284!' },
   { role: 'Psicólogo A', email: 'a@episodes.invalid', password: 'Episode-Demo-Only-284!' },
@@ -147,6 +150,7 @@ export default function LoginScreen({
     const wasRegistered = await onRegisterPsychologist(psychologistForm);
 
     if (wasRegistered) {
+      if (accreditationDemo) setLoginForm({email:psychologistForm.email,password:''});
       setPsychologistForm(buildEmptyPsychologistRegisterForm());
     }
   };
@@ -322,7 +326,7 @@ export default function LoginScreen({
         })}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      {!accreditationDemo&&<div className="grid gap-4 md:grid-cols-2">
         {renderTextField({
           label: 'Titulo profesional',
           name: 'professionalTitle',
@@ -340,7 +344,7 @@ export default function LoginScreen({
           placeholder: 'LIC-PSI-001',
           disabled: isRegistering,
         })}
-      </div>
+      </div>}
 
       {renderTextField({
         label: 'Correo',
@@ -376,7 +380,7 @@ export default function LoginScreen({
       {registrationSuccess ? (
         <InlineNotice
           tone="success"
-          title="Solicitud enviada"
+          title={accreditationDemo?'Continúa con el inicio de sesión':'Solicitud enviada'}
           message={registrationSuccess}
         />
       ) : null}
@@ -508,7 +512,9 @@ export default function LoginScreen({
         ? {
           icon: UserRoundCheck,
           title: 'Registro de psicologo',
-          subtitle: 'Tu cuenta quedara pendiente de revision hasta que el backoffice la apruebe.',
+          subtitle: accreditationDemo
+            ? 'Crea tu cuenta y luego inicia sesión para presentar tus credenciales. Usa datos ficticios en este ensayo.'
+            : 'Tu cuenta quedara pendiente de revision hasta que el backoffice la apruebe.',
         }
         : {
             icon: LockKeyhole,

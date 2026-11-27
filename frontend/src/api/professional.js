@@ -26,8 +26,31 @@ export const uploadPhoto=async(file,version)=>(await media(response=>response.js
 export const loadPhoto=async()=> media(response=>response.blob());
 export const retirePhoto=async rowVersion=>(await apiRequest('/professional-profile/me/photo',{method:'DELETE',body:JSON.stringify({rowVersion})})).data;
 export const recoverUploads=async rowVersion=>(await apiRequest('/professional-profile/me/photo/recover',{method:'POST',body:JSON.stringify({rowVersion})})).data;
-// Fixed operation; no general path argument and no access to ordinary storage.
-export const restrictedStatus=async(token,signal)=>{
-  const response=await fetch(API_BASE_URL+'/professional-status/me',{headers:{Authorization:`Bearer ${token}`},signal});
-  const body=await response.json();if(!response.ok)throw new Error('La sesión restringida terminó o el estado cambió. Inicia sesión de nuevo.');return body.data;
+// Restricted endpoints never read or write the ordinary session store.
+const restrictedRequest=async(path,token,{signal,data}={})=>{
+  const response=await fetch(API_BASE_URL+path,{
+    headers:{Authorization:`Bearer ${token}`,...(data ? {'Content-Type':'application/json'} : {})},
+    signal,
+    method:data ? 'POST' : 'GET',
+    body:data ? JSON.stringify(data) : undefined,
+  });
+  const body=await response.json();
+  if(!response.ok)throw Object.assign(new Error(response.status===401
+    ? 'La sesión restringida terminó o el estado cambió. Inicia sesión de nuevo.'
+    : body.message||'No pudimos completar la operación.'),{status:response.status});
+  return body.data;
 };
+export const restrictedStatus=(token,signal)=>restrictedRequest('/professional-status/me',token,{signal});
+export const getAccreditation=async(token,signal)=>token
+  ? restrictedRequest('/professional-status/me/accreditation',token,{signal})
+  : (await apiRequest('/professional-profile/me/accreditation',{signal})).data;
+export const submitAccreditation=async(token,data)=>token
+  ? restrictedRequest('/professional-status/me/accreditation',token,{data})
+  : (await apiRequest('/professional-profile/me/accreditation',{method:'POST',body:JSON.stringify(data)})).data;
+export const listRevalidations=async()=> (await apiRequest('/professional-reviews/revalidation')).data;
+const reviewPath=(owner,version)=>`/professional-reviews/${encodeURIComponent(owner)}/${encodeURIComponent(version)}`;
+export const getRevalidation=async(owner,version)=>(await apiRequest(reviewPath(owner,version)+'/revalidation')).data;
+export const decideManualReview=async(review,body)=>(await apiRequest(
+  reviewPath(review.ownerId,review.pending.version)+(review.mode==='revalidation'?'/revalidation':'/manual-decision'),
+  {method:'POST',body:JSON.stringify(body)}
+)).data;

@@ -530,6 +530,16 @@ Pareja y tratamientos paralelos (ADR-030): principios aprobados y mecanismos pen
 | AB-36 | LEGAL A VALIDAR: revisión jurídica mexicana de consentimiento, confidencialidad, datos, entrega de expedientes y procedimiento ARCO pendiente. Opiniones clínicas no establecen obligaciones ni restricciones legales; privacidad ordinaria no es denegación absoluta de derechos. | Diseño de pareja y preparación para producción |
 | AB-37 | RESUELTA COMO PRODUCTO: no permitir dos episodios conjuntos activos simultáneos para la misma pareja, aunque cambien profesional u objetivos (RN-73). Pendientes semántica de pausados y mecanismo técnico seguro antes de implementar. | Alcance/vinculación 2A; implementación pendiente |
 
+## Acreditación manual e incorporación profesional
+
+**APROBADO para #28.** La revisión humana es la vía principal del MVP. La vía estándar exige licenciatura en Psicología, cédula comprobada, título e institución correspondientes y cotejo humano de la identidad y titularidad. Las fuentes confiables, fechas, revisor, resultados por comprobación, referencias disponibles y motivo forman evidencia de la versión exacta. Casos ambiguos, equivalencias y titulaciones extranjeras que excedan la vía estándar esperan confirmación competente. Son criterios internos de producto.
+
+- El registro profesional nuevo permite una incorporación privada y restringida mientras la cuenta está pendiente. El titular puede presentar, consultar y corregir información propia. La primera activación exige acreditación vigente y aprobación de cuenta. Al cumplir ambas, la cuenta obtiene las funciones ordinarias actualmente autorizadas, incluida la disponibilidad y el inicio de los recorridos habilitados. Siguen aplicando AB-23, consentimientos, autorizaciones por episodio y precondiciones de activación.
+- Una revisión puede aprobar, quedar inconclusa, devolver para corrección o rechazar con motivo comunicable. La devolución cierra esa propuesta. Un resultado inconcluso conserva su revisión pendiente. La resolución corresponde a la versión exacta. Una propuesta posterior rechazada conserva la acreditación anterior vigente salvo evidencia fundada que afecte su validez.
+- La vigencia interna es de 12 meses desde la comprobación sustentada. Puede pedirse revalidación anticipada con motivo fundado. Revalidar datos sin cambios conserva la versión aprobada y agrega evidencia. Un cambio requiere otra propuesta. El vencimiento se evalúa con el reloj del servidor y conserva los controles de elegibilidad y retiro de preferencias. Los efectos clínicos adicionales requieren decisión propia.
+- El cotejo de identidad se hace fuera de la aplicación. Se conserva el registro estructurado de método y resultado, sin copias de documentos, CURP, fotografías de identificación, grabaciones ni e.firma.
+- Los enfoques terapéuticos son opcionales y declarativos. Cognitivo-conductual, sistémico y humanista son opciones candidatas sujetas a validación profesional. Se difieren especialidades, certificaciones, formación adicional y automatización. Antes de uso real se requiere validar criterios, procedimiento de identidad, privacidad, conservación, eliminación y autorización operativa.
+
 ## Acciones y supuestos no aprobados
 
 **Estado: NO APROBADA para el alcance actual**, o incompatibles con las reglas firmes según se indica:
