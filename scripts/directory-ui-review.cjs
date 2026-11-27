@@ -61,16 +61,16 @@ async function ownerProfile(page) {
   await heading(page,'Visibilidad y recepción').waitFor();
 }
 
-async function photoFile(page) {
-  const encoded=await page.evaluate(()=>{
+async function photoFile(page,color='#3730a3') {
+  const encoded=await page.evaluate(background=>{
     const canvas=document.createElement('canvas');
     canvas.width=128;canvas.height=128;
     const context=canvas.getContext('2d');
-    context.fillStyle='#3730a3';context.fillRect(0,0,128,128);
+    context.fillStyle=background;context.fillRect(0,0,128,128);
     context.fillStyle='#e0e7ff';context.textAlign='center';context.textBaseline='middle';
     context.font='bold 44px sans-serif';context.fillText('CM',64,64);
     return canvas.toDataURL('image/png').split(',')[1];
-  });
+  },color);
   return {name:'retrato-de-ensayo.png',mimeType:'image/png',buffer:Buffer.from(encoded,'base64')};
 }
 
@@ -93,6 +93,10 @@ async function photoFile(page) {
       await heading(page,'Directorio profesional').waitFor();
       await heading(page,'Elena Robles').waitFor();
       for(const name of ['Bruno Salgado','Nadia Ríos']) await heading(page,name).waitFor();
+      const elena=page.getByRole('article').filter({has:heading(page,'Elena Robles')});
+      await elena.getByRole('heading',{name:'Enfoques declarados',exact:true}).waitFor();
+      await elena.getByText('Cognitivo-conductual',{exact:true}).waitFor();
+      assert.equal(await page.getByRole('article').filter({has:heading(page,'Bruno Salgado')}).getByText('Enfoques declarados',{exact:true}).count(),0);
       for(const name of ['Clara Montes','Diana Álamo','Emilio Valle','Nadia Propuesta']) assert.equal(await heading(page,name).count(),0);
       assert.equal(await page.evaluate(()=>localStorage.getItem('psicopanel_auth_token')),null);
       assert.equal(await page.locator('meta[name=robots]').getAttribute('content'),'noindex, nofollow');
@@ -130,6 +134,7 @@ async function photoFile(page) {
       await page.getByRole('link',{name:'Ver perfil de Nadia Ríos'}).click();
       await heading(page,'Nadia Ríos').waitFor();
       await heading(page,'Formación y acreditación').waitFor();
+      await heading(page,'Enfoques declarados').waitFor();
       await page.getByText('Sistémico',{exact:true}).waitFor();
       await page.getByText('Sin recepción de nuevos pacientes',{exact:true}).waitFor();
       assert.equal(await page.getByText('Institución candidata reservada',{exact:false}).count(),0);
@@ -192,6 +197,31 @@ async function photoFile(page) {
     await owner.getByRole('status').filter({hasText:'Recepción activada.'}).waitFor();
     await desktop.reload();
     await desktop.getByText('Recibe nuevos pacientes',{exact:true}).waitFor();
+
+    const previousPhoto=photoSrc;
+    await owner.getByText('Gestionar fotografía',{exact:true}).click();
+    await owner.getByLabel('Seleccionar fotografía',{exact:true}).setInputFiles(await photoFile(owner,'#065f46'));
+    await owner.getByRole('img',{name:'Vista previa de la fotografía seleccionada'}).waitFor();
+    await shot(owner,'replace-public-photo-desktop');
+    await button(owner,'Guardar foto pública').click();
+    await owner.getByRole('status').filter({hasText:'Fotografía pública actualizada.'}).waitFor();
+    await owner.getByText('Perfil público',{exact:true}).waitFor();
+    for(const [size,page] of Object.entries(visitors)){
+      await directory(page);
+      const clara=page.getByRole('article').filter({has:heading(page,'Clara Montes')});
+      await clara.getByText('Humanista',{exact:true}).waitFor();
+      await clara.getByText('Recibe nuevos pacientes',{exact:true}).waitFor();
+      const photo=clara.locator('img');
+      await photo.evaluate(image=>image.decode());
+      photoSrc=await photo.getAttribute('src');
+      assert.notEqual(photoSrc,previousPhoto);
+      assert.equal(await page.evaluate(async url=>(await fetch(url,{cache:'no-store'})).status,previousPhoto),404);
+      await shot(page,'directory-updated-photo-'+size);
+      await page.getByRole('link',{name:'Ver perfil de Clara Montes'}).click();
+      await heading(page,'Clara Montes').waitFor();
+      assert.equal(await page.locator('article img').getAttribute('src'),photoSrc);
+    }
+
     await button(owner,'Retirar del directorio').click();
     await owner.getByRole('dialog',{name:'Retirar tu perfil público'}).waitFor();
     await button(owner,'Confirmar retiro').click();

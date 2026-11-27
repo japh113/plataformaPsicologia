@@ -67,21 +67,29 @@ function ProfessionalDetails({data,publication,busy,onSave,onCancel}) {
   </form>;
 }
 
-function PhotoSettings({data,busy,run}) {
-  const [file,setFile] = useState(null);
+function PhotoSettings({data,isPublic,busy,run}) {
+  const [selection,setSelection] = useState(null);
   const {profile} = data;
+  useEffect(()=>()=>{if(selection) URL.revokeObjectURL(selection.url);},[selection]);
   return <details className="rounded-xl border border-slate-200 px-4">
     <summary className="cursor-pointer py-3 text-sm font-semibold text-slate-800">Gestionar fotografía</summary>
     <div className="space-y-3 pb-4">
       {data.capabilities.photographsConfigured ? <>
         <p className="text-sm text-slate-700">JPEG, PNG o WebP estático, hasta 5 MiB.
-          {profile.isPublic && ' Al guardar otra fotografía, tu perfil quedará privado hasta que vuelvas a publicarlo.'}</p>
+          {isPublic && ' Al guardar la foto, los visitantes la verán en tu perfil del directorio.'}</p>
         <label className="block text-sm font-medium text-slate-800">Seleccionar fotografía
-          <input type="file" className={control} accept="image/jpeg,image/png,image/webp" onChange={event=>setFile(event.target.files[0] || null)}/>
+          <input type="file" className={control} accept="image/jpeg,image/png,image/webp" onChange={event=>{
+            const file=event.target.files[0];
+            setSelection(file ? {file,url:URL.createObjectURL(file)} : null);
+          }}/>
         </label>
+        {selection && <img src={selection.url} alt="Vista previa de la fotografía seleccionada"
+          className="h-24 w-24 rounded-xl border border-slate-200 object-cover"/>}
         <div className="flex flex-wrap gap-2">
-          <button className={primary} disabled={busy || !file} onClick={()=>
-            run(()=>api.uploadPhoto(file,profile.rowVersion),'Fotografía guardada en privado.')}>Guardar fotografía</button>
+          <button className={primary} disabled={busy || !selection} onClick={()=>run(
+            ()=>api.uploadPhoto(selection.file,profile.rowVersion,{publish:isPublic}),
+            isPublic ? 'Fotografía pública actualizada.' : 'Fotografía guardada en privado.'
+          )}>{isPublic ? 'Guardar foto pública' : 'Guardar fotografía'}</button>
           {profile.currentPhotoId && <button className={secondary} disabled={busy} onClick={()=>
             run(()=>api.retirePhoto(profile.rowVersion),'Fotografía retirada del perfil.')}>Retirar fotografía</button>}
           <button className={secondary} disabled={busy} onClick={()=>
@@ -213,7 +221,7 @@ export default function ProfessionalDirectorySettings({name}) {
                 <dd className="text-slate-700">{data.catalog.filter(item=>data.approaches.includes(item.code)).map(item=>item.label).join(' · ') || 'Sin enfoques seleccionados'}</dd></div>
             </dl>
           </>}
-          <PhotoSettings key={profile.currentPhotoId || 'no-photo'} data={data} busy={busy} run={run}/>
+          <PhotoSettings key={profile.currentPhotoId || 'no-photo'} data={data} isPublic={isPublic} busy={busy} run={run}/>
           {photoId && photo?.id===photoId && !photoSource && <p className="flex gap-2 text-sm text-slate-700"><Camera size={17} aria-hidden="true"/>
             No pudimos cargar tu fotografía. Actualiza el perfil antes de publicarla.</p>}
         </section>

@@ -129,13 +129,17 @@ test('D3 anonymous directory and owner publication on isolated PostgreSQL', {
         body:{rowVersion:published.rowVersion,modality:null}});
     });
 
-    const upload=async(owner,colour)=>{
+    const upload=async(owner,colour,{publish=false,status=200,rowVersion}={})=>{
       const png=await sharp({create:{width:48,height:48,channels:3,background:colour}}).png().toBuffer();
-      return expect(200,privatePhoto,{actor:owner.actor,method:'POST',body:png,
-        headers:{'Content-Type':'image/png','If-Match':(await refresh(owner)).rowVersion}});
+      return expect(status,privatePhoto+(publish?'/public':''),{actor:owner.actor,method:'POST',body:png,
+        headers:{'Content-Type':'image/png','If-Match':rowVersion??(await refresh(owner)).rowVersion}});
     };
     let livePhoto;
     await t.test('only the current, eligible and expressly shared photo can be retrieved',async()=>{
+      await upload(privateOwner,'#4455aa',{status:409});
+      assert.equal((await refresh(privateOwner)).isPublic,true);
+      await preferences(privateOwner,{isPublic:false});
+      await upload(privateOwner,'#4455aa',{publish:true,status:409});
       const first=await upload(privateOwner,'#4455aa');
       assert.equal((await refresh(privateOwner)).isPublic,false);
       const firstUrl=profilePath(privateOwner)+'/photo/'+first.id;
@@ -151,15 +155,44 @@ test('D3 anonymous directory and owner publication on isolated PostgreSQL', {
       await expect(404,profilePath(privateOwner)+'/photo/%2E%2E%2Fprivate.webp');
       await expect(404,profilePath(privateOwner)+'/photo/'+(await client.query(
         'SELECT storage_key FROM professional_photographs WHERE id=$1',[first.id])).rows[0].storage_key);
-      const second=await upload(privateOwner,'#11aa77');
+      await upload(privateOwner,'#11aa77',{publish:true,status:409,rowVersion:'0'});
+      const second=await upload(privateOwner,'#11aa77',{publish:true});
       livePhoto=profilePath(privateOwner)+'/photo/'+second.id;
-      await expect(404,firstUrl);
-      await expect(404,livePhoto);
-      await preferences(privateOwner,{isPublic:true});
+      assert.deepEqual((await expect(200,'/directory?name=Clara')).profiles.map(profile=>[profile.photoUrl,profile.acceptsNewPatients]),[[livePhoto,true]]);
       await expect(200,livePhoto);
       await expect(404,firstUrl);
-      const withdrawn=await preferences(privateOwner,{isPublic:false});
-      assert.equal(withdrawn.acceptsNewPatients,true);
+
+      const getClient=db.getClient;
+      let staged, resume;
+      const afterReservation=new Promise(resolve=>{staged=resolve;});
+      const continueUpload=new Promise(resolve=>{resume=resolve;});
+      db.getClient=async()=>{
+        const connection=await getClient();
+        let reserved=false;
+        return {
+          query:async(sql,values)=>{
+            const result=await connection.query(sql,values);
+            if(sql.includes('INSERT INTO professional_photographs('))reserved=true;
+            if(reserved && sql==='COMMIT'){staged();await continueUpload;}
+            return result;
+          },
+          release:()=>connection.release(),
+        };
+      };
+      let pending;
+      try {
+        pending=upload(privateOwner,'#667788',{publish:true,status:409});
+        await Promise.race([afterReservation,pending.then(()=>assert.fail('Upload stopped before staging the photo.'))]);
+        const withdrawn=await preferences(privateOwner,{isPublic:false});
+        assert.equal(withdrawn.acceptsNewPatients,true);
+        resume();
+        await pending;
+      } finally {
+        resume();
+        await Promise.allSettled([pending]);
+        db.getClient=getClient;
+      }
+      assert.equal((await refresh(privateOwner)).currentPhotoId,second.id);
       assert.deepEqual((await http(firstUrl)).payload,(await http(livePhoto)).payload);
       await expect(404,livePhoto);
       await expect(404,profilePath(privateOwner));
@@ -183,6 +216,7 @@ test('D3 anonymous directory and owner publication on isolated PostgreSQL', {
       await fixtureAccreditationExpiry(client,approvals,{keepPreferences:true});
       assert.equal((await refresh(approvals)).isPublic,true);
       await expect(404,profilePath(approvals));
+      await upload(approvals,'#4455aa',{publish:true,status:409});
       assert.ok(!(await expect(200,'/directory')).profiles.some(item=>item.publicId===approvals.publicId));
       await preferences(approvals,{isPublic:true},409);
       await expect(200,`/professional-reviews/${approvals.actor.id}/${proposed.version}/manual-decision`,{actor:admin,method:'POST',

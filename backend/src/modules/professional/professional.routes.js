@@ -32,7 +32,11 @@ profileRoutes.post('/me/credential-proposals',safeHandler(req=>service.submitPro
 profileRoutes.get('/me/accreditation',safeHandler(req=>getManualAccreditation(req.user)));
 profileRoutes.post('/me/accreditation',safeHandler(req=>submitManualAccreditation(req.user,req.body)));
 profileRoutes.get('/me/photo',safeHandler(getPhoto));
-profileRoutes.post('/me/photo',safeHandler(uploadPhoto));
+profileRoutes.post('/me/photo',safeHandler(req=>uploadPhoto(req)));
+profileRoutes.post('/me/photo/public',safeHandler(req=>{
+  requireDirectory();
+  return uploadPhoto(req,{publish:true});
+}));
 profileRoutes.delete('/me/photo',safeHandler(req=>retirePhoto(req.user,req.body)));
 profileRoutes.post('/me/photo/recover',safeHandler(req=>recoverUploads(req.user,req.body)));
 reviewRoutes.use((req,res,next)=>['admin','superadmin'].includes(req.user.role)?next():res.status(403).json({success:false,message:'Operación no autorizada.'}));

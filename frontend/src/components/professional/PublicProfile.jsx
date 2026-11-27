@@ -29,6 +29,11 @@ function Location({city, state}) {
   </span>;
 }
 
+function ApproachChips({approaches}) {
+  return <ul className="flex flex-wrap gap-2">{approaches.map(item => <li key={item}
+    className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-900">{item}</li>)}</ul>;
+}
+
 export function ProfessionalCard({profile}) {
   return <article className="flex h-full min-w-0 flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
     <div className="flex items-start gap-3">
@@ -44,6 +49,10 @@ export function ProfessionalCard({profile}) {
         {modalityLabels[profile.modality]}
       </span>
     </div>
+    {profile.approaches.length > 0 && <div className="space-y-1.5">
+      <h3 className="text-xs font-semibold text-slate-700">Enfoques declarados</h3>
+      <ApproachChips approaches={profile.approaches}/>
+    </div>}
     <div><ReceivingBadge accepts={profile.acceptsNewPatients}/></div>
     <a href={'/directorio/' + profile.publicId} aria-label={'Ver perfil de ' + profile.professionalName}
       className={secondary + ' mt-auto self-start'}>Ver perfil</a>
@@ -70,8 +79,7 @@ export default function PublicProfile({profile, previewPhoto, preview = false}) 
         {profile.description && <p className="text-sm leading-6 text-slate-700">{profile.description}</p>}
         {profile.approaches.length > 0 && <>
           <Subheading className="pt-2 text-sm font-bold text-slate-900">Enfoques declarados</Subheading>
-          <ul className="flex flex-wrap gap-2">{profile.approaches.map(item => <li key={item}
-            className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-900">{item}</li>)}</ul>
+          <ApproachChips approaches={profile.approaches}/>
           <p className="text-xs text-slate-600">Los enfoques los declara el profesional.</p>
         </>}
       </section>

@@ -6,6 +6,7 @@ import {fileURLToPath} from 'node:url';
 import env from '../../config/env.js';
 import {transaction,lockProfessional,expectVersion,fail} from './professional.core.js';
 import {decimal,exact} from './professional.validators.js';
+import {isDirectoryLocation} from './directory.catalog.js';
 const MiB=1024*1024;
 let processing=false;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -31,10 +32,23 @@ export const processImage=(input,mime)=>new Promise((resolve,reject)=>{
 });
 // Dimensions come from a second decode rather than trusting a WebP header variant.
 const processedMetadata=async buffer=>{const {default:sharp}=await import('sharp');const result=await sharp(buffer).metadata();return {width:result.width,height:result.height};};
-export const uploadPhoto=async req=>{
+
+async function lockPhotoUpload(client, actor, version, publish) {
+  const profile=await lockProfessional(client,actor);
+  expectVersion(profile,version);
+  const visible=Boolean(env.directoryEnabled && profile.is_public && profile.modality &&
+    isDirectoryLocation(profile.city,profile.state) && (await client.query(
+      'SELECT has_current_manual_accreditation($1) AS current',[actor.id]
+    )).rows[0].current);
+  if(publish && !visible)throw fail('El perfil debe seguir publicado y elegible para actualizar su fotografía pública.',409);
+  if(!publish && visible)throw fail('Usa Guardar foto pública para cambiar la fotografía de tu perfil publicado.',409);
+  return profile;
+}
+
+export const uploadPhoto=async (req,{publish=false}={})=>{
   const expected=decimal(req.headers['if-match']);
   const mime=req.headers['content-type'];if(!['image/jpeg','image/png','image/webp'].includes(mime)||req.headers['content-encoding'])throw fail('Formato de subida no permitido.',415);
-  await transaction(async client=>expectVersion(await lockProfessional(client,req.user),expected));
+  await transaction(client=>lockPhotoUpload(client,req.user,expected,publish));
   const root=await privateRoot();
   if(processing)throw fail('Procesamiento ocupado. Reintenta después.',429);
   processing=true;let photo;
@@ -46,7 +60,7 @@ export const uploadPhoto=async req=>{
     clearTimeout(intakeDeadline);
     const output=await processImage(Buffer.concat(chunks),mime),meta=await processedMetadata(output);
     photo=await transaction(async client=>{
-      const profile=await lockProfessional(client,req.user);expectVersion(profile,expected);
+      await lockPhotoUpload(client,req.user,expected,publish);
       // Serialize reservations across owners/processes without taking another account lock.
       await client.query('SELECT pg_advisory_xact_lock(728194607)');
       const quota=(await client.query(`SELECT COALESCE(sum(byte_size),0)::text AS total,COALESCE(sum(byte_size) FILTER(WHERE owner_user_id=$1),0)::text AS own,count(*)::int AS count FROM professional_photographs`,[req.user.id])).rows[0];
@@ -57,11 +71,11 @@ export const uploadPhoto=async req=>{
     const file=await fs.open(photoPath(root,photo.storage_key),constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
     try{await file.writeFile(output);await file.sync();}finally{await file.close();}
     return await transaction(async client=>{
-      const profile=await lockProfessional(client,req.user);expectVersion(profile,expected);
+      const profile=await lockPhotoUpload(client,req.user,expected,publish);
       const ready=await client.query("UPDATE professional_photographs SET status='ready' WHERE id=$1 AND owner_user_id=$2 AND status='staged' RETURNING id",[photo.id,req.user.id]);
       if(!ready.rowCount)throw fail('Carga no vigente.',409);
-      // A replacement is private until the owner has previewed and published it.
-      await client.query('UPDATE professional_publication_profiles SET current_photo_id=$2,is_public=false,row_version=row_version+1 WHERE owner_user_id=$1',[req.user.id,photo.id]);
+      await client.query('UPDATE professional_publication_profiles SET current_photo_id=$2,is_public=$3,row_version=row_version+1 WHERE owner_user_id=$1',
+        [req.user.id,photo.id,publish]);
       if(profile.current_photo_id)await client.query("UPDATE professional_photographs SET status='retired' WHERE id=$1",[profile.current_photo_id]);
       return {id:photo.id,rowVersion:String(BigInt(profile.row_version)+1n)};
     });
