@@ -3,11 +3,12 @@ import {directPayload,proposalPayload,decisionPayload,decimal} from './professio
 import {logAuditEvent} from '../../utils/audit.js';
 import env from '../../config/env.js';
 import {manualReviewDetails} from './manual-accreditation.service.js';
+import {isDirectoryLocation} from './directory.catalog.js';
 const projection=row=>row?{publicId:row.public_id,rowVersion:String(row.row_version),description:row.description,modality:row.modality,
   city:row.city,state:row.state,isPublic:row.is_public,acceptsNewPatients:row.accepts_new_patients,
   approvedCredentialVersion:row.approved_credential_version,pendingCredentialVersion:row.pending_credential_version,currentPhotoId:row.current_photo_id}:null;
 const catalog=async client=>(await client.query('SELECT code,label FROM professional_general_approaches ORDER BY code')).rows;
-const profileDTO=async(client,row)=>({profile:projection(row),approaches:row?(await client.query('SELECT approach_code FROM professional_profile_approaches WHERE owner_user_id=$1 ORDER BY approach_code',[row.owner_user_id])).rows.map(r=>r.approach_code):[],catalog:await catalog(client),capabilities:{publish:false,approveCredentials:false,descriptionPubliclyCleared:false,photographsConfigured:Boolean(env.professionalMediaRoot)}});
+const profileDTO=async(client,row)=>({profile:projection(row),approaches:row?(await client.query('SELECT approach_code FROM professional_profile_approaches WHERE owner_user_id=$1 ORDER BY approach_code',[row.owner_user_id])).rows.map(r=>r.approach_code):[],catalog:await catalog(client),capabilities:{publish:env.directoryEnabled,approveCredentials:false,descriptionPubliclyCleared:false,photographsConfigured:Boolean(env.professionalMediaRoot)}});
 export const getProfile=actor=>transaction(async client=>{
   const {profile,legacy}=await lockProfessionalContext(client,actor);
   const result=await profileDTO(client,profile);
@@ -22,12 +23,20 @@ export const updateProfile=(actor,body)=>{
   const changes=directPayload(body);
   return transaction(async client=>{
     const profile=await lockProfessional(client,actor);expectVersion(profile,body.rowVersion);
+    const modality=Object.hasOwn(changes,'modality')?changes.modality:profile.modality;
+    const city=changes.city??profile.city, state=changes.state??profile.state;
+    if (profile.is_public && (!modality || !isDirectoryLocation(city,state))) {
+      throw fail('El perfil público requiere modalidad y una ubicación del catálogo. Retira el perfil para quitar estos datos.',409);
+    }
+    if (env.directoryEnabled && ('city' in changes || 'state' in changes) && (city || state) && !isDirectoryLocation(city,state)) {
+      throw fail('Elige una ciudad y un estado del catálogo.');
+    }
     if(changes.approachCodes){const allowed=await catalog(client);if(changes.approachCodes.some(code=>!allowed.some(row=>row.code===code)))throw fail('Enfoque no autorizado.');
       await client.query('DELETE FROM professional_profile_approaches WHERE owner_user_id=$1',[actor.id]);
       for(const code of changes.approachCodes)await client.query('INSERT INTO professional_profile_approaches(owner_user_id,approach_code) VALUES($1,$2)',[actor.id,code]);}
     const next=(await client.query(`UPDATE professional_publication_profiles SET description=$3,modality=$4,city=$5,state=$6,row_version=row_version+1
       WHERE owner_user_id=$1 AND row_version=$2 RETURNING *`,[actor.id,body.rowVersion,changes.description??profile.description,
-      Object.hasOwn(changes,'modality')?changes.modality:profile.modality,changes.city??profile.city,changes.state??profile.state])).rows[0];
+      modality,city,state])).rows[0];
     return profileDTO(client,next);
   });
 };

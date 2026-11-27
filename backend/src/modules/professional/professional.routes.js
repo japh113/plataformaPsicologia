@@ -8,6 +8,7 @@ import * as service from './professional.service.js';
 import {getPhoto,uploadPhoto,retirePhoto,recoverUploads} from './professional.photos.js';
 import {createPublicAuthLimiter,publicAuthClientKey} from '../auth/public-auth-limiter.js';
 import {getManualAccreditation,submitManualAccreditation,decideManualAccreditation} from './manual-accreditation.service.js';
+import {getPublicationPreview,requireDirectory,setPublicationPreferences} from './directory.service.js';
 export const profileRoutes=Router(),reviewRoutes=Router();
 const enabled=(req,res,next)=>env.d2Enabled?next():res.status(404).json({success:false,message:'Not found'});
 const privateBudget=createPublicAuthLimiter({limit:240,windowMs:60_000});
@@ -24,12 +25,18 @@ reviewRoutes.use(enabled,privateBudget,expressBudget,authenticate,privateRespons
 profileRoutes.get('/me',safeHandler(req=>service.getProfile(req.user)));
 profileRoutes.post('/me',safeHandler(req=>{exact(req.body||{},[]);return service.createProfile(req.user);}));
 profileRoutes.patch('/me',safeHandler(req=>service.updateProfile(req.user,req.body)));
+profileRoutes.get('/me/publication',safeHandler(req=>{requireDirectory();return getPublicationPreview(req.user);}));
+profileRoutes.patch('/me/publication',safeHandler(req=>{requireDirectory();return setPublicationPreferences(req.user,req.body);}));
 profileRoutes.get('/me/credentials',safeHandler(req=>service.getCredentials(req.user)));
 profileRoutes.post('/me/credential-proposals',safeHandler(req=>service.submitProposal(req.user,req.body)));
 profileRoutes.get('/me/accreditation',safeHandler(req=>getManualAccreditation(req.user)));
 profileRoutes.post('/me/accreditation',safeHandler(req=>submitManualAccreditation(req.user,req.body)));
 profileRoutes.get('/me/photo',safeHandler(getPhoto));
-profileRoutes.post('/me/photo',safeHandler(uploadPhoto));
+profileRoutes.post('/me/photo',safeHandler(req=>uploadPhoto(req)));
+profileRoutes.post('/me/photo/public',safeHandler(req=>{
+  requireDirectory();
+  return uploadPhoto(req,{publish:true});
+}));
 profileRoutes.delete('/me/photo',safeHandler(req=>retirePhoto(req.user,req.body)));
 profileRoutes.post('/me/photo/recover',safeHandler(req=>recoverUploads(req.user,req.body)));
 reviewRoutes.use((req,res,next)=>['admin','superadmin'].includes(req.user.role)?next():res.status(403).json({success:false,message:'Operación no autorizada.'}));

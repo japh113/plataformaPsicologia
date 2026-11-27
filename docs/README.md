@@ -1,8 +1,8 @@
 # Documentación de PsicoPanel
 
-Continuidad vigente: [checkpoint](project-checkpoint.md), corte del **19 de noviembre de 2026**, base `main` `13b6efa106bde7767afe3f8faed27c0c781705a3`, merge #78. **2A parcial** con SQL 001–017 integrado.
+Continuidad vigente en el [checkpoint](project-checkpoint.md), corte del **27 de noviembre de 2026**, base `main` `e3381627786546962afe0ba687b979f37a0c1711`, merge #87. **2A parcial** con SQL 001–023 integrado.
 
-El incremento vigente retira la entrevista global y deja la [admisión individual por episodio](stage2a-identity-directory-intake.md#admisión-clínica-y-entrevistas--contrato-objetivo) como recorrido único de entrevista en el sandbox. [Hitos aprobados](product/roadmap.md#planificación-vigente-por-hitos-funcionales).
+El incremento #29 entrega en rama el [directorio de ensayo y la publicación optativa](identity-directory-delivery-plan.md#implementación-d3-y-demo-del-directorio). Los [hitos aprobados](product/roadmap.md#planificación-vigente-por-hitos-funcionales) mantienen la admisión y la primera consulta individual ficticia ya integradas.
 
 ## Ruta mínima de lectura
 
@@ -24,7 +24,7 @@ No hace falta leer todo docs/ para iniciar una tarea. [README raíz](../README.m
 | Ver seguridad actual | [Triage de 28 CodeQL y cero Dependabot](security-codeql-triage.md). Corte fechado y residual por superficie; no evaluación de despliegue ni falso positivo automático. |
 | Desarrollar/verificar | [Desarrollo Docker/WSL](development.md), [CI implementada](ci-implementation.md). Destinos nuevos autorizados, siete checks, artifacts 14 días por HEAD/base/merge/intento. |
 | Identidad y contactos | [B](patient-identity-verification.md), [C](contact-changes.md), [diseño bcrypt/012 aprobado](contact-bcrypt-admission-design.md), [auth pública #55](public-auth-hardening.md). Simuladores no autorizan proveedores reales. |
-| Perfil profesional/directorio | [Plan A/B/C/D](identity-directory-delivery-plan.md), [D1/006](professional-persistence.md), [D2/007](private-professional-management.md). D1/D2 integrados; D2 condicionado a configuración; aprobación acreditada y D3 siguen pendientes (#28/#29). |
+| Perfil profesional/directorio | [Plan A/B/C/D](identity-directory-delivery-plan.md), [D1/006](professional-persistence.md), [D2/007](private-professional-management.md). D1/D2 y acreditación manual integrados. [D3](identity-directory-delivery-plan.md#implementación-d3-y-demo-del-directorio) en rama #29 para ensayos ficticios. |
 | Episodios/participantes y privacidad | [Paralelos/pareja](parallel-couple-episodes.md), [fundamentos 003/008](clinical-episodes-foundation.md), [evaluación denegadora](episode-authorization-foundation.md), [recursos](episode-resource-resolution.md). Estructura preparada, sin permisos positivos. |
 | Procedencia privada y mínimos técnicos | [Elegibilidad/009](private-note-read-eligibility.md), [originales/010](private-note-origins.md), [resolver/011](private-note-origin-resolver.md). Los tres contratos se complementan; 011 ya integrado #54, no conectado a lectores operativos. |
 | Inventario de datos y destinatarios | [Privacidad/DTO actual y objetivo 2A](patient-response-privacy.md#consolidación-2a--inventario-y-permisos-objetivo). [Alternativas de audiencia #51](patient-response-privacy.md#propuesta-2a--contrato-de-audiencia-verificable) siguen propuestas salvo subconjunto ADR-032; materiales/publicación no aprobados en bloque. |
@@ -52,4 +52,4 @@ Estos informes conservan fecha, SHA, resultados y límites de **su** entrega. «
 
 Checkpoint se actualiza sin acumular todos los PRs; ADR preservan decisiones, roadmap prioridades/dependencias, contratos comportamientos exigibles, Issues trabajo/estado, e informes evidencia fechada por commit. Al integrar una entrega, verificar main y ajustar las entradas vigentes, dejando enlaces a historia. Inventario se amplía con cada documento nuevo; el tamaño no decide su valor. [Limpieza propuesta](documentation-inventory.md#segundo-pr-de-limpieza-propuesto-no-autorizado) requiere otro alcance: no mover/eliminar/fusionar archivos en este PR.
 
-Mantener `prepared`, `allowed:false`, `audienceVerified:false`, AB-23, originales privados y separación backoffice/clínica. Conservar SQL 001–017/manifiesto/hashes; sin bases habituales, datos reales, migraciones, publicación, proveedores, merge o despliegue por inferencia documental.
+Mantener `prepared`, `allowed:false`, `audienceVerified:false`, AB-23, originales privados y separación backoffice/clínica. Conservar SQL 001–023/manifiesto/hashes; sin bases habituales, datos reales, migraciones, publicación, proveedores, merge o despliegue por inferencia documental.

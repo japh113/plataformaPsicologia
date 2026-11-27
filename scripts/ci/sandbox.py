@@ -74,13 +74,20 @@ class Sandbox:
     def review(self,kind):
         assert kind in KINDS
         if kind=='D2':self.env.update(D2_ENABLED='true',RESTRICTED_JWT_SECRET='D2-private-demo-fixture-Independent-Key-84930276')
-        if kind=='ACR':self.env.update(D2_ENABLED='true',MANUAL_ACCREDITATION_ENABLED='true',RESTRICTED_JWT_SECRET='accreditation-disposable-restricted-key-284391',EPISODE_DEMO_PGUSER='consultation_legacy_demo',EPISODE_DEMO_PGPASSWORD='disposable_consultation_legacy')
+        if kind in ('ACR','D3'):self.env.update(D2_ENABLED='true',MANUAL_ACCREDITATION_ENABLED='true',RESTRICTED_JWT_SECRET='accreditation-disposable-restricted-key-284391',EPISODE_DEMO_PGUSER='consultation_legacy_demo',EPISODE_DEMO_PGPASSWORD='disposable_consultation_legacy')
+        if kind=='D3':self.env.update(D3_ENABLED='true')
         if kind in ('ADM','CARE'):self.env.update(FIRST_CONSULTATION_ENABLED='true',EPISODE_DEMO_PGUSER='consultation_legacy_demo',EPISODE_DEMO_PGPASSWORD='disposable_consultation_legacy',BILATERAL_ENABLED='true',BILATERAL_SECRET='fictitious-bilateral-independent-demo-key-32bytes',ADMISSION_ENABLED='true',ADMISSION_SECRET='fictitious-admission-independent-demo-key-32bytes')
         if kind=='CARE':self.env.update(UNIFIED_CARE_ENABLED='true')
         if kind=='VIN':self.env.update(EPISODE_DEMO_PGUSER='consultation_legacy_demo',EPISODE_DEMO_PGPASSWORD='disposable_consultation_legacy',BILATERAL_ENABLED='true',BILATERAL_SECRET='fictitious-bilateral-independent-demo-key-32bytes',D2_ENABLED='true',RESTRICTED_JWT_SECRET='D2-private-demo-fixture-Independent-Key-84930276')
-        self.cmd('run','--rm','-T','-e','NODE_ENV=development',*(['-e','FIRST_CONSULTATION_ENABLED'] if kind in ('ADM','CARE') else []),*(['-e','UNIFIED_CARE_ENABLED'] if kind=='CARE' else []),'backend','node','scripts/create-'+('admission' if kind in ('ADM','CARE') else 'bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'accreditation' if kind=='ACR' else 'identity')+'-demo.js')
+        fixture='admission' if kind in ('ADM','CARE') else 'bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'accreditation' if kind in ('ACR','D3') else 'identity'
+        fixture_flags={'ADM':['FIRST_CONSULTATION_ENABLED'],
+                       'CARE':['FIRST_CONSULTATION_ENABLED','UNIFIED_CARE_ENABLED'],
+                       'D3':['D2_ENABLED','MANUAL_ACCREDITATION_ENABLED','D3_ENABLED','RESTRICTED_JWT_SECRET']}
+        fixture_env=[arg for flag in fixture_flags.get(kind,[]) for arg in ('-e',flag)]
+        self.cmd('run','--rm','-T','-e','NODE_ENV=development',*fixture_env,'backend','node','scripts/create-'+fixture+'-demo.js')
         self.cmd('--profile','demo','up','-d','api','frontend')
-        review=str(uuid.uuid4());stem='accreditation' if kind=='ACR' else 'care' if kind=='CARE' else 'admission' if kind=='ADM' else 'bilateral' if kind=='VIN' else 'professional' if kind=='D2' else 'contact' if kind=='C' else 'ui'
+        review=str(uuid.uuid4())
+        stem={'ACR':'accreditation','D3':'directory','CARE':'care','ADM':'admission','VIN':'bilateral','D2':'professional','C':'contact','B':'ui'}[kind]
         label='io.psicopanel.'+stem+'-review.run'
         tag='psicopanel-'+stem+'-review-'+episode_images.execution_suffix(review)+'-chromium:isolated'
         assert not subprocess.check_output(['docker','ps','-aq','--filter','label='+label+'='+review],text=True).strip()
@@ -94,11 +101,11 @@ class Sandbox:
         command(['docker','build','--no-cache','-t',tag,'-f',str(dockerfile),'scripts/ci/browser'],timeout=900)
         config={'work':str(work.resolve()),'out':str(out.resolve()),'baseline':str((work/'baseline.json').resolve()),'run':review,'demo':self.run,'project':self.project,'network':self.project+'_app','image':tag,'base':'http://frontend.localhost:5173','composeArgs':self.args}
         file=self.path/'review.json';file.write_text(json.dumps(config))
-        command(['python3','scripts/run-'+('identity' if kind=='B' else 'professional' if kind=='ACR' else stem)+'-ui-review.py',str(file)]+(['accreditation'] if kind=='ACR' else []),timeout=600)
+        command(['python3','scripts/run-'+('identity' if kind=='B' else 'professional' if kind in ('ACR','D3') else stem)+'-ui-review.py',str(file)]+([stem] if kind in ('ACR','D3') else []),timeout=600)
         data=json.loads((work/('review-data.json' if kind=='B' else 'results.json')).read_text())
         source=Path('scripts/'+('identity' if kind=='B' else stem)+'-ui-review.cjs').read_text()
         expected=set(re.findall(r"await (?:test|scenario)\('([^']+)'",source))
-        if kind in ['D2','VIN','ADM','CARE','ACR']:assert expected==set(json.loads(Path('scripts/ci/browser-cases.json').read_text())[kind])
+        if kind in ['D2','VIN','ADM','CARE','ACR','D3']:assert expected==set(json.loads(Path('scripts/ci/browser-cases.json').read_text())[kind])
         cases=data['results'];assert set(r['id'] for r in cases)==expected and len(cases)==len(expected)
         validate_cases(kind,cases)
         assert all(r['status']=='PASS' for r in cases)

@@ -2,14 +2,16 @@ import {apiRequest,API_BASE_URL,beginSessionRequest,clearAuthToken} from './clie
 export const getProfile=async()=> (await apiRequest('/professional-profile/me')).data;
 export const createProfile=async()=> (await apiRequest('/professional-profile/me',{method:'POST',body:'{}'})).data;
 export const updateProfile=async body=>(await apiRequest('/professional-profile/me',{method:'PATCH',body:JSON.stringify(body)})).data;
+export const getPublication=async()=>(await apiRequest('/professional-profile/me/publication')).data;
+export const updatePublication=async body=>(await apiRequest('/professional-profile/me/publication',{method:'PATCH',body:JSON.stringify(body)})).data;
 export const getCredentials=async()=>(await apiRequest('/professional-profile/me/credentials')).data;
 export const submitProposal=async body=>(await apiRequest('/professional-profile/me/credential-proposals',{method:'POST',body:JSON.stringify(body)})).data;
 export const listReviews=async()=>(await apiRequest('/professional-reviews/pending')).data;
 export const getReview=async(owner,version)=>(await apiRequest(`/professional-reviews/${encodeURIComponent(owner)}/${encodeURIComponent(version)}`)).data;
 export const decideReview=async(owner,version,body)=>(await apiRequest(`/professional-reviews/${encodeURIComponent(owner)}/${encodeURIComponent(version)}/decision`,{method:'POST',body:JSON.stringify(body)})).data;
-const media=async(read,options={})=>{
+const media=async(read,options={},suffix='')=>{
   const {token,ensureCurrent}=beginSessionRequest();
-  const response=await fetch(API_BASE_URL+'/professional-profile/me/photo',{...options,headers:{...options.headers,Authorization:`Bearer ${token}`}});
+  const response=await fetch(API_BASE_URL+'/professional-profile/me/photo'+suffix,{...options,headers:{...options.headers,Authorization:`Bearer ${token}`}});
   ensureCurrent();
   const body=await (response.ok?read(response):response.json());
   ensureCurrent();
@@ -22,8 +24,10 @@ const media=async(read,options={})=>{
   }
   return body;
 };
-export const uploadPhoto=async(file,version)=>(await media(response=>response.json(),{method:'POST',headers:{'Content-Type':file.type,'If-Match':version},body:file})).data;
-export const loadPhoto=async()=> media(response=>response.blob());
+export const uploadPhoto=async(file,version,{publish=false}={})=>(await media(response=>response.json(),{
+  method:'POST',headers:{'Content-Type':file.type,'If-Match':version},body:file,
+},publish?'/public':'')).data;
+export const loadPhoto=async(id)=> media(response=>response.blob(),id?{headers:{'If-Match':id}}:{});
 export const retirePhoto=async rowVersion=>(await apiRequest('/professional-profile/me/photo',{method:'DELETE',body:JSON.stringify({rowVersion})})).data;
 export const recoverUploads=async rowVersion=>(await apiRequest('/professional-profile/me/photo/recover',{method:'POST',body:JSON.stringify({rowVersion})})).data;
 // Restricted endpoints never read or write the ordinary session store.

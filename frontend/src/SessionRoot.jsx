@@ -2,6 +2,8 @@ import {useEffect,useState} from 'react';
 import App from './App';
 import {restrictedStatus} from './api/professional';
 import ProfessionalAccreditation from './screens/ProfessionalAccreditation';
+import DirectoryScreen from './screens/DirectoryScreen';
+import {directoryEnabled} from './api/directory';
 const labels={pending_review:'Pendiente de revisión',rejected:'Solicitud rechazada',suspended:'Cuenta suspendida'};
 function RestrictedStatus({token,onLogout}){
   const [data,setData]=useState(null),[error,setError]=useState('');
@@ -30,6 +32,8 @@ function RestrictedStatus({token,onLogout}){
 }
 export default function SessionRoot(){
   const [restricted,setRestricted]=useState(null),[generation,setGeneration]=useState(0);
+  const directoryRoute=/^\/directorio(?:\/(.*))?$/.exec(window.location.pathname);
+  if(directoryEnabled && directoryRoute) return <DirectoryScreen id={directoryRoute[1]}/>;
   if(restricted)return <RestrictedStatus token={restricted} onLogout={()=>{setRestricted(null);setGeneration(value=>value+1);}}/>;
   return <App key={generation} onRestrictedSession={setRestricted}/>;
 }

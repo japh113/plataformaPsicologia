@@ -293,6 +293,43 @@ test('023 manual accreditation in an isolated ordinary API, HTTP and PostgreSQL'
         await reply;
       }
     });
+    await t.test('a restricted state read checks expiry after COMMIT',async sub=>{
+      const subject=await register('expiry-commit');
+      await pgClient.query(`INSERT INTO professional_account_messages(owner_user_id,author_user_id,author_role,account_status,owner_message)
+        VALUES($1,$2,'admin','pending_review','Mensaje protegido de COMMIT')`,[subject.id,reviewer]);
+      const path='/professional-status/me';
+      const expires=jwt.decode(subject.restrictedToken).exp;
+      const clock=sub.mock.method(Date,'now',()=> (expires-1)*1000);
+      const getClient=db.getClient;
+      let commits=0,expireDuringCommit=false;
+      db.getClient=async()=>{
+        const client=await getClient();
+        return {
+          query:async(sql,values)=>{
+            const result=client.query(sql,values);
+            if(sql==='COMMIT'){
+              commits++;
+              if(expireDuringCommit)clock.mock.mockImplementation(()=>expires*1000);
+            }
+            return result;
+          },
+          release:()=>client.release(),
+        };
+      };
+      try {
+        assert.equal((await expect(200,path,subject.restrictedToken)).messages[0].message,'Mensaje protegido de COMMIT');
+        assert.equal(commits,1);
+        expireDuringCommit=true;
+        const result=await http(path,subject.restrictedToken);
+        assert.equal(commits,2);
+        assert.equal(result.status,401);
+        assert.equal(result.body.data,undefined);
+        assert.doesNotMatch(JSON.stringify(result.body),/Mensaje protegido|pending_review/);
+      } finally {
+        db.getClient=getClient;
+        clock.mock.restore();
+      }
+    });
     await t.test('suspension committed during a review invalidates the decision and the restricted session',async()=>{
       const subject=await register('suspension-race');
       const version=(await submit(subject,{licenseNumber:'900019'})).version;
