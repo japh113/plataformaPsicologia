@@ -28,6 +28,9 @@ const secondary = 'min-h-11 rounded-lg border border-slate-300 px-4 py-2 font-se
 export default function ManualAccreditationReview({review,onResolve,busy}) {
   const revalidation=review.mode==='revalidation';
   const available = Object.keys(outcomes).filter(key => revalidation === key.startsWith('revalidat'));
+  const [outcome,setOutcome]=useState('');
+  const [affectsPrior,setAffectsPrior]=useState(false);
+  const showPrior=outcome==='rejected'&&review.approved;
   const [confirmation,setConfirmation]=useState(null);
   const confirmTitle=useRef(null);
   const confirming=Boolean(confirmation?.outcome);
@@ -42,7 +45,17 @@ export default function ManualAccreditationReview({review,onResolve,busy}) {
       setConfirmation({error:'Marca cada comprobación que coincida y registra el método de cotejo antes de aprobar.'});
       return;
     }
-    setConfirmation({rowVersion:review.rowVersion,outcome,message:form.get('message'),internalNote:form.get('internalNote'),evidence});
+    const check=form.get('priorCheck');
+    const priorImpact=showPrior&&affectsPrior ? {
+      version:review.approved.version,
+      message:form.get('priorReason'),
+      evidence:{
+        ...Object.fromEntries(checks.map(([key])=>[key,key===check?'discrepancy':'pending'])),
+        checkedOn:form.get('priorDate'), reference:form.get('priorReference'),
+        identityMethod:check==='identity'?'simulated_official_id':'pending',
+      },
+    } : undefined;
+    setConfirmation({priorImpact,rowVersion:review.rowVersion,outcome,message:form.get('message'),internalNote:form.get('internalNote'),evidence});
   };
   return <article className="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 sm:p-6">
     <header className="space-y-2">
@@ -81,7 +94,7 @@ export default function ManualAccreditationReview({review,onResolve,busy}) {
         <div className="space-y-3 border-t border-slate-200 pt-4">
           <h3 className="font-bold text-slate-900">Resolución</h3>
           <div><label htmlFor="manual-review-outcome" className="block text-sm font-medium text-slate-800">Resultado</label>
-          <select id="manual-review-outcome" name="outcome" className={input} required defaultValue="">
+          <select id="manual-review-outcome" name="outcome" className={input} required value={outcome} onChange={event=>{setOutcome(event.target.value);setAffectsPrior(false);}}>
             <option value="" disabled>Selecciona el resultado</option>
             {available.map(value=><option key={value} value={value}>{outcomes[value]}</option>)}
           </select></div>
@@ -89,6 +102,28 @@ export default function ManualAccreditationReview({review,onResolve,busy}) {
             <textarea name="message" required maxLength={2000} rows={3} className={input} aria-describedby="accreditation-message-help"/>
           </label>
           <p id="accreditation-message-help" className="text-sm text-slate-600">Explica el resultado y el siguiente paso. Evita datos de otras cuentas.</p>
+          {showPrior&&<section className="space-y-3 rounded-xl border border-slate-200 p-4">
+            <h4 className="font-semibold">Acreditación anterior · versión {review.approved.version}</h4>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={affectsPrior} onChange={event=>setAffectsPrior(event.target.checked)}/>
+              La discrepancia comprobada también afecta a esta versión
+            </label>
+            {affectsPrior&&<>
+              <AccreditationDetails value={review.approved}/>
+              <label className="block text-sm">Comprobación contradictoria de la versión anterior
+                <select name="priorCheck" className={input} required defaultValue="">
+                  <option value="" disabled>Selecciona qué comprobaste</option>
+                  {checks.map(([key,label])=><option key={key} value={key}>{label}{key==='identity'?' (identificación oficial simulada)':''}</option>)}
+                </select>
+              </label>
+              <label className="block text-sm">Fecha del cotejo anterior<input type="date" name="priorDate" required className={input}/></label>
+              <label className="block text-sm">Referencia ficticia del cotejo anterior<input name="priorReference" required maxLength={160} className={input}/></label>
+              <label className="block text-sm">Motivo de revalidación para el profesional
+                <textarea name="priorReason" required maxLength={2000} className={input} aria-describedby="prior-reason-help"/>
+              </label>
+              <p id="prior-reason-help" className="text-sm text-slate-600">Explica qué hallazgo afecta a la versión aprobada y qué debe hacer el profesional.</p>
+            </>}
+          </section>}
           <details className="rounded-lg border border-slate-200 p-3">
             <summary className="cursor-pointer text-sm font-semibold">Agregar observación interna</summary>
             <label className="mt-2 block text-sm font-medium">Observación reservada<textarea name="internalNote" maxLength={4000} className={input}/></label>
@@ -99,7 +134,9 @@ export default function ManualAccreditationReview({review,onResolve,busy}) {
       {confirmation?.error&&<p role="alert" className="rounded-xl bg-rose-50 p-3 text-sm text-rose-900">{confirmation.error}</p>}
       {confirmation?.outcome&&<div aria-live="polite" className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
         <h3 tabIndex={-1} ref={confirmTitle} className="font-bold text-indigo-950">{outcomes[confirmation.outcome]}</h3>
-        <p className="text-sm text-indigo-950">{effects[confirmation.outcome]}</p>
+        <p className="text-sm text-indigo-950">{confirmation.priorImpact
+          ? `La propuesta se rechazará y la versión ${confirmation.priorImpact.version} quedará pendiente de revalidación. Se retirarán las preferencias de publicación y de recepción de solicitudes. El profesional recibirá ambos mensajes.`
+          : effects[confirmation.outcome]}</p>
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={busy} onClick={()=>onResolve(confirmation)}
             className={'min-h-11 rounded-lg px-4 py-2 font-semibold text-white focus-visible:outline-indigo-700 disabled:opacity-60 '+(confirmation.outcome==='rejected'?'bg-rose-700':'bg-indigo-700')}>

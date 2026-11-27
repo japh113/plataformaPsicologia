@@ -2,7 +2,7 @@ import {Router} from 'express';
 import {rateLimit} from 'express-rate-limit';
 import env from '../../config/env.js';
 import {getUserById} from '../auth/auth.service.js';
-import {verifyRestrictedToken,validateRestrictedSession} from '../auth/restricted-session.js';
+import {verifyRestrictedToken,validateRestrictedSession,validateRestrictedSessionExpiry} from '../auth/restricted-session.js';
 import {transaction,safeHandler,fail} from './professional.core.js';
 import {createPublicAuthLimiter,publicAuthClientKey} from '../auth/public-auth-limiter.js';
 import {getManualAccreditation,submitManualAccreditation} from './manual-accreditation.service.js';
@@ -36,10 +36,12 @@ router.get('/me',safeHandler(async(req)=>{
       ${env.manualAccreditationEnabled ? ', manual_accreditation_required, manual_onboarded_at' : ''}
       FROM psychologist_profiles WHERE user_id=$1 FOR UPDATE`,[id])).rows[0];
     validateRestrictedSession(row?{id:row.id,role:row.role,isActive:row.is_active,sessionVersion:row.session_version,psychologistStatus:profile?.approval_status}:null,payload);
+    const messages = (await client.query(`SELECT id,account_status AS "accountStatus",owner_message AS message,created_at AS "createdAt"
+      FROM professional_account_messages WHERE owner_user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 50`,[id])).rows;
+    validateRestrictedSessionExpiry(payload);
     return {status:profile.approval_status,
       manualOnboarding:Boolean(profile.manual_accreditation_required && !profile.manual_onboarded_at && profile.approval_status==='pending_review'),
-      messages:(await client.query(`SELECT id,account_status AS "accountStatus",owner_message AS message,created_at AS "createdAt"
-      FROM professional_account_messages WHERE owner_user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 50`,[id])).rows};
+      messages};
   });
 }));
 router.get('/me/accreditation',safeHandler(req=>getManualAccreditation(req.restrictedSession,{onboarding:true})));

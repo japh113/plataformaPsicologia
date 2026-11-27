@@ -187,11 +187,51 @@ test('023 manual accreditation in an isolated ordinary API, HTTP and PostgreSQL'
       });
       assert.equal(rejection.status,200,JSON.stringify(rejection.body));
       assert.equal((await expect(200,ordinary,session.token)).approved.version,version);
-      let renewal=await expect(200,reviewPath(winner,version)+'/revalidation',token(reviewer));
-      await expect(200,reviewPath(winner,version)+'/revalidation',token(reviewer),{
-        rowVersion:renewal.rowVersion,outcome:'revalidation_requested',message:'Aviso ficticio verificable.',evidence,
+      const next=await expect(200,ordinary,session.token,{
+        ...proposed,rowVersion:(await expect(200,ordinary,session.token)).rowVersion,licenseNumber:'900021',
       });
-      assert.equal((await expect(200,ordinary,session.token)).validity.requiresReview,true);
+      await pgClient.query(`UPDATE professional_publication_profiles SET is_public=true,
+        accepts_new_patients=true,row_version=row_version+1 WHERE owner_user_id=$1`,[winner.id]);
+      const review=await detail(winner,next.version);
+      const priorImpact={version,message:'El título anterior requiere volver a comprobarse.',
+        evidence:{...evidence,reference:'SIM-PRIOR',title:'discrepancy'}};
+      const rejectionWithImpact={rowVersion:review.rowVersion,outcome:'rejected',
+        evidence:{...evidence,title:'discrepancy'},priorImpact};
+      assert.equal((await decision(winner,next.version,{...rejectionWithImpact,priorImpact:{...priorImpact,version:next.version}})).status,409);
+      assert.equal((await decision(winner,next.version,{...rejectionWithImpact,priorImpact:{...priorImpact,evidence}})).status,400);
+      await pgClient.query(`CREATE FUNCTION test_reject_final_decision() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'fixture rollback'; END $$;
+        CREATE TRIGGER test_reject_final_decision BEFORE INSERT ON professional_credential_decisions
+        FOR EACH ROW EXECUTE FUNCTION test_reject_final_decision()`);
+      try {
+        assert.equal((await decision(winner,next.version,rejectionWithImpact)).status,409);
+        const rolledBack=await expect(200,ordinary,session.token);
+        assert.equal(rolledBack.validity.current,true);
+        assert.equal(rolledBack.pending.version,next.version);
+        assert.ok(!rolledBack.events.some(event=>event.message===priorImpact.message));
+        assert.equal((await pgClient.query('SELECT is_public FROM professional_publication_profiles WHERE owner_user_id=$1',[winner.id])).rows[0].is_public,true);
+      } finally {
+        await pgClient.query('DROP TRIGGER test_reject_final_decision ON professional_credential_decisions; DROP FUNCTION test_reject_final_decision()');
+      }
+      assert.equal((await decision(winner,next.version,rejectionWithImpact)).status,200);
+      const impacted=await expect(200,ordinary,session.token);
+      assert.equal(impacted.accountStatus,'active');
+      assert.equal(impacted.pending,null);
+      assert.equal(impacted.approved.version,version);
+      assert.equal(impacted.validity.requiresReview,true);
+      assert.ok(impacted.events.some(event=>event.version===version && event.message===priorImpact.message));
+      assert.ok(impacted.events.some(event=>event.version===next.version && event.outcome==='rejected'));
+      assert.deepEqual((await pgClient.query(`
+        SELECT p.is_public,p.accepts_new_patients,r.credential_version::text AS version,r.outcome,d.outcome AS original
+        FROM professional_publication_profiles p
+        JOIN professional_credential_validity v ON (v.owner_user_id,v.credential_version)=(p.owner_user_id,p.approved_credential_version)
+        JOIN professional_manual_reviews r ON r.id::text=v.evidence_reference AND r.owner_user_id=v.owner_user_id
+        JOIN professional_credential_decisions d ON (d.owner_user_id,d.credential_version)=(v.owner_user_id,v.credential_version)
+        WHERE p.owner_user_id=$1`,[winner.id])).rows[0],
+      {is_public:false,accepts_new_patients:false,version,outcome:'revalidation_requested',original:'approved'});
+      await expect(200,'/availability/me',session.token);
+      await expect(200,'/patients',session.token);
+      let renewal;
       renewal=await expect(200,reviewPath(winner,version)+'/revalidation',token(reviewer));
       await expect(200,reviewPath(winner,version)+'/revalidation',token(reviewer),{
         rowVersion:renewal.rowVersion,outcome:'revalidated',message:'Comprobación ficticia renovada.',evidence,
@@ -220,6 +260,38 @@ test('023 manual accreditation in an isolated ordinary API, HTTP and PostgreSQL'
       assert.equal((await account(loser,'suspended')).status,200);
       await expect(401,restricted,loser.restrictedToken);
       await expect(401,restricted,(await login(loser.email)).restrictedToken);
+    });
+    await t.test('a restricted state read discards all protected data when the token expires during a database lock wait',async sub=>{
+      const subject=await register('expiry-wait');
+      await pgClient.query(`INSERT INTO professional_account_messages(owner_user_id,author_user_id,author_role,account_status,owner_message)
+        VALUES($1,$2,'admin','pending_review','Mensaje protegido del ensayo')`,[subject.id,reviewer]);
+      const path='/professional-status/me';
+      assert.equal((await expect(200,path,subject.restrictedToken)).messages[0].message,'Mensaje protegido del ensayo');
+      const expires=jwt.decode(subject.restrictedToken).exp;
+      const clock=sub.mock.method(Date,'now',()=> (expires-1)*1000);
+      await pgClient.query('BEGIN');
+      let reply;
+      try {
+        await pgClient.query('SELECT user_id FROM psychologist_profiles WHERE user_id=$1 FOR UPDATE',[subject.id]);
+        reply=http(path,subject.restrictedToken);
+        let waiting=false;
+        for(let i=0;i<120&&!waiting;i++){
+          waiting=(await control.query(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=$1
+            AND wait_event_type='Lock' AND query LIKE '%FROM psychologist_profiles WHERE user_id=$1 FOR UPDATE%') AS waiting`,[database])).rows[0].waiting;
+          if(!waiting)await delay(15);
+        }
+        assert.equal(waiting,true);
+        clock.mock.mockImplementation(()=>expires*1000);
+        await pgClient.query('COMMIT');
+        const result=await reply;
+        assert.equal(result.status,401);
+        assert.equal(result.body.data,undefined);
+        assert.doesNotMatch(JSON.stringify(result.body),/Mensaje protegido|pending_review/);
+      } finally {
+        clock.mock.restore();
+        await pgClient.query('ROLLBACK');
+        await reply;
+      }
     });
     await t.test('suspension committed during a review invalidates the decision and the restricted session',async()=>{
       const subject=await register('suspension-race');

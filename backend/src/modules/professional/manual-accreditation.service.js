@@ -94,6 +94,9 @@ export const manualReviewDetails = async (client, owner, version, profile, legac
     accountStatus: legacy.approval_status,
     registeredName: nationalName,
     pending: proposal,
+    ...(mode === 'proposal' && profile.approved_credential_version ? {
+      approved: await credentials(client, owner, profile.approved_credential_version),
+    } : {}),
     validity,
   };
 };
@@ -104,7 +107,7 @@ const audit = (client, actor, owner, version, action, metadata) => logAuditEvent
 });
 
 const validateReview = (body, mode) => {
-  exact(body, ['rowVersion', 'outcome', 'message', 'internalNote', 'evidence']);
+  exact(body, ['rowVersion', 'outcome', 'message', 'internalNote', 'evidence', 'priorImpact']);
   const rowVersion = decimal(body.rowVersion);
   const {outcome} = body;
   const validOutcomes = mode === 'revalidation' ? outcomes.slice(4) : outcomes.slice(0, 4);
@@ -134,14 +137,68 @@ const validateReview = (body, mode) => {
   return {rowVersion, outcome, message, note, checkedOn, reference, method, scores, grantsValidity};
 };
 
+function validatePriorImpact(impact, review, mode) {
+  if (impact === undefined) return null;
+  if (mode !== 'proposal' || review.outcome !== 'rejected') {
+    throw fail('La revisión de la acreditación anterior requiere rechazar la propuesta.');
+  }
+  exact(impact, ['version', 'message', 'evidence']);
+  const version = decimal(impact.version);
+  const prior = validateReview({
+    rowVersion:review.rowVersion, outcome:'revalidation_requested', message:impact.message, evidence:impact.evidence,
+  }, 'revalidation');
+  if (!prior.reference || !prior.scores.includes('discrepancy') ||
+      (prior.scores.at(-1) === 'discrepancy' && prior.method !== 'simulated_official_id')) {
+    throw fail('Documenta una discrepancia comprobada de la versión aprobada y su referencia.');
+  }
+  return {version, review:prior};
+}
+
+async function recordReview(client, actor, owner, version, review, validUntil) {
+  const {id} = (await client.query(`
+    INSERT INTO professional_manual_reviews (
+      owner_user_id,credential_version,reviewer_user_id,reviewer_role,outcome,owner_message,source_code,checked_on,
+      source_reference,identity_method,license_result,holder_result,title_result,institution_result,identity_result
+    ) VALUES ($1,$2,$3,$4,$5,$6,'simulated_registry',$7,$8,$9,$10,$11,$12,$13,$14)
+    RETURNING id
+  `, [owner, version, actor.id, actor.role, review.outcome, review.message, review.checkedOn,
+    review.reference, review.method, ...review.scores])).rows[0];
+
+  if (review.note) await client.query(`
+    INSERT INTO professional_review_internal_notes
+      (owner_user_id,credential_version,reviewer_user_id,reviewer_role,body) VALUES($1,$2,$3,$4,$5)
+  `, [owner, version, actor.id, actor.role, review.note]);
+
+  if (review.grantsValidity || review.outcome === 'revalidation_requested') {
+    await client.query(`
+      INSERT INTO professional_credential_validity (
+        owner_user_id,credential_version,status,evidence_reference,assessed_by_user_id,assessed_by_role,
+        assessed_at,valid_from,valid_until
+      ) VALUES ($1,$2,$3,$4,$5,$6,clock_timestamp(),$7,$8)
+      ON CONFLICT (owner_user_id,credential_version) DO UPDATE SET status=excluded.status,
+        evidence_reference=excluded.evidence_reference,assessed_by_user_id=excluded.assessed_by_user_id,
+        assessed_by_role=excluded.assessed_by_role,assessed_at=excluded.assessed_at,
+        valid_from=excluded.valid_from,valid_until=excluded.valid_until,
+        row_version=professional_credential_validity.row_version+1
+    `, [owner, version, review.grantsValidity ? 'supported' : 'requires_review', id,
+      actor.id, actor.role, review.grantsValidity ? review.checkedOn : null, review.grantsValidity ? validUntil : null]);
+  }
+
+  return id;
+}
+
 export const decideManualAccreditation = (actor, owner, version, body, mode) => {
   decimal(version);
   const review = validateReview(body, mode);
+  const impact = validatePriorImpact(body.priorImpact, review, mode);
   return transaction(async client => {
     const {profile, legacy} = await lock(client, actor, owner, {review: true});
     const storedVersion = mode === 'revalidation' ? profile?.approved_credential_version : profile?.pending_credential_version;
     if (storedVersion !== version || String(profile.row_version) !== review.rowVersion) {
       throw fail('La solicitud cambió. Vuelve a abrirla antes de resolver.', 409);
+    }
+    if (impact && profile.approved_credential_version !== impact.version) {
+      throw fail('La versión aprobada cambió. Vuelve a abrir la revisión.',409);
     }
     if (mode === 'revalidation' && legacy.approval_status !== 'active' && legacy.manual_onboarded_at) {
       throw fail('La cuenta no está disponible para revalidación.', 409);
@@ -150,39 +207,14 @@ export const decideManualAccreditation = (actor, owner, version, body, mode) => 
       SELECT ((clock_timestamp() AT TIME ZONE 'UTC')::date)::text AS today,
         ($1::date + interval '12 months')::date::text AS "validUntil"
     `, [review.checkedOn])).rows[0];
-    if (review.checkedOn > today || (review.grantsValidity && validUntil <= today)) {
+    if (review.checkedOn > today || impact?.review.checkedOn > today || (review.grantsValidity && validUntil <= today)) {
       throw fail('La fecha de comprobación debe ser actual y permitir una acreditación vigente.');
     }
-    const {id} = (await client.query(`
-      INSERT INTO professional_manual_reviews (
-        owner_user_id,credential_version,reviewer_user_id,reviewer_role,outcome,owner_message,source_code,checked_on,
-        source_reference,identity_method,license_result,holder_result,title_result,institution_result,identity_result
-      ) VALUES ($1,$2,$3,$4,$5,$6,'simulated_registry',$7,$8,$9,$10,$11,$12,$13,$14)
-      RETURNING id
-    `, [owner, version, actor.id, actor.role, review.outcome, review.message, review.checkedOn,
-      review.reference, review.method, ...review.scores])).rows[0];
-
-    if (review.note) await client.query(`
-      INSERT INTO professional_review_internal_notes
-        (owner_user_id,credential_version,reviewer_user_id,reviewer_role,body) VALUES($1,$2,$3,$4,$5)
-    `, [owner, version, actor.id, actor.role, review.note]);
-
-    if (review.grantsValidity && mode === 'proposal') {
-      await claimLicense(client, owner, version);
-    }
-    if (review.grantsValidity || review.outcome === 'revalidation_requested') {
-      await client.query(`
-        INSERT INTO professional_credential_validity (
-          owner_user_id,credential_version,status,evidence_reference,assessed_by_user_id,assessed_by_role,
-          assessed_at,valid_from,valid_until
-        ) VALUES ($1,$2,$3,$4,$5,$6,clock_timestamp(),$7,$8)
-        ON CONFLICT (owner_user_id,credential_version) DO UPDATE SET status=excluded.status,
-          evidence_reference=excluded.evidence_reference,assessed_by_user_id=excluded.assessed_by_user_id,
-          assessed_by_role=excluded.assessed_by_role,assessed_at=excluded.assessed_at,
-          valid_from=excluded.valid_from,valid_until=excluded.valid_until,
-          row_version=professional_credential_validity.row_version+1
-      `, [owner, version, review.grantsValidity ? 'supported' : 'requires_review', id,
-        actor.id, actor.role, review.grantsValidity ? review.checkedOn : null, review.grantsValidity ? validUntil : null]);
+    if (review.grantsValidity && mode === 'proposal') await claimLicense(client, owner, version);
+    const id = await recordReview(client, actor, owner, version, review, validUntil);
+    if (impact) {
+      await recordReview(client, actor, owner, impact.version, impact.review, null);
+      await audit(client, actor, owner, impact.version, 'professional_credential_decided', {outcome:'revalidation_requested'});
     }
 
     const terminal = mode === 'proposal' && review.outcome !== 'inconclusive';
